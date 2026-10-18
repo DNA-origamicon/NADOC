@@ -93,7 +93,7 @@ _schema("TwistParams", plain="kind total_degrees degrees_per_nm")
 _schema("BendParams", plain="kind curvature_deg_per_bp direction_deg endpoints midpoint polymer_circle_count")
 _schema("SweepParams", refs={"preceding_op_ids": "deformation"},
         plain="kind points_nm origin_nm initial_rotation initial_tangent point_frames warning_bps auto_loop_skips loop_skip_warnings direction start_step steps path_length_nm bp_positions_nm bp_frames")
-_schema("PhotoproductJunction", "photoproduct", special="base_key_1 base_key_2 design_coordinates",
+_schema("PhotoproductJunction", "photoproduct", special="base_key_1 base_key_2 design_coordinates context_coordinates",
         plain="product stereochemistry formation patch_order orientation_method photoproduct_id",
         blocked="t1_stable_id t2_stable_id bond_relaxation")
 _schema("ProteinAsset", "protein_asset",
@@ -290,7 +290,7 @@ def referenced_resources(model):
         if isinstance(value, models.DeformationOp):
             _targets(value.targets, reference)
         if isinstance(value, models.PhotoproductJunction):
-            for key in [value.base_key_1, value.base_key_2, *value.design_coordinates]:
+            for key in [value.base_key_1, value.base_key_2, *value.design_coordinates, *value.context_coordinates]:
                 _base_key(key, reference)
         snapshot = snapshot_for(value)
         if snapshot is not None:
@@ -339,6 +339,9 @@ def remap_design(design, mapping):
         if isinstance(model, models.PhotoproductJunction):
             for field in ("base_key_1", "base_key_2"):
                 result[field] = _base_key(getattr(model, field), resolve)
+            result["context_coordinates"] = {
+                _base_key(key, resolve): atoms for key, atoms in model.context_coordinates.items()
+            }
             result["design_coordinates"] = {
                 _base_key(key, resolve): atoms for key, atoms in model.design_coordinates.items()
             }

@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { canConvertExtraThymines } from './cpd_selection.js'
+import { canConvertExtraThymines, canConvertThymines, cpdSelectionKeys } from './cpd_selection.js'
 import { transformTargetsForSelection } from './nucleotide_transform_tool.js'
 const keys = ['__xb__:a:0', '__xb__:b:1']
 const design = { crossovers: [{ id: 'a', extra_bases: 'T' }, { id: 'b', extra_bases: 'AT' }] }
 const formed = { ...design, photoproduct_junctions: [{ base_key_1: keys[0], base_key_2: keys[1], design_coordinates: { [keys[0]]: { C5: [0, 0, 0] } } }] }
 describe('CPD authoring selection', () => {
+  it('allows ordinary, extra and mixed thymines and expands selected crossover inserts', () => {
+    const geometry = [{ helix_id: 'h', bp_index: 2, direction: 'FORWARD', nucleobase: 'T' },
+      { helix_id: 'h', bp_index: 3, direction: 'REVERSE', nucleobase: 'T' }]
+    expect(canConvertThymines(design, ['h:2:FORWARD', 'h:3:REVERSE'], geometry)).toBe(true)
+    expect(canConvertThymines(design, [keys[0], 'h:3:REVERSE'], geometry)).toBe(true)
+    expect(canConvertThymines(design, [keys[0], 'h:9:REVERSE'], geometry)).toBe(false)
+    const state = { currentDesign: { crossovers: [{ id: 'a', extra_bases: 'TT' }] },
+      selection: { items: [{ kind: 'crossover', id: 'a' }] } }
+    expect(cpdSelectionKeys(state)).toEqual(['__xb__:a:0', '__xb__:a:1'])
+    expect(canConvertThymines(state.currentDesign, cpdSelectionKeys(state))).toBe(true)
+  })
   it('offers conversion only for two distinct, unused extra thymines', () => {
     expect(canConvertExtraThymines(design, keys)).toBe(true)
     for (const bad of [[keys[0]], [keys[0], keys[0]], [keys[0], '__xb__:b:0'], [keys[0], 'h:1:FORWARD']]) expect(canConvertExtraThymines(design, bad)).toBe(false)

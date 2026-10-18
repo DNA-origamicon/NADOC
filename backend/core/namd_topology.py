@@ -591,9 +591,9 @@ def photoproduct_patch_plan(
     if not lesions:
         return {"topology_paths": [], "patches": [], "reverse_identity": []}
     if registry is None:
-        from backend.core.photoproduct_registry import photoproduct_registry
 
-        registry = photoproduct_registry()
+        from backend.core.cpd_mvp_simulation import simulation_registry
+        registry = simulation_registry(design)
     segment_by_chain = {item["chain_id"]: item["segid"] for item in segments}
     residue_by_key: dict[str, set[tuple[str, int]]] = {}
     for atom in model.atoms:
@@ -850,6 +850,9 @@ def build_charmm_psfgen_topology(
             )
         psf_text = psf_path.read_text(errors="replace")
         pdb_text = pdb_path.read_text(errors="replace")
+        from backend.core.cpd_mvp_simulation import uses_mvp, fix_and_audit_pdb
+        if uses_mvp(design):
+            pdb_text = fix_and_audit_pdb(design, pdb_text, patch_plan)
         audit = audit_psf(
             psf_text,
             require_dna_hydrogens=True,
@@ -884,9 +887,9 @@ def build_charmm_psfgen_topology(
                     f"stderr:\n{baseline_proc.stderr[-4000:]}"
                 )
             from backend.core.photoproduct_psf_audit import audit_photoproduct_psf
-            from backend.core.photoproduct_registry import photoproduct_registry
 
-            registry = photoproduct_registry()
+            from backend.core.cpd_mvp_simulation import simulation_registry, uses_mvp
+            registry = simulation_registry(design)
             topology_specs = {}
             for product_id in {item["product_id"] for item in patch_plan["patches"]}:
                 entry = next(item for item in registry["products"] if item["id"] == product_id)
@@ -906,6 +909,7 @@ def build_charmm_psfgen_topology(
                 reactant_psf_text=baseline_psf_path.read_text(errors="replace"),
                 patch_plan=patch_plan,
                 topology_specs=topology_specs,
+                experimental_mvp=uses_mvp(design),
             )
             if not photoproduct_static_audit["passed"]:
                 raise RuntimeError(

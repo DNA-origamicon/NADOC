@@ -1,0 +1,143 @@
+{
+  "recipe_root": null,
+  "input_sources": {},
+  "repair_draft": null,
+  "dimensions": [],
+  "id": "9a5058d0-5c07-4607-8d68-0532b4655bf6",
+  "lattice_frames": [],
+  "helices": [
+    {
+      "id": "h0",
+      "axis_start": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "axis_end": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 2.672
+      },
+      "native_residues": [],
+      "native_source": null,
+      "phase_offset": 0.0,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 8,
+      "bp_start": 0,
+      "loop_skips": [],
+      "label": null,
+      "lattice_frame_id": null,
+      "grid_pos": null,
+      "direction": null
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf",
+      "domains": [
+        {
+          "helix_id": "h0",
+          "start_bp": 0,
+          "end_bp": 7,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": "TTTTTTTT",
+      "custom_scaffold_length": null,
+      "color": null,
+      "name": null,
+      "notes": null,
+      "routing_seed": null,
+      "is_reference": false
+    },
+    {
+      "id": "stap",
+      "domains": [
+        {
+          "helix_id": "h0",
+          "start_bp": 7,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": "TTTTTTTT",
+      "custom_scaffold_length": null,
+      "color": null,
+      "name": null,
+      "notes": null,
+      "routing_seed": null,
+      "is_reference": false
+    }
+  ],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "Untitled",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": [],
+    "identity_last_known_path": null,
+    "identity_confirmed_at": "",
+    "primitive_kind": null,
+    "hardware_defaults": {},
+    "peg_surface": null,
+    "namd_peg_review": null,
+    "namd_box_solvent": null,
+    "namd_peg_coating": null,
+    "namd_peg_visible": true
+  },
+  "deformations": [],
+  "cluster_transforms": [],
+  "nucleotide_transforms": [],
+  "cluster_joints": [],
+  "cluster_join_constraints": [],
+  "overhangs": [],
+  "overhang_connections": [],
+  "overhang_bindings": [],
+  "connection_versions": [],
+  "duplexes": [],
+  "flexible_segment_marks": [],
+  "flexible_connections": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "nanoparticles": [],
+  "nanoparticle_conjugations": [],
+  "nanoparticle_connection_versions": [],
+  "tm_settings": {
+    "na_mM": 50.0,
+    "conc_nM": 250.0
+  },
+  "extensions": [],
+  "staple_groups": [],
+  "plate_layout": null,
+  "representation_overrides": [],
+  "view_volumes": [],
+  "annotations": [],
+  "annotations_enabled": true,
+  "visibility_state": {
+    "hidden_base_keys": [],
+    "shown_base_keys": [],
+    "hidden_cluster_ids": []
+  },
+  "photoproduct_junctions": [],
+  "crossovers": [],
+  "crossover_constraints": [],
+  "forced_ligations": [],
+  "camera_poses": [],
+  "animations": [],
+  "chain_sim_projects": [],
+  "loadouts": [],
+  "atomistic_reference": null,
+  "active_loadout_id": null,
+  "last_editable_loadout_id": null,
+  "feature_log": [],
+  "feature_log_cursor": -1,
+  "feature_log_sub_cursor": null
+}

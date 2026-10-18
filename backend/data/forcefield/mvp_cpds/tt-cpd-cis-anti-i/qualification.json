@@ -1,0 +1,54 @@
+{
+  "product": "tt-cpd-cis-anti-i",
+  "status": "provisional_numerical_admission_passed_physical_validation_insufficient",
+  "files": [
+    {
+      "file": "patch.rtf",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/tt-cpd-cis-anti-i/patch.rtf",
+      "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976"
+    },
+    {
+      "file": "overlay.prm",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/tt-cpd-cis-anti-i/overlay.prm",
+      "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f"
+    },
+    {
+      "file": "transfer_records.json",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/tt-cpd-cis-anti-i/transfer_records.json",
+      "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170"
+    }
+  ],
+  "external_sources": [
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-return-v1/tt-cpd-cis-anti-i/input.str",
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-return-v1/thymidine-reference/input.str"
+  ],
+  "transfer_policy": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/policy.json",
+  "required_parents": [
+    "/home/jojo/Work/NADOC/backend/data/forcefield/top_all36_na.rtf",
+    "/home/jojo/Work/NADOC/backend/data/forcefield/par_all36_na.prm",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/top_all36_cgenff.rtf",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/par_all36_cgenff.prm"
+  ],
+  "scope_restrictions": [
+    "Isolated candidate only; no production promotion.",
+    "Use ordered endpoints from the chemical definition. The XCPD patch alone does not construct or certify stereochemistry.",
+    "One isomer parameter set per system; CX aliases/XCPD names intentionally isolated and must not be mixed across these packages.",
+    "Current test fixtures have internal lesion endpoints in a six-T chain. Terminal-lesion and mixed-isomer cases are unqualified.",
+    "Transfer of matched charge differences is a provisional hypothesis, not experimentally validated electrostatics.",
+    "Photoproduct formation context restrictions remain those of the admitted roster."
+  ],
+  "numerical_panel_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cgenff_numerical_panel_20261017.json",
+  "timestep_diagnostic_all_passed": true,
+  "required_parent_sha256": {
+    "/home/jojo/Work/NADOC/backend/data/forcefield/top_all36_na.rtf": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49",
+    "/home/jojo/Work/NADOC/backend/data/forcefield/par_all36_na.prm": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/top_all36_cgenff.rtf": "18b0f76e4d9fba1918e321327984850b1bb216403a2fe21e251d038f84b48069",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/par_all36_cgenff.prm": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183"
+  },
+  "reproducible_examples": {
+    "psfgen_input": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/tt-cpd-cis-anti-i/candidate.tcl",
+    "candidate_psf": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/tt-cpd-cis-anti-i/candidate.psf",
+    "canonical_start_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-cis-anti-i",
+    "solvated_NAMD_configs_and_restart_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i"
+  }
+}

@@ -40,13 +40,15 @@ export function planWeldDraw (pairs, getPos) {
       midB: geom.midB,
       dNm: geom.dNm,
       etaDeg: geom.etaDeg,
-      k: geom.k,
-      reactive: geom.reactive,
-      color: weldColor(geom.k),
+      k: p.formed ? null : geom.k,
+      reactive: p.formed ? false : geom.reactive,
+      color: p.formed ? 0x55ccee : weldColor(geom.k),
       // Below vdW contact a classical force field is being pushed past what it can
       // represent — flag it rather than drawing it as a normal happy state.
-      belowVdw: geom.dNm < VDW_FLOOR_NM,
-      readout: formatWeldReadout(geom),
+      belowVdw: !p.formed && geom.dNm < VDW_FLOOR_NM,
+      readout: p.formed
+        ? `Formed ${p.stereochemistry} CPD · midpoint ${(geom.dNm * 10).toFixed(2)} Å · η ${geom.etaDeg.toFixed(1)}°`
+        : formatWeldReadout(geom),
     })
   }
   return out
@@ -94,6 +96,7 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
   let _pairs = []
   let _visible = false
   let _plans = []
+  let _getPos = null
   let _windows = []
   let _windowMeshes = []
   let _group = null
@@ -150,6 +153,7 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
    * `getPos(serial) → [x,y,z]|null` must be the renderer's own atom placement.
    */
   function update (getPos) {
+    _getPos = getPos
     _plans = _visible && _pairs.length ? planWeldDraw(_pairs, getPos) : []
     if (!_visible || !_plans.length) {
       for (const node of _nodes.values()) for (const m of Object.values(node)) m.visible = false
@@ -158,6 +162,7 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
     if (!_ensureGroup()) return _plans
     const alive = new Set()
     for (const plan of _plans) {
+      alive.add(plan.id)
       alive.add(plan.id)
       let node = _nodes.get(plan.id)
       if (!node) { node = _makeNode(plan.color); _nodes.set(plan.id, node) }
@@ -213,6 +218,7 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
     _visible = !!v
     if (_group) _group.visible = _visible
     if (!_visible) for (const node of _nodes.values()) for (const m of Object.values(node)) m.visible = false
+    update(_getPos)
   }
 
   /**
@@ -243,6 +249,7 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
     if (_group && scene) scene.remove(_group)
     _group = null
     _plans = []
+    _getPos = null
   }
 
   return { setPairs, setWindows, loadForJob, update, setVisible, isVisible, getReadouts, dispose }

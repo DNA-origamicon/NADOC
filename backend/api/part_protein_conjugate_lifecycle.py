@@ -144,7 +144,7 @@ def _residue_dependents(design, binder, domains):
                 for domain in domains for selected in (strand.routing_seed or [])):
             blocked("strand", strand.id)
     for item in design.photoproduct_junctions:
-        for key in (item.base_key_1, item.base_key_2, *item.design_coordinates):
+        for key in (item.base_key_1, item.base_key_2, *item.design_coordinates, *item.context_coordinates):
             parsed = parse_base_key(key)
             if parsed is None:
                 _unsupported("Conjugate lifecycle cannot resolve legacy or malformed photoproduct endpoints")

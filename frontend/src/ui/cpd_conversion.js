@@ -1,91 +1,70 @@
 import { createModal } from './primitives/modal.js'
+import { createCpdContextPreview } from './cpd_context_preview.js'
 import { el } from './primitives/dom.js'
-import { projectTrajectoryFrame } from './tt_cpd_trajectory_help.js'
-
-/** Rotatable projection of the actual 3D template; no WebGL context needed. */
-export function drawCpdPreview(svg, template, angle = 0) {
-  svg.replaceChildren()
-  if (!template) return
-  const points = projectTrajectoryFrame(template.positions, 600, 330, angle)
-  const node = (tag, attrs) => {
-    const n = document.createElementNS('http://www.w3.org/2000/svg', tag)
-    for (const [key, value] of Object.entries(attrs)) n.setAttribute(key, value)
-    return n
-  }
-  for (const [a, b] of template.bonds) {
-    const crosslink = template.atom_keys[a].split(':')[0] !== template.atom_keys[b].split(':')[0]
-    svg.append(node('line', { x1: points[a][0], y1: points[a][1], x2: points[b][0], y2: points[b][1], stroke: crosslink ? '#ff4fd8' : '#8b949e', 'stroke-width': crosslink ? 5 : 2 }))
-  }
-  const colors = { C: '#849cff', N: '#58a6ff', O: '#f85149', P: '#d29922', H: '#d8dee9' }
-  points.map((p, i) => [p, i]).sort((a, b) => a[0][2] - b[0][2]).forEach(([p, i]) => {
-    const element = template.atom_keys[i].split(':')[1][0]
-    const atom = node('circle', { cx: p[0], cy: p[1], r: element === 'H' ? 3 : 6, fill: colors[element] ?? '#aaa' })
-    const title = node('title', {})
-    title.textContent = template.atom_keys[i]
-    atom.append(title); svg.append(atom)
-  })
-}
-
 export async function showCpdConversion({ api, baseKeys }) {
   const keys = [...baseKeys]
-  const status = el('p', { text: 'Loading CPD types…', attrs: { role: 'status' } })
-  const choices = el('select', { attrs: { 'aria-label': 'CPD type', style: 'width:100%;padding:8px' } })
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  svg.setAttribute('viewBox', '0 0 600 330')
-  svg.setAttribute('aria-label', '3D CPD template preview')
-  svg.style.cssText = 'width:100%;background:#0d1117;border-radius:6px'
-  const rotation = el('input', { attrs: { type: 'range', min: -180, max: 180, value: 20, 'aria-label': 'Rotate CPD preview', style: 'width:100%' } })
+  const status = el('p', { text: 'Loading CPD isomers…', attrs: { role: 'status' } })
+  const choices = el('select', { attrs: { 'aria-label': 'CPD type', style: 'width:100%;padding:8px;background:#202833;color:#e6edf3;border:1px solid #576574;border-radius:4px' } })
+  const context = el('p')
+  const host = el('div')
+  const before = el('input', { attrs: { type: 'checkbox', 'aria-label': 'Show original thymines' } })
+  const refresh = el('button', { text: 'Refresh preview', attrs: { type: 'button' } })
   const convert = el('button', { text: 'Convert to CPD', className: 'primary-btn', attrs: { disabled: true } })
-  const body = el('div', { children: [choices, status, svg, el('label', { text: 'Rotate preview', children: [rotation] })] })
-  let epoch = 0, template = null, saving = false
+  const body = el('div', { children: [choices, context, host,
+    el('p', { text: 'Drag to rotate · scroll to zoom. Pink: new CPD bonds. Backbone colors identify strands.' }),
+    el('label', { text: 'Show original thymines ', children: [before] }), refresh, status] })
+  let epoch = 0, preview = null, viewer = null, saving = false, revision
   const modal = createModal({ title: 'Convert to CPD', size: 'lg', body, actions: [convert], onClose: () => {
     if (saving) return false
-    epoch++
+    epoch++; viewer?.dispose()
   } })
   modal.open()
-  rotation.addEventListener('input', () => drawCpdPreview(svg, template, Number(rotation.value) * Math.PI / 180))
+  before.addEventListener('change', () => viewer?.setBefore(before.checked))
   async function select() {
     const token = ++epoch
-    template = null; svg.replaceChildren(); convert.disabled = true
-    status.textContent = 'Loading template…'
+    preview = null; convert.disabled = true
+    status.textContent = 'Fitting isomer to selected thymines…'
     try {
-      const result = await api.getCpdDesignTemplate(choices.value)
+      const result = await api.previewCpdConversion(keys, choices.value, revision)
       if (token !== epoch || !modal.isOpen()) return
-      if (!result?.positions?.length) throw new Error('CPD template is unavailable.')
-      template = result
-      status.textContent = result.qualification
-      drawCpdPreview(svg, template, Number(rotation.value) * Math.PI / 180)
+      if (!result?.positions?.length) throw new Error('CPD context preview is unavailable.')
+      revision = result.revision
+      viewer ??= createCpdContextPreview(host)
+      viewer.setData(result)
+      preview = result
+      context.textContent = `${result.relationship === 'same strand' ? 'Same strand' : 'Different strands'} · Endpoint 1: ${result.endpoints?.[0]?.key ?? keys[0]} · Endpoint 2: ${result.endpoints?.[1]?.key ?? keys[1]}`
+      status.textContent = `${result.qualification} Sugar–base attachment lengths: ${result.glycosidic_distances_nm.map(n => (n * 10).toFixed(2)).join(' / ')} Å.`
       convert.disabled = false
     } catch (error) {
       if (token === epoch && modal.isOpen()) status.textContent = error.message
     }
   }
   choices.addEventListener('change', select)
+  refresh.addEventListener('click', () => { if (!saving) { revision = undefined; void select() } })
   convert.addEventListener('click', async () => {
-    if (!template || saving) return
-    saving = true; convert.disabled = true; choices.disabled = true
-    status.textContent = 'Converting thymines and relaxing bonds and nearby clashes…'
+    if (!preview || saving) return
+    saving = true; convert.disabled = true; choices.disabled = true; refresh.disabled = true
+    status.textContent = preview.placement?.flanking_bases_fixed
+      ? 'Applying six-residue geometry; flanking bases stay fixed…'
+      : 'Converting bases; backbone stays fixed…'
     try {
-      const result = await api.convertExtraBasesToCpd(keys, choices.value)
+      const result = await api.convertThyminesToCpd(keys, choices.value, revision)
       if (!result) throw new Error('Conversion failed. Check the current selection and try again.')
       saving = false; modal.close()
     } catch (error) {
-      status.textContent = error.message
+      status.textContent = /design changed/i.test(error.message)
+        ? 'Design changed. Refresh the preview before converting.' : error.message
+      preview = null
     } finally {
-      saving = false; convert.disabled = false; choices.disabled = false
+      saving = false; convert.disabled = !preview; choices.disabled = false; refresh.disabled = false
     }
   })
   try {
-    const catalog = await api.getPhotoproductCatalog()
+    const catalog = await api.getCpdConversionOptions()
     if (!modal.isOpen()) return modal
-    if (!catalog?.products?.length) throw new Error('CPD types could not be loaded.')
-    for (const p of catalog.products.filter(p => p.product === 'TT-CPD')) {
-      const available = p.simulation_supported === true || p.simulation_ready === true
-      choices.append(el('option', { text: `${p.label} · ${available ? (p.simulation_ready ? 'Validated' : 'Preliminary research template') : 'In development'}`, attrs: { value: p.stereochemistry, ...(available ? {} : { disabled: true }) } }))
-    }
-    const first = [...choices.options].find(o => !o.disabled)
-    if (first) { choices.value = first.value; await select() }
-    else status.textContent = 'All CPD types are in development. No conversion template is available.'
+    if (!catalog?.products?.length) throw new Error('CPD isomers could not be loaded.')
+    for (const p of catalog.products) choices.append(el('option', { text: `${p.label} · MVP`, attrs: { value: p.stereochemistry } }))
+    await select()
   } catch (error) {
     if (modal.isOpen()) status.textContent = error.message
   }

@@ -112,6 +112,13 @@ describe('weldTraceSeries', () => {
 })
 
 describe('weldTraceSummary', () => {
+  it('does not interpret a formed product as an unreacted pair', () => {
+    const result={n_frames:2,times_ps:[0,10],pairs:[{label:'Formed cis-anti-I CPD',formed:true,
+      d_min_nm:0.15,d_mean_nm:0.16,d_nm:[0.15,0.17],eta_deg:[-160,-155],k:[],k_max:null,reactive_frames:null}]}
+    expect(weldTraceSummary(result)).toContain('formation propensity not applicable')
+    expect(weldTraceSeries(result,'k')).toEqual([])
+    expect(weldTraceSeries(result,'d')[0].points).toHaveLength(2)
+  })
   it('leads with the minimum distance, which is the actual question', () => {
     const s = weldTraceSummary(TRACE)
     expect(s).toContain('min 9.00 Å')

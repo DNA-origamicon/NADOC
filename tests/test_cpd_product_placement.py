@@ -149,6 +149,8 @@ def _endpoint(
     ("strand_ids", "directions", "source_classes", "expected_relationship"),
     [
         (("same", "same"), ("FORWARD", "FORWARD"), ("ordinary", "ordinary"), "intrastrand"),
+        (("left", "right"), ("FORWARD", "REVERSE"), ("ordinary", "ordinary"), "interstrand"),
+        (("same", "same"), ("FORWARD", "FORWARD"), ("crossover-extra", "crossover-extra"), "intrastrand"),
         (("left", "right"), ("FORWARD", "REVERSE"), ("crossover-extra", "crossover-extra"), "interstrand"),
     ],
 )

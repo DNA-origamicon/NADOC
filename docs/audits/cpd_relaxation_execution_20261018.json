@@ -1,0 +1,84 @@
+{
+  "status": "completed",
+  "requested": "All four 1xT CPD isomers through all normal relaxation stages, with convergence skip acceleration enabled, via desktop user workflow.",
+  "initial_failure": {
+    "job_id": "1bdc152b2987",
+    "isomer": "cis-anti-I",
+    "error": "Duplicate bond from atom 941 to atom 242",
+    "cause": "Two CPD covalent bonds also emitted as inter-residue base-ring ENM restraints.",
+    "diagnostics": ".development-artifacts/cpd-relax-execution/original-cis-anti-failure",
+    "failed_job_deleted": true
+  },
+  "fix": "ENM builder excludes existing PSF covalent bonds at every restraint strength, including rebuilds.",
+  "unit_test": "tests/test_aksimentiev_enm.py: 4 passed",
+  "browser_test": "frontend/e2e/cpd_relax_execution.spec.js",
+  "execution": "Dedicated backend on 8002, lifespan off; desktop library open, wizard Create job, visible NAMD Run button; local GPU, sequential jobs.",
+  "schedule": "Unmodified design_speed schedule, CPD ordinary masses / 2 fs policy, adaptive minimization, early_stop_relax enabled; no force-skips.",
+  "jobs": {
+    "cis-anti-I": "935bbecba8cf",
+    "cis-syn-I": "6d6c46163a00",
+    "trans-syn-I": "b2b43076da96",
+    "trans-syn-II": "974191dc2e63"
+  },
+  "evidence_root": ".development-artifacts/cpd-relax-execution",
+  "monitoring": {
+    "mode": "filesystem events on atomic job.json replacement; no periodic job-status requests",
+    "triggers": [
+      "completed",
+      "failed",
+      "paused",
+      "stopped",
+      "stage transition",
+      "deadline"
+    ],
+    "preparation_limit_minutes": 10,
+    "execution_limit_hours_per_isomer": 6,
+    "deadline_action": "Pause using normal stop control, retain outputs and deadline report",
+    "tests": "6 trigger tests passed; frontend/e2e/helpers/md_job_triggers.node.mjs",
+    "active_run_bridge": "Only the old browser polling worker is suspended; backend and NAMD continue. Filesystem terminal/deadline trigger resumes it for final screenshot."
+  },
+  "adaptive_minimization_fix": {
+    "evidence": "Cis-anti-I minimized energy oscillated by 0.0001\u20130.0003 kcal/mol at about -2,095,747.56; strict improvement>=0 reset the stable interval counter.",
+    "change": "Only permit negative improvements within abs(previous_energy)*1e-9 + 1e-6 kcal/mol numerical tolerance. Positive energy-delta threshold, required consecutive intervals, minimum and maximum steps unchanged.",
+    "validation": "8 adaptive minimization tests passed, including Tcl execution accepting alternating 0.0002 kcal/mol changes and rejecting alternating 1 kcal/mol changes.",
+    "scope": "New packages; active cis-anti-I minimization completed unchanged at its original maximum."
+  },
+  "completed": {
+    "cis-anti-I": {
+      "job_id": "935bbecba8cf",
+      "skipped_chunks": 16,
+      "chirality_passed": true,
+      "all_health_checks_passed": true,
+      "audit": ".development-artifacts/cpd-relax-execution/cis-anti-I/completed-audit.json"
+    },
+    "cis-syn-I": {
+      "job_id": "6d6c46163a00",
+      "skipped_chunks": 16,
+      "chirality_passed": true,
+      "all_health_checks_passed": true,
+      "audit": ".development-artifacts/cpd-relax-execution/cis-syn-I/completed-audit.json"
+    },
+    "trans-syn-I": {
+      "job_id": "b2b43076da96",
+      "skipped_chunks": 16,
+      "chirality_passed": true,
+      "all_health_checks_passed": true,
+      "audit": ".development-artifacts/cpd-relax-execution/trans-syn-I/completed-audit.json"
+    },
+    "trans-syn-II": {
+      "job_id": "974191dc2e63",
+      "skipped_chunks": 15,
+      "chirality_passed": true,
+      "all_health_checks_passed": true,
+      "audit": ".development-artifacts/cpd-relax-execution/trans-syn-II/completed-audit.json"
+    }
+  },
+  "harness_corrections": [
+    "Initial package audit assumed syn C5-C5/C6-C6 bonds; changed to each isomer chemical definition (anti uses C5-C6/C6-C5).",
+    "Initial run test selected the hidden generic Run control; switched to the visible NAMD Run control.",
+    "First running browser test retained an old segment-status assertion (completed vs actual done). NAMD completed successfully; independent final chemistry audit passed. Later tests accept the actual done state.",
+    "Reopened completed cis-anti-I job for a fresh UI result after the original browser worker was suspended to stop its polling.",
+    "Browser harness stalled after starting trans-syn-I; actual NAMD completed and independent final-coordinate audit passed. Restarting final isomer with bounded browser actions and output redirected to disk."
+  ],
+  "cleanup_note": "Historical disposable UI evidence removed; final audits and all managed jobs preserved. See docs/cpd_work_summary_20261018.md."
+}

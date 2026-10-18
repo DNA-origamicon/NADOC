@@ -32,7 +32,7 @@ import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRef
 import * as THREE from 'three'
 import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
-import { canConvertExtraThymines } from './cpd_selection.js'
+import { canConvertThymines, cpdSelectionKeys } from './cpd_selection.js'
 import { showCpdConversion } from '../ui/cpd_conversion.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { instanceBounds, boundsInRect, createRectangleCollector, segmentInRect } from './rectangle_selection.js'
@@ -4734,11 +4734,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _showExtensionMenu(e.clientX, e.clientY, ids)
       return
     }
-    if (_baseKeys.length > 0) {
+    const cpdState = store.getState()
+    const cpdKeys = cpdSelectionKeys(cpdState)
+    const canConvertCpd = canConvertThymines(cpdState.currentDesign, cpdKeys, cpdState.currentGeometry)
+    if (_baseKeys.length > 0 || canConvertCpd) {
       _dismissMenu()
       const menu = _menuBase(e.clientX, e.clientY)
-      if (canConvertExtraThymines(store.getState().currentDesign, _baseKeys)) {
-        const keys = [..._baseKeys]
+      if (canConvertCpd) {
+        const keys = [...cpdKeys]
         menu.appendChild(_menuItem('Convert to CPD…', () => {
           _dismissMenu()
           void showCpdConversion({ api, baseKeys: keys })

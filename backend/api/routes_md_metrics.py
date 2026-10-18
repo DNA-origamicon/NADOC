@@ -510,12 +510,15 @@ def get_md_cpd_colvars(
         return {"ready": False, "reason": inputs, "config": "", "windows": []}
     psf, _ref, _segments, design = inputs
     pairs = designed_weld_pairs(design)
+    formed = any(p.get('formed') for p in pairs)
+    pairs = [p for p in pairs if not p.get('formed')]
     if not pairs:
         return {
             "ready": True,
             "config": "",
             "windows": [],
-            "reason": "design has no extra-base reciprocal crossover pair",
+            "reason": ("Formed CPDs have no reactant umbrella-window ladder. Use the geometry trace."
+                       if formed else "design has no extra-base reciprocal crossover pair"),
         }
     try:
         import MDAnalysis as mda

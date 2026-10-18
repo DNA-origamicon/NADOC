@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -26,6 +28,7 @@ class PhotoproductCreateBody(BaseModel):
     base_keys: list[str] = Field(min_length=2, max_length=2)
     stereochemistry: TTCPDStereochemistry = "cis-syn"
     expected_revision: int | None = None
+    placement: Literal["legacy", "bases-only", "contextual"] = "legacy"
 
 
 class PhotoproductVisualReviewBody(BaseModel):
@@ -175,9 +178,13 @@ def delete_photoproduct(photoproduct_id: str) -> dict:
             ]
         ),
     )
-    payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)
+    if lesion.orientation_method in {"manual-base-only-mvp-v1", "manual-six-residue-mvp-v1"}:
+        from backend.api.crud import _design_response_with_geometry
+        payload = _design_response_with_geometry(updated, validation, preserve_feature_log_id=entry.id)
+    else:
+        payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)
+        payload["geometry_unchanged"] = True
     payload["removed_photoproduct_id"] = photoproduct_id
-    payload["geometry_unchanged"] = True
     return payload
 
 
@@ -190,21 +197,48 @@ def get_design_template(stereochemistry: str) -> dict:
         raise HTTPException(422, detail=str(exc)) from exc
 
 
+@router.get("/design/photoproducts/conversion-options")
+def get_conversion_options():
+    from backend.core.cpd_conversion import conversion_catalog
+    return conversion_catalog()
+
+
+@router.post("/design/photoproducts/conversion-preview")
+def preview_conversion(body: PhotoproductCreateBody):
+    from backend.core.cpd_conversion import prepare_conversion
+    revision = design_state.revision()
+    if body.expected_revision is not None and body.expected_revision != revision:
+        raise HTTPException(409, detail="Design changed; reopen the CPD preview.")
+    try:
+        _, preview = prepare_conversion(design_state.get_or_404(), body.base_keys, body.stereochemistry)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    if design_state.revision() != revision:
+        raise HTTPException(409, detail="Design changed while building the CPD preview.")
+    return {**preview, "revision": revision}
+
+
 @router.post("/design/photoproducts/convert")
 def convert_design_photoproduct(body: PhotoproductCreateBody) -> dict:
     from uuid import uuid4
     identity = str(uuid4())
     from backend.core.cpd_design import convert_extra_pair
+    from backend.core.cpd_conversion import convert_thymine_pair
+    converter = convert_thymine_pair if body.placement != "legacy" else convert_extra_pair
     def apply(current):
         try:
-            return convert_extra_pair(current, body.base_keys, body.stereochemistry, identity_seed=identity)[0]
+            return converter(current, body.base_keys, body.stereochemistry, identity_seed=identity)[0]
         except (ValueError, KeyError) as exc:
             raise HTTPException(422, detail=str(exc)) from exc
     updated, validation, entry = design_state.mutate_with_feature_log(
-        "photoproduct-create", f"Convert extra thymines to {body.stereochemistry} CPD",
-        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry, "history_seed": identity, "method": "convert"}, apply,
+        "photoproduct-create", f"Convert thymines to {body.stereochemistry} CPD",
+        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry, "history_seed": identity,
+         "method": body.placement if body.placement != "legacy" else "convert"}, apply,
         expected_revision=body.expected_revision,
     )
+    if body.placement != "legacy":
+        from backend.api.crud import _design_response_with_geometry
+        return _design_response_with_geometry(updated, validation, preserve_feature_log_id=entry.id)
     payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)
     payload["geometry_unchanged"] = True  # Extra-base poses are rendered client-side.
     return payload

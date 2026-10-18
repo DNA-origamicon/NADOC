@@ -1,0 +1,349 @@
+{
+  "schema": "nadoc.cpd-1xt-start-investigation.v1",
+  "date": "2026-10-18",
+  "status": "four_experimental_seeds_no_production_promotion",
+  "source": {
+    "input": "/media/jojo/Archive/NADOC_archive/runtime/workspace/2hb_1xT_CPD.nadoc",
+    "input_sha256": "ed7fd57ca23a8373eb219297b7255c270b56d6577869564815da805975d1decc",
+    "cores_sha256": "f0da037802d12548b1de011bb6fb1753ecaa723c2447882d52e3a38eee30297b",
+    "keys": [
+      "__xb__:4a12dd44-bce2-46be-8296-093ce52d2ec9:0",
+      "__xb__:54c5689d-127b-4693-bc11-f51121719fad:0"
+    ],
+    "qualification": "isolated diagnostic; no production admission",
+    "moving": "two complete inserted nucleotides; all other atoms fixed"
+  },
+  "artifact_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-1xt-starts-20261018-v1",
+  "protocol": {
+    "geometry_search": "24 proper cube orientations; rigid CPD core plus glycosidic and backbone torsions; fixed environment",
+    "minimization": "NAMD, provisional isomer-specific CGenFF-derived MVP patches, vacuum, no dynamics",
+    "conditions": [
+      "inserted residues mobile, 2000 steps",
+      "inserted residues mobile, 10000 steps",
+      "inserted residues plus immediate flanking sugars/backbones mobile, flanking bases fixed, 2000 steps",
+      "same expanded mobility, 10000 steps"
+    ],
+    "scope": "exact user 2hb_1xT_CPD.nadoc; ordered endpoints; one geometry context"
+  },
+  "results": {
+    "cis-syn": {
+      "namd": {
+        "minimum_mobile_heavy_vdw_ratio": 0.7002780174116122,
+        "endpoint_backbone_attachments_A": [
+          1.9283807458360172,
+          1.6281833704602964,
+          2.9413666585974076,
+          1.8360642648306016
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [
+          {
+            "a": 926,
+            "b": 927,
+            "length_A": 2.9413666585974076
+          }
+        ],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 3.741277763097323
+      },
+      "namd-10000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.7025206896911251,
+        "endpoint_backbone_attachments_A": [
+          1.8875125822187149,
+          1.6297135290596612,
+          2.960144763963097,
+          1.6632119245216446
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [
+          {
+            "a": 926,
+            "b": 927,
+            "length_A": 2.960144763963097
+          }
+        ],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 6.4258117110312085
+      },
+      "namd-neighbor-backbones-2000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8054539568335835,
+        "endpoint_backbone_attachments_A": [
+          1.5901343346768217,
+          1.548551584030267,
+          1.5860994357031093,
+          1.5781536319522318
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.627571478603758
+      },
+      "namd-neighbor-backbones": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8065731717346705,
+        "endpoint_backbone_attachments_A": [
+          1.590085839854022,
+          1.547640614409666,
+          1.5867117633834706,
+          1.5784275825540277
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.619296115734236
+      }
+    },
+    "trans-syn-I": {
+      "namd": {
+        "minimum_mobile_heavy_vdw_ratio": 0.7440644930949359,
+        "endpoint_backbone_attachments_A": [
+          1.6981884299725138,
+          1.6513387768566292,
+          2.2499950966456796,
+          1.5956116871271404
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [
+          {
+            "a": 926,
+            "b": 927,
+            "length_A": 2.2499950966456796
+          }
+        ],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 3.8170929840981795
+      },
+      "namd-10000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.7438335125625961,
+        "endpoint_backbone_attachments_A": [
+          1.6976984225876883,
+          1.6506870435589531,
+          2.24936793559085,
+          1.5949384008648613
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [
+          {
+            "a": 926,
+            "b": 927,
+            "length_A": 2.24936793559085
+          }
+        ],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 3.8812479639465813
+      },
+      "namd-neighbor-backbones-2000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8460925942046197,
+        "endpoint_backbone_attachments_A": [
+          1.5598540524827869,
+          1.5766860777837,
+          1.5662551137651834,
+          1.5863000664552953
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 4.995929371912386
+      },
+      "namd-neighbor-backbones": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8424559942789391,
+        "endpoint_backbone_attachments_A": [
+          1.5582234306545621,
+          1.573941405301652,
+          1.5649599795592224,
+          1.5847140680421565
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 4.93859726264048
+      }
+    },
+    "trans-syn-II": {
+      "namd": {
+        "minimum_mobile_heavy_vdw_ratio": 0.6938646640237751,
+        "endpoint_backbone_attachments_A": [
+          1.6848729451180167,
+          1.708530762290232,
+          1.4797824948829301,
+          1.7620971972783757
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.544177306780915
+      },
+      "namd-10000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.6937168638503637,
+        "endpoint_backbone_attachments_A": [
+          1.6862824592639372,
+          1.7090614244603917,
+          1.4795156833519425,
+          1.7617208514214888
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.542130261769481
+      },
+      "namd-neighbor-backbones-2000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8145539136311959,
+        "endpoint_backbone_attachments_A": [
+          1.5908566961585788,
+          1.5662885395574495,
+          1.6085848919714414,
+          1.5446879264423972
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 6.419888849850469
+      },
+      "namd-neighbor-backbones": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8144659692425382,
+        "endpoint_backbone_attachments_A": [
+          1.5910497168846813,
+          1.5664536685861248,
+          1.6101553466968739,
+          1.545558792972264
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 6.429759916660047
+      }
+    },
+    "cis-anti-I": {
+      "namd": {
+        "minimum_mobile_heavy_vdw_ratio": 0.7165620726469208,
+        "endpoint_backbone_attachments_A": [
+          1.790247704646788,
+          1.647255557745146,
+          1.7427255229215426,
+          1.5959672667581917
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.544352686476293
+      },
+      "namd-10000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.716339086948668,
+        "endpoint_backbone_attachments_A": [
+          1.789909318701035,
+          1.6485898457452488,
+          1.7403795214265076,
+          1.594541492385745
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 5.548892128251738
+      },
+      "namd-neighbor-backbones-2000": {
+        "minimum_mobile_heavy_vdw_ratio": 0.820299233638368,
+        "endpoint_backbone_attachments_A": [
+          1.5770426092849958,
+          1.5858405525672101,
+          1.5772473178796744,
+          1.5878642212122682
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 3.644727104306382
+      },
+      "namd-neighbor-backbones": {
+        "minimum_mobile_heavy_vdw_ratio": 0.8207201238370102,
+        "endpoint_backbone_attachments_A": [
+          1.5782856927486244,
+          1.5861694020450658,
+          1.5782817183748785,
+          1.585819129672859
+        ],
+        "heavy_contacts_under_2A": [],
+        "heavy_bonds_over_2A": [],
+        "cpd_ring_piercings": [],
+        "chirality_passed": true,
+        "fixed_max_displacement_A": 0.0,
+        "engine_passed": true,
+        "mobile_heavy_max_displacement_from_repaired_A": 3.765156287060583
+      }
+    }
+  },
+  "conclusions": [
+    "Endpoint-only mobility stalls with cis-syn and trans-syn-I attachment bonds over 2 angstrom even after 10000 steps.",
+    "Immediate flanking sugar/backbone mobility gives four endpoint attachment bonds 1.55-1.61 angstrom at 10000 steps across all isomers.",
+    "All 16 minimizations completed with finite energies, retained ordered stereochemistry, and zero fixed atom movement.",
+    "Expanded mobility results have no local heavy nonbonded contacts below 2 angstrom, no mobile heavy bonds above 2 angstrom, and no external bond crossing the CPD four-membered ring.",
+    "Expanded mobility retains compressed nonbonded contacts: minimum vdW ratios about 0.81-0.84. These are candidate starting conformers, not strain-free structures.",
+    "2000 to 10000 steps shifts mobile atoms by RMS 0.05-0.18 angstrom; bond geometry is already similar at 2000 steps.",
+    "Maximum flanking heavy atom displacement is 3.19-5.62 angstrom; the relaxation is local but not negligible."
+  ],
+  "recommended_representation": "Per-isomer ordered six-residue seed including two inserts and four flanking sugar/backbone neighborhoods, anchored on unchanged flanking bases; fit and locally refine to actual context. Store source parameters and chirality with each candidate.",
+  "remaining_validation": [
+    "Independent initial conformers and reversed endpoint mappings",
+    "Full crossover helical-phase and separation sweep before generalized/default placement",
+    "Solvated restrained validation with provisional parameters",
+    "Broader ring-piercing and local angle/torsion strain audits; current piercing check targets CPD cyclobutane only",
+    "No relative isomer stability or physical forcefield validation inferred from vacuum minimization"
+  ],
+  "verification": {
+    "ruff": "passed",
+    "diff_check": "passed",
+    "existing_cpd_design_tests": "3 passed, 6 skipped by active-simulation guard",
+    "experimental_runs": 16
+  },
+  "reproduce": [
+    "uv run python -m scripts.investigate_cpd_1xt_starts --output NEW_OUTPUT",
+    "uv run python -m scripts.minimize_cpd_1xt_starts NEW_OUTPUT",
+    "uv run python -m scripts.minimize_cpd_1xt_starts NEW_OUTPUT --steps 10000 --tag namd-10000",
+    "uv run python -m scripts.minimize_cpd_1xt_starts NEW_OUTPUT --steps 2000 --tag namd-neighbor-backbones-2000 --neighbor-backbones",
+    "uv run python -m scripts.minimize_cpd_1xt_starts NEW_OUTPUT --steps 10000 --tag namd-neighbor-backbones --neighbor-backbones",
+    "uv run python -m scripts.audit_cpd_1xt_starts NEW_OUTPUT"
+  ]
+}

@@ -98,11 +98,13 @@ def _pose_with_jacobian(coordinates, center, torsions, x):
     return points, jac
 
 
-def minimize_attachment_bonds(model, endpoints, placed):
+def minimize_attachment_bonds(model, endpoints, placed, *, template=None, crosslinks=None):
     """Relax the product pose and six single-bond torsions against fixed neighbors.
 
     This is a local bond-length and steric relaxation, not force-field dynamics.
     The CPD base-ring core, bond lengths, valence angles and chirality are preserved.
+    Explicit templates and ordered crosslinks support isolated isomer experiments;
+    omitted arguments retain the legacy cis-syn placement and exclusions.
     """
     from scipy.optimize import least_squares, minimize
 
@@ -131,7 +133,7 @@ def minimize_attachment_bonds(model, endpoints, placed):
         for name in e.atom_positions_nm
     )
     input_coordinates = np.array([placed[k] for k in keys])
-    template = design_template()
+    template = design_template() if template is None else template
     aliases = {"OP1": "O1P", "OP2": "O2P"}
     coordinates = np.array(
         [
@@ -213,8 +215,14 @@ def minimize_attachment_bonds(model, endpoints, placed):
     # Fresh designs do not yet contain the CPD bonds; use the same product
     # graph as saved lesions for intramolecular nonbonded exclusions.
     serials = {(atom_base_key(a), a.name): a.serial for a in moving}
-    for name in ("C5", "C6"):
-        a, b = [serials[(e.key, name)] for e in endpoints]
+    if crosslinks is None:
+        crosslinks = [("1:C5", "2:C5"), ("1:C6", "2:C6")]
+    for left, right in crosslinks:
+        a, b = [
+            serials[(endpoints[int(address.split(":")[0]) - 1].key,
+                     address.split(":")[1])]
+            for address in (left, right)
+        ]
         neighbors.setdefault(a, set()).add(b)
         neighbors.setdefault(b, set()).add(a)
     mask = np.ones((len(moving), len(nearby)), dtype=bool)
@@ -564,7 +572,7 @@ def apply_design_coordinates(atoms, design):
     coordinates = {
         key: positions
         for lesion in design.photoproduct_junctions
-        for key, positions in lesion.design_coordinates.items()
+        for key, positions in {**lesion.design_coordinates, **lesion.context_coordinates}.items()
     }
     if not coordinates:
         return
@@ -582,10 +590,14 @@ def add_design_bonds(model, design):
     for lesion in design.photoproduct_junctions:
         if not lesion.design_coordinates:
             continue
-        for name in ("C5", "C6"):
-            pair = [
-                by_key.get((k, name)) for k in (lesion.base_key_1, lesion.base_key_2)
-            ]
+        from backend.core.photoproduct_chemistry import load_chemical_definition
+        definition = load_chemical_definition(lesion.product, lesion.stereochemistry)
+        endpoint_keys = {"1": lesion.base_key_1, "2": lesion.base_key_2}
+        for bond in definition["graph_delta"]["bonds_added"]:
+            pair = []
+            for address in (bond["atom_1"], bond["atom_2"]):
+                endpoint, name = address.split(":")
+                pair.append(by_key.get((endpoint_keys[endpoint], name)))
             if None not in pair and tuple(sorted(pair)) not in existing:
                 model.bonds.append(tuple(pair))
 
@@ -597,6 +609,9 @@ def relax_existing_cpd(design, lesion_id):
     lesion = next((p for p in design.photoproduct_junctions if p.id == lesion_id), None)
     if lesion is None or not lesion.design_coordinates:
         raise ValueError("Select a converted CPD to relax.")
+    from backend.core.cpd_conversion import METHOD
+    if lesion.orientation_method in {METHOD, "manual-six-residue-mvp-v1"}:
+        raise ValueError("Base-only CPDs keep the backbone fixed; whole-nucleotide relaxation is not enabled for this placement.")
     model = build_atomistic_model(design)
     endpoints, errors = resolve_base_keys(
         design,

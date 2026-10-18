@@ -1035,6 +1035,7 @@ class PhotoproductJunction(BaseModel):
     orientation_method: str = "canonical-key-order"
     # Exact test-template coordinates before per-residue rigid poses (nm).
     design_coordinates: dict[str, dict[str, List[float]]] = Field(default_factory=dict)
+    context_coordinates: dict[str, dict[str, List[float]]] = Field(default_factory=dict)
     bond_relaxation: dict[str, Any] = Field(default_factory=dict)
     t1_stable_id: Optional[str] = None
     t2_stable_id: Optional[str] = None
@@ -1085,6 +1086,16 @@ class PhotoproductJunction(BaseModel):
                     raise ValueError("CPD design coordinates require both ring atoms")
                 if any(len(xyz) != 3 or not all(math.isfinite(v) for v in xyz) for xyz in atoms.values()):
                     raise ValueError("CPD design coordinates must be finite xyz triples")
+        if self.context_coordinates:
+            if self.orientation_method != "manual-six-residue-mvp-v1":
+                raise ValueError("Context coordinates require six-residue placement")
+            if len(self.context_coordinates) != 4 or set(self.context_coordinates) & {self.base_key_1, self.base_key_2}:
+                raise ValueError("Six-residue placement requires four distinct flanks")
+            for atoms in self.context_coordinates.values():
+                if not atoms or any("'" not in name and name not in {"P", "OP1", "OP2"} for name in atoms):
+                    raise ValueError("Only flanking sugar/backbone atoms may move")
+                if any(len(xyz) != 3 or not all(math.isfinite(v) for v in xyz) for xyz in atoms.values()):
+                    raise ValueError("Context coordinates must be finite xyz triples")
         return self
 
     @property
@@ -2600,6 +2611,9 @@ def _reclassify_invalid_crossovers(design: "Design") -> None:
     be ForcedLigations. Mismatched-bp halves (which the model normally forbids)
     are also handled defensively.
 
+    Preserve junction IDs and inserted sequences: CPDs and nucleotide poses
+    address those bases through the same __xb__ keys for either junction type.
+
     Mutates *design* in place.
     """
     from backend.core.crossover_positions import crossover_neighbor  # noqa: PLC0415
@@ -2618,6 +2632,8 @@ def _reclassify_invalid_crossovers(design: "Design") -> None:
         if a.index != b.index:
             new_fls.append(
                 ForcedLigation(
+                    id=xo.id,
+                    extra_bases=xo.extra_bases,
                     three_prime_helix_id=a.helix_id,
                     three_prime_bp=a.index,
                     three_prime_direction=a.strand,
@@ -2648,6 +2664,8 @@ def _reclassify_invalid_crossovers(design: "Design") -> None:
         else:
             new_fls.append(
                 ForcedLigation(
+                    id=xo.id,
+                    extra_bases=xo.extra_bases,
                     three_prime_helix_id=a.helix_id,
                     three_prime_bp=a.index,
                     three_prime_direction=a.strand,

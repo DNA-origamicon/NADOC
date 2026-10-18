@@ -2158,7 +2158,10 @@ while {{$nadoc_min_done < $nadoc_min_max}} {{
     set nadoc_min_improvement ""
     if {{[string is double -strict $nadoc_min_previous] && [string is double -strict $nadoc_min_energy]}} {{
         set nadoc_min_improvement [expr {{$nadoc_min_previous - $nadoc_min_energy}}]
-        if {{$nadoc_min_done >= $nadoc_min_min && $nadoc_min_improvement >= 0.0 && $nadoc_min_improvement <= $nadoc_min_delta}} {{
+        # Parallel energy reductions can fluctuate in the final digits after the
+        # minimizer has stopped moving. Do not reset a plateau on roundoff alone.
+        set nadoc_min_roundoff [expr {{abs($nadoc_min_previous) * 1.0e-9 + 1.0e-6}}]
+        if {{$nadoc_min_done >= $nadoc_min_min && $nadoc_min_improvement >= -$nadoc_min_roundoff && $nadoc_min_improvement <= $nadoc_min_delta}} {{
             incr nadoc_min_stable
         }} else {{
             set nadoc_min_stable 0
@@ -2586,6 +2589,24 @@ def write_aksimentiev_enm_files(
         lo = hi = np.empty(0, dtype=np.int64)
         dists = np.empty(0, dtype=float)
 
+    # CPDs covalently join base-ring atoms on different residues. NAMD rejects
+    # an extraBonds restraint that repeats a PSF bond, even at a different k.
+    # Use the package topology also when rebuilding ENM from relaxed coordinates.
+    psf_path = package_dir / f"{name_stem}.psf"
+    n_covalent_excluded = 0
+    if psf_path.is_file() and len(lo):
+        from backend.core.photoproduct_psf_audit import parse_psf_index_section
+
+        covalent = np.asarray(parse_psf_index_section(
+            psf_path.read_text(), "!NBOND", 2), dtype=np.int64).reshape(-1, 2) - 1
+        if len(covalent):
+            covalent.sort(axis=1)
+            stride = int(max(covalent.max(), hi.max())) + 1
+            keep = ~np.isin(lo * stride + hi,
+                            covalent[:, 0] * stride + covalent[:, 1])
+            n_covalent_excluded = int((~keep).sum())
+            lo, hi, dists = lo[keep], hi[keep], dists[keep]
+
     n_bonds = int(len(lo))
     if progress is not None:
         progress("enm", 0.5, "Writing elastic-network restraint files…")
@@ -2621,6 +2642,7 @@ def write_aksimentiev_enm_files(
         "n_residues_with_base_atoms": len(residues),
         "n_base_atoms": int(len(positions)),
         "n_restraints_per_file": n_bonds,
+        "n_covalent_bonds_excluded": n_covalent_excluded,
         "base_k_kcal_mol_A2": base_k,
         "scales": list(scales),
         "cut_ang": cut_ang,

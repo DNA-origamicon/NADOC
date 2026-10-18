@@ -3897,7 +3897,7 @@ export async function createPhotoproduct(baseKeys, stereochemistry = 'cis-syn') 
 
 export async function deletePhotoproduct(photoproductId) {
   const json = await _request('DELETE', `/design/photoproducts/${encodeURIComponent(photoproductId)}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /**
@@ -5538,6 +5538,26 @@ async function _namdSetupPresetRequest(method, path, body) {
 
 export async function getCpdDesignTemplate(stereochemistry) {
   return _request('GET', `/design/photoproducts/template/${encodeURIComponent(stereochemistry)}`, undefined, { suppressBusy: true })
+}
+
+export async function getCpdConversionOptions() {
+  return _request('GET', '/design/photoproducts/conversion-options', undefined, { suppressBusy: true })
+}
+
+export async function previewCpdConversion(baseKeys, stereochemistry, revision = currentRevisionWatermark()) {
+  const result = await _request('POST', '/design/photoproducts/conversion-preview', {
+    base_keys: baseKeys, stereochemistry, expected_revision: revision,
+  }, { suppressBusy: true, skipSimulationPrepare: true })
+  if (!result) throw new Error(lastErrorMessage() || 'Could not build the CPD preview.')
+  return result
+}
+
+export async function convertThyminesToCpd(baseKeys, stereochemistry, revision) {
+  const result = await _request('POST', '/design/photoproducts/convert', {
+    base_keys: baseKeys, stereochemistry, expected_revision: revision, placement: 'contextual',
+  })
+  if (!result) throw new Error(lastErrorMessage() || 'CPD conversion failed.')
+  return _syncFromDesignResponse(result)
 }
 
 export async function convertExtraBasesToCpd(baseKeys, stereochemistry) {

@@ -2149,7 +2149,12 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
         if k in type(body).model_fields
         and (k == "protocol" or k in preset.locked or k not in explicit)
     }
-    return body.model_copy(update=updates) if updates else body
+    if not updates:
+        return body
+    resolved = body.model_copy(update=updates)
+    # Preset defaults are not explicit caller choices (notably for CPD safety).
+    resolved.__pydantic_fields_set__ = explicit
+    return resolved
 
 
 def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> CreateJobRequest:
@@ -2566,11 +2571,16 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             from backend.core.cpd_forcefield import (  # noqa: PLC0415
                 CpdCapabilityError,
                 assert_cpd_simulation_supported,
+                design_has_photoproducts,
             )
 
             try:
                 assert_cpd_simulation_supported(design, path="NAMD job creation")
                 body = _apply_photoproduct_integrator_policy(design, body)
+                if design_has_photoproducts(design) and body.draft:
+                    # Validate and freeze formed-product packages before offering Run
+                    # or remote submission. Creation must never execute the package.
+                    body = body.model_copy(update={"draft": False, "autostart": False})
             except CpdCapabilityError as exc:
                 raise HTTPException(400, str(exc)) from exc
         name = (design.metadata.name or "design").replace(" ", "_")

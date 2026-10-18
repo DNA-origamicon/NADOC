@@ -642,18 +642,24 @@ export function initDesignRenderer(scene, storeRef) {
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
       // root.visible covers them automatically; no extra VISIBILITY RULE required.
       _helixCtrl.root.add(xoverResult.group)
-      _cpdSlabBonds = createCpdSlabBonds(design, _xoverSlabsMesh, target => {
-        const arc = _xoverArcDataMap.get(target?.crossover_id)
-        if (!arc || target.k < 0 || target.k >= arc.beadCount) return null
-        return arc.beadStartIdx + simBeadIndex(target.k, arc.beadCount, arc.simReversed)
-      })
-      if (_cpdSlabBonds) xoverResult.group.add(_cpdSlabBonds.mesh)
       // Re-skin extra-base meshes if a non-strand coloring mode is active —
       // build emitted strand colors, applyColoring covers helix meshes, this
       // covers the xover extras.
       if (coloringMode && coloringMode !== 'strand') _applyXoverColoring(coloringMode)
     }
 
+    _cpdSlabBonds = createCpdSlabBonds(design, _xoverSlabsMesh, target => {
+      if (target?.helix_id === '__xb__') {
+        const arc = _xoverArcDataMap?.get(target.crossover_id)
+        if (!arc || target.k < 0 || target.k >= arc.beadCount) return null
+        return { mesh: _xoverSlabsMesh, index: arc.beadStartIdx + simBeadIndex(target.k, arc.beadCount, arc.simReversed) }
+      }
+      const entry = _helixCtrl.slabEntries.find(e => e.nuc.helix_id === target?.helix_id &&
+        e.nuc.bp_index === target.bp_index && e.nuc.direction === target.direction &&
+        (e._copy ?? e.nuc.copy_k ?? 0) === (target.copy ?? 0))
+      return entry ? { mesh: entry.instMesh, index: entry.id } : null
+    })
+    if (_cpdSlabBonds) _helixCtrl.root.add(_cpdSlabBonds.mesh)
 
     // Re-apply post-rebuild visibility state
     if (_slabThickness !== 0.06) _helixCtrl.setSlabThickness(_slabThickness)

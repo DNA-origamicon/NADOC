@@ -713,6 +713,20 @@ def build_cpd_product_coordinates(design, atomistic_model):
     """Apply all released photoproduct templates after the central capability gate."""
 
     assert_cpd_simulation_supported(design, path="TT-CPD coordinate builder")
+    from backend.core.cpd_mvp_simulation import uses_mvp, world_core
+    if uses_mvp(design):
+        reports = []
+        for lesion in design.photoproduct_junctions:
+            ends, errors = resolve_base_keys(design, [lesion.base_key_1, lesion.base_key_2], atomistic_model=atomistic_model)
+            if errors:
+                raise ProductPlacementError(f"CPD endpoints do not resolve: {errors}")
+            core = world_core(design, lesion)
+            for i,e in enumerate(ends,1):
+                for name, xyz in e.atom_positions_nm.items():
+                    if f"{i}:{name}" in core and not np.allclose(xyz,core[f"{i}:{name}"],atol=1e-8):
+                        raise ProductPlacementError("CPD coordinate override disagrees with authored six-residue geometry")
+            reports.append({"method": lesion.orientation_method, "qualification": "experimental MVP; not physically validated", "isomer": lesion.stereochemistry, "authored_coordinates_preserved": True})
+        return atomistic_model, reports
     registry = photoproduct_registry()
     result = atomistic_model
     reports: list[dict[str, Any]] = []

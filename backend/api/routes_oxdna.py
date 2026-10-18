@@ -3424,7 +3424,7 @@ async def _export_dcd_bundle(job_id: str, job, design, stages, ref, indices, ste
     from backend.core import dcd_fast
     from backend.core.atomistic import build_atomistic_model
     from backend.core.oxdna_health import iter_composite_trajectory_atomistic
-    from backend.core.pdb_export import export_pdb
+    from backend.core.pdb_export import export_coordinate_pdb as export_pdb
 
     def _frame_prog(done: int, total: int) -> None:
         _EXPORT_PROGRESS[job_id] = {"done": done, "total": total, "phase": "frames"}
@@ -3554,7 +3554,7 @@ async def export_oxdna_trajectory(
 
     from backend.core.atomistic import build_atomistic_model
     from backend.core.oxdna_health import iter_composite_trajectory_atomistic
-    from backend.core.pdb_export import build_multiframe_pdb_template, export_pdb
+    from backend.core.pdb_export import build_multiframe_pdb_template, export_coordinate_pdb as export_pdb
 
     stem = _export_stem(job, design)
     filename = f"{stem}_frames{lo}-{hi}.pdb"

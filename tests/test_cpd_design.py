@@ -22,21 +22,55 @@ def fixture():
     return d
 
 
-def positions(design):
+def positions(design, keys=KEYS):
     model = build_atomistic_model(design)
-    ends, errors = resolve_base_keys(design, KEYS, atomistic_model=model)
+    ends, errors = resolve_base_keys(design, keys, atomistic_model=model)
     assert not errors
     return model, ends
 
 
-def test_conversion_preserves_complete_template_and_round_trips():
-    d = fixture()
+@pytest.mark.parametrize("relationship", ["intrastrand", "interstrand"])
+def test_conversion_preserves_complete_template_and_round_trips(relationship):
+    if relationship == "intrastrand":
+        d, keys = fixture(), KEYS
+    else:
+        from backend.parameterization.photoproduct_candidate_context import (
+            build_reciprocal_crossover_1xt_context,
+        )
+
+        context = build_reciprocal_crossover_1xt_context(stereochemistry="cis-syn")
+        intent = context.photoproduct_junctions[0]
+        keys = [intent.base_key_1, intent.base_key_2]
+        # Normalize the imported topology before measuring conversion: legacy
+        # off-lattice crossovers become forced ligations when opened in the editor.
+        d = Design.from_json(context.copy_with(photoproduct_junctions=[]).to_json())
+    original, original_ends = positions(d, keys)
+    assert all(e.strand_id for e in original_ends)
+    assert (original_ends[0].strand_id == original_ends[1].strand_id) == (
+        relationship == "intrastrand"
+    )
     before = d.model_dump_json()
-    converted, lesion = convert_extra_pair(d, KEYS)
+    converted, lesion = convert_extra_pair(d, keys)
     assert d.model_dump_json() == before
+    assert converted.strands == d.strands
+    assert converted.crossovers == d.crossovers
     converted = Design.from_json(converted.to_json())
     assert converted.photoproduct_junctions[0] == lesion
-    model, ends = positions(converted)
+    model, ends = positions(converted, keys)
+    assert [e.strand_id for e in ends] == [e.strand_id for e in original_ends]
+    assert len(model.atoms) == len(original.atoms)
+    assert {tuple(sorted(b)) for b in original.bonds} <= {
+        tuple(sorted(b)) for b in model.bonds
+    }
+    from backend.core.base_keys import atom_base_key
+
+    neighbors = {
+        a.serial: [a.x, a.y, a.z]
+        for a in original.atoms if atom_base_key(a) not in keys
+    }
+    for atom in model.atoms:
+        if atom.serial in neighbors:
+            np.testing.assert_allclose([atom.x, atom.y, atom.z], neighbors[atom.serial])
     template = design_template()
     # All pairwise distances pin geometry/chirality-preserving template placement,
     # not just the two crosslinks.

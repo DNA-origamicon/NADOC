@@ -656,13 +656,13 @@ def estimate_profile_from_design(
     """
     design = design.without_reference_geometry()
     import numpy as np  # noqa: PLC0415
-    from backend.core.pdb_export import export_pdb  # noqa: PLC0415
+    from backend.core.pdb_export import export_coordinate_pdb  # noqa: PLC0415
 
     key = _profile_cache_key(design, padding_nm, atomistic_model)
     if key is not None and key in _PROFILE_CACHE:
         return _PROFILE_CACHE[key]
 
-    pdb = export_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
+    pdb = export_coordinate_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
     dna: list[tuple[float, float, float]] = []
     n_p = 0
     for ln in pdb.splitlines():

@@ -685,6 +685,9 @@ def _geometry_for_helices(
         result.extend(_strand_extension_geometry(design, nuc_pos_map, extension_ids))
     apply_nucleotide_transforms_to_geometry(result[regular_count:], design)
     from backend.core.native_slab_placement import attach_native_slab_poses
+    from backend.core.cpd_representation import apply_base_only_cpd_geometry, apply_cpd_context_geometry
+    apply_base_only_cpd_geometry(result, design)
+    apply_cpd_context_geometry(result, design)
     attach_native_slab_poses(result)
     return result
 

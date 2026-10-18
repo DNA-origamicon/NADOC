@@ -276,7 +276,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   function _rebuild(data) {
     _clearScene()
     const table = _state.atoms = makeAtomTable(data)
-    if (_state.mode === 'off' || !table.count) { _notifyAtoms(); return }
+    if (_state.mode === 'off' || !table.count) { _weldOverlay?.update(null); _notifyAtoms(); return }
 
     const bonds = data?.bonds ?? []
     _state.topologyBonds = bonds
@@ -386,6 +386,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
 
     // Re-apply last known highlight state after geometry rebuild
     _applyColors(_state.lastSel)
+    _updateWeldFromAtoms()
     _notifyAtoms()
   }
 
@@ -441,6 +442,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       }
       _state.bondMesh.instanceMatrix.needsUpdate = true
     }
+    _updateWeldFromAtoms()
     return true
   }
 
@@ -571,9 +573,19 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   }
 
   // Optional CPD weld overlay (scene/cpd_weld_overlay.js). It is driven from inside
-  // applyPositionLerp so its markers are computed from the SAME placement that positions
-  // the atom instances — see the note there.
+  // static rebuilds, coordinate updates and applyPositionLerp, so its markers use
+  // the SAME placement as the atom instances.
   let _weldOverlay = null
+  function _updateWeldFromAtoms() {
+    if (!_weldOverlay) return
+    const table = _state.atoms
+    let rows
+    _weldOverlay.update(serial => {
+      rows ??= new Map(Array.from({length:table.count}, (_, row) => [table.serial(row), row]))
+      const row = rows.get(serial)
+      return row == null ? null : [table.x(row), table.y(row), table.z(row)]
+    })
+  }
 
   // ── Public API ────────────────────────────────────────────────────────────
 

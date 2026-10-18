@@ -28,7 +28,7 @@ test('converts an extra thymine pair through the context menu and moves it as a 
   await canvas.click({ button: 'right', position: { x: 300, y: 200 } })
   await page.getByText('Convert to CPD…', { exact: true }).click()
   await expect(page.getByRole('button', { name: 'Convert to CPD', exact: true })).toBeEnabled()
-  await expect(page.locator('svg[aria-label="3D CPD template preview"] circle')).not.toHaveCount(0)
+  await expect(page.getByLabel('3D CPD selection preview')).toBeVisible()
   await page.getByRole('button', { name: 'Convert to CPD', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Convert to CPD', exact: true })).not.toBeVisible({ timeout: 30_000 })
   const result = await page.evaluate(async () => {
@@ -42,13 +42,13 @@ test('converts an extra thymine pair through the context menu and moves it as a 
       crossoverTargets: transformTargetsForSelection(current, { kind: 'crossover', id: 'xo_direct' }).length,
     }
   })
-  expect(result).toEqual({ products: 1, poses: 2, baseTargets: 2, crossoverTargets: 2 })
+  expect(result).toEqual({ products: 1, poses: 0, baseTargets: 2, crossoverTargets: 2 })
   await page.evaluate(async () => { await window.__nadocTest.setRepresentation('full') })
   await expect.poll(() => page.evaluate(() => {
     const bars = window.__nadocTest.getDesignRenderer().getHelixCtrl().root.getObjectByName('cpdSlabBonds')
     return bars?.visible ? bars.count : 0
   })).toBe(2)
-  await expect(page.locator('#properties-content')).toContainText('Local bond relaxation')
+  await expect(page.locator('#properties-content')).toContainText('backbone fixed')
   await page.evaluate(async () => { await window.__nadocTest.setRepresentation('ballstick') })
   await expect.poll(() => page.evaluate(() => !!window.__nadocTest.getAtomisticRenderer().residueInfo({ helix_id: '__xb__', crossover_id: 'xo_direct', k: 0 }))).toBe(true)
   for (const ref of [{ kind: 'base', key: '__xb__:xo_direct:0' }, { kind: 'crossover', id: 'xo_direct', subtype: 'crossover' }]) {
@@ -120,10 +120,10 @@ test('fresh 2hb conversion matches subsequent relaxation in Full representation'
     const items = keys.map(key => ({ kind: 'base', key }))
     store.setState({ selection: { items, primary: items[0] } })
   }, { content: JSON.stringify(design), keys })
-  await page.locator('#canvas').click({ button: 'right', position: { x: 300, y: 200 } })
-  await page.getByText('Convert to CPD…', { exact: true }).click()
-  await page.getByRole('button', { name: 'Convert to CPD', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Convert to CPD', exact: true })).not.toBeVisible({ timeout: 30_000 })
+  await page.evaluate(async keys => {
+    const { convertExtraBasesToCpd } = await import('/src/api/client.js')
+    await convertExtraBasesToCpd(keys, 'cis-syn')
+  }, keys)
   const snapshot = () => page.evaluate(async () => {
     const { store } = await import('/src/state/store.js')
     const design = store.getState().currentDesign

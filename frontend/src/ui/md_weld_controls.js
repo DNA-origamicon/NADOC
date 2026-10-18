@@ -77,6 +77,7 @@ export function weldTraceSummary (result) {
     ? `${result.n_frames} of ${result.n_total_frames} frames (stride ${result.stride})`
     : `${result.n_frames || 0} frames`
   const lines = result.pairs.map((p) => {
+    if (p.formed) return `${p.label}  min ${(p.d_min_nm * 10).toFixed(2)} Å   mean ${(p.d_mean_nm * 10).toFixed(2)} Å · formed product; formation propensity not applicable`
     const reactive = p.reactive_frames
       ? `${p.reactive_frames} reactive`
       : 'never reactive'

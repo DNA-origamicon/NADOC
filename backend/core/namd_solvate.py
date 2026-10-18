@@ -3113,11 +3113,20 @@ def build_namd_solvated_package(
             if ff_path.exists():
                 zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())
         if photoproduct_assets:
+            from backend.core.cpd_mvp_simulation import uses_mvp
+            experimental_mvp = uses_mvp(design)
+            if experimental_mvp:
+                zf.writestr(prefix + "EXPERIMENTAL_CPD_README.txt",
+                    "Provisional CPD MVP force field for the reviewed six-residue 1xT starting geometry.\n"
+                    "Not a physically validated or generally released parameter set.\n"
+                    "One isomer parameter set per system. Use ordinary masses and at most 2 fs.\n"
+                    "Monitor CPD stereochemistry, attachments and local geometry during relaxation and dynamics.\n")
             if any(record["kind"] == "preliminary_review" for record in photoproduct_assets):
                 from backend.core.cpd_preliminary import PACKAGE_NOTICE
                 zf.writestr(prefix + "PRELIMINARY_CPD_README.txt", PACKAGE_NOTICE)
             packaged_manifest = {
                 "schema": "nadoc.packaged-photoproduct-forcefield.v1",
+                "qualification": "experimental-mvp" if experimental_mvp else "registry-qualified",
                 "timestep_fs": 2.0,
                 "hmr_4fs_enabled": False,
                 "lesions": [
@@ -3173,6 +3182,10 @@ def get_solvation_stats(
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
 ) -> dict:
+    # Deletion candidate (approval pending): no application callers. The only
+    # remaining experiment reference is an unused import in exp22. Maintained
+    # estimates live in md_vram.estimate_profile_from_design; actual counts in
+    # md_vram.package_solvation_profile. See docs/audits/cpd_visualization_legacy.md.
     """Return a dict with estimated system size without building the package.
 
     Runs gmx editconf + solvate to count water molecules, then returns

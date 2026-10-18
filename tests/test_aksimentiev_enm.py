@@ -137,3 +137,18 @@ def test_enm_handles_no_pairs_in_range(tmp_path: Path) -> None:
     report = write_aksimentiev_enm_files(pdb, tmp_path, "far")
     assert report["n_restraints_per_file"] == 0
     assert _bonds_from_file(tmp_path / "far_k0.5.enm.extra") == set()
+
+
+def test_covalent_inter_residue_cpd_bonds_are_not_restrained(tmp_path):
+    atoms = [("C5", "THY", "A", 1, 0., 0., 0.),
+             ("C6", "THY", "A", 1, 0., 1.5, 0.),
+             ("C5", "THY", "B", 2, 1.5, 0., 0.),
+             ("C6", "THY", "B", 2, 1.5, 1.5, 0.)]
+    pdb = tmp_path / "relaxed.pdb"
+    _write_pdb(pdb, atoms)
+    # Opposite ordering checks canonicalization; PSF uses 1-based indices.
+    (tmp_path / "cpd.psf").write_text("PSF\n\n 2 !NBOND: bonds\n 3 1 2 4\n")
+    report = write_aksimentiev_enm_files(pdb, tmp_path, "cpd")
+    assert report["n_covalent_bonds_excluded"] == 2
+    for k in (0.5, 0.1, 0.01):
+        assert _bonds_from_file(tmp_path / f"cpd_k{k:g}.enm.extra") == {(0, 3), (1, 2)}

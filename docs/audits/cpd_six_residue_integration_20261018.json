@@ -1,0 +1,34 @@
+{
+  "schema": "nadoc.cpd-six-residue-integration.v1",
+  "date": "2026-10-18",
+  "authorization": "User authorized implementing the reviewed six-residue starting geometry.",
+  "scope": "Four MVP isomers on compatible pairs of single-T crossover inserts with four distinct flanking residues.",
+  "seed_file": "backend/data/cpd_six_residue_seeds.json",
+  "seed_file_sha256": "8cda5af406b43e21027616bc1a34b3b7c17b050cbd234c950897e0562bafda37",
+  "behavior": [
+    "Existing Convert to CPD popup previews and commits the same fitted six-residue coordinates.",
+    "Two complete endpoint residues and four flanking sugar/backbone groups move; flanking base atoms and slabs remain fixed.",
+    "Stable endpoint ordering makes crossover click order irrelevant for 1xT seeds.",
+    "Preview checks flanking anchor fit, phosphodiester/glycosidic attachment lengths and local heavy nonbonded distances against the actual model. Incompatible contexts fail explicitly.",
+    "Coordinates persist in lesion endpoint/context fields; removal and undo restore original geometry.",
+    "Full-view backbone beads follow O5-prime while flanking slab positions/orientations remain fixed.",
+    "Other pair types retain their existing base-only authoring path. Legacy saved lesions are not migrated.",
+    "No per-conversion NAMD run or archive dependency. Simulation qualification is unchanged."
+  ],
+  "limits": [
+    "Seeds originate from one reviewed 1xT crossover context and vacuum minimization with provisional parameters.",
+    "Not a universal placement across arbitrary crossover phases; incompatible contexts require further local relaxation.",
+    "No native recipe replay certification added."
+  ],
+  "verification": {
+    "backend_six_residue": 7,
+    "backend_existing_conversion": 13,
+    "scope_reference_schema": 29,
+    "frontend_unit": 33,
+    "desktop_e2e_all_four_isomers": 4,
+    "ruff": "passed",
+    "diff_check": "passed"
+  },
+  "review_artifacts": ".development-artifacts/cpd-six-residue-review/",
+  "input_document_modified": false
+}

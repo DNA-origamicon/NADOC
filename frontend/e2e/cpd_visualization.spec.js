@@ -1,0 +1,77 @@
+import {test,expect} from '@playwright/test'
+import fs from 'node:fs'
+import path from 'node:path'
+const cases=[['cis-anti-I','935bbecba8cf'],['cis-syn-I','6d6c46163a00'],['trans-syn-I','b2b43076da96'],['trans-syn-II','974191dc2e63']]
+test.afterEach(async({page},info)=>{
+ if(info.status!==info.expectedStatus)await page.screenshot({path:path.resolve('../.development-artifacts/cpd-visualization',`${info.title}-failed.png`),timeout:10000}).catch(()=>{})
+})
+for(const [isomer,id] of cases)test(`CPD visualization ${isomer}`,async({page})=>{
+ test.skip(process.env.NADOC_CPD_VISUAL_REVIEW!=='1','Uses local CPD review jobs, read only')
+ test.setTimeout(240000)
+ page.setDefaultTimeout(30000)
+ await page.setViewportSize({width:1600,height:1000})
+ const out=path.resolve('../.development-artifacts/cpd-visualization');fs.mkdirSync(out,{recursive:true})
+ await page.goto('/?doc=__e2e__cpd-visualization')
+ await page.locator('[data-library-path$="CPD_1xT_isomers"]').click()
+ await page.locator(`[data-library-path$="2hb_1xT_CPD_${isomer}.nadoc"]`).click()
+ await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
+ if(!await page.locator('#simulate-body').isVisible())await page.click('#simulate-heading')
+ await page.click('.engine-selector-btn[data-engine="namd"]')
+ await page.locator('#md-box-solvent-toggle').click()
+ await page.locator('#md-box-view-details').check()
+ await expect(page.locator('#md-box-clearance')).toContainText('X−',{timeout:60000})
+ await expect(page.locator('#md-box-warnings')).toBeHidden()
+ await page.screenshot({path:path.join(out,`${isomer}-box.png`)})
+ await page.locator('#md-box-view-periodic').check()
+ await page.locator('#md-box-view-periodic').uncheck()
+ await page.locator('#md-box-view-details').uncheck()
+ await page.locator(`#simulate-jobs-list [data-job-id="${id}"]`).click()
+ if(!await page.locator('#md-jobs-display-toggle').isVisible())await page.locator('#md-jobs-viz-toggle').click()
+ await page.locator('#md-jobs-display-toggle').check()
+ for(const control of ['box','ions','water'])await page.locator(`#md-jobs-${control}-toggle`).check()
+ await page.locator('#md-jobs-weld-toggle').check()
+ await expect(page.locator('#md-jobs-weld-status')).toContainText('1 weld pair',{timeout:90000})
+ await page.evaluate(()=>window.__nadocTest.setRepresentation('ballstick'))
+ await expect(page.locator('#md-jobs-weld-readout')).toContainText('Formed',{timeout:90000})
+ await page.screenshot({path:path.join(out,`${isomer}-job.png`)})
+ if(isomer==='cis-anti-I'){
+  for(const repr of ['full','vdw','stick','ballstick']){
+   expect(await page.evaluate(r=>window.__nadocTest.setRepresentation(r),repr)).not.toBe(false)
+   await page.screenshot({path:path.join(out,`${isomer}-${repr}.png`)})
+  }
+  for(const control of ['water','ions','box'])await page.locator(`#md-jobs-${control}-toggle`).uncheck()
+  await page.locator('#md-jobs-traj-toggle').check()
+  await expect(page.locator('#md-jobs-traj-controls')).toBeVisible({timeout:90000})
+  await page.locator('#md-jobs-traj-next').click()
+  await expect(page.locator('#md-jobs-weld-readout')).toContainText('Formed',{timeout:30000})
+  await page.screenshot({path:path.join(out,`${isomer}-trajectory.png`)})
+ }
+ fs.writeFileSync(path.join(out,`${isomer}.json`),JSON.stringify({isomer,id,display:await page.locator('#md-jobs-display-status').textContent(),solvent:await page.locator('#md-jobs-solvent-status').textContent(),weld:await page.locator('#md-jobs-weld-readout').textContent()},null,2))
+})
+
+test('CPD analysis views',async({page})=>{
+ test.skip(process.env.NADOC_CPD_VISUAL_REVIEW!=='1','Uses a local completed relaxation job')
+ test.setTimeout(240000)
+ page.setDefaultTimeout(30000)
+ const out=path.resolve('../.development-artifacts/cpd-visualization')
+ await page.setViewportSize({width:1600,height:1000})
+ await page.goto('/?doc=__e2e__cpd-analysis')
+ await page.locator('[data-library-path$="CPD_1xT_isomers"]').click()
+ await page.locator('[data-library-path$="2hb_1xT_CPD_cis-anti-I.nadoc"]').click()
+ await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
+ if(!await page.locator('#simulate-body').isVisible())await page.click('#simulate-heading')
+ await page.click('.engine-selector-btn[data-engine="namd"]')
+ await page.locator('#simulate-jobs-list [data-job-id="935bbecba8cf"]').click()
+ await page.locator('#md-jobs-flex-toggle').check()
+ await expect(page.locator('#md-jobs-flex-legend')).toBeVisible({timeout:90000})
+ await page.screenshot({path:path.join(out,'cis-anti-I-rmsf.png')})
+ await expect(page.locator('#md-jobs-occupancy-toggle')).toBeDisabled()
+ await expect(page.locator('#md-jobs-photoproduct-toggle')).toBeDisabled()
+ await expect(page.locator('#md-jobs-photoproduct-status')).toContainText('production')
+ await page.locator('#md-jobs-display-toggle').check()
+ for(const repr of ['surface','beads']){
+  expect(await page.evaluate(r=>window.__nadocTest.setRepresentation(r),repr)).toBe(false)
+ }
+ await expect(page.locator('#md-jobs-display-status')).toContainText('Displaying',{timeout:90000})
+ await page.screenshot({path:path.join(out,'cis-anti-I-representation-gates.png')})
+})
