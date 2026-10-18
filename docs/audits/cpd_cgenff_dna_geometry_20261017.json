@@ -1,0 +1,148 @@
+{
+  "at": "2026-10-18T02:42:09.715466+00:00",
+  "status": "six_canonical_engineering_starts_pass_native_static_energy_force_loading",
+  "source": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/closeout.py",
+    "sha256": "158e2ac75adb35b76fd419c3531aee35fb5c919da6def613617c799adb87ffec"
+  },
+  "geometry_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/plan.json",
+    "sha256": "f26e7eebf82d8dc923500040dd0f63418b57ee135dc49204bdbca2ab82c2bea2"
+  },
+  "stereo_repair": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/repair_registration.json",
+    "sha256": "9b007782ad9ae4c8a63d5e86d8303afee9f1fdc733f2dbdc3920d82a07ebd6d7"
+  },
+  "native_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/native_plan_v4.json",
+    "sha256": "c7da41a9fc15b11530c43fe8312a95985f4a88e967b3eb47f069c92b9a493859"
+  },
+  "native_results": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/native_results_v4.json",
+    "sha256": "54482828f5f64b60d9efe837e262363d9e7e523855193e91b8e396a59f970a14"
+  },
+  "failed_native_plan_results": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/native_results.json",
+    "sha256": "eab96a39f38a7e9cc2f6c12197af7ae2a50676334099af28d33895a3547a68aa"
+  },
+  "transfer_revision": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/revision.json",
+    "sha256": "d9e54c2e8ef4c7fcceb9cdbe584e692b85ebadd39c4f30568bb574531ece2d4a"
+  },
+  "transfer_independent_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v4/independent_audit.json",
+    "sha256": "e97ee14a5d87dfa99ccebc5adad02fd437ae38fe171466ffe14a1c6f6b4932a5"
+  },
+  "start_comparison": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "proper_rotation_heavy_RMSD_A": 2.513844722623091,
+      "interpretation": "Different embedding starts; not proof of distinct thermodynamic basins or experimental-conformation coverage."
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "proper_rotation_heavy_RMSD_A": 5.128318051001279,
+      "interpretation": "Different embedding starts; not proof of distinct thermodynamic basins or experimental-conformation coverage."
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "proper_rotation_heavy_RMSD_A": 4.684551980939975,
+      "interpretation": "Different embedding starts; not proof of distinct thermodynamic basins or experimental-conformation coverage."
+    }
+  ],
+  "records": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "start": "start-1",
+      "native_energy": [
+        "ENERGY:       0       360.3058       171.4606       328.2257         0.0007           -367.0870       141.8711         0.0000         0.0000         0.0000            634.7769         0.0000       634.7769       637.1048         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-cis-anti-i/start-1/forces_v4.force",
+        "sha256": "1dd4b4a19dc89ee645fa992449020881383e44bcee5822a1addcd1b54e068c6f"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 344.4333064738205,
+      "rms_force_component": 53.620746962060046
+    },
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "start": "start-2",
+      "native_energy": [
+        "ENERGY:       0       359.8928       158.6487       324.6333         0.0005           -334.2688       248.5218         0.0000         0.0000         0.0000            757.4284         0.0000       757.4284       759.8336         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-cis-anti-i/start-2/forces_v4.force",
+        "sha256": "5b7f82499edfc5c3b50533cd86df96608b1cfc7e249636862d728f37337eceb8"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 346.57918337591343,
+      "rms_force_component": 56.351729822890576
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "start": "repaired-start-1",
+      "native_energy": [
+        "ENERGY:       0       361.4533       184.0576       310.3665         0.0002           -403.1744       202.5576         0.0000         0.0000         0.0000            655.2608         0.0000       655.2608       657.7389         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-trans-syn-i/repaired-start-1/forces_v4.force",
+        "sha256": "bd30d506575dab4721ef37dcd299919c9109f30138389943a6958ddf5253f10a"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 366.0680857095849,
+      "rms_force_component": 56.36254803661973
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "start": "repaired-start-2",
+      "native_energy": [
+        "ENERGY:       0       342.7395       167.7513       322.3731         0.0009           -427.8768       167.1121         0.0000         0.0000         0.0000            572.1001         0.0000       572.1001       574.3285         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-trans-syn-i/repaired-start-2/forces_v4.force",
+        "sha256": "ec50cdcd2fe4a78b9a38211489fa031a01e7c983fa0556a6998c2ba77bdf3f1f"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 353.0391712591708,
+      "rms_force_component": 52.79267146816023
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "start": "repaired-start-1",
+      "native_energy": [
+        "ENERGY:       0       350.4032       166.7284       319.7682         0.0008           -430.9526       189.7274         0.0000         0.0000         0.0000            595.6755         0.0000       595.6755       598.1404         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-trans-syn-ii/repaired-start-1/forces_v4.force",
+        "sha256": "e53d0fe57e8a6691a1216817ac98a924cd3b4234422c8749fb9fa113f0ba0bf4"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 343.72631736328964,
+      "rms_force_component": 54.412886900709516
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "start": "repaired-start-2",
+      "native_energy": [
+        "ENERGY:       0       347.8344       166.5570       338.0125         0.0006           -471.0555       162.5688         0.0000         0.0000         0.0000            543.9178         0.0000       543.9178       546.2107         0.0000"
+      ],
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-geometry-v1/tt-cpd-trans-syn-ii/repaired-start-2/forces_v4.force",
+        "sha256": "7c63708157468dd6729bd59c35458b684c2d0a9cab300bac2c09db1fe8ba5d1b"
+      },
+      "force_finite": true,
+      "max_force_kcal_mol_A": 361.4759449432337,
+      "rms_force_component": 53.99485194161409
+    }
+  ],
+  "native_seconds_total": 2394.7352243834484,
+  "scope": "Six191atom six-T DNA engineering starts, two per isomer. All22center signs checked in NAMD input coordinates. Not source-matched experimental structures or known-basin coverage.",
+  "interpretation": {
+    "numerical_stability": "Static energy/force loading only; dynamics/restarts untested.",
+    "practical_equivalence": "Not established.",
+    "sampling": "None. Different embeddings do not establish independent equilibrated basins.",
+    "force_magnitudes": "Seed strain diagnostic; not a refinement trigger or minimum certification."
+  },
+  "next": "Solvate isolated v4 fixtures with canonical identity checks; register bounded staged minimization/thermalization with independent velocity seeds and restart checks before feasibility sampling. Experimental-context fixtures/observables remain required."
+}

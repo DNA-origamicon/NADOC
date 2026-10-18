@@ -1,0 +1,28 @@
+{
+  "stage": "cis-syn-independent-external-assignment-input-ready",
+  "input_manifest": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-input-v1/manifest.json",
+  "input_manifest_sha256": "ae79a2fab223133bda61bb46e89213422ab3961c7bc89fcedf7965c1bf3d6ecf",
+  "package": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-assignment-input-v1.zip",
+  "passed": {
+    "atoms": 62,
+    "net_formal_charge": 0,
+    "mapped_stereocenters": 10,
+    "mol2_roundtrip": true
+  },
+  "not_claimed": [
+    "Optimized minimum",
+    "External assignment completed",
+    "Native qualification of this new candidate",
+    "Replacement of legacy cis-syn model"
+  ],
+  "awaiting": "User supplies CGenFF results through previously selected account workflow; no licensed executable/account connection available locally.",
+  "expectations_before_return": [
+    "Exact submitted graph and input identity retained",
+    "All10mapped sugar/ring centers retained",
+    "Neutral complete external parameter coverage",
+    "Library/version compatibility with existing thymidine reference",
+    "Independent boundary-transfer and native admission still required after return"
+  ],
+  "native_seconds_used": 2947.3957649814856,
+  "new_native_jobs": 0
+}

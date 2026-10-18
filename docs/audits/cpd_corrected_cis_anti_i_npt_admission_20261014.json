@@ -1,0 +1,25 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-finish-v2-service/completion_wake_ack.json",
+    "sha256": "5fd1d66efab39cd4227aa9e218f3d5db14e5f0a3c0cc14a5703227fcc5c2c0f3"
+  },
+  "control_finish_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-finish-v2/completion_audit.json",
+    "sha256": "9ee29b28ab56c11db5628ec3d1bc86f53320a2accce84526866ffd6c46bfb63d"
+  },
+  "release_gate_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/release-dynamics-review-v2/assessment.json",
+    "sha256": "30c9de75e5d6e2dc68b200098586090c4e049dfa6bc3382a9939da349687c630"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-anti-v1/launch_receipt.json",
+    "sha256": "add1757f70e2dec327551807494a57c64f4030a5e7d930a09b408c5a0bcb0efe"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-anti-v1/handoff.json",
+    "sha256": "0965eed523c6ead2b530f22b5447d4739229be1251eb42b3ca96f6422b96ccf7"
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

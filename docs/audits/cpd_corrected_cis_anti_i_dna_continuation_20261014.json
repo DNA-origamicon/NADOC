@@ -1,0 +1,59 @@
+{
+  "at": "2026-10-14T16:39:43.829819+00:00",
+  "prior_assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5/assessment.json",
+    "sha256": "ee56d9fc2f3532d22864fef51e49b5a68ed047c21bd8e7aca3459e7e7028aeb0"
+  },
+  "independent_force_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5/independent_force_audit.json",
+    "sha256": "c5f5fa2d13357d9bd41865576c837d0e80c5a9d196acb7833a6c196c9017c368"
+  },
+  "ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5-service/completion_wake_ack.json",
+    "sha256": "d83917664292cc177d5e7134a4fb1c26ada73df399bfec5bfb9f24613ce363e7"
+  },
+  "audit": {
+    "stopping_reason": "Iteration budget reached",
+    "iterations": 1500,
+    "evaluations": 1514,
+    "elapsed_seconds": 775.4685115280008,
+    "energy_decrease_kcal": 14747.015978016767,
+    "last250_energy_decrease_kcal": 12.656161408420303,
+    "final_force": 4.6617751747588,
+    "best_force": 0.7090042300304396,
+    "stereo": true,
+    "bonds": [
+      0.9611216438227214,
+      1.0554830228249692
+    ],
+    "fixed_atoms_unchanged": true,
+    "rejected": {
+      "stereo": 0,
+      "contacts": 0
+    }
+  },
+  "decision": "Meaningful progress and valid restart; continue with larger iteration allocation inside original two-hour wall ceiling, early stop at unchanged0.01 force acceptance. No claim of convergence or minimum.",
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v6/plan.json",
+    "sha256": "efff9465915d43598380cf8a8654ece7a502df65eafa373eeeb44fbb252bc00b"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v6/launch_receipt.json",
+    "sha256": "f16eac126d5ffab0dc27fbe8efed17a1b4a3d0ad9b33f14d6c4640cfd8a2a174"
+  },
+  "verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v6/launch_verification.json",
+    "sha256": "0834613e16b7ad3338206821ba88e1ca4e32aacc2c6123bafdcfa96b774e6eca"
+  },
+  "times_denver": {
+    "start_epoch": "2026-10-14T10:39:23.005358-06:00",
+    "hard_deadline_epoch": "2026-10-14T12:39:23.005358-06:00",
+    "review_deadline_epoch": "2026-10-14T12:34:23.005358-06:00"
+  },
+  "wake_token": "cd4f6ed7-aacd-49d3-95ed-aa6c0d0cafac",
+  "remaining": "Full independent geometry/force audit, application displacement screens, conditioned native static parity, matched solvent/restart/context validation and explicit parameter limitations.",
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0,
+  "periodic_polling": false
+}

@@ -1,0 +1,23 @@
+{
+  "time_utc": "2026-10-18T03:07:20.451961+00:00",
+  "goal_complete": false,
+  "blocking_condition": "Missing independently executed cis-syn-I external assignment; user selected own CGenFF account, no local licensed executable/authenticated connection available.",
+  "consecutive_turn_evidence": [
+    "Cis-syn input preparation turn: requested account return; input ready",
+    "NMR deposition retrieval turn: return absent; independent reference work progressed",
+    "NMR mapping turn: return still pending; independent mapping progressed",
+    "Current turn: extracted files and candidate ZIP stream contents checked; all are previous anti/trans/reference returns, no CSIS assignment"
+  ],
+  "previous_turn_classification": "progress: source mapping and independent sugar/dihedral audit",
+  "availability_audit": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-input-v1/return_availability_audit.json",
+  "scientific_stopping_decision": "Completed numerical panel stays closed. Physical-equivalence evidence remains insufficient; do not expand simulations/refine parameters to fill time while external assignment is unavailable. Deposited restraints do not yet justify a substantial-effect criterion.",
+  "preserved_state": [
+    "Three external candidate packages retained for tested numerical scope",
+    "Legacy cis-syn model retained with historical qualifications",
+    "Failures and primary reference downloads retained",
+    "No production promotion",
+    "No active native jobs"
+  ],
+  "native_seconds_used": 2947.3957649814856,
+  "resume_trigger": "User returns cis-syn-I CGenFF outputs; verify submitted input, source version, graph/stereo, charge/coverage and boundary transfer before new native admission."
+}

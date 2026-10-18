@@ -1,0 +1,143 @@
+{
+  "at": "2026-10-18T02:49:38.219371+00:00",
+  "status": "first_solvated_cis_anti_start_passed_bounded_two_seed_numerical_admission",
+  "plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/plan_config_v2.json",
+    "sha256": "05c450724350f62fe4f62e1839d1fd9bf4f5bbf486d8856d9fb74e5b1d1f8495"
+  },
+  "worker": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/run_pilot_v2.py",
+    "sha256": "c63c19962a94d0bd38b2f364ae964459aa71f6dc4bdb3134d2f3823f08b788f7"
+  },
+  "auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/check_stage.py",
+    "sha256": "e2bdaad436aea29573ba4f57201c676962102e41502b264660079d5f6250281b"
+  },
+  "native_results": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/pilot_status_v2.json",
+    "sha256": "aea90e63b5b8e2fc1cd998295f8e119984fe22d1aa80eefb5bd18b2c80eae862"
+  },
+  "initial_config_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/pilot_status.json",
+    "sha256": "be146ff1e56600810a42c1af62c3337d161a4084fccf9ed12626ae99ca5a61d6"
+  },
+  "assembly": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/assembly_audit.json",
+    "sha256": "120ee46eeda37833bb584ba28f8cdc906dd09059a12b49733dbd7b3d1f4ba9c3"
+  },
+  "stages": [
+    {
+      "stage": "solvmin",
+      "frames_checked": 11,
+      "minimum_signed_margin_A3": 1.5687981843948364,
+      "last_temperature_K": 0.0,
+      "first_potential": -86594.6194,
+      "last_potential": -124688.1762,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/solvmin.audit.json",
+        "sha256": "093f66384ee7c25b0b6e60e5f7a18c3504403305502c17ace798d99904509c83"
+      }
+    },
+    {
+      "stage": "wholemin",
+      "frames_checked": 21,
+      "minimum_signed_margin_A3": 1.6319292783737183,
+      "last_temperature_K": 0.0,
+      "first_potential": -122842.7794,
+      "last_potential": -124164.0035,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/wholemin.audit.json",
+        "sha256": "74bc0829ce9f44ba2ee2a14b8aadf800803b51529d5fbc71e2d155a31b25bcd2"
+      }
+    },
+    {
+      "stage": "r1_thermal",
+      "frames_checked": 101,
+      "minimum_signed_margin_A3": 1.442944049835205,
+      "last_temperature_K": 289.4701,
+      "first_potential": -124164.0042,
+      "last_potential": -101433.2606,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r1_thermal.audit.json",
+        "sha256": "62034d9f0cd51e5acbb88785bf743a5a09d2ffe3c9a302f5c139bcd4dc74c844"
+      }
+    },
+    {
+      "stage": "r1_release",
+      "frames_checked": 101,
+      "minimum_signed_margin_A3": 1.3433241844177246,
+      "last_temperature_K": 297.9072,
+      "first_potential": -101466.0961,
+      "last_potential": -100684.6629,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r1_release.audit.json",
+        "sha256": "13192aa6d943559469ad0dee6058c0297ebd1a5572b341fffd9b170a0c620d92"
+      }
+    },
+    {
+      "stage": "r1_restart",
+      "frames_checked": 11,
+      "minimum_signed_margin_A3": 1.693612813949585,
+      "last_temperature_K": 299.7589,
+      "first_potential": -100684.6659,
+      "last_potential": -100858.939,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r1_restart.audit.json",
+        "sha256": "b99061a34b09fee80d8b985d1d7115d7144dfaa5146fd8fcb33dec49602d7aba"
+      }
+    },
+    {
+      "stage": "r2_thermal",
+      "frames_checked": 101,
+      "minimum_signed_margin_A3": 1.2815608978271484,
+      "last_temperature_K": 291.0749,
+      "first_potential": -124164.0042,
+      "last_potential": -101940.3005,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r2_thermal.audit.json",
+        "sha256": "a525aad69e71acd12abf200b441f7a8d89d4d0ebc388a6cefe7c938576251ab0"
+      }
+    },
+    {
+      "stage": "r2_release",
+      "frames_checked": 101,
+      "minimum_signed_margin_A3": 1.278846263885498,
+      "last_temperature_K": 297.8426,
+      "first_potential": -101974.9724,
+      "last_potential": -100545.7081,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r2_release.audit.json",
+        "sha256": "67e3c1a28ba8ff0372e6658d44ae3a8ed1c0eb8ccb951bb45cf7ed8340aab74e"
+      }
+    },
+    {
+      "stage": "r2_restart",
+      "frames_checked": 11,
+      "minimum_signed_margin_A3": 1.5611358880996704,
+      "last_temperature_K": 299.4415,
+      "first_potential": -100545.7033,
+      "last_potential": -100628.371,
+      "audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2/r2_restart.audit.json",
+        "sha256": "8ff4a3aa63d9425bdf26fa37d20fb56c95ca0b4ad43bd51c3d4d03874e0653e0"
+      }
+    }
+  ],
+  "expectations": {
+    "neutrality_and_parameter_coverage": "PASS:29538atoms,191solute atoms; neutral",
+    "minimization_decreases_energy_within_each_stage": "PASS",
+    "all22center_signs_in_saved_frames_and_endpoints": "PASS",
+    "two_independent_velocity_seeds": "PASS35171and80239; shared minimized start",
+    "restart_potential_tolerance_0.01_kcal_mol": "PASS:0.0030and0.0048",
+    "physical_equivalence": "NOT TESTED",
+    "equilibrium_sampling": "INSUFFICIENT"
+  },
+  "native_seconds_total": 2484.5425266365364,
+  "scope": "One cis-anti-I six-T engineering start, 1fs ordinary masses, CHARMM TIP3P, nominal150mMNaCl; two21psbranches after minimization. This is numerical admission, not a calibrated physical model.",
+  "remaining": [
+    "Other five starting fixtures and two seeds each",
+    "Integration at intended production timestep",
+    "Experimental-context/observable qualification and convergence or explicit finite insufficiency closeout"
+  ],
+  "next": "Pilot permits remaining registered serial numerical-admission cases within shared1h initial panel allowance. No parameter changes or refitting justified by this result."
+}

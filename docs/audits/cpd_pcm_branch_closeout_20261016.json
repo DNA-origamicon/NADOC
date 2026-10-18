@@ -1,0 +1,55 @@
+{
+  "at": "2026-10-17T02:30:37+00:00",
+  "accepted": false,
+  "scf_completed": true,
+  "energy_hartree": -1963.9944991263894,
+  "wall_seconds": 412.7193571139942,
+  "coordinate_error_A": 8.881784197001252e-16,
+  "warning_count": 2,
+  "decision": "Close PCMSolver branch after registered finer-grid retry. No more mesh changes; both warning-bearing energies remain rejected. Assess isolated ddx runtime using upstream reference tests before CPD pilot.",
+  "sources": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v2/plan.json",
+      "sha256": "14bace91902423a4cb5fcbe172f4b98c561ced0c8a0005696caa58f0cf4a0bf3"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v2/original_qm/output.dat",
+      "sha256": "f653d5d1d7c81bb53080e1f2ded59e8d23b0890f4eddd600106525feb6d33199"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v2/original_qm/returned_geometry_angstrom.npy",
+      "sha256": "4134d6d497cedc05fefcb2c3ecb66eae3f365a949629c67733a8d378ff35eb45"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v2/original_qm_runner.log",
+      "sha256": "3f476b71e1caddad27c952c1f73125b8f18693dd190e4e386252f3d74fa89487"
+    }
+  ],
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "ddx_reference_checks": {
+    "passed": true,
+    "records": [
+      {
+        "name": "nh3-df",
+        "energy": -56.17153414849917,
+        "reference": -56.171546236617495,
+        "error": 1.2088118324982133e-05,
+        "tolerance": 0.0001,
+        "passed": true
+      },
+      {
+        "name": "fcm-pcm",
+        "energy": -597.9718943192867,
+        "reference": -597.9718943192062,
+        "error": 8.049028110690415e-11,
+        "tolerance": 1e-08,
+        "passed": true
+      }
+    ]
+  },
+  "runtime": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-ddx-runtime-v1/site-v3",
+  "runtime_build_notes": "No binary wheel available; builds1/2 failed import with Python API mismatch. Build3 explicitly selected matching Python3.12.14 executable/include/library and pybind11 2.13.6; both upstream reference tests passed. Original runtime unchanged; all artifacts on Archive.",
+  "upstream_test_source": "/home/jojo/miniforge3/envs/nadoc-qm/lib/python3.12/site-packages/psi4/tests/test_ddx.py",
+  "alternative_reference": "https://psicode.org/psi4manual/master/ddx.html"
+}

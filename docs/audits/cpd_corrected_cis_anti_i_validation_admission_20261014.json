@@ -1,0 +1,27 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-control-v2-service/completion_wake_ack.json",
+    "sha256": "600d8b527cf7daa79e1f814237584b1f03a67df8e0cd3723d550a3fa32799826"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-control-v2/completion_audit.json",
+    "sha256": "143b14e5a7d7de8d1a9106b3ba557b583c427e9da94e8ad939e9230b281cc69c"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-anti-v3/launch_receipt.json",
+    "sha256": "90aaa67da44b4263d66e7b4ec5a3402d2ec7a0db5b6eaa113f9af5de4c698362"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-anti-v3/handoff.json",
+    "sha256": "4a07fa87c4d663bbb421c5c2269f7a92f008a96db47009efd583fcf1ca33a0ff"
+  },
+  "performance": {
+    "control_native_seconds_per_ns": 3261.718689,
+    "control_worker_seconds": 3329.869125,
+    "slowdown_stop_seconds_per_ns": 3914.0624268
+  },
+  "scope": "Provisional engineering/structural validation only; not melting comparison or minimum/parameter certification.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

@@ -1,0 +1,1092 @@
+{
+  "at": "2026-10-17T23:27:59.699081+00:00",
+  "rdkit_version": "2026.03.5",
+  "source": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_isomer_formation/audit_existing_rdkit_20261017.py",
+    "sha256": "2110089d701b3959e197db74fe0c9ff5dc0234069b8bfddd87770a0652c005dd"
+  },
+  "passed": true,
+  "method": "Remove all stereo annotations; AssignStereochemistryFrom3D; recursive rdCIPLabeler.AssignCIPLabels; atom-mapped signed-volume/connectivity checks against current definitions. Reordering and reflected-coordinate controls on eight cores.",
+  "existing_core_candidates": [
+    {
+      "product": "tt-cpd-cis-syn",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-syn/construction.sdf",
+        "sha256": "a0aa970fc4c1810780290123df3ed5e4720f6dd6cedae7eb008264568cb46c1b"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-syn/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.199458549718,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.7971406603880002,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": -2.2008214929879997,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": 1.7275181870399996,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-cis-syn-ii",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-syn-ii/construction.sdf",
+        "sha256": "b9ed2ca1ffdfef968513b13ca3ec2999a441882dec92f69fc700dfe21dbd62c1"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-syn-ii/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": -2.2977786166049996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": 1.577328666504,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.1499133952719998,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6598743490729997,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-i/construction.sdf",
+        "sha256": "d77aa20270e0793097b5715898f9ba700dfc2ae3d83323bad1d4e99a07b9a34b"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-i/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": -2.20471806468,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": 1.5997636612589996,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": -2.105258583912,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": 1.6472830043409996,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-ii/construction.sdf",
+        "sha256": "ad1a3729eca7f726b0a99b91fc6164a6ebcbd62964b87e851e8f5ba4d5c550ee"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-ii/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.1289621546420006,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6191076607369999,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.07661482865,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.5980337904210002,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/construction.sdf",
+        "sha256": "3fb1cb8acd0d17aae0d63b344eb3a6a9ff7da6d7647473af0302e8d46747a795"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.3148020542510004,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.4179766676980001,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 1.9945816270170003,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.5800733920260002,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-cis-anti-ii",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-ii/construction.sdf",
+        "sha256": "93b3a36699434d53d34d41462db76eb59870ddb51472a6cf6e2fe2410fb6ec4d"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-ii/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": -2.002185534683001,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": 1.611162332478,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": -2.31082215707,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": 1.56053120187,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-trans-anti-i",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-anti-i/construction.sdf",
+        "sha256": "478e85eb229dab9161cdd26af423cbdf81de9cf58b404e907f085df216c07195"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-anti-i/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": -2.283407457914999,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": 1.5693184892279997,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.2639868066380004,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6598501712940001,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    },
+    {
+      "product": "tt-cpd-trans-anti-ii",
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-anti-ii/construction.sdf",
+        "sha256": "29fc148f0883771fb009f385402c841335c326a601d8f36e5373e36cb37cbed6"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7"
+      },
+      "atom_map": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-anti-ii/atom_map.json",
+        "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+      },
+      "coordinate_check": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.158144719288,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.7588258014569997,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": -2.488643403802,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": 1.509912698532,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "stored_tag_agreement": true,
+      "atom_reordering_invariant": true,
+      "reflection_negative_control_rejected": true,
+      "limitation": "Existing capped-core coordinates, not a full DNA fixture; capped-graph CIP labels need not equal DNA-attached labels. No formation claim."
+    }
+  ],
+  "recent_canonical_fragment_points": [
+    {
+      "point": "A_center",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_center_bohr.npy",
+        "sha256": "f1071616d6c86e0127a66a31e21228e50e6ba3106d3e5e5db0385bc576edf9e2"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2722432615087182,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6919355327377363,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.245440884499653,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.681901015511474,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "A_minus2",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_minus2_bohr.npy",
+        "sha256": "c3a35192e8c0d5b250ad2b0ea4a53a558baf1d9383df5b0b278fcf0a273371fb"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2722432615087182,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6919355327377363,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.245440884499653,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.681901015511474,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "A_plus2",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_plus2_bohr.npy",
+        "sha256": "912b526d03eb77894ff174637446c0847148f36640ee85d399a2f0da9d2ec3b2"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2722432615087182,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6919355327377363,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.245440884499653,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.681901015511474,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "A_minus4",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_minus4_bohr.npy",
+        "sha256": "c550c470b62b922fda8078297c98fb3937260ad5536336e16701995ce7f56ed5"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2722432615087182,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6919355327377363,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.245440884499653,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.681901015511474,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "A_plus4",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_plus4_bohr.npy",
+        "sha256": "464ba5f603ca2f65ac9a45fae38f6cdf1dcd83b9173f5113bbcae881b1d0103e"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2722432615087182,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6919355327377363,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.245440884499653,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.681901015511474,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "B_center",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_center_bohr.npy",
+        "sha256": "19bec091ceee1be6ebccb9dc2f4a8782215f8546e8df0c54f6ca02e0b41eb8c4"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.258070617870612,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6984493604065996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.288333728677519,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6882611825507399,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "B_minus2",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_minus2_bohr.npy",
+        "sha256": "37b18e00f5517d08d3b52ad85ae632d27b351a3b15176ffbcb5d94b79f841bf9"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.258070617870612,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6984493604065996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.288333728677519,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6882611825507399,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "B_plus2",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_plus2_bohr.npy",
+        "sha256": "edec02b4c501d9c853613732ca171e8f3a7b6724233ab294a4e3c71fb36674a0"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.258070617870612,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6984493604065996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.288333728677519,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6882611825507399,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "B_minus4",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_minus4_bohr.npy",
+        "sha256": "9af84952c4d4781e327338960a0bb23e7a476c6f8ee357bba47ee5b446cd4243"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.258070617870612,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6984493604065996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.288333728677519,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6882611825507399,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "point": "B_plus4",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_plus4_bohr.npy",
+        "sha256": "fa507ef6c98479c962702bfaf56bae93375b9d4f963242310610687d9897ba5f"
+      },
+      "core": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.258070617870612,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6984493604065996,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.288333728677519,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6882611825507399,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "sugar": [
+        {
+          "atom": "1:C1'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "observed_tag": "CHI_TETRAHEDRAL_CCW",
+          "passed": true
+        },
+        {
+          "atom": "1:C3'",
+          "CIP": "S",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        },
+        {
+          "atom": "1:C4'",
+          "CIP": "R",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "observed_tag": "CHI_TETRAHEDRAL_CW",
+          "passed": true
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "scope": "Identity only. This audit does not establish experimental formation of every registry entry, force-field accuracy, or validity of historical full-DNA sugar geometry.",
+  "user_scope": "Only previously established products of thymine-thymine photoreactions. No new-isomer discovery or enumeration. Experimental formation provenance is required separately from a possible stereochemical classification before admitting another isomer campaign.",
+  "production_modified": false,
+  "native_jobs": 0
+}

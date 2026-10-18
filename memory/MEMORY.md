@@ -16,6 +16,7 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 - [VR human motion](project_vr_human_motion.md) — archived BEHAVIOR Vive recordings, movement modeller, live/Witness adapters; steady_fast first, all four presets for final validation.
 
+- [CPD QM solver preference](feedback_cpd_qm_solver_choice.md) — start charged-fragment solvent references with tested PySCF IEF-PCM; keep numerical/resource gates.
 - [CPD strand builder](project_cpd_strand_builder.md) — preliminary additive cis-syn support, packaged assets, scope and verification.
 
 - [Sella default](feedback_sella_default.md) — user-selected optimizer for new molecular QM/fragment-MM geometry work; preserve independent gates and frozen evidence.

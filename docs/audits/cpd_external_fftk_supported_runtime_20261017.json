@@ -1,0 +1,36 @@
+{
+  "schema": "nadoc.cpd.external-fftk-supported-runtime.v1",
+  "native": {
+    "state": "completed",
+    "returncode": 0,
+    "started_at": 1792281527.7082362,
+    "finished_at": 1792281531.7789094,
+    "elapsed_seconds": 4.070673227310181
+  },
+  "psi4_version": "1.6",
+  "fftk_version": "2.2",
+  "source_modified": false,
+  "original_expectations": {
+    "native_optimization_completes_within_120s": "PASS",
+    "exactly_one_new_frame": "FAIL: three optimization frames imported"
+  },
+  "diagnostic_resolution": "Reader iterates over all OPTKING completion markers, including intermediate optimization steps. After PSF initialization,3markers produce3frames. Last-frame coordinates independently checked against native final Angstrom block. No QM rerun for harness repairs.",
+  "max_coordinate_difference_A": 0.0004983127230000495,
+  "coordinate_tolerance_basis": "PDB writes three decimals;0.000501A per component allows rounding",
+  "native_seconds_used": 1866.646260949814,
+  "verdict": "Geometry input generation, native execution and final-coordinate import interoperable on supported runtime; original one-frame expectation remains failed.",
+  "limitations": [
+    "No frequency or minimum certification",
+    "No charge/Hessian/torsion-fitting test yet",
+    "No CPD model qualification"
+  ],
+  "preserved_failures": [
+    "conda-dry-run.json: missing intel-openmp",
+    "import_before_pin.log: Pydantic2 incompatible; fixed dependency pin<2",
+    "Psi4 1.11 output marker mismatch",
+    "read_example.log: harness lacked PSF initialization",
+    "read_example_v2.log: harness lacked coordinate frame for PSF subset",
+    "read_example_v3.log: incorrect one-frame expectation"
+  ],
+  "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-fftk-v1/native-psi4-16"
+}

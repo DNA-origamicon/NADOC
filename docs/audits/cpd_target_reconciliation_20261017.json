@@ -1,0 +1,124 @@
+{
+  "at": "2026-10-17T08:43:21.708317+00:00",
+  "table": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/independent-pcm-pair-closeout-v1/target_reconciliation.csv",
+    "sha256": "dcc7235148bbe1b6570377aa36e5bfedafc39df1dbf7e4ad04f5ebd6ace4c5df"
+  },
+  "sources": [
+    {
+      "path": "/home/jojo/Work/NADOC/docs/audits/cpd_endpoint_cap_review_20261016.json",
+      "sha256": "8f0cb9d4da167cb8954fa9b2f33493c156b7395c412ed24487423ae989dccbb1"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/docs/audits/cpd_endpoint_exocyclic_holdout_20261016.json",
+      "sha256": "5789384204cd1d7d08b446562b59e5af55e1249771e562413869d1a495497d42"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/docs/audits/cpd_endpoint_basis_review_20261016.json",
+      "sha256": "c89d2a91b1465f61d7dbb314316977347cf0709d15cc25336de4b9c621bef2e2"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/independent-pcm-pair-closeout-v1/assessment.json",
+      "sha256": "e396bdad24c4cbf1db89abe49815232f5dbfcc7f608667a3efb2e9cd0c557a34"
+    }
+  ],
+  "rows": [
+    {
+      "family": "neutral_cap_cross_diagnostic",
+      "contrast": "heavy_change_caps_A",
+      "qm_kcal_mol": 10.426772814613253,
+      "mm_kcal_mol": 1.146112425136268,
+      "mm_minus_qm_kcal_mol": -9.280660389476985,
+      "qualification": "Published audit contrast; preserve constituent method/basis provenance; not a new fit target"
+    },
+    {
+      "family": "neutral_cap_cross_diagnostic",
+      "contrast": "heavy_change_caps_B",
+      "qm_kcal_mol": -8.970715615927535,
+      "mm_kcal_mol": -16.73698168992555,
+      "mm_minus_qm_kcal_mol": -7.766266073998015,
+      "qualification": "Published audit contrast; preserve constituent method/basis provenance; not a new fit target"
+    },
+    {
+      "family": "neutral_cap_cross_diagnostic",
+      "contrast": "cap_change_heavy_A",
+      "qm_kcal_mol": 6.826419025782178,
+      "mm_kcal_mol": 6.856107490256075,
+      "mm_minus_qm_kcal_mol": 0.029688464473896836,
+      "qualification": "Published audit contrast; preserve constituent method/basis provenance; not a new fit target"
+    },
+    {
+      "family": "neutral_cap_cross_diagnostic",
+      "contrast": "cap_change_heavy_B",
+      "qm_kcal_mol": -12.571069404758608,
+      "mm_kcal_mol": -11.026986624805742,
+      "mm_minus_qm_kcal_mol": 1.5440827799528662,
+      "qualification": "Published audit contrast; preserve constituent method/basis provenance; not a new fit target"
+    },
+    {
+      "family": "neutral_cap_cross_diagnostic",
+      "contrast": "original_diagonal",
+      "qm_kcal_mol": -2.1442965901453563,
+      "mm_kcal_mol": -9.880874199669474,
+      "mm_minus_qm_kcal_mol": -7.736577609524118,
+      "qualification": "Published audit contrast; preserve constituent method/basis provenance; not a new fit target"
+    },
+    {
+      "family": "neutral_exocyclic_rigid_holdout",
+      "contrast": "original_qm_minus30",
+      "qm_kcal_mol": 24.18466763499462,
+      "mm_kcal_mol": 36.35644994220592,
+      "mm_minus_qm_kcal_mol": 12.171782307211299,
+      "qualification": "Keep failed holdout; rejected trial not applied"
+    },
+    {
+      "family": "neutral_exocyclic_rigid_holdout",
+      "contrast": "original_qm_plus30",
+      "qm_kcal_mol": 5.203101102886891,
+      "mm_kcal_mol": 4.569613856429326,
+      "mm_minus_qm_kcal_mol": -0.6334872464575652,
+      "qualification": "Keep failed holdout; rejected trial not applied"
+    },
+    {
+      "family": "neutral_exocyclic_rigid_holdout",
+      "contrast": "alternate_qm_minus30",
+      "qm_kcal_mol": 5.852029364296187,
+      "mm_kcal_mol": 3.1780129504644137,
+      "mm_minus_qm_kcal_mol": -2.6740164138317732,
+      "qualification": "Keep failed holdout; rejected trial not applied"
+    },
+    {
+      "family": "neutral_exocyclic_rigid_holdout",
+      "contrast": "alternate_qm_plus30",
+      "qm_kcal_mol": 9.07912981456595,
+      "mm_kcal_mol": 9.43639585461342,
+      "mm_minus_qm_kcal_mol": 0.35726604004746854,
+      "qualification": "Keep failed holdout; rejected trial not applied"
+    },
+    {
+      "family": "charged_terminal_HF_PCM_fixed_proxy",
+      "contrast": "alternate_minus_original_302",
+      "qm_kcal_mol": -0.047194038143031455,
+      "mm_kcal_mol": null,
+      "mm_minus_qm_kcal_mol": null,
+      "qualification": "No matched solvent MM residual; not comparable to neutral MP2 endpoint"
+    },
+    {
+      "family": "charged_terminal_HF_PCM_fixed_proxy",
+      "contrast": "alternate_minus_original_350",
+      "qm_kcal_mol": -0.03676244979944453,
+      "mm_kcal_mol": null,
+      "mm_minus_qm_kcal_mol": null,
+      "qualification": "No matched solvent MM residual; not comparable to neutral MP2 endpoint"
+    }
+  ],
+  "observations": [
+    "Neutral heavy-geometry residual survives fixed cap orientations;cap-only residuals much smaller.",
+    "Rigid original-minus30 increment is QM24.18kcal/mol and MM36.36kcal/mol; MM LJ increment41.87kcal/mol dominates MM response, but no QM term decomposition proves the discrepancy is purely LJ.",
+    "Frozen torsion correction remains rejected on holdouts; do not fit contact error into torsion.",
+    "Charged-terminal HF/PCM near-degeneracy cannot be used to cancel neutral MP2/MM mismatch."
+  ],
+  "next_action": "Before new QM or fitting, attach sugar pseudorotation/exocyclic/glycosidic/contact descriptors and exact per-row method/basis provenance to existing neutral geometry panel. Reuse existing MM decompositions; identify missing discriminating constrained-relaxed points separately from rigid contact stress tests.",
+  "no_new_qm": true,
+  "parameters_changed": false
+}

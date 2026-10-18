@@ -1,0 +1,104 @@
+{
+  "at": "2026-10-16T17:21:06+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_cap_check_v1.py",
+    "sha256": "37679f16b6e88aca2bb761de80c7a0011169c1344666beba4878aa768eb15f26"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/assessment.json",
+    "sha256": "0f7b5d0f7d77ffc2ce6cb0a58d7a0f64da48f52ac8951ce738a285f22a5065b6"
+  },
+  "records": [
+    {
+      "label": "AB",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/original_with_alternate_caps/result.json",
+        "sha256": "a4b97834bea90a5e92be1168aae4ccd50930eed289a9fe0c19448432e3c088c2"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/original_with_alternate_caps/output.dat",
+        "sha256": "7df1f5d5f458aca4590cc18ac5404a94e38b00e834cf6b51001427c388483cdf"
+      },
+      "energy_hartree": -1366.0926486234916,
+      "only_cap_hydrogens_changed": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    },
+    {
+      "label": "BA",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/alternate_with_original_caps/result.json",
+        "sha256": "29ecd3ab3223ac21cb70f7a9d19ca764d2126928d518a579e829c37e36653d0e"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/alternate_with_original_caps/output.dat",
+        "sha256": "809842bbeffcba7676d8572bc76ceceff6280ff2a36edc9422395d55032686a7"
+      },
+      "energy_hartree": -1366.0869110945177,
+      "only_cap_hydrogens_changed": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    }
+  ],
+  "contrasts": {
+    "parent": {
+      "heavy_change_caps_A": {
+        "qm_kcal_mol": 10.426772814613253,
+        "mm_kcal_mol": 0.9556625265840744,
+        "error_kcal_mol": -9.471110288029179
+      },
+      "heavy_change_caps_B": {
+        "qm_kcal_mol": -8.970715615927535,
+        "mm_kcal_mol": -16.92743158847777,
+        "error_kcal_mol": -7.956715972550235
+      },
+      "cap_change_heavy_A": {
+        "qm_kcal_mol": 6.826419025782178,
+        "mm_kcal_mol": 6.856107490256104,
+        "error_kcal_mol": 0.029688464473926146
+      },
+      "cap_change_heavy_B": {
+        "qm_kcal_mol": -12.571069404758608,
+        "mm_kcal_mol": -11.02698662480574,
+        "error_kcal_mol": 1.544082779952868
+      },
+      "original_diagonal": {
+        "qm_kcal_mol": -2.1442965901453563,
+        "mm_kcal_mol": -10.071324098221666,
+        "error_kcal_mol": -7.92702750807631
+      }
+    },
+    "core_round1": {
+      "heavy_change_caps_A": {
+        "qm_kcal_mol": 10.426772814613253,
+        "mm_kcal_mol": 1.146112425136268,
+        "error_kcal_mol": -9.280660389476985
+      },
+      "heavy_change_caps_B": {
+        "qm_kcal_mol": -8.970715615927535,
+        "mm_kcal_mol": -16.73698168992555,
+        "error_kcal_mol": -7.766266073998015
+      },
+      "cap_change_heavy_A": {
+        "qm_kcal_mol": 6.826419025782178,
+        "mm_kcal_mol": 6.856107490256075,
+        "error_kcal_mol": 0.029688464473896836
+      },
+      "cap_change_heavy_B": {
+        "qm_kcal_mol": -12.571069404758608,
+        "mm_kcal_mol": -11.026986624805742,
+        "error_kcal_mol": 1.5440827799528662
+      },
+      "original_diagonal": {
+        "qm_kcal_mol": -2.1442965901453563,
+        "mm_kcal_mol": -9.880874199669474,
+        "error_kcal_mol": -7.736577609524118
+      }
+    }
+  },
+  "decision": "OH orientation does not explain the heavy-conformer MM discrepancy: errors remain7.77\u20139.28kcal/mol at fixed caps. Do not infer a unique force-term error or fit to these four diagnostic points. No further basis/cap repeats.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "next_stage": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/handoff.json"
+}

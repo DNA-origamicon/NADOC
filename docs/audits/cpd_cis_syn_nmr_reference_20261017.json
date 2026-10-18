@@ -1,0 +1,76 @@
+{
+  "status": "Deposited cis-syn quantitative reference recovered; comparison not yet admitted",
+  "sources": [
+    "https://files.rcsb.org/download/1TTD.mr",
+    "https://bmrb.io/ftp/pub/bmrb/entry_directories/bmr4415/bmr4415_3.str",
+    "https://pubmed.ncbi.nlm.nih.gov/9753551/"
+  ],
+  "files": [
+    {
+      "url": "https://bmrb.io/ftp/pub/bmrb/entry_directories/bmr4415/bmr4415_3.str",
+      "file": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/bmr4415.str",
+      "bytes": 97188,
+      "sha256": "86bef53e40d50f3d4e6bbe37c07b223daf545a423021ba437e446a23110b2e2d"
+    },
+    {
+      "url": "https://files.rcsb.org/download/1TTD.mr",
+      "file": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/1ttd.mr",
+      "bytes": 65359,
+      "sha256": "81896d0142a90cc43226e6c29584acef88341c1ff23d4e67ae7b641a23a724d1"
+    },
+    {
+      "url": "https://files.rcsb.org/download/1TTD.cif",
+      "file": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/1ttd.cif",
+      "bytes": 105347,
+      "sha256": "dee91d406d08ebc6e56e0598565320059ab8e90e48614bb2912451bbfea0bf35"
+    }
+  ],
+  "restraint_inventory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/1ttd_restraint_inventory.json",
+  "counts": {
+    "assumed_hydrogen_bond": 28,
+    "source_distance_restraint_measurement_provenance_pending": 407,
+    "dihedral_source_restraint": 22
+  },
+  "lesion_involving_non_hbond": 50,
+  "experimental_fixture": {
+    "strand1": "GCACGAATTAAG",
+    "strand2": "CTTAATTCGTGC",
+    "lesion_strand": 1,
+    "lesion_residues": [
+      8,
+      9
+    ],
+    "temperature_K": 278,
+    "temperature_reported_error_K": 1,
+    "pH_star": 6.6,
+    "pH_star_reported_error": 0.1,
+    "DNA_each_strand_mM": 0.7,
+    "salt_conditions": "not established from inspected deposition; retrieve primary methods"
+  },
+  "specific_observable_candidate": {
+    "name": "epsilon at T9pA10",
+    "atoms": [
+      "T9:C4'",
+      "T9:C3'",
+      "T9:O3'",
+      "A10:P"
+    ],
+    "deposited_bounds_degrees": [
+      -100,
+      -70
+    ],
+    "source_line": 540,
+    "independent_support": "Primary paper attributes BII to31Pshifts and3JP-H3couplings with an optimized Karplus relationship.",
+    "qualification": "Deposited structure restraint, not a population confidence interval or permission to impose the restraint during validation."
+  },
+  "mandatory_before_comparison": [
+    "Resolve original author residue/atom numbering against current merged TTD residue; do not assume PDB residue9 equals originalT9.",
+    "Separate measured distances from assumed geometry and hydrogen bonds.",
+    "Resolve methyl pseudoatom and stereospecific hydrogen conventions.",
+    "Obtain applicable salt/solution conditions and direct coupling forward-model uncertainty.",
+    "Register source-matched canonical fixtures, independent starts/seeds, effect criterion and finite allocation before MD."
+  ],
+  "cis_syn_assignment_return": "No identified new cis-syn return in Downloads; core(2)(2)/core.str identifies TSII and is not the requested cis-syn result.",
+  "new_native_jobs": 0,
+  "goal_complete": false
+}

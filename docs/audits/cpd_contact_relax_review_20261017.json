@@ -1,0 +1,82 @@
+{
+  "at": "2026-10-17T19:42:51+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_contact_relax_v2.py",
+    "sha256": "048015ce5d1456476db540d920f68beef7fe1cdf72b989272d9d78aeda749bf3"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/assessment.json",
+    "sha256": "9d351a74b89625b2970ca25a5242a00fc4a23442535f245d4232ce7542e66362"
+  },
+  "records": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/original/result.json",
+      "sha256": "b088277a20e01f0a4b17f766ff6d8cdca819567cf96942c882a67b06ad4754f7"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/minus30/result.json",
+      "sha256": "cfc0264584cb9a1ea9598397199cdb366ca22cba4c7e7215a0a4c9dfb5a0a458"
+    }
+  ],
+  "relaxed_qm_increment": 11.747125856636597,
+  "relaxed_mm_increment": 7.367900067455521,
+  "relaxed_error": -4.379225789181076,
+  "rigid_error": 12.171782307211299,
+  "decision": "Local MM relaxation reduces absolute rigid-holdout error12.17 to4.38kcal/mol but reverses sign. Not solved and MM-selected geometries are biased. Do not refit torsion from this pair. Next apply identical fixed-torsion branch relaxation to alternate canonical endpoint and compare with already computed relaxed original, directly probing main7.74kcal/mol discrepancy with one new QM energy.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "launch": {
+    "at": "2026-10-17T19:43:29.187728+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/plan.json",
+      "sha256": "ffa760bc797a6e4a8e23e9b9a22d4d4d35e7e63e7e3e6b4f76eeabaac1dc4825"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-contact-relax-alternate-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=3885",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1-service"
+    ],
+    "watcher": {
+      "token": "da04f2a9-96aa-4735-812c-e244b492be60",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792266209.1843712,
+      "expected_seconds": 900,
+      "supervisor_pid": 3074211,
+      "supervisor_identity": "32130449",
+      "state": "armed",
+      "watcher_pid": 3074214,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-contact-relax-alternate-v1-review",
+      "active_deadline_epoch": 1792269809.1178942
+    },
+    "limits": "RuntimeMaxUSec=1h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792270109.1178942,
+    "review_epoch": 1792269809.1178942,
+    "cloud_spending_usd": 0
+  }
+}

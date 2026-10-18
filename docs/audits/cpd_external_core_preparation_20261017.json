@@ -1,0 +1,32 @@
+{
+  "schema": "nadoc.cpd.external-core-geometry-audit.v1",
+  "rows": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "passed": false,
+      "native": {
+        "product": "tt-cpd-cis-anti-i",
+        "state": "deadline",
+        "returncode": null,
+        "elapsed_seconds": 300.0125300884247,
+        "input_sha256": "c183b2227c21f9e9047bd3133caee55c48fc85dccd139b2b28ac05f794a8bb6d"
+      }
+    }
+  ],
+  "registered_cases": 3,
+  "finished_cases": 1,
+  "all_registered_pass": false,
+  "native_seconds_used": 2388.969990226471,
+  "scope": "External geometry workflow on existing neutral capped cores. No sugar-containing DNA, fitted parameters, frequencies, or NAMD qualification.",
+  "decision": "STOPPED_AT_FIRST_NATIVE_DEADLINE; NO_IDENTICAL_RETRY",
+  "unrun_products": [
+    "tt-cpd-trans-syn-i",
+    "tt-cpd-trans-syn-ii"
+  ],
+  "external_assignment_package": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-core-geometry-v1/cgenff-inputs-v2/submission_manifest.json",
+    "sha256": "d11e85611144c24db332e8a4981cbdcd797eb9a7cefcda6dbe67ee027a8f6ff3"
+  },
+  "user_scope": "Require resolved experimental attachment-order evidence before admitting trans-antiI/II.",
+  "next": "Audit existing QM target assets before any further acquisition; obtain external initial assignments from prepared CGenFF inputs. No licensed local CGenFF executable or authenticated connector available."
+}

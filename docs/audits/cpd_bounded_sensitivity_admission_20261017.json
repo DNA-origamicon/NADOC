@@ -1,0 +1,148 @@
+{
+  "at": "2026-10-17T20:57:18.379992+00:00",
+  "registration": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/registration.json",
+    "sha256": "59f175fcd89cca603431e7382d4f53f1527aab468b2860e5f89c4820f4d22669"
+  },
+  "versions": {
+    "numpy": "2.5.2",
+    "rdkit": "2026.3.5",
+    "openmm": "8.6.0"
+  },
+  "connectivity_passed": true,
+  "canonical_endpoint_recheck": [
+    {
+      "name": "original_qm",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/original_qm_bohr.npy",
+        "sha256": "86ed1878086e2634bbf6778102a45cbbdfa3db82515c34bc72e91dcf69967959"
+      },
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0326356419462666
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "alternate_qm",
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/alternate_qm_bohr.npy",
+        "sha256": "c00d80f5000a49f06a1eaf2d09380761c776608559b3a427dc1921749fd1a1c1"
+      },
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.032507450679748
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      }
+    }
+  ],
+  "holdout_rmse_kcal_mol": {
+    "baseline": 6.241626259044579,
+    "rejected_trial": 6.639472751098815
+  },
+  "decision": "INCONCLUSIVE_PARAMETER_FAMILY_NOT_ADMITTED",
+  "stage0": "closed with incomplete MD registration; parameter-range gate failed",
+  "static_preflight": "source hashes, mapped connectivity and both endpoint identities checked; full variant force/curvature and DNA fixture gates not run",
+  "native_preflight": "not run: Stage 0 failed; historical run0 evidence is provenance only",
+  "numerical_stability": "not established by this campaign",
+  "practical_equivalence": "not evaluated",
+  "sampling": "no new trajectories; no effect sizes, confidence intervals or parameter envelope",
+  "freeze_provisional_model": false,
+  "active_job": null,
+  "native_jobs_launched": 0,
+  "native_seconds": 0,
+  "cloud_spending_usd": 0,
+  "next_discriminating_step": "A prospective local directional-force/curvature reference with fixed background and explicit OH/phosphate chemistry, checked on separate holdouts, to justify a transferable local variant range; then independently audited canonical two-sugar DNA fixtures for both starts. No computation automatically authorized by this record."
+}

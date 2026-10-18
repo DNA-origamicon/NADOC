@@ -1,0 +1,153 @@
+{
+  "at": "2026-10-17T19:46:52+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_contact_relax_alternate_v1.py",
+    "sha256": "ad6730c1b4975eed5f8aabf94bab2a72c2de20e53d8801fabc9df4d4e2c60688"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/assessment.json",
+    "sha256": "026f4edd6ede14543fc79b439a4884c6790b7835a891338164dede9ed353b3f9"
+  },
+  "records": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/alternate/result.json",
+      "sha256": "ef78a36c6d67b8326cfbeca537ab9cb5fb4feec81418c90923655ca55d04c691"
+    }
+  ],
+  "original_reference": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/completion_audit.json",
+    "sha256": "2f396de8a53f96661a596a01fe2c3f4a74f1bf5fcf1a47b7ec58653a2390addf"
+  },
+  "relaxed_qm_delta_kcal_mol": -1.7851864033583476,
+  "relaxed_mm_delta_kcal_mol": -9.927031981810668,
+  "relaxed_error_kcal_mol": -8.14184557845232,
+  "prior_error_kcal_mol": -7.736577609524118,
+  "absolute_error_change_kcal_mol": 0.4052679689282028,
+  "decision": "Close local exocyclic contact-relaxation route: main conformer error worsens7.7366->8.1418kcal/mol. Contact relief explains part of rigid holdout behavior but does not solve endpoint mismatch. No further same-branch sweeps or torsion fit. Next distinguish coupled ring/backbone contributions with existing geometries and gradients before a new optimizer/target panel.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "descriptors": {
+    "at": "2026-10-17T19:47:11+00:00",
+    "script": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/descriptor_contact_closeout_v1.py",
+      "sha256": "6ddd35c7483809167d5499e8af6dc38ad57bc7672c9db9be3ee502c888acd9f0"
+    },
+    "definitions": {
+      "ring_0": [
+        "1:O4'",
+        "1:C1'",
+        "1:C2'",
+        "1:C3'"
+      ],
+      "ring_1": [
+        "1:C1'",
+        "1:C2'",
+        "1:C3'",
+        "1:C4'"
+      ],
+      "ring_2": [
+        "1:C2'",
+        "1:C3'",
+        "1:C4'",
+        "1:O4'"
+      ],
+      "ring_3": [
+        "1:C3'",
+        "1:C4'",
+        "1:O4'",
+        "1:C1'"
+      ],
+      "ring_4": [
+        "1:C4'",
+        "1:O4'",
+        "1:C1'",
+        "1:C2'"
+      ],
+      "chi": [
+        "1:O4'",
+        "1:C1'",
+        "1:N1",
+        "1:C2"
+      ],
+      "exocyclic": [
+        "1:O5'",
+        "1:C5'",
+        "1:C4'",
+        "1:C3'"
+      ]
+    },
+    "rows": {
+      "original_qm": {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/original_qm_bohr.npy",
+          "sha256": "86ed1878086e2634bbf6778102a45cbbdfa3db82515c34bc72e91dcf69967959"
+        },
+        "torsions_degrees": {
+          "ring_0": -26.59742040180418,
+          "ring_1": 15.743712347263118,
+          "ring_2": -0.19170132892423694,
+          "ring_3": -17.080262946185655,
+          "ring_4": 27.38345989322881,
+          "chi": 105.65946347192308,
+          "exocyclic": 175.7117093182877
+        }
+      },
+      "alternate_qm": {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/alternate_qm_bohr.npy",
+          "sha256": "c00d80f5000a49f06a1eaf2d09380761c776608559b3a427dc1921749fd1a1c1"
+        },
+        "torsions_degrees": {
+          "ring_0": -23.567755813856234,
+          "ring_1": 36.271559625856675,
+          "ring_2": -36.8424101126566,
+          "ring_3": 23.107868032109614,
+          "ring_4": 0.3209891945548319,
+          "chi": 105.65946347563123,
+          "exocyclic": 46.404883021905775
+        }
+      },
+      "original_relaxed": {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/original_bohr.npy",
+          "sha256": "1b0a4712c79be95b7d27f52eed394e5c21532efb8dba6338394c32a167cad9c3"
+        },
+        "torsions_degrees": {
+          "ring_0": -26.59742040180418,
+          "ring_1": 15.743712347263118,
+          "ring_2": -0.19170132892423694,
+          "ring_3": -17.080262946185655,
+          "ring_4": 27.38345989322881,
+          "chi": 105.65946347192308,
+          "exocyclic": 175.71170931830707
+        }
+      },
+      "alternate_relaxed": {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/alternate_bohr.npy",
+          "sha256": "d9b638c1c1a01ed64fae76f75c9b5cb2f2eb3c8948b8120a1e83cde9a4d89cd5"
+        },
+        "torsions_degrees": {
+          "ring_0": -23.567755813856234,
+          "ring_1": 36.271559625856675,
+          "ring_2": -36.8424101126566,
+          "ring_3": 23.107868032109614,
+          "ring_4": 0.3209891945548319,
+          "chi": 105.65946347563123,
+          "exocyclic": 46.404883021875726
+        }
+      }
+    },
+    "relaxed_mm_alternate_minus_original_force_groups": {
+      "0:HarmonicBondForce": 0.003601793830558364,
+      "1:HarmonicAngleForce": -1.7324525733020835,
+      "2:HarmonicBondForce": 0.09069806184004936,
+      "3:PeriodicTorsionForce": -4.024037803712176,
+      "4:CustomTorsionForce": -0.009620952570759345,
+      "5:CMAPTorsionForce": 0.0,
+      "6:NonbondedForce": -4.255220507896325
+    },
+    "interpretation": "Ring and chi unchanged within each local relaxation; original vs alternate still differ in coupled ring/exocyclic geometry. MM force-group partition is not a QM decomposition and cannot uniquely identify parameters to fit. This record supports selecting broader coupled-coordinate targets, not another local exocyclic retry."
+  }
+}

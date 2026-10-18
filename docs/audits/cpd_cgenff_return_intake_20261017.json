@@ -1,0 +1,74 @@
+{
+  "at": "2026-10-18T02:17:25.364469+00:00",
+  "status": "external_cgenff_assignments_received_identity_coverage_and_capped_core_native_loading_passed",
+  "intake": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-return-intake-v1/audit.json",
+    "sha256": "6f2591ebde2317cd632a1ace9c50af73d3b0d14141660a1be75948c7c12d1d9e"
+  },
+  "stereochemistry": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-return-intake-v1/stereo_audit.json",
+    "sha256": "7830d93a45fd43c58b3fdacd71e644c18acb61988bd47c23fb6584e6b33cf8f1"
+  },
+  "native_results": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-return-intake-v1/native_results_shortpath.json",
+    "sha256": "0ae042d8290325c097c5fe3f0e7c11801689890ad4c0fce78c5c75cf0e00e5f7"
+  },
+  "preserved_failures": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-return-intake-v1/native_results.json",
+      "sha256": "262bb83284077e86f34a21eff0da4c8c0a5e36de3f55976b0340ed0d7414d87f"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-return-intake-v1/native_results_cpu.json",
+      "sha256": "93f2c06e6e7ff091e733179ac58e5a2a9d3598cae3dee12763e3679a0f0f366e"
+    }
+  ],
+  "native_seconds_added": 4.016309068945702,
+  "native_seconds_total": 2392.9862992954168,
+  "native_hours_ceiling": 48,
+  "records": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "atoms": 36,
+      "charge": -1.1102230246251565e-16,
+      "max_parameter_penalty": 46.1,
+      "max_charge_penalty": 42.242,
+      "parameter_coverage": true
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "atoms": 36,
+      "charge": -1.3877787807814457e-16,
+      "max_parameter_penalty": 46.1,
+      "max_charge_penalty": 42.083,
+      "parameter_coverage": true
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "atoms": 36,
+      "charge": -1.3877787807814457e-16,
+      "max_parameter_penalty": 46.1,
+      "max_charge_penalty": 42.083,
+      "parameter_coverage": true
+    }
+  ],
+  "expectation_outcomes": {
+    "submitted_input_identity": "PASS all three; returned source MOL2 byte-identical",
+    "returned_mol2_stereochemistry": "PASS all three against current mapped definitions",
+    "neutral_charge_and_full_core_coverage": "PASS all three using external ParmEd and CGenFF5.0",
+    "six_finite_native_run_zero_checks": "PASS with short relative output basenames; two prior failed jobs retained"
+  },
+  "warnings": [
+    "CGenFF warns about noncanonical/sorted parent-library improper/dihedral entries; original .err files retained.",
+    "ParmEd reports unsupported COLINEAR lone-pair definitions in parent library; the three cores contain exactly36real atoms and no lone-pair sites.",
+    "Two initial NAMD runs produced finite energies then crashed writing outputs. CPU reported buffer overflow; same GPU job succeeds with shorter output basename. All scientific inputs unchanged."
+  ],
+  "interpretation": {
+    "numerical_stability": "Only native static loading passed; dynamics, integration and restart untested for these assignments.",
+    "practical_equivalence": "Not established.",
+    "sampling": "No dynamics collected.",
+    "penalties": "Analogy scores, not calibrated energy uncertainty; no automatic refit triggered.",
+    "DNA_scope": "N1-methyl capped cores only; complete canonical sugar-boundary terms/charges remain to be qualified."
+  },
+  "next": "Reconcile capped-core external assignments with CHARMM DNA parent topology and canonical sugar endpoints; register isolated DNA admission fixtures and finite NAMD allocation before dynamics. No fragment refit or production promotion."
+}
