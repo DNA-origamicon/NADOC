@@ -1745,3 +1745,30 @@ the fix and passes afterward. The physical steady-fast tour subsequently
 completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 `.development-artifacts/vr-join-20261013/reselection-repro.log`,
 `reselection-fixed.log`, and `physical-fixed/steady_fast/`.
+
+## ISSUE-79 — Ball+Stick Flex temporal splitting at half application cadence (2026-10-15, IMPROVED, OPEN)
+
+User recording 140701076018774 contains 179 final stereo presentations but only
+90 distinct submitted images. Actual molecular landmarks shift on a reused image
+and return when the next application image arrives; four landmarks across both
+eyes agree. Recorded grip transforms follow current controller poses, with no
+flagged tracking dropout or hover/haptic event in that recording. The symptom is
+temporal position splitting, not an established duplicate silhouette in one frame.
+
+The restored 24HB Flex Ball+Stick view draws 22.95M triangles per eye. Plain exact
+indexing reduced repeated vertex records but left the live workload near 13 ms
+GPU / 45 application Hz. Exact groups of eight indexed sphere meshes reduced the
+per-instance rendering cost while preserving all vertices, ordered triangles,
+matrices, colors and normal/shadow arithmetic. Optional resource failures fall
+back. Existing small-stick grouping is unchanged.
+
+The normal deployed candidate now averages 87.343 application Hz (median gap
+11.166 ms, maximum 22.447 ms). Three full 120-result GPU windows have medians
+8.497/8.473/8.577 ms, zero query skips. Scientific export and geometry payloads are
+unchanged; actual eye output and browser attachment were verified. Eight native
+checks and 50 focused tour checks passed; `main.js` LOC delta is zero.
+
+Occasional misses remain, and a fresh physical torso-motion capture is pending.
+Do not close this issue or MV-44 on the quiet timing result alone. ISSUE-77's
+menu/hover correlation is a separate unresolved comparison. Review and rollback
+evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.development-artifacts/vr-temporal-fix-20261015/index.html).

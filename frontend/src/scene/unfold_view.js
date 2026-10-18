@@ -30,6 +30,7 @@ import { baseKey } from './base_ref.js'
 import { selectedStrandIds } from './selection_model.js'
 import { crossoverArcHiddenForRepresentations } from './view_volume_rules.js'
 import { sameConnectionTopology } from './connection_topology.js'
+import { setNativePoseMap } from '../viewer/native_placement.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -81,10 +82,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       _straightPosMap = new Map()
       for (const nuc of straightGeometry) {
         const bp = nuc.backbone_position
-        _straightPosMap.set(
-          `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`,
-          new THREE.Vector3(bp[0], bp[1], bp[2]),
-        )
+        setNativePoseMap(_straightPosMap, new THREE.Vector3(...bp), nuc)
       }
     }
     if (straightHelixAxes) {

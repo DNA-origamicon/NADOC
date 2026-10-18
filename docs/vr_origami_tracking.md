@@ -347,3 +347,105 @@ source, arguments and placement. The measured 24HB P1 Alpine Aug 7 Flex workload
 went from about 13.8 ms / 45 new images per second to about 5.6 ms / 90; these are
 workload-specific software results, not a guarantee for every scene or a physical
 comfort verdict.
+
+## Ball+Stick indexing and motion verification
+
+`NADOC_VR_INDEXED_VIEW_MESHES` selects exact indexing of eligible exported View
+Tools meshes: the default is on, `1` explicitly enables it, and `0` retains their
+original unindexed draws. The native path deduplicates complete vertex records
+and indexes the original vertex sequence, preserving triangle order, geometry,
+normals, colors and the selected shader. Existing grouped meshes with at most 72
+base vertices keep their established path. The inspected Ball+Stick sphere has
+420 original vertices and 91 byte-distinct vertex records; this is a geometry
+count, not a measured performance result.
+
+`NADOC_VR_GROUPED_INDEXED_MESHES` additionally groups eight indexed logical
+instances into a hardware instance. It defaults to on; `0` isolates plain
+indexing. Each group repeats the byte-exact unique vertex records and offsets the
+original index sequence, including the final partial group. The existing grouped
+vertex shader reads the original instance matrix/color buffer; normal arithmetic
+and fragment shading are unchanged. CPU derived arrays share an 8 MiB per-view
+budget with ordinary indexing. Missing shader/sampler capabilities, texture limits
+or incomplete optional buffers fall back to plain indexing or original arrays.
+The shadow path retains its ungrouped shader/draw behavior.
+
+Use the existing **Origami tracking** entry to discover the following comparison.
+Preserve the current document, exported assets, model placement, runtime identity,
+viewer binary and launch settings before either separate viewer launch. Keep
+representation, Flex data, eye dimensions, menus, shaders, grouping and SteamVR
+settings identical. Keep `NADOC_VR_INDEXED_VIEW_MESHES=1` and compare only
+`NADOC_VR_GROUPED_INDEXED_MESHES=0` versus `=1`, with
+`NADOC_VR_GPU_PASS_TIMING=1` in both conditions. Setting the indexing flag to `0`
+separately provides the original-array rollback. Verify the actual selection,
+`grouped_active_batches`, resource reasons and grouped draw/instance counters in
+`view_tools.instance_groups.indexed_meshes`;
+record fallback reasons rather than assuming an environment request took effect.
+
+Before timing, verify the actual browser is still attached to the viewer: check
+its current publication/connection state and that repeated desktop renderer-frame
+observations stay frozen while native VR renders. A disconnected browser can
+resume a large desktop scene and contend for the same GPU. Normal managed launches
+must name the actual ELF executable, not a shell wrapper, because the backend
+verifies the process executable. Retain and exclude samples taken with an
+unexpectedly active desktop renderer; reattachment must happen before, rather
+than during, the comparison window.
+
+1. Compare saved quiet and moving windows using `summarize-gpu-passes`, excluding
+   the same 300 ms boundaries and preserving query coverage. Compare shadow and
+   each eye separately. A GPU interval is not an isolated shader busy-time
+   measurement, and host time inside `xrEndFrame` is not GPU execution time.
+2. Record the user's coordinated torso/head/controller movement through **Record
+   final output**, retaining its journal and frame markers. Keep the complete
+   origami visible. Use `identify-frames` with first-image ROI calibration and
+   held-out later images; retain failed decodes and exact session/eye/frame joins.
+   Compare distinct submitted images, repeated-ID runs, skips and presentation
+   accounting. Zero recorder drops does not mean a new application image on every
+   presentation.
+3. Track the same visible molecular landmarks in original images, excluding the
+   marker and menus, then use `compare-temporal`. Inspect consecutive single-eye
+   originals around repeated/advanced IDs for held-frame displacement followed by
+   a return when the application image advances. Keep existing score/ambiguity
+   thresholds, rejected observations and actual timestamps. No image blending or
+   interpolation is evidence of a second image.
+4. Report geometry preservation, GPU cost, submitted-image cadence and measured
+   molecular motion as separate results. A faster draw or 179 saved presentations
+   alone does not establish that the visible symptom is resolved. Repeat the
+   physical monocular check with the user; software capture does not measure
+   headset scanout or persistence.
+
+At the measured 89.53 Hz presentation rate, the native-refresh budget is about
+11.17 ms. A runtime-reported prediction period near 22.34 ms describes the next
+application frame and can reflect half-rate scheduling; it is not a larger budget
+that proves 90 new images per second. OpenXR permits the runtime to adjust frame
+timing and specifies that the predicted application period can differ from the
+hardware period. Preserve its predicted time for both located poses and submitted
+views; do not manufacture a shorter period as a performance fix. See the
+[OpenXR frame-loop specification](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#frame-loop)
+and [Khronos frame-submission guidance](https://github.com/KhronosGroup/OpenXR-Guide/blob/main/chapters/frame_submission.md).
+
+The [October 15 Ball+Stick motion review](/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-ballstick-capture-20261015/index.html)
+retains the pre-indexing observation: 90 distinct application images across 179
+saved presentations, plus accepted molecular landmarks that shift on a reused
+image and return on the next new image. It is evidence of temporal position
+splitting, without an obvious second whole-model silhouette in the inspected
+single frames. Plain indexing passed exact rendering tests but left the live
+Ball+Stick workload near 13 ms and 45 new images per second. It did not resolve
+this workload's half-rate behavior.
+
+The [saved-view group comparison](/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-temporal-fix-20261015/mesh-benchmark/run-3-summary.json)
+then measured 18 alternating samples per condition: indexed grouping reduced
+median stereo mesh time from 16.56 ms for plain indexing to 8.76 ms, with zero
+RGBA/depth/object-ID differences in both saved views. The live viewer was also
+using the GPU, so these are comparative offline intervals, not application-frame
+costs. The experiment excludes canonical shadows, menus, mirror and runtime
+submission; it uses a declared synthetic shadow texture. Simplified normal
+arithmetic did not provide an isolated benefit and is not in the renderer.
+The subsequent ordinary live viewer measured 87.343 Hz mean application cadence
+(median interval 11.166 ms; occasional 22 ms intervals) versus the approximately
+45 Hz baseline. Three complete 120-result GPU windows had medians 8.497, 8.473
+and 8.577 ms, versus the prior approximately 13 ms. See the
+[live timing evidence](../.development-artifacts/vr-temporal-fix-20261015/candidate2-performance/summary.json).
+This is an improvement with remaining missed refreshes; a fresh motion capture
+and physical check are still required. Neither this benchmark nor the earlier
+Dense Stick result is a physical symptom verdict. The standalone benchmark and input preparation are documented in
+`native/vr_viewer/benchmarks/README.md`.

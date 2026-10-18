@@ -893,6 +893,14 @@ No timing thresholds or motion presets were relaxed. Re-run this profile under a
 quiet host condition before claiming complete four-profile coverage.
 
 - **MV-44 — IMPROVED, OPEN — Timing-related physical double vision (2026-10-13).**
+  **October 15 Ball+Stick update:** ISSUE-79 groups exact exported sphere meshes
+  in batches of eight. The same restored Flex scene improved from about 45 to
+  87.343 application Hz, with occasional missed refreshes still present. Native
+  exact rendering checks pass; this does not close the physical symptom. A fresh
+  two-second gripped-model torso recording and monocular report were requested
+  with the candidate live. See
+  [current evidence](.development-artifacts/vr-temporal-fix-20261015/index.html).
+  The following October 13 evidence remains historical context.
   The user reports substantially reduced doubling after the normal optimized
   viewer deployment, with remaining lag/frame drops when menus enter view or the
   other controller aims, hovers or vibrates. The speed-dependent monocular symptom

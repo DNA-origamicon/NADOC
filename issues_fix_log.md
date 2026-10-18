@@ -572,3 +572,29 @@ this native event order; physical playback exposed it. Added a failing regressio
 then reused the valid result for an identical current pose. Full frontend suite:
 7,906 passed, one skipped. Broader validation and frame-rate limits are retained
 in `.development-artifacts/vr-join-20261013/verification-summary.json`.
+
+### ISSUE-79 — Exact grouped Ball+Stick rendering (2026-10-15, physical validation pending)
+
+Root-cause chain supported by measurements: dense exported atom meshes → costly
+small hardware instances despite exact indexing → GPU frame cost around 13 ms →
+application images reused at approximately 45/90 Hz → speed-dependent temporal
+landmark splitting in the user's recording. Grouping eight indexed instances
+cuts the measured live GPU cost to approximately 8.5 ms and raises mean app cadence
+to 87.343 Hz; occasional missed refreshes and physical confirmation remain open.
+
+Failed hypothesis: plain vertex indexing alone did not materially improve live
+cadence. Offline blend/culling/normal simplifications did not give a useful isolated
+gain; only exact grouping was promoted. A diagnostic wrapper also disconnected
+the browser, causing competing desktop rendering and inflated timing. That sample
+is retained separately; configuring the actual ELF and reattaching the same viewer
+restored the valid measurement condition. No SteamVR setting was changed.
+
+Implementation is in `view_indexed_mesh.hpp` and View Tools stream/render wiring,
+with bounded derived storage and fallback. Eight native tests passed without skips:
+34 grouped exact color/depth/stencil/ID comparisons, 12 fallback comparisons and
+75765 ordered vertex records; ordinary indexing and previous shader/group tests
+also pass. Fifty tour checks passed. Live scene and browser were verified, and the
+user was asked for the fresh two-second torso capture. GPU OOM cleanup is statically
+reviewed, not a forced live-driver failure test. `main.js` LOC delta: **0**.
+
+Evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.development-artifacts/vr-temporal-fix-20261015/index.html).

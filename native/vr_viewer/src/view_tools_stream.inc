@@ -1,10 +1,10 @@
 // Included inside VRViewTools. File I/O, validation and pose normalization are CPU
 // worker work. GL writes use spare buffers in <=256 KiB pieces, with a 1 ms budget.
-struct IncomingView {std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false;};
+struct IncomingView {std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false,indexedAny=false,indexedGroupedAny=false;};
 struct StagedView {IncomingView view;GLuint triangles=0,lines=0,texture=0;size_t buffer=0,offset=0,textureRow=0;double uploadMs=0;};
 std::future<std::optional<IncomingView>> reading;
 std::optional<StagedView> staging;
-static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={}){
+static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={},bool indexMeshes=false,bool groupIndexedMeshes=false){
  const auto start=std::chrono::steady_clock::now();std::ifstream in(path,std::ios::binary);char magic[8];IncomingView out;auto& h=out.header;
  if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]!=4&&h[0]!=5&&h[0]!=6)||h[1]==current)return {};
  const bool atlas=h[0]!=6;
@@ -31,21 +31,58 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
  if(groupInstances){size_t remaining=nadoc_vr::view_groups::maxExpandedBytes;
   for(auto& b:out.batches){b.groupPlan=nadoc_vr::view_groups::plan(b.vertices.size(),b.instances.size(),sizeof(V),groupLimits,remaining);
    if(b.groupPlan.eligible){b.groupedVertices=nadoc_vr::view_groups::expand(b.vertices);remaining-=b.groupPlan.expandedBytes;out.groupedAny=true;}}}
+ if(indexMeshes){size_t remaining=nadoc_vr::view_indexed::maxDerivedBytes;
+  for(auto& b:out.batches){auto indexed=nadoc_vr::view_indexed::build(b.vertices,remaining);b.indexPlan=indexed.plan;
+   if(indexed.plan.eligible){remaining-=indexed.plan.derivedBytes;
+    if(groupIndexedMeshes){auto grouped=nadoc_vr::view_indexed::expandGroups(indexed.vertices,indexed.indices,nadoc_vr::view_indexed::planGroups(indexed.plan,b.instances.size(),sizeof(V),groupLimits,remaining),remaining);
+     b.indexedGroupPlan=grouped.plan;if(grouped.plan.eligible){remaining-=grouped.plan.derivedBytes;b.indexedGroupVertices=std::move(grouped.vertices);b.indexedGroupIndices=std::move(grouped.indices);out.indexedGroupedAny=true;}}
+    else b.indexedGroupPlan.reason="disabled_or_grouped_program_unavailable";
+    b.indexedVertices=std::move(indexed.vertices);b.indices=std::move(indexed.indices);out.indexedAny=true;}
+   else b.indexedGroupPlan.reason="indexed_mesh_unavailable";}}
+ else for(auto& b:out.batches){b.indexPlan.reason="disabled";b.indexPlan.originalVertices=b.vertices.size();b.indexedGroupPlan.reason="indexing_disabled";}
  out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;
+}
+static void discardIndexedGroups(Batch& b,const char* reason){
+ if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);
+ if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);
+ if(b.instanceTexture && !b.groupPlan.eligible){glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;}
+ b.indexedGroupVertexBuffer=b.indexedGroupIndexBuffer=0;b.indexedGroupPlan.eligible=false;b.indexedGroupPlan.reason=reason;b.indexedGroupPlan.derivedBytes=0;
+ std::vector<V>().swap(b.indexedGroupVertices);std::vector<uint32_t>().swap(b.indexedGroupIndices);
+}
+static void discardIndexed(Batch& b,const char* reason){
+ discardIndexedGroups(b,"indexed_base_unavailable");
+ if(b.indexedVertexBuffer)glDeleteBuffers(1,&b.indexedVertexBuffer);
+ if(b.indexBuffer)glDeleteBuffers(1,&b.indexBuffer);
+ b.indexedVertexBuffer=b.indexBuffer=0;b.indexPlan.eligible=false;b.indexPlan.reason=reason;b.indexPlan.derivedBytes=0;
+ std::vector<V>().swap(b.indexedVertices);std::vector<uint32_t>().swap(b.indices);
 }
 bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin){
  if(path.empty())return false;
  if(reading.valid()&&reading.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{auto next=reading.get();if(next){staging.emplace();staging->view=std::move(*next);}}catch(const std::exception&){} }
- if(staging){auto& s=*staging;const double start=glfwGetTime();const size_t stride=s.view.groupedAny?3:2;const size_t count=2+s.view.batches.size()*stride;
-  while(s.buffer<count&&glfwGetTime()-start<.001){GLuint* buffer;const void* data;size_t bytes;
+ if(staging){auto& s=*staging;const double start=glfwGetTime();const size_t indexKind=s.view.groupedAny?3:2;const size_t indexedGroupKind=indexKind+(s.view.indexedAny?2:0);const size_t stride=indexedGroupKind+(s.view.indexedGroupedAny?2:0);const size_t count=2+s.view.batches.size()*stride;
+  while(s.buffer<count&&glfwGetTime()-start<.001){GLuint* buffer;const void* data;size_t bytes;Batch* optionalIndexed=nullptr;bool optionalGroup=false;
    if(s.buffer<2){auto& list=s.buffer==0?s.view.triangles:s.view.lines;buffer=s.buffer==0?&s.triangles:&s.lines;data=list.data();bytes=list.size()*sizeof(V);}
    else {auto& b=s.view.batches[(s.buffer-2)/stride];const size_t kind=(s.buffer-2)%stride;
-    buffer=kind==2?&b.groupedVertexBuffer:kind==1?&b.instanceBuffer:&b.vertexBuffer;
-    data=kind==2?(const void*)b.groupedVertices.data():kind==1?(const void*)b.instances.data():(const void*)b.vertices.data();
-    bytes=kind==2?b.groupedVertices.size()*sizeof(V):kind==1?b.instances.size()*sizeof(Instance):b.vertices.size()*sizeof(V);}
+    if(kind>=indexedGroupKind){optionalIndexed=&b;optionalGroup=true;const bool elements=kind==indexedGroupKind+1;
+     buffer=elements?&b.indexedGroupIndexBuffer:&b.indexedGroupVertexBuffer;data=elements?(const void*)b.indexedGroupIndices.data():(const void*)b.indexedGroupVertices.data();bytes=elements?b.indexedGroupIndices.size()*sizeof(uint32_t):b.indexedGroupVertices.size()*sizeof(V);}
+    else if(kind>=indexKind){optionalIndexed=&b;const bool elements=kind==indexKind+1;
+     buffer=elements?&b.indexBuffer:&b.indexedVertexBuffer;data=elements?(const void*)b.indices.data():(const void*)b.indexedVertices.data();bytes=elements?b.indices.size()*sizeof(uint32_t):b.indexedVertices.size()*sizeof(V);}
+    else {buffer=kind==2?&b.groupedVertexBuffer:kind==1?&b.instanceBuffer:&b.vertexBuffer;
+     data=kind==2?(const void*)b.groupedVertices.data():kind==1?(const void*)b.instances.data():(const void*)b.vertices.data();
+     bytes=kind==2?b.groupedVertices.size()*sizeof(V):kind==1?b.instances.size()*sizeof(Instance):b.vertices.size()*sizeof(V);}}
+   const auto discardOptional=[&](const char* reason){if(optionalGroup)discardIndexedGroups(*optionalIndexed,reason);else discardIndexed(*optionalIndexed,reason);};
+   const auto noteOptionalError=[&](GLenum error){if(optionalGroup)optionalIndexed->indexedGroupUploadGlError=error;else optionalIndexed->indexUploadGlError=error;};
    if(!bytes){++s.buffer;s.offset=0;continue;}
-   if(!*buffer){glGenBuffers(1,buffer);glBindBuffer(GL_ARRAY_BUFFER,*buffer);glBufferData(GL_ARRAY_BUFFER,bytes,nullptr,GL_STREAM_DRAW);}else glBindBuffer(GL_ARRAY_BUFFER,*buffer);
-   const size_t n=std::min(size_t(256*1024),bytes-s.offset);if(n)glBufferSubData(GL_ARRAY_BUFFER,s.offset,n,(const char*)data+s.offset);s.offset+=n;
+   if(!*buffer){glGenBuffers(1,buffer);
+    if(optionalIndexed && !*buffer){noteOptionalError(glGetError());discardOptional("indexed_buffer_name_failed");++s.buffer;s.offset=0;continue;}
+    glBindBuffer(GL_ARRAY_BUFFER,*buffer);glBufferData(GL_ARRAY_BUFFER,bytes,nullptr,GL_STREAM_DRAW);
+    if(optionalIndexed){GLint allocated=0;glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&allocated);if(allocated!=int(bytes)){noteOptionalError(glGetError());discardOptional("indexed_buffer_allocation_failed");++s.buffer;s.offset=0;continue;}}
+   }else glBindBuffer(GL_ARRAY_BUFFER,*buffer);
+   const size_t n=std::min(size_t(256*1024),bytes-s.offset);if(n)glBufferSubData(GL_ARRAY_BUFFER,s.offset,n,(const char*)data+s.offset);
+   // Only optional staged uploads inspect errors. A pre-existing error also
+   // conservatively falls back, and its code remains visible in diagnostics.
+   if(optionalIndexed){const auto error=glGetError();if(error!=GL_NO_ERROR){noteOptionalError(error);discardOptional("indexed_upload_gl_error");++s.buffer;s.offset=0;continue;}}
+   s.offset+=n;
    if(s.offset==bytes){++s.buffer;s.offset=0;}
   }
   if(s.buffer==count&&!s.view.pixels.empty()&&glfwGetTime()-start<.001){
@@ -57,18 +94,29 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin)
   if(s.buffer==count&&(s.view.pixels.empty()||s.textureRow==2048)){
    clearBatches();glDeleteBuffers(1,&triangleVbo);glDeleteBuffers(1,&lineVbo);triangleVbo=s.triangles;lineVbo=s.lines;
    if(s.texture){glDeleteTextures(1,&texture);texture=s.texture;}
-   if(s.view.groupedAny){GLint active=0;glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);
-    for(auto& b:s.view.batches)if(b.groupPlan.eligible && b.groupedVertexBuffer){glGenTextures(1,&b.instanceTexture);GLint width=0,format=0,vertexBytes=0;
-     glBindBuffer(GL_ARRAY_BUFFER,b.groupedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertexBytes);
+   if(s.view.groupedAny || s.view.indexedGroupedAny){GLint active=0;glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);
+    for(auto& b:s.view.batches)if((b.groupPlan.eligible && b.groupedVertexBuffer) || (b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer)){glGenTextures(1,&b.instanceTexture);GLint width=0,format=0,vertexBytes=0;
+     if(b.groupPlan.eligible){glBindBuffer(GL_ARRAY_BUFFER,b.groupedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertexBytes);}
      if(b.instanceTexture){glBindTexture(GL_TEXTURE_BUFFER,b.instanceTexture);glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,b.instanceBuffer);glGetTexLevelParameteriv(GL_TEXTURE_BUFFER,0,GL_TEXTURE_WIDTH,&width);glGetTexLevelParameteriv(GL_TEXTURE_BUFFER,0,GL_TEXTURE_INTERNAL_FORMAT,&format);}
-     if(vertexBytes!=int(b.groupedVertices.size()*sizeof(V)) || width!=int(b.instances.size()*5) || format!=GL_RGBA32F){if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;glDeleteBuffers(1,&b.groupedVertexBuffer);b.groupedVertexBuffer=0;std::vector<V>().swap(b.groupedVertices);b.groupPlan={false,"grouped_resource_incomplete"};}}
+     const auto error=b.indexedGroupPlan.eligible?glGetError():GL_NO_ERROR;
+     if((b.groupPlan.eligible && vertexBytes!=int(b.groupedVertices.size()*sizeof(V))) || width!=int(b.instances.size()*5) || format!=GL_RGBA32F || error!=GL_NO_ERROR){if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;
+      if(b.indexedGroupPlan.eligible){b.indexedGroupUploadGlError=error;discardIndexedGroups(b,"indexed_group_texture_incomplete");}
+      if(b.groupPlan.eligible){glDeleteBuffers(1,&b.groupedVertexBuffer);b.groupedVertexBuffer=0;std::vector<V>().swap(b.groupedVertices);b.groupPlan={false,"grouped_resource_incomplete"};}}}
     glActiveTexture(active);}
+   if(s.view.indexedAny)for(auto& b:s.view.batches)if(b.indexPlan.eligible){GLint vertices=0,elements=0;
+    if(b.indexedVertexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertices);}
+    if(b.indexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&elements);}
+    if(!nadoc_vr::view_indexed::resourcesComplete(b.indexPlan,sizeof(V),vertices,elements))discardIndexed(b,"indexed_resource_incomplete");}
+   if(s.view.indexedGroupedAny)for(auto& b:s.view.batches)if(b.indexedGroupPlan.eligible){GLint vertices=0,elements=0;
+    if(b.indexedGroupVertexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedGroupVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertices);}
+    if(b.indexedGroupIndexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedGroupIndexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&elements);}
+    if(!b.instanceTexture || !nadoc_vr::view_indexed::groupResourcesComplete(b.indexedGroupPlan,sizeof(V),vertices,elements))discardIndexedGroups(b,"indexed_group_resource_incomplete");}
    opaqueEligibility=s.view.opaqueEligibility;
    batches=std::move(s.view.batches);triangles=std::move(s.view.triangles);lines=std::move(s.view.lines);sprites=std::move(s.view.sprites);
    cachedSceneBounds=s.view.bounds;version=s.view.header[1];flags=s.view.header[2];acknowledged=s.view.header[9];if(acknowledged>=sequence)waiting=false;parseMs=s.view.parseMs;uploadMs=s.uploadMs;staging.reset();return true;
   }
  }
- if(!reading.valid()&&!staging&&++frames%3==0){reading=std::async(std::launch::async,[=,current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits]{return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits);});}
+ if(!reading.valid()&&!staging&&++frames%3==0){reading=std::async(std::launch::async,[=,current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits,indexMeshes=indexedRequested,groupIndexedMeshes=indexedGroupsRequested&&groupsAvailable()]{return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits,indexMeshes,groupIndexedMeshes);});}
  return false;
 }
-void cancelStaging(){if(!staging)return;auto& s=*staging;for(auto& b:s.view.batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}if(s.triangles)glDeleteBuffers(1,&s.triangles);if(s.lines)glDeleteBuffers(1,&s.lines);if(s.texture)glDeleteTextures(1,&s.texture);staging.reset();}
+void cancelStaging(){if(!staging)return;auto& s=*staging;for(auto& b:s.view.batches){if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);if(b.indexedVertexBuffer)glDeleteBuffers(1,&b.indexedVertexBuffer);if(b.indexBuffer)glDeleteBuffers(1,&b.indexBuffer);if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}if(s.triangles)glDeleteBuffers(1,&s.triangles);if(s.lines)glDeleteBuffers(1,&s.lines);if(s.texture)glDeleteTextures(1,&s.texture);staging.reset();}

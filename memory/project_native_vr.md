@@ -7,7 +7,102 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
-## Current menu-hover timing follow-up (2026-10-13)
+## Current Ball+Stick grouped-index candidate (2026-10-15)
+
+The user's requested fix is deployed; physical motion confirmation is pending.
+24hb_0xT / P1 Alpine Aug 7 / Flex / Ball+Stick now groups eight exact indexed
+sphere meshes per hardware instance. Complete vertex records, instance matrices,
+colors, triangle order, normal arithmetic and shadows are unchanged. Four sphere
+batches have 420 original records / 91 unique records each; their grouped buffers
+have 728 records / 3360 indices. Existing small-stick grouping remains active.
+Derived CPU/GPU storage is 280896/217728 bytes; optional allocation/capability
+failures retain plain indexing or original arrays. Both indexing and grouped
+indexing default on; `NADOC_VR_GROUPED_INDEXED_MESHES=0` isolates plain indexing,
+and `NADOC_VR_INDEXED_VIEW_MESHES=0` restores original large-mesh draws.
+
+Quiet live baseline was approximately 13.02 ms GPU / 22.33 ms app interval
+(45 Hz). Plain indexing alone did not improve it. Grouped indexing now measures
+87.343 Hz mean application cadence, median interval 11.166 ms, p95 16.218 ms,
+maximum 22.447 ms. Three complete 120-result GPU windows have medians
+8.497/8.473/8.577 ms, p95 9.027/9.168/9.139 ms, maximum 9.567 ms, zero query
+skips. Occasional missed refreshes remain: this is not stable 90 Hz or proof that
+the monocular temporal splitting is gone. User was asked for a new two-second
+gripped-model torso recording; retain MV-44 and ISSUE-79 until that is evaluated.
+
+Current normal physical-inspect PID 2374833 / session 2374833-144926698728966,
+binary SHA256 af4e887c0591a0f9f452ecfca593a9557d6fecebd057bdad24089fa4153065f2,
+build `vr-temporal-fix-20261015/native-build-2`. Existing compositor 2210586 was
+preserved. Scientific export and all geometry payloads are unchanged, actual
+browser publication is verified, and desktop renderer frame 71052 was frozen
+during the measurement. Per-pass profiling is off. The saved model placement is
+restored; reload closes the menus. Rediscover identities rather than reusing PIDs.
+
+Eight native checks passed without skips, including 34 grouped exact rendering
+comparisons, 12 fallback comparisons and 75765 ordered 22-word vertex records.
+Fifty focused tour tests passed. Application-eye capture visibly confirms the
+expected Flex model. Live GPU OOM was not forced; optional CPU failures and
+resource-size predicates are tested, staged GL cleanup is statically reviewed.
+No frontend JS or backend behavior changed (`main.js` LOC delta 0).
+
+Headless deployment restores coordinates before trajectory, then visualization,
+simulation and View Tools feeds; wait for representation loading to finish.
+**Configure the actual ELF:** a temporary shell wrapper enabled profiling but
+failed the backend's `/proc/PID/exe` identity check, disconnecting the browser.
+Its desktop renderer resumed and inflated GPU time to 17.7 ms. Restoring the
+direct build path and reattaching the existing tab to the same PID froze desktop
+rendering again; clean profiling measured 12.32 ms total (2.27 shadow, 4.84 right,
+5.15 left). The left pass includes mirror/swap/release, not only scene shading.
+Retain the contaminated sample, but do not attribute it to query overhead.
+
+Evidence root: [current review](../.development-artifacts/vr-temporal-fix-20261015/index.html),
+[live timing](../.development-artifacts/vr-temporal-fix-20261015/candidate2-performance/summary.json),
+[deployment](../.development-artifacts/vr-temporal-fix-20261015/deployment-2/verification.json),
+[browser verification](../.development-artifacts/vr-temporal-fix-20261015/candidate2-reconnect/verification.json),
+[native tests](../.development-artifacts/vr-temporal-fix-20261015/candidate2/native-tests.log).
+Original binary/config/assets and unsuccessful trials remain under that root.
+The unshipped analytical-sphere prototype is archived separately under the task
+root; it is not compiled into the viewer. The original manual recording below
+remains the regression target.
+
+## Current Ball+Stick temporal splitting evidence (2026-10-15)
+
+User capture 140701076018774 (11:33 local, two seconds) confirms temporal position
+splitting in 24hb_0xT / P1 Alpine Aug 7 / Flex / Ball+Stick. All 179 final stereo
+presentations are retained with zero recorder drops; all 358 eye markers join.
+There are 90 distinct application images and 89 reused presentations per eye:
+approximately 44.76 application Hz versus 89.53 final-present Hz.
+
+Actual molecular landmarks, independently of the frame-ID panel, move left then
+return right. Capture indices 45/46/47 decode app IDs 23973/23973/23974 at
+502.564/513.733/524.992 ms after the first captured present. Left upper landmark
+x is 342.5/326.5/342.5 pixels;
+right upper is 1289.5/1274.5/1290.5 in full stereo coordinates. Two landmarks per
+eye agree. Fixed first-frame templates were chosen retrospectively; unchanged
+score >=0.80 and distinct-peak gap >=0.05 reject many other frames. Preserve those
+rejections. Inspected individual originals show no second complete silhouette.
+Alternating final-image placement is measured; reprojection of a moving object
+at half-rate is a plausible mechanism, not optical/scanout or GPU-cause proof.
+Across 46/89 held intervals with accepted pixel matches, median displacement
+correlates with neighboring application-pose head speed (Pearson r=0.983).
+These are selected, temporally dependent samples, not compositor late-pose data.
+
+Both menus stay open, but all 146 retained journal rows have zero hover changes
+and zero haptic requests/dispatches. Tracking flags remain valid. Recorded model
+transforms follow the current gripped controller within 3.22e-7 m; no CPU stale
+model transform is evident. Ball+Stick draws 22.95M triangles/eye (6.20 times
+Stick-only geometry); opaque optimization is active. This is a load candidate,
+not a measured GPU bottleneck. No viewer/config/placement changes were made.
+
+Evidence and raw-frame review: [October 15 report](../.development-artifacts/vr-ballstick-capture-20261015/index.html),
+[pixel tracking](../.development-artifacts/vr-ballstick-capture-20261015/temporal-motion.json),
+[journal findings](../.development-artifacts/vr-ballstick-capture-20261015/journal-findings.txt),
+and [runtime baseline](../.development-artifacts/vr-ballstick-capture-20261015/baseline/summary.json).
+Observed viewer PID 2110721/session 2110721-140414220546292 uses the vr-join-20261013
+build. Rediscover live identity before acting; older PIDs/builds below are history.
+The config's active-capture path was stale; the live final_capture.directory
+correctly selected runtime-1792085254393766426/compositor.
+
+## Earlier menu-hover timing follow-up (2026-10-13)
 
 The user reports substantially reduced doubling after normal deployment, with
 remaining lag/frame drops as menus enter view or the other controller aims,
@@ -1730,3 +1825,8 @@ recordings and review session ownership: `.development-artifacts/vr-stereo-recor
 Discoverable regression: Debug → VR Tours & Tests → Controls & layout → Tools ·
 five-second stereo recording (`menu_tour --recording-checks --validate --exit`).
 Physical double vision remains manual debt MV-44.
+
+
+2026-10-16: QR shared-position AR tools retired at user request. Earlier QR calibration, cube printing, reference-marker and phone tracking entries are historical, not active validation debt. Guest QR invitations remain. VR Share now starts and ends presentations through the desktop lifecycle; see docs/vr_sharing.md.
+
+2026-10-16: VR Share → Share headset perspective now drives opt-in guest Follow from the native mid-eye camera in source coordinates. Browser-side quaternion/position smoothing: 180 ms damping, 90°/s turn cap, 1 tracking metre/s translation cap. Independent of Show VR model, 10 Hz bounded publication, tracking-loss hold and host-issued expiry. Desktop source preserved. Four-profile real-local-host test covers desktop/mobile guest rendering and lifecycle; evidence `.development-artifacts/headset-follow-20261016/`. See docs/vr_sharing.md for limitations and retained test-harness failures.

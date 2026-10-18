@@ -309,8 +309,6 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     pendingFrames.clear()
     _frameCallbacks.clear()
     _inner.dispose()
-    if (_savedInner && _savedInner !== _inner) _savedInner.dispose()
-    _savedInner = null
     _onResize = null
     _navSegments = () => new Float64Array(0)
     renderer.dispose()

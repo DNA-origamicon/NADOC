@@ -1,0 +1,11 @@
+{
+  "description": "Exact 420 full vertex records from an exported Ball+Stick unit sphere; no molecule or instance data. Little-endian twelve float32 attributes per 48-byte record: position3, color4, UV2, normal3. Fixture validates preservation of seams and pole records.",
+  "source_filename": "nadoc-vr-event-5il5me5k.json.viewtools",
+  "source_file_bytes": 64869624,
+  "source_batch": 0,
+  "source_byte_offset": 344,
+  "record_count": 420,
+  "record_bytes": 48,
+  "byte_unique_records": 91,
+  "fixture_sha256": "eac0bd0780fd0b62ee620aa9add9dcdcc9edd7ea10a6d407ef0527cb9854036f"
+}
