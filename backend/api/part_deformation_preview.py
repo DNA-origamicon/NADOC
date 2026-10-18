@@ -408,12 +408,12 @@ def _before_command(kind, params, design):
         _growth(design, 2)
 
 
-def _run(kind, design, params, check):
+def _run(kind, design, params, check, executor=None):
     check()
     try:
         _before_command(kind, params, design)
         check()
-        updated = execute(kind, design, params)
+        updated = (executor or execute)(kind, design, params)
     except CommandContractError:
         raise
     except (ValueError, TypeError, KeyError, NotImplementedError) as error:
@@ -525,10 +525,12 @@ def _replay_prefix(captured, rows, check, *, stop=None, runner=None):
         current = root_design(captured.recipe_root).copy_with(id=captured.id)
     except (ValueError, TypeError) as error:
         _reject(str(error), "invalid_recipe_root")
+    from backend.core.part_replay_cache import ReplayChain
+    cached = ReplayChain(captured.recipe_root, captured.input_sources).wrap(execute) if runner is None else None
     for identity, kind, params in rows:
         if identity == stop:
             break
-        updated = (_run(kind, current, params, check) if runner is None
+        updated = (_run(kind, current, params, check, cached) if runner is None
                    else runner(identity, kind, current, params, check))
         current = updated.copy_with(
             id=captured.id, recipe_root=captured.recipe_root,

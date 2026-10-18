@@ -26,6 +26,7 @@ class ReplayPrefix:
         self.sub_index = sub_index
         self.selected_child_index = 0
         self.child_design = None
+        self.position = None  # replay-cache chain position at self.design
 
     def execute(self, executor, kind, current, params):
         if len(self.log) == self.count:
@@ -33,6 +34,8 @@ class ReplayPrefix:
                 self.design = current.copy_with(
                     id=self.source.id, feature_log=list(self.log)
                 ).model_copy(deep=True)
+                chain = getattr(executor, "chain", None)
+                self.position = chain.position() if chain is not None else None
             if self.sub_index is not None and self.child_design is None:
                 if self.selected_child_index == self.sub_index:
                     # Reference context after earlier siblings, not a separately

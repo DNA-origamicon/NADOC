@@ -39,34 +39,51 @@ SLOW (371 s). This change's 4 failures fixed and rerun; 13 pre-existing (10 stri
 from untracked sealed admission, 1 strict immutable evaluation, 2 junction-balance tolerance).
 Not exercised on the user's live dev server.
 
+## R1 incremental rebuild — delivered (S60, October 18, 2026)
+
+Re-plan R1–R5 is in [operating_contract.md §9](operating_contract.md) (user-approved; experimental build).
+`backend/core/part_replay_cache.py` hash-chains the explicit root and exact command inputs.
+A full-key hit returns the cached result; for geometry-only Bend/Twist edits, commands in
+`DEFORMATION_INDEPENDENT` (seamless/seamed/matched auto-scaffold, autostaple, auto-crossover,
+auto-break, auto-merge) reuse cached topology with the current deformations substituted.
+Wired into the preview prefix replay, the Apply-time source proof (`ReplayPrefix` records the
+chain position) and `regenerate`. Invariants (deformation writes only `deformations`; listed
+kinds pass deformations through and are invariant under deformation parameters) are asserted on
+honeycomb and square recipes in `tests/test_part_replay_cache.py`, plus cold-replay equality.
+
+Measured, 18hb × 504 bp ordinary part (host, in-process): Apply after a routed bend 3.5 s → 0.25 s;
+bend placed before autostaple: repeat edit Apply 0.16 s (first edit after load still pays one full
+proof replay, ~3.2 s). Open 2.4–3.1 s and evaluate 1.4–1.7 s are now display-bound (native
+projection, finite checks, geometry arrays, deep copies, byte-check encoding), not replay-bound.
+
+Checks: focused recipe/preview/repair/routing modules pass; `tests/test_part_replay_cache.py`
+8 passed; history browser suite 38 passed (10.0 m), cleanup verified; `just test-smart` FAST:
+14 failed / 18964 passed / 19 skipped, DEFERRED full, FAST SUITE TOO SLOW (386 s). One failure was
+this change (service-read budget test retargeted; 28 pass); 13 pre-existing as before.
+
 ## Single next bounded task
 
-**ID:** S59 — Bend/Twist large-part preview performance.
-**Tool / contract items:** Bend/Twist; C8 (parent FH-20).
-**Status:** Unstarted. No blocker.
-**Objective:** Bring per-change preview on an 18hb×504 scaffolded+stapled part within 2× budget
-(≤ 1.0 s) and reduce Open (5.8 s), without changing geometry or weakening bounds.
-**Inputs:** S58 measurements; profile of `evaluate` (native projection `project_for_deformation_preview`,
-`_inputs` re-admission of prefix each call, `copy_prefix` deepcopy) and of `prepare` (full prefix replay).
-**Deliverables:** Measured profile; the smallest change(s) removing repeated per-call work (for
-example caching the prefix admission/projection already done at prepare); before/after timings
-at 6hb×126, 18hb×252, 18hb×504; browser-side render time for one evaluate.
-**Files:** `backend/api/part_deformation_preview_dto.py`, `part_deformation_preview.py`,
-`backend/core/part_dna_comparison.py` only if needed; real-scale test.
-**Acceptance:** Identical display payloads before/after (exact JSON equality on fixtures);
-`tests/test_deformation_preview_real_scale.py` and focused preview modules pass.
-**Exclusions:** Geometry/constants/topology changes, new lifecycle layers, other tools.
-**Stop condition:** Budget met, or the remaining cost is attributed to a named phase with numbers.
+**ID:** S61 — Partial display projection for Bend/Twist preview (R1 follow-on, C8).
+**Objective:** Evaluate returns candidate geometry only for helices whose geometry the edit can
+change (the deformation's affected helices plus anything downstream that reads deformation
+geometry), with the unchanged prefix display reused client-side; Open reuses one projection.
+**Acceptance:** 18hb × 504 evaluate ≤ 1.0 s; display equals full projection on fixtures (exact);
+browser suite passes. **Exclusions:** geometry/constants changes, new lifecycle layers.
 
 ## User decisions pending
 
-1. C9: keep the legacy editor permanently as the fallback for unverified saved files, or plan an
-   explicit "convert history to verified" migration (needs `.nadoc` migration approval).
-2. Whether the 13 pre-existing `test-smart` failures (sealed-path and junction-balance) should be
-   triaged now; they are outside Bend/Twist.
+1. **R2 legacy migration approach** (every pre-overhaul saved file lacks a recipe root):
+   (A) re-root the whole current state as an explicit import baseline — exact and cheap, but old
+   features stop being editable as features; (B) re-root at the earliest non-replayable row,
+   using that row's saved pre-state as an explicit, user-visible import baseline, and replay the
+   later rows natively (old bends/twists stay editable) — accepted only if the replay equals the
+   saved design exactly; (C) synthesize versioned commands for every legacy row (most coverage,
+   highest risk). Recommended: B. Writing converted files needs explicit approval.
+2. C9: keep the legacy editor as the fallback for files that cannot be converted.
+3. Whether to triage the 13 pre-existing `test-smart` failures (sealed path, junction balance).
 
 ## Session discipline and Git
 
 One task per session; ≤15 appended plan evidence lines; no new reports. Handoff ≤150 lines.
 Ledger only for milestone changes; memory only for gate flips or milestone closure.
-S58 commit: explicit overhaul-only paths (see the commit body); mixed/shared files excluded.
+Commits: explicit overhaul-only paths; mixed/untracked Codex harness and sealed files excluded.

@@ -75,7 +75,15 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
 
     executor = executor or execute
     from backend.api.part_recovery_budget import RecoveryBudget
+    from backend.core.part_replay_cache import ReplayChain
     budget = prefix.budget if prefix is not None else RecoveryBudget()
+    # Incremental rebuild (R1): continue the replay chain from the prefix, so
+    # unchanged and geometry-independent commands reuse cached results.
+    if getattr(executor, "chain", None) is None:
+        chain = (ReplayChain(position=prefix.position) if prefix is not None and prefix.position
+                 else ReplayChain.for_design(source) if prefix is None else None)
+        if chain is not None:
+            executor = chain.wrap(executor)
 
     def run(entry, current):
         kind, arguments = command_input(entry)
@@ -179,9 +187,11 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
     from backend.api.part_recipe_prefix import ReplayPrefix
 
     prefix = ReplayPrefix(source, index, sub_index=sub_index if params is not None else None)
+    from backend.core.part_replay_cache import ReplayChain
+    proof_executor = ReplayChain.for_design(captured).wrap(executor)
     proof = assess_part_history(
         captured,
-        execute=lambda kind, d, p: prefix.execute(executor, kind, d, p),
+        execute=lambda kind, d, p: prefix.execute(proof_executor, kind, d, p),
         dependencies=dependency_resolver,
         checkpoint=checkpoint,
     )

@@ -156,3 +156,23 @@ The ledger's older numbers are superseded by this line; rewrite them only when a
 milestone status next changes. FH-20 closes
 when Bend and Twist are done; the Extrude and Sweep parts of FH-27 (MV-50/MV-51)
 close when those tools are done.
+
+## 9. Re-plan (user-approved October 18, 2026; experimental build)
+
+The user designated this an experimental build that can be reverted to a known commit, and
+granted full permission to edit, park or delete overhaul code as needed. Sequence, in order;
+C1–C9 (§1) remain the per-tool definition of done:
+
+- **R1 Incremental rebuild (Onshape-style).** (a) A bounded cache of verified replay results
+  keyed by a hash chain over the explicit root and exact command inputs, so Open, Apply and the
+  source proof stop replaying the whole recipe repeatedly. (b) Geometry-only edits: Bend/Twist do
+  not change topology, so downstream commands proven independent of deformation geometry reuse
+  their cached topology instead of rerunning (autostaple dominates rebuild cost: 2.86 s of
+  2.92 s on an 18hb × 504 bp part). Independence is a tested invariant, not an assumption.
+- **R2 Legacy migration.** Opt-in "convert history to verified" for pre-overhaul files: replay,
+  compare to the saved design, write a new file only on exact match; never overwrite silently.
+- **R3 One lifecycle.** Sweep and Extrude move onto the Bend/Twist preview-session host; the
+  immutable geometry host, sealed path and strict permit/receipt layers are parked or deleted.
+- **R4 User-facing history.** Dependency (parent/child) view, error/blocked states in the
+  feature log, suppress/unsuppress, reorder within dependencies.
+- **R5 Deferred:** agent policy, provenance receipts, further qualification matrices.

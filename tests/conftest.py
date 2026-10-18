@@ -1289,3 +1289,12 @@ def pytest_sessionfinish(session, exitstatus):
                 f"full report: {_SLOW_CANDIDATES_FILE}  "
                 f"(triage: .claude/skills/triage-slow-tests)"
             )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_replay_cache():
+    """The incremental replay cache is process-global; isolate every test."""
+    from backend.core import part_replay_cache
+    part_replay_cache.clear()
+    yield
+    part_replay_cache.clear()

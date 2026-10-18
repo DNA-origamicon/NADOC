@@ -884,3 +884,9 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Tests: focused frontend 194 passed; `just test-frontend` 773 files, 9306 passed, 1 skipped (344 s); history browser suite **38 passed (10.0 m)** incl. 17-helix open, legacy-fallback and C4 cases, cleanup verified; new `tests/test_deformation_preview_real_scale.py` 3 passed; bounding-mechanism tests pinned to test scale via `tests/preview_test_limits.py`.
 - `just test-smart`: FAST, 15 failed / 18955 passed / 19 skipped, DEFERRED full suite, FAST SUITE TOO SLOW (371 s). 4 failures were this change and are fixed (rerun pass); 13 pre-existing and untouched by it: 10 strict registration (Codex's untracked sealed strict-preview admission returns 415), `test_part_immutable_evaluation` strict GET 409, 2 `test_junction_balance` tolerance (clean modules).
 - Open: C8 large-part preview (S59); C9 — legacy path kept as fallback for unverified files (user decision on permanence/migration). Not verified on the user's live dev server; verified in the isolated real-frontend harness.
+
+## S60 — R1 incremental rebuild (October 18, 2026)
+- `part_replay_cache.ReplayChain`: full-key hits and, for `DEFORMATION_INDEPENDENT` kinds after a geometry-only edit, topology hits (cached output + current deformations). Wired into preview prefix replay, Apply source proof and `regenerate`.
+- Invariants and cold-replay equality: `tests/test_part_replay_cache.py` 8 passed (HC/SQ, bend/twist, 7 routing kinds).
+- 18hb×504: Apply after routed bend 3.5 s → 0.25 s; bend before autostaple, repeat Apply 0.16 s (first after load ~3.2 s). Open/evaluate now display-bound (S61).
+- Browser history suite 38 passed; `test-smart` FAST 14 failed/18964 passed (1 mine, fixed; 13 pre-existing).
