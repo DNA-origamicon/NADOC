@@ -1,77 +1,80 @@
 # Dependency overhaul session handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Updated: October 18, 2026. **Sessions since last gate flip or milestone close: 1**.
+Updated: October 18, 2026. **Sessions since last gate flip or milestone close: 2**.
 **Tools done: 0/4.** CAD ledger: **20/34 complete, 14 remaining (7 core, 7 parked)** per contract §8.
 Only a production gate flip resets the counter. At 3, report blockers and ask; do not start a successor.
 
 ## Current state
 
-S54 replaced provisional Sweep downstream-nick expansion with Bend/Twist C7 mid-log
-refusal qualification, the nearer gate unit's uncovered app behavior. Delivered two
-browser cases in `frontend/e2e/bend_release.spec.js`, using existing Bend/Twist→Sweep
-fixtures and real client seek to cursor 1. History Edit refuses visibly. Toolbar
-creation refuses visibly and keeps its selection picker with Apply disabled; Cancel
-closes it. Exact canonical design/history/redo/revision and adopted geometry remain
-unchanged, with no mutation requests. Return to tip restores Edit/Cancel.
+S55 delivered Bend/Twist downstream-nick replay and persistence qualification in
+`frontend/e2e/bend_release.spec.js`, using two new native fixture variants in
+`tests/deformation_history_app.py`. The nick uses the existing routing-group
+representation, command convention and deterministic identities. Recovery snapshots
+are deliberately invalidated. The existing fixture proof route exposes independent
+root/command replay authoring and geometry; no production code or endpoint was added.
 
-Final guarded browser run: **2 passed (34.1 s)**, strict clean consoles. Two prior
-runs failed (2 cases each) because the new test incorrectly expected the refused
-creation picker to close. Existing production behavior required no change.
-JavaScript syntax check passed. No interaction latencies measured.
-All three disposable roots independently verified absent; no accessible marked
-processes or workspace fixtures; ports 8004/5177 bind (32 protected process
-environments unreadable). Evidence appended to [Bend/Twist plan](bend_twist_release_acceptance.md).
+Both app cases preserve exact Cancel state (including redo), publish once, preserve
+helix/strand/ordered-domain identity, compare complete authoring/native geometry
+against cold replay, and compare all shared adopted nucleotide placement fields.
+One-step undo/redo and save/reopen pass, including reopened independent proof.
+Focused fixture checks: **4 passed, 22 deselected (2.80 s)**. Final guarded browser
+run: **2 passed (30.1 s)**, clean consoles. Initial browser run failed both reopened
+proofs because the fixture incorrectly used a bare minor row; corrected to the
+native routing group. JavaScript syntax passed. No interaction latencies measured.
 
-C7 now has bounded-fixture app evidence for both tools, not representative-design
-qualification. Production history/creation/backend gates remain false. No milestone
-changed; ledger and project memory deliberately untouched. Historical failed broad
-software validation remains debt; no backend/frontend full suite or smoke run here.
+Both disposable roots independently verified absent; no accessible marked processes
+or workspace fixtures; 32 protected environments unreadable. No listeners on
+8004/5177; both ports bind with SO_REUSEADDR (plain bind encountered TIME_WAIT).
+Evidence appended to [Bend/Twist plan](bend_twist_release_acceptance.md).
 
-Existing evidence retained: Bend/Twist entry/control, Cancel/Apply, undo/redo/save/reopen,
-lost-reply and downstream Sweep workflows; Extrude family and Sweep source matrices.
-Remaining gate work includes explicit downstream topology-changing replay (C3),
-failure/dependents behavior (C4/C5), representative-design C1–C8 qualification and
-latency measurements, then paired Bend/Twist gate enablement and C9 legacy retirement.
-The sealed path and unrelated simulation/service/VR work are excluded.
+C3/C6 now have downstream topology-change evidence on bounded fixtures. C7 already
+has mid-log refusal evidence. Representative-design C1–C8 and latency qualification,
+C4 failure behavior, C5 dependents, paired gate enablement and C9 remain open.
+Production history/creation/backend gates remain false. No milestone changed;
+ledger and project memory untouched. Historical failed broad software validation
+remains debt; no full backend/frontend suite or smoke run in S55.
+The sealed path and unrelated simulation/service/VR work remain excluded.
 
 ## Next bounded task
 
-**ID:** S55 — Bend/Twist downstream-nick replay in the app.
-**Tool / contract items:** Bend/Twist gate unit; C3, C6 (parent FH-20).
+**ID:** S56 — Bend/Twist upstream-deletion dependents dialog.
+**Tool / contract items:** Bend/Twist gate unit; C5 (parent FH-20).
 **Status:** Unstarted.
-**Objective:** Edit each deformation before a native nick, prove the authored helix,
-strand/domain identities and final geometry equal independent cold replay, including reopening.
-**Deliverables:** Reuse existing native nick contracts in one fixture variant per tool;
-two browser cases exercising parameter edit, one Apply, independent root replay,
-one-step undo/redo, save/reopen and reopened proof. Preserve exact Cancel checks.
-**Files:** `tests/deformation_history_app.py`, existing native deformation fixture/tests,
-`frontend/e2e/bend_release.spec.js`, existing harness helpers only as needed,
-`docs/audits/feature_history_20261014/bend_twist_release_acceptance.md`, this handoff.
-**Acceptance:** Guarded focused fixture checks and two real-app cases, full native
-geometry/identity assertions, clean tool consoles, unchanged deadlines and verified
-failure-safe scratch/process/port cleanup. Production changes only for a demonstrated
-tool defect, with repository-required validation.
-**Exclusions:** Sweep matrix expansion, new lifecycle/host/queue/session/layer/endpoint,
-new molecular/address semantics, unrelated production fixes, broad unauthorized suites,
-user-design mutation, simulation, sealed path, gate flips without complete C1–C9.
-**Stop condition:** Both cases qualify, or record a precise blocker; scientific identity
-uncertainty or any prerequisite outside the four tools requires asking the user.
-Do not start a second task. Preserve other C-items in the existing plan.
+**Objective:** In the running app, attempt deletion of the upstream native Bundle
+referenced by each deformation and verify the existing dependents dialog lists the
+correct dependent features before any canonical commit.
+**Deliverables:** Two focused browser cases reusing the Bend/Twist→nick fixtures;
+assert dependent identities/labels, exact pre-decision and Cancel preservation,
+then the existing cascade choice and one-step undo restoration. Document existing
+behavior; no new deletion semantics.
+**Files:** `frontend/e2e/bend_release.spec.js`, existing fixture/tests/helpers only
+if necessary, `docs/audits/feature_history_20261014/bend_twist_release_acceptance.md`,
+this handoff; tool production files only for a demonstrated in-scope defect.
+**Acceptance:** Guarded two-case real-app run; correct dependents visible before
+commit, no mutation before decision, exact Cancel, single confirmed deletion,
+undo restoration, strict tool consoles and verified failure-safe cleanup.
+**Exclusions:** New lifecycle/host/queue/session/layer/endpoint, molecular/address
+semantics, shared dependency infrastructure work, unrelated production fixes,
+user-design mutation, sealed path, broader matrices or incomplete gate flips.
+**Stop condition:** Both cases qualify, or report a precise blocker; any scientific
+identity uncertainty or prerequisite outside the four tools requires asking.
+Do not start a second task. Without a gate flip this session ends at counter 3,
+so the following session must report blockers and ask rather than start a successor.
 
 ## Session discipline and Git
 
 Read applicable repository instructions, operating contract, then this handoff from disk.
 One task per session; ≤15 appended evidence lines in the existing tool plan; no new
-reports. Handoff ≤150 lines. Update ledger only for milestone status changes and
-project memory only for gate flips or milestone closure. Counter increments absent a gate flip.
+reports. Handoff ≤150 lines. Ledger only for milestone status changes; project
+memory only for gate flips or milestone closure. Counter increments absent a gate flip.
 
-Starting HEAD: `96ab701e`. This session commits only the three explicit overhaul-only
-paths: this handoff, the Bend/Twist plan and `frontend/e2e/bend_release.spec.js`.
-Those files were previously untracked; their existing overhaul history is included.
-The rest of the accumulated worktree is left intact and uncommitted, including the
-existing harness dependencies and operating contract. No push.
-Mixed/shared files intentionally excluded include `backend/api/main.py`,
-`backend/api/crud.py`, `frontend/src/api/client.js`, `tests/conftest.py`,
-`CLAUDE.md`, `START.md`, `memory/project_feature_log_overhaul.md`, issue ledgers and
-VR/scientific/memory-maintenance changes. Do not sweep this backlog into a commit.
+S55 starting HEAD: `0a16851e`. Commit only five explicit overhaul-only paths:
+this handoff, Bend/Twist plan, `frontend/e2e/bend_release.spec.js`,
+`tests/deformation_history_app.py`, `tests/test_deformation_history_app.py`.
+The two previously untracked fixture files include their existing overhaul content.
+Leave the accumulated shared worktree and other untracked harness dependencies intact.
+No push. Mixed/shared exclusions include `backend/api/main.py`, `backend/api/crud.py`,
+`frontend/src/api/client.js`, `tests/conftest.py`, `CLAUDE.md`, `START.md`, memory,
+issue ledgers and VR/scientific/memory-maintenance changes. Do not sweep this backlog
+into a commit. The operating contract remains untracked and unmodified.

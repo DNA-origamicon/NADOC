@@ -588,3 +588,73 @@ for (const kind of ['bend', 'twist']) test(`${kind} mid-log creation and history
     expect(await f.checkpoint()).toEqual(tip)
   }, `${kind}-sweep`)
 })
+
+for (const kind of ['bend', 'twist']) test(`${kind} downstream nick cold replay Cancel undo redo and reopen`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, kind, async f => {
+    const before = await f.checkpoint(), stored = await f.browser()
+    const input = kind === 'bend' ? '#def-bend-angle' : '#def-twist-value'
+    expect(before.design.feature_log.at(-1).id).toBe('downstream-nick')
+    expect(before.design.strands).toHaveLength(3)
+    expect(before.redo).toHaveLength(1)
+    const fields = ['helix_id', 'direction', 'bp_index', 'copy_k', 'strand_id', 'strand_type',
+      'domain_index', 'is_five_prime', 'is_three_prime', 'overhang_id', 'placement_source',
+      'backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position', 'slab_quaternion']
+    const placements = rows => {
+      expect(rows.every(row => fields.every(field => Object.hasOwn(row, field)))).toBe(true)
+      return rows.map(row => fields.map(field => row[field]))
+        .sort((a, b) => JSON.stringify(a.slice(0, 4)).localeCompare(JSON.stringify(b.slice(0, 4))))
+    }
+    const prove = async () => {
+      const proof = await readFixture(f, 'proof')
+      expect(proof.status).toBe('verified')
+      expect(proof.cold_replay.authoring_equal).toBe(true)
+      expect(proof.cold_replay.geometry_equal).toBe(true)
+      const current = await f.checkpoint()
+      for (const [field, value] of Object.entries(proof.cold_replay.authoring))
+        expect(current.design[field], field).toEqual(value)
+      expect(placements((await f.browser()).geometry)).toEqual(placements(proof.cold_replay.geometry))
+    }
+    await prove()
+    await f.open(0)
+    await f.change(input, 20)
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(stored)
+    await page.locator('#def-cancel-btn').click()
+    await expect(f.popup).not.toBeVisible()
+    await expect.poll(async () => (await f.display()).roots).toBe(0)
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(stored)
+    await f.open(0)
+    await f.change(input, 20)
+    await page.locator('#def-apply-btn').click()
+    await expect(f.popup).not.toBeVisible()
+    await expect.poll(async () => (await f.display()).roots).toBe(0)
+    const after = await f.checkpoint(), adopted = await f.browser()
+    expect(after.revision).toBe(before.revision + 1)
+    expect(after.history).toHaveLength(before.history.length + 1)
+    expect(after.redo).toHaveLength(0)
+    expect(after.design.feature_log.map(e => e.id)).toEqual(before.design.feature_log.map(e => e.id))
+    expect(after.design.feature_log.at(-1).children[0].params).toEqual(before.design.feature_log.at(-1).children[0].params)
+    expect(after.design.helices).toEqual(before.design.helices)
+    expect(after.design.strands).toEqual(before.design.strands)
+    expect(adopted.geometry).not.toEqual(stored.geometry)
+    await prove()
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file)) throw new Error('Save failed')
+      await api.undo()
+    }, f.file)
+    // Full authoring, including ordered domains, not merely deformation parameters.
+    for (const field of Object.keys((await readFixture(f, 'proof')).cold_replay.authoring))
+      expect((await f.checkpoint()).design[field], field).toEqual(before.design[field])
+    expect(placements((await f.browser()).geometry)).toEqual(placements(stored.geometry))
+    await page.evaluate(async () => (await import('/src/api/client.js')).redo())
+    await prove()
+    expect(placements((await f.browser()).geometry)).toEqual(placements(adopted.geometry))
+    await page.evaluate(async file => (await import('/src/api/client.js')).loadDesign(file), f.file)
+    await prove()
+    expect(placements((await f.browser()).geometry)).toEqual(placements(adopted.geometry))
+    expect(f.writes.filter(r => r.path === `${previewPath}/apply`)).toHaveLength(1)
+    expect(f.writes.some(r => /\/design\/deformation(?:\/|$)/.test(r.path))).toBe(false)
+  }, `${kind}-nick`)
+})

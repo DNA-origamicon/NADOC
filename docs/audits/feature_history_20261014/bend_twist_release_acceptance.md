@@ -839,3 +839,16 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - First two runs: 2 failures each from incorrectly expecting the refused creation picker to close; corrected to its documented existing refusal behavior, retaining strict state/request checks.
 - `node --check frontend/e2e/bend_release.spec.js` passed; independent cleanup: all three owned roots absent, no accessible marked processes, ports 8004/5177 bind, no workspace fixtures; 32 protected environments unreadable.
 - No interaction latency measurements, representative-design claim, scientific changes, gate flip, milestone close or broad-suite run. C7 evidence is bounded-fixture only.
+
+## S55 — downstream nick replay (October 18, 2026)
+- Current status and sole successor: [session handoff](session_handoff.md).
+- Added Bend/Twist→native nick fixture variants, using the existing routing-group representation and nick convention; invalidated recovery snapshots.
+- Existing fixture proof route now exposes independent root/command replay authoring and geometry for these variants; no production changes or new endpoints.
+- Two browser cases assert exact Cancel including redo, one Apply, complete authoring/helix/strand/ordered-domain identity, full native geometry equality and exact adopted placement fields.
+- One-step undo/redo and save/reopen retain identity and geometry; root replay is checked initially, after Apply, after redo and after reopen; clean tool consoles.
+- `just test-focused tests/test_deformation_history_app.py -k nick`: final **4 passed, 22 deselected (2.80 s)**, including serialized fixture round-trip.
+- `NADOC_HISTORY_E2E_GREP='downstream nick cold replay' just validate-safe uv run --no-sync python scripts/run_deformation_history_e2e.py`: final **2 passed (30.1 s)**.
+- Initial browser run: 2 failures at reopened proof because fixture used a bare minor row; corrected to native routing group without relaxing assertions. Earlier selector invocation selected no tests before edits ran (`python` unavailable; used `python3`).
+- `node --check frontend/e2e/bend_release.spec.js` passed. Both exact scratch roots absent; no accessible marked processes or workspace fixtures; 32 process environments unreadable.
+- No listeners on 8004/5177; both bind with SO_REUSEADDR (initial plain bind encountered TIME_WAIT). Launcher stopped owned processes before deleting scratch.
+- No interaction latencies measured; bounded-fixture C3/C6 evidence only, no representative-design or full-suite claim. No gate or milestone changed.
