@@ -658,3 +658,72 @@ for (const kind of ['bend', 'twist']) test(`${kind} downstream nick cold replay 
     expect(f.writes.some(r => /\/design\/deformation(?:\/|$)/.test(r.path))).toBe(false)
   }, `${kind}-nick`)
 })
+
+for (const kind of ['bend', 'twist']) test(`${kind} upstream deletion dependents decision Cancel cascade and undo`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, kind, async f => {
+    const before = await f.checkpoint(), stored = await f.browser()
+    expect(before.redo).toHaveLength(1)
+    expect(before.design.feature_log.map(e => e.id).slice(1)).toEqual(['edited-feature', 'downstream-nick'])
+    const deletePath = '/api/design/features/0'
+    const decisions = []
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Delete dependent features?' })
+    const openDecision = async () => {
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === deletePath && r.request().method() === 'DELETE')
+      await page.locator('[title="Delete this feature"]').first().click()
+      const response = await pending
+      expect(response.ok()).toBe(true)
+      const decision = await response.json()
+      expect(decision.needs_cascade_decision).toBe(true)
+      expect(decision.target_index).toBe(0)
+      expect(decision.target_label).toBe('Native bounded bundle')
+      expect(decision.dependents.map(d => ({ index: d.index, feature_ids: d.feature_ids }))).toEqual([
+        { index: 1, feature_ids: ['edited-feature'] }, { index: 2, feature_ids: ['nick-child'] },
+      ])
+      for (const dependent of decision.dependents) {
+        expect(dependent.label).toBeTruthy()
+        for (const id of dependent.feature_ids) expect(dependent.reasons[id]).toBeTruthy()
+      }
+      expect(decision.dependents.map(d => d.label)).toEqual(
+        before.design.feature_log.slice(1).map(e => e.label ?? e.feature_type))
+      expect(await f.checkpoint()).toEqual(before)
+      expect(await f.browser()).toEqual(stored)
+      await expect(dialog).toBeVisible()
+      await expect(dialog.locator('li')).toHaveText(decision.dependents.map(d => `F${d.index + 1}: ${d.label}`))
+      await expect(dialog).toContainText('Native bounded bundle')
+      expect(await f.checkpoint()).toEqual(before)
+      expect(await f.browser()).toEqual(stored)
+      decisions.push(decision)
+    }
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const start = f.writes.length
+    await openDecision()
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(dialog).not.toBeVisible()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(stored)
+    expect(f.writes.slice(start).map(r => r.path)).toEqual([deletePath])
+    await openDecision()
+    expect(decisions[1]).toEqual(decisions[0])
+    const published = page.waitForResponse(r => new URL(r.url()).pathname === deletePath
+      && new URL(r.url()).searchParams.get('cascade') === 'true')
+    await dialog.getByRole('button', { name: 'Delete all (3)', exact: true }).click()
+    expect((await published).ok()).toBe(true)
+    await expect(dialog).not.toBeVisible()
+    await expect.poll(async () => (await f.browser()).design.feature_log.length).toBe(0)
+    const after = await f.checkpoint()
+    expect(after.revision).toBe(before.revision + 1)
+    expect(after.history).toHaveLength(before.history.length + 1)
+    expect(after.redo).toHaveLength(0)
+    for (const field of ['feature_log', 'helices', 'strands', 'deformations']) expect(after.design[field]).toEqual([])
+    expect((await f.browser()).geometry).toEqual([])
+    expect(f.writes.slice(start).map(r => r.path)).toEqual([deletePath, deletePath, deletePath])
+    await page.evaluate(async () => (await import('/src/api/client.js')).undo())
+    const restored = await f.checkpoint()
+    expect(restored.design).toEqual(before.design)
+    expect(restored.history).toEqual(before.history)
+    expect(restored.redo).toHaveLength(1)
+    expect((await f.browser()).design).toEqual(stored.design)
+    expect((await f.browser()).geometry).toEqual(stored.geometry)
+    expect((await readFixture(f, 'proof')).status).toBe('verified')
+  }, `${kind}-nick`)
+})

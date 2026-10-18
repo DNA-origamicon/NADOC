@@ -852,3 +852,13 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - `node --check frontend/e2e/bend_release.spec.js` passed. Both exact scratch roots absent; no accessible marked processes or workspace fixtures; 32 process environments unreadable.
 - No listeners on 8004/5177; both bind with SO_REUSEADDR (initial plain bind encountered TIME_WAIT). Launcher stopped owned processes before deleting scratch.
 - No interaction latencies measured; bounded-fixture C3/C6 evidence only, no representative-design or full-suite claim. No gate or milestone changed.
+
+## S56 — upstream deletion decision blocker (October 18, 2026)
+- Added two C5 cases using Bend/Twist→nick fixtures: dependent IDs/labels/reasons, pre-decision preservation, Cancel, cascade and undo/proof.
+- `node --check frontend/e2e/bend_release.spec.js`: passed.
+- `NADOC_HISTORY_E2E_GREP='upstream deletion dependents' just validate-safe uv run --no-sync python scripts/run_deformation_history_e2e.py`: **2 failed**, repeated **2 failed** after moving preservation checks before visibility.
+- Both final cases verify correct `edited-feature`/`nick-child` identities, labels/reasons and exact canonical/browser preservation, then fail at missing dialog (5 s assertion timeout).
+- Cause: `frontend/src/ui/primitives/dependents_dialog.js:65–71` creates but never opens the modal; `modal.js:120–127` requires explicit `open()` to append it.
+- Shared dependency UI prerequisite: stopped under contract §5/S56 exclusions; no production repair. Cancel/cascade/undo and final strict-console assertions remain unexecuted; C5 not passed.
+- No interaction latency measurement; no full suites run. No gate or milestone change. Current state and user-decision successor: [handoff](session_handoff.md).
+- Both exact roots `/tmp/__e2e__history-dqojntjl` and `/tmp/__e2e__history-4816mo4i` independently verified absent; no accessible marked processes or workspace fixtures; ports 8004/5177 bind with SO_REUSEADDR.
