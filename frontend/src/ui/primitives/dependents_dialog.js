@@ -69,5 +69,6 @@ export function showDependentsDecision({ targetLabel = 'this feature', dependent
       actions: [cancelBtn, revertBtn, cascadeBtn],
       onClose: () => _resolve(null),
     })
+    modal.open()
   })
 }

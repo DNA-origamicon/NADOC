@@ -862,3 +862,15 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Shared dependency UI prerequisite: stopped under contract §5/S56 exclusions; no production repair. Cancel/cascade/undo and final strict-console assertions remain unexecuted; C5 not passed.
 - No interaction latency measurement; no full suites run. No gate or milestone change. Current state and user-decision successor: [handoff](session_handoff.md).
 - Both exact roots `/tmp/__e2e__history-dqojntjl` and `/tmp/__e2e__history-4816mo4i` independently verified absent; no accessible marked processes or workspace fixtures; ports 8004/5177 bind with SO_REUSEADDR.
+
+## S57 — authorized dependents-dialog repair (October 18, 2026)
+- User authorized the shared-dialog repair and resumption at counter 3. Open the existing modal; forward sub-index/options through the app deletion wrapper so cascade reaches the existing API.
+- Two Bend/Twist→nick C5 cases now pass: correct visible dependent IDs/labels, exact pre-decision/Cancel preservation, one confirmed deletion, one-step undo and independent proof.
+- Undo adoption matches all 17 shared native placement fields exactly; a subsequent full read also matches the entire original geometry payload exactly. No topology/geometry production changes.
+- Harness stubs only default-animation startup POST; console checks remain strict. No lifecycle or endpoint added.
+- `just test-frontend`: **773 files passed; 9297 tests passed, 1 skipped (337.58 s)** after modal fix, before wrapper repair. Final wrapper exercised by browser run; no second full-suite run.
+- `NADOC_HISTORY_E2E_GREP='upstream deletion dependents' just validate-safe uv run --no-sync python scripts/run_deformation_history_e2e.py`: final **2 passed (25.0 s)**, clean consoles.
+- Five earlier runs: 2 failures each; missing cascade forwarding, compact/full comparison mismatch, and unsuccessful baseline round-trip setup (animation/empty undo stack). Final test checks actual adopted placements before full-read equality; no assertions removed.
+- `node --check` on both production files and browser spec, plus `git diff --check`: passed. No interaction latencies measured; bounded-fixture evidence only.
+- Six exact `/tmp/__e2e__history-` roots (ocry3tf8, x6g50wev, rhal3pef, 0zflnp4m, cbtgicvz, z_6eg5ws) absent; no accessible marked processes or workspace fixtures; 31 environments unreadable; ports 8004/5177 bind with SO_REUSEADDR.
+- No gate/milestone change; ledger/memory untouched. Current state and single successor: [handoff](session_handoff.md).

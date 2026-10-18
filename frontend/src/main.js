@@ -4997,8 +4997,8 @@ async function main() {
     return api.seekFeatures(position, subPosition, options)
   }
 
-  async function _deleteFeatureWithDelta(index) {
-    return api.deleteFeature(index)
+  async function _deleteFeatureWithDelta(index, subIndex = null, options = {}) {
+    return api.deleteFeature(index, subIndex, options)
   }
 
   /**

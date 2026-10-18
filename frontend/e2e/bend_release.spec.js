@@ -660,6 +660,11 @@ for (const kind of ['bend', 'twist']) test(`${kind} downstream nick cold replay 
 })
 
 for (const kind of ['bend', 'twist']) test(`${kind} upstream deletion dependents decision Cancel cascade and undo`, async ({ page, request }) => {
+  // Unrelated default-animation startup writes are not part of this history case.
+  await page.route(url => url.pathname === '/api/design/animations', route =>
+    route.request().method() === 'POST' && route.request().postDataJSON()?.ensure_default
+      ? route.fulfill({ status: 200, contentType: 'application/json', body: 'null' })
+      : route.continue())
   await withHistoryFixture({ page, request }, kind, async f => {
     const before = await f.checkpoint(), stored = await f.browser()
     expect(before.redo).toHaveLength(1)
@@ -723,6 +728,20 @@ for (const kind of ['bend', 'twist']) test(`${kind} upstream deletion dependents
     expect(restored.history).toEqual(before.history)
     expect(restored.redo).toHaveLength(1)
     expect((await f.browser()).design).toEqual(stored.design)
+    // Check the actual adopted compact geometry before any refresh, using every
+    // shared native placement field (as in the downstream-nick replay case).
+    const fields = ['helix_id', 'direction', 'bp_index', 'copy_k', 'strand_id', 'strand_type',
+      'domain_index', 'is_five_prime', 'is_three_prime', 'overhang_id', 'placement_source',
+      'backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position', 'slab_quaternion']
+    const placements = rows => {
+      expect(rows.every(row => fields.every(field => Object.hasOwn(row, field)))).toBe(true)
+      return rows.map(row => fields.map(field => row[field]))
+        .sort((a, b) => JSON.stringify(a.slice(0, 4)).localeCompare(JSON.stringify(b.slice(0, 4))))
+    }
+    expect(placements((await f.browser()).geometry)).toEqual(placements(stored.geometry))
+    // Full reads carry additional metadata and a different order. Retain exact
+    // whole-payload equality too, comparing the same wire format on both sides.
+    await page.evaluate(async () => (await import('/src/api/client.js')).getGeometry())
     expect((await f.browser()).geometry).toEqual(stored.geometry)
     expect((await readFixture(f, 'proof')).status).toBe('verified')
   }, `${kind}-nick`)
