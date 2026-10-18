@@ -101,13 +101,9 @@ the isolated editor) pass; history browser suite 39 passed (9.3 m); `just test-f
 
 ## User decisions pending
 
-1. Raise the 1 MB import-root limit (`PartRecipeRoot.source_json`): it is in
-   `part_history_contract.py`, which the CPD/duplex/streptavidin numerical manifests hash, so it
-   needs a recorded schema-compatibility transition. Approve doing that ceremony, or keep the limit.
-2. Stale legacy rows (e.g. 6hb_curved loop skips): offer an explicit "re-derive from current bend"
-   repair? It would change topology and needs review per file.
-3. C9: keep the legacy editor as the fallback for unconvertible files.
-4. Whether to triage the 13 pre-existing `test-smart` failures (sealed path, junction balance).
+Legacy-file questions are closed by the user (contract §10): no conversion, import-limit or
+stale-row work; old files that stop working are acceptable. Remaining:
+1. Whether to triage the 13 pre-existing `test-smart` failures (sealed path, junction balance).
 
 ## Session discipline and Git
 

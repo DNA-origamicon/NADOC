@@ -176,3 +176,18 @@ C1–C9 (§1) remain the per-tool definition of done:
 - **R4 User-facing history.** Dependency (parent/child) view, error/blocked states in the
   feature log, suppress/unsuppress, reorder within dependencies.
 - **R5 Deferred:** agent policy, provenance receipts, further qualification matrices.
+
+## 10. Legacy files policy (user decision, October 18, 2026)
+
+No existing file with Bend/Twist/Sweep features needs preserving: those features were always in
+development, and legacy models with simulation data will be redone. Therefore:
+
+- Compatibility with pre-overhaul history is **never a blocker** and never a work item. Do not
+  spend effort converting, repairing or migrating old files, and do not keep code paths alive
+  only for them. An old file that cannot be edited (or opened) after this overhaul is acceptable.
+- The R2 converter (File → Convert history to verified…) stays as an optional, unmaintained
+  convenience; it may be deleted if it ever gets in the way. Its open questions (1 MB import
+  limit, stale-row repair) are closed as "won't do".
+- C9 is reinterpreted: the legacy mutating editor remains only as the fallback for *new* parts the
+  isolated editor does not yet support (extensions, overhang connections, nanoparticles, staple
+  groups, …). Remove it per tool once the isolated editor covers those scopes — not for old files.
