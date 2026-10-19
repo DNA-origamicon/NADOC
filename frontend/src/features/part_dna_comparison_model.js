@@ -66,7 +66,9 @@ export function validatedDeformationPreviewComponent(value) {
 /** Preview and comparison share native scoped samples under distinct contracts. */
 export function validateDeformationPreviewComponent(value) {
   shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
-  if (value.component_kind !== 'deformation-preview-dna' || value.component_version !== 2
+  // v2: JSON rows; v3: compact float64 coordinate block (same records).
+  if (value.component_kind !== 'deformation-preview-dna' || ![2, 3].includes(value.component_version)
+      || (value.component_version === 3) === Array.isArray(value.nucleotides)
       || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported deformation display version')
   validateNativeComponent(value, true)
   validatedPreviews.add(value)
@@ -231,7 +233,7 @@ function validateNativeComponent(value, scopedSamples) {
   }
   validateRecords(decodeDnaComparisonRecords(value.nucleotides), expected)
   validateAxes(value.helix_axes, helices, strands, overhangs, domains, scopedSamples)
-  bounds(value.bounds_nm, value.nucleotides.length || value.helix_axes.length)
+  bounds(value.bounds_nm, (Array.isArray(value.nucleotides) ? value.nucleotides.length : value.nucleotides.count) || value.helix_axes.length)
   return value
 }
 

@@ -905,3 +905,10 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Not kept: memoizing arm frames in `deformed_helix_axes` (0.31 → 0.10 s, byte-identical output; browser median 1.27 s / p95 1.42 s) because `deformation.py` is pinned by the CPD and duplex-relax engine manifests — needs a user-reviewed manifest transition.
 - C8 status: small/medium parts within the 2× allowance; the full-size 18hb×504 part is ~2.9× → performance task remains (contract §3), or the user revises the large-design budget.
 - Checks: `tests/test_preview_display_performance.py` 6, preview DTO/session/real-scale 84 (one unreproduced failure in 4 runs), frontend codec/limit tests, `just test-frontend` 776 files / 9331 passed, manifest tests 185 passed after reverting the frame cache; `test-smart` and history browser suite results are in the handoff.
+
+## S63 — compact preview transport, frame cache shipped (October 19, 2026; Claude session)
+- User approved changing CPD/duplex-relax engine pins: `deformed_helix_axes` arm-frame memoization re-applied (byte-identical axes on 42 designs); reviewed transition `preview-axis-frame-cache-v1` recorded (16 edges retargeted, 2 added; prior policy and before-capture in this folder); manifest tests 187 passed.
+- Preview DNA component v3: coordinates as one base64 little-endian float64 block (28 doubles/record), other columns as JSON rows; Python and JS decoders accept v2 rows and v3 blocks; decoded records equal the native rows exactly. Payload 13.7 → 8.5 MB.
+- Client: unrolled compact decoder (103 → ~15 ms); layer takes the validator's decoded records once.
+- Browser `bend-large` (GPU raster excluded): median 1.46 → 1.17 s, p95 1.67 → 1.23 s; server+headers ~0.73 s, client after body ~0.41 s. In-process server evaluate ~0.67 s, spread over geometry 0.14, record validation 0.14 (incl. guard slab recompute), axes 0.09, prefix deep copy 0.05, four whole-model admissions 0.06, packing 0.035.
+- Checks: `just test-frontend` 776 files / 9335 passed; `test-smart` FAST 13 failed (known) / 19022 passed; preview/comparison backend 127 passed.

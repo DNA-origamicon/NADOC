@@ -296,11 +296,13 @@ def test_request_and_response_objects_cannot_mutate_retained_inputs(document):
     opened = host.prepare(request)
     request["feature_id"] = "replacement"
     result = host.evaluate(update(opened))
-    result["candidate"]["nucleotides"][0][4][0] += 100
+    result["candidate"]["nucleotides"]["rows"][0][0] = "mutated"
+    result["candidate"]["nucleotides"]["f64"] = ""
     result["candidate"]["display_topology"]["strands"][0]["domains"].clear()
     opened["control_context"]["strands"].clear()
     again = host.evaluate(update(opened, sequence=2))
-    assert again["candidate"]["nucleotides"][0][4][0] != result["candidate"]["nucleotides"][0][4][0]
+    assert again["candidate"]["nucleotides"]["rows"][0][0] != "mutated"
+    assert again["candidate"]["nucleotides"]["f64"]
     assert again["candidate"]["display_topology"]["strands"][0]["domains"]
 
 

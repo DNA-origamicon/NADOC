@@ -2939,6 +2939,7 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         return axes
 
     result: list[dict] = []
+    frame_cache: dict = {}
 
     for h in real_helices:
         h = effective_helix_for_geometry(h, design)
@@ -3020,8 +3021,15 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
             samples_pre = (spines + np.einsum("nij,j->ni", frames, cs_offset)).tolist()
         else:
             samples_pre = []
+            arm_key = tuple(h2.id for h2 in arm_helices)
             for local_bp in sample_local:
-                spine_p, R_p, _ = _frame_at_bp(design, local_bp + bp_offset, arm_helices)
+                # Every helix of an arm samples the same bundle frames; compute
+                # each (arm, bp) frame once per call (pure; read-only reuse).
+                key = (arm_key, local_bp + bp_offset)
+                frame = frame_cache.get(key)
+                if frame is None:
+                    frame = frame_cache[key] = _frame_at_bp(design, local_bp + bp_offset, arm_helices)
+                spine_p, R_p, _ = frame
                 samples_pre.append((spine_p + R_p @ cs_offset).tolist())
         # Per-segment endpoints: interpolate the pre-cluster centerline at the
         # segment's bp boundaries, then apply each cluster only to the segments

@@ -59,7 +59,8 @@ def test_preview_projection_bounds_keep_native_values():
 
     design = native_source("bend")
     pane = project_for_deformation_preview(design)
-    points = [p for row in pane["nucleotides"] for p in (row[4], row[5], row[19])]
+    from backend.core.part_dna_comparison_codec import unpack_records
+    points = [r[f] for r in unpack_records(pane["nucleotides"]) for f in ("backbone_position", "base_position", "slab_position")]
     for axis in pane["helix_axes"]:
         points += [axis["start"], axis["end"], *axis["samples"]]
         for segment in axis["segments"]:

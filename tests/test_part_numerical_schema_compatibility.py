@@ -27,6 +27,8 @@ POSES_BEFORE = ROOT / "docs/audits/feature_history_20261014/placement_poses_sche
 POSES_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/placement_poses_schema_compatibility_prior_policy.json"
 EXTENSIONS_BEFORE = ROOT / "docs/audits/feature_history_20261014/extension_schema_compatibility_before.json"
 EXTENSIONS_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/extension_schema_compatibility_prior_policy.json"
+FRAME_CACHE_BEFORE = ROOT / "docs/audits/feature_history_20261014/preview_axis_frame_cache_before.json"
+FRAME_CACHE_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/preview_axis_frame_cache_prior_policy.json"
 BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
              "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE,
              "organization-load-v1": LINEAGE_BEFORE, "native-domain-lineage-v1": VISIBILITY_BEFORE,
@@ -182,7 +184,7 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
-    assert len(entries) == 23
+    assert len(entries) == 25
     assert compatibility.POLICY_PATH.stat().st_size <= 32 * 1024
     assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
     historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
@@ -214,6 +216,16 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
     assert all(entry["to_sha256"] == extension_before[entry["engine_id"]]["implementation_sha256"] for entry in poses_policy)
     expected_sources.update((engine, value["implementation_sha256"]) for engine, value in extension_before.items())
     assert len(expected_sources) == 23
+    # preview-axis-frame-cache-v1: the 23 sources are retargeted to the new CPD and
+    # duplex pins, and the terminal-extensions pins of those two engines become sources.
+    frame_prior = json.loads(FRAME_CACHE_PRIOR_POLICY.read_text())["transitions"]
+    assert len(frame_prior) == 23
+    assert {(entry["engine_id"], entry["from_sha256"]) for entry in frame_prior} == expected_sources
+    frame_before = json.loads(FRAME_CACHE_BEFORE.read_text())["engines"]
+    assert all(entry["to_sha256"] == frame_before[entry["engine_id"]]["implementation_sha256"] for entry in frame_prior)
+    expected_sources.update((engine, value["implementation_sha256"]) for engine, value in frame_before.items()
+                            if value["implementation_sha256"] != current[engine])
+    assert len(expected_sources) == 25
     assert {(entry["engine_id"], entry["from_sha256"]) for entry in entries} == expected_sources
     assert all(entry["to_sha256"] == captured[entry["engine_id"]]["implementation_sha256"]
                for entry in immediate_prior)
@@ -272,6 +284,10 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
         expected.add("backend/core/lattice.py")
     if generation in {"group-visibility-v1", "placement-poses-v1"}:
         expected = {"backend/core/models.py"}
+    if family != "part_streptavidin_contract":
+        # preview-axis-frame-cache-v1 (user-approved October 19, 2026): byte-identical
+        # display-axis memoization; the reviewed edges were retargeted to the new pin.
+        expected.add("backend/core/deformation.py")
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
         key: value for key, value in current.items() if key != "files"}
@@ -642,3 +658,21 @@ def test_runtime_failure_retains_the_separate_implementation_decision(compatibil
         assert error.value.code == "runtime_mismatch"
     assert len(evidence["transitions"]) == 1
     assert evidence["transitions"][0]["engine_id"] == contract.ENGINE_ID
+
+
+@pytest.mark.parametrize("family", ["part_cpd_contract", "part_duplex_relax_contract"])
+def test_preview_axis_frame_cache_edge_changes_only_deformation(compatibility, family):
+    contract = import_module(f"backend.core.{family}")
+    capture = json.loads(FRAME_CACHE_BEFORE.read_text())
+    before = capture["engines"][contract.ENGINE_ID]
+    current = contract.implementation_manifest()
+    assert digest(before["manifest"]) == before["implementation_sha256"]
+    entries = [entry for entry in compatibility._policy()
+               if entry["engine_id"] == contract.ENGINE_ID and entry["from_sha256"] == before["implementation_sha256"]]
+    assert len(entries) == 1 and entries[0]["to_sha256"] == digest(current)
+    assert entries[0]["id"] == f"preview-axis-frame-cache-v1.from-terminal-extensions-v1.{contract.ENGINE_ID}"
+    assert entries[0]["source_checkpoint"] == capture["checkpoint"]
+    old_files, new_files = before["manifest"]["files"], current["files"]
+    changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
+    assert changes == set(entries[0]["changed_paths"]) == {"backend/core/deformation.py"}
+    assert before["manifest"]["data"] == current["data"]

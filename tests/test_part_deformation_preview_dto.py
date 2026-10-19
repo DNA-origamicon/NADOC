@@ -59,7 +59,7 @@ def test_complete_native_geometry_and_controls_are_owned(kind, grouped, scoped):
         records, axes = _ordinary_geometry(design)
         component = wire[label]
         assert component["component_kind"] == "deformation-preview-dna"
-        assert component["component_version"] == 2
+        assert component["component_version"] == 3
         assert unpack_records(component["nucleotides"]) == records
         assert component["helix_axes"] == axes
     assert result["stage"] == "feature"
@@ -76,7 +76,8 @@ def test_complete_native_geometry_and_controls_are_owned(kind, grouped, scoped):
                    for segment in axis["segments"])
     # DTO consumers may mutate every returned layer without modifying either
     # private input or the next independent projection.
-    result["before"]["nucleotides"][0][4][0] += 100
+    result["before"]["nucleotides"]["rows"][0][0] = "mutated"  # compact v3: scalar rows + f64 block
+    result["before"]["nucleotides"]["f64"] = ""
     result["candidate"]["display_topology"]["strands"][0]["domains"].clear()
     controls["strands"][0]["domains"].clear()
     controls["selected_operation"]["affected_helix_ids"].clear()
@@ -223,18 +224,20 @@ def test_combined_result_has_independent_output_allowances(monkeypatch, limit):
     assert caught.value.code == "preview_limit"
 
 
-def test_comparison_v3_and_preview_v2_preserve_same_scoped_axes_and_limits(monkeypatch):
+def test_comparison_v3_and_preview_v3_preserve_same_scoped_axes_and_limits(monkeypatch):
     from backend.core import part_dna_comparison as projection
 
     _prefix, evaluated = _owned(scoped=True)
     comparison = projection.project(evaluated.design)
     displayed = projection.project_for_deformation_preview(evaluated.design)
     assert comparison["component_version"] == 3
-    assert displayed["component_version"] == 2
+    assert displayed["component_version"] == 3
     assert displayed["component_kind"] == "deformation-preview-dna"
+    # Preview v3 sends the same records in the compact f64 transport.
+    assert unpack_records(displayed["nucleotides"]) == unpack_records(comparison["nucleotides"])
     assert {key: value for key, value in displayed.items() if key not in {
-        "component_version", "component_kind"}} == {
-        key: value for key, value in comparison.items() if key != "component_version"}
+        "component_version", "component_kind", "nucleotides"}} == {
+        key: value for key, value in comparison.items() if key not in {"component_version", "nucleotides"}}
     assert comparison["helix_axes"] == _ordinary_geometry(evaluated.design)[1]
     assert any("samples" in segment for axis in comparison["helix_axes"] for segment in axis["segments"])
     monkeypatch.setattr(projection, "MAX_AXIS_POINTS", 1)

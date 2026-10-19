@@ -1,8 +1,8 @@
 # Dependency overhaul session handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Updated: October 19, 2026 (S61, Claude session; history browser suite 42 passed). **Sessions since last gate flip or milestone close: 1**
-(last reset: routing step editor gate ON, October 18, user-requested; S61 flipped nothing).
+Updated: October 19, 2026 (S63, Claude session). **Sessions since last gate flip or milestone close: 2**
+(last reset: routing step editor gate ON, October 18; S61 and S63 flipped nothing).
 **Tools done: 0/4.** Bend/Twist gates are ON; C8 (large-part preview) and C9 (legacy fallback
 scope) remain. CAD ledger: **20/34 complete, 14 remaining (7 core, 7 parked)**.
 
@@ -16,19 +16,16 @@ scope) remain. CAD ledger: **20/34 complete, 14 remaining (7 core, 7 parked)**.
 | Move/Rotate history | OFF | Not a contract tool. |
 | Fine-routing step editor | ON (`ROUTING_HISTORY_EDITOR_ENABLED`) | Edits v1 and positional v2 children. Not a contract tool. |
 
-**Bend/Twist C8 (S61, 18hb × 504 bp scaffolded, autostapled, routed whole-bundle bend):**
-- Before S61 the browser refused real parts outright (frontend toy display caps); fixed.
-- Preview update in the browser, GPU raster excluded (this desktop's headless WebGL is SwiftShader,
-  ~2 s/frame): median **1.46 s**, p95 **1.67 s** alone; 1.59 / 1.73 s inside the full suite
-  (budget 0.5 s; 2× allowance 1.0 s → ~3×).
-  Split: server + headers ~0.95 s (in-process evaluate 0.63–0.70 s), body 0.08 s, client ~0.6 s.
-- Apply 0.2–0.6 s; Open (prepare) 4.5 s server / ~6.3 s browser (no contract budget).
-- 18hb × 252: server evaluate 0.35 s → expected within the allowance. Small parts pass.
-- Kept out pending review: arm-frame memoization in `deformation.py` (byte-identical; browser
-  median 1.27 s / p95 1.42 s) — that file is pinned by the CPD and duplex-relax engine manifests.
-- Evidence: [Bend/Twist plan S61](bend_twist_release_acceptance.md); spec
-  `frontend/e2e/bend_preview_latency.spec.js` (fixture `bend-large`; `NADOC_C8_SPLIT=1` phase split,
-  `NADOC_C8_PROFILE=1` CPU profile, `NADOC_C8_BUDGET_MS=1000` contract check; default ceiling 3 s).
+**Bend/Twist C8 (S61 + S63, 18hb × 504 bp scaffolded, autostapled, routed whole-bundle bend):**
+- Browser preview update, GPU raster excluded (this desktop renders WebGL on the CPU via
+  SwiftShader): median **1.17 s**, p95 **1.23 s** (session start 1.75 / 1.98 s; budget 0.5 s, 2× = 1.0 s).
+  Split: server + headers ~0.73 s (in-process evaluate ~0.67 s), body 0.06 s, client ~0.41 s.
+- Shipped: compact v3 preview transport (f64 block), arm-frame memoization (engine pins moved via
+  reviewed transition `preview-axis-frame-cache-v1`, user-approved), loopback no-gzip, GC pause,
+  hidden-tube skip, single validation/decode. Apply 0.2–0.6 s; Open 4.5 s server / ~6 s browser.
+- Remaining server cost is spread thin (geometry 0.14, record validation incl. guard slab recompute
+  0.14, axes 0.09, prefix deep copy 0.05, 4 whole-model admissions 0.06 s). Evidence:
+  [Bend/Twist plan S61/S63](bend_twist_release_acceptance.md); spec `e2e/bend_preview_latency.spec.js`.
 
 ## Delivered since the S58 handoff (details in commits and the Bend/Twist plan)
 
@@ -49,32 +46,48 @@ scope) remain. CAD ledger: **20/34 complete, 14 remaining (7 core, 7 parked)**.
 
 ## Single next bounded task
 
-**ID:** S63 — Bend/Twist C8: compact coordinate transport for the preview DNA component.
-**Depends on:** user decision 1 below. If the user raises the full-size budget so 1.67 s passes,
-skip S63, flip nothing (gates are ON), close C8 and take the C9 scope task instead.
-**Objective:** cut the per-update transfer/parse/decode cost (~0.25 s of the 1.46 s) by sending the
-numeric record columns (positions, normals, tangents, slab pose, helical site) as one base64
-little-endian Float64 block per column group in a new preview component version, decoded once into
-the existing record objects. Lossless (bit-identical doubles); string/flag columns unchanged.
-**Files:** `backend/core/part_dna_comparison{,_codec}.py`, `backend/api/part_deformation_preview_dto.py`,
-`frontend/src/features/part_dna_comparison_{codec,model}.js`, `frontend/src/scene/part_dna_comparison_layer.js`,
-their tests. Repair comparison (v3) may keep JSON rows.
-**Acceptance:** decoded records deep-equal today's rows on HC/SQ fixtures (unit, both sides); browser
-p95 on `bend-large` measured and recorded; history browser suite passes.
-**Exclusions:** geometry/constants, `deformation.py` and other engine-pinned sources, new lifecycle
-layers or endpoints. **Stop:** if p95 cannot reach 1.0 s without engine-pinned edits, report the
-remaining gap to the user rather than continuing.
+**ID:** S64 — Bend/Twist C8: per-session reuse in preview evaluate (server half).
+**Objective:** within one open preview session, compute topology-only work once (record inventory,
+prefix admission, scalar record rows) and reuse it for every slider evaluate; send only the f64
+block plus a reference to the prepare-time rows. Keep every coordinate guard (finite, slab
+registration) per evaluate. **Acceptance:** `bend-large` p95 measured and recorded; decoded
+records equal full projection on fixtures; history browser suite passes. **Exclusions:** dropping
+guards, geometry/constants changes, new endpoints or lifecycle layers. **Stop:** if p95 cannot
+reach 1.0 s, report the gap and the progressive (axes-first) option to the user.
 
 ## User decisions pending
 
-1. **Full-size preview budget.** 18hb × 504 is ~2.9× the 500 ms budget (contract §3 is user-revisable).
-   Either revise the large-design preview budget, or keep it and fund S63 (+ decision 2).
-2. **Engine-manifest transition for `deformation.py`.** Approve recording a reviewed
-   source-pin transition so the byte-identical arm-frame memoization (−0.2 s/update) can ship.
-3. **C9 scope.** Which parts must the isolated editor cover before the legacy Bend/Twist editor is
-   removed (nanoparticles, proteins, imports, relax/autorefine kinds), or keep it as the fallback.
-4. Whether to triage the 13 pre-existing `test-smart` failures (10 from untracked sealed strict
-   admission, 1 immutable evaluation, 2 junction-balance tolerance).
+1. **C9 legacy-editor removal list** (approve items individually; until covered, parts with these
+   use the legacy editor). Display (`part_deformation_preview_dto._admit`, `check_scope`, frontend
+   DNA validator) and/or replay (`_before_command`) refuse:
+   a. strand extensions (`extensions`; extension-upsert/delete replay is admitted)
+   b. overhang linkers (`overhang_connections`, `__lnk__` helices, linker strands; linker-add/patch/delete)
+   c. overhang bindings and duplexes (`overhang_bindings`, `duplexes`, binds_overhang domains; duplex-*)
+   d. connection versions (`connection_versions`; overhang-bulk pending actions)
+   e. staple groups (`staple_groups`; display metadata only)
+   f. cluster joints and Join constraints (`cluster_joints`, `cluster_join_constraints`; cluster-join)
+   g. flexible segments (`flexible_segment_marks`, `flexible_connections`; flexible-relax)
+   h. nanoparticles (+ conjugations, connection versions, `__np__` helices; nanoparticle-*)
+   i. proteins and streptavidin (`protein_assets`, `protein_attachments`, `__strep_dna__`; protein-*)
+   j. photoproducts/CPD (`photoproduct_junctions`; photoproduct-*) — experimental
+   k. numerical relax/refine rows (duplex-relax, flexible-relax, nanoparticle-connection-relax,
+      autorefine-skips, cando-autorefine-marks, scaffold-budget-fit, encode-sweep-curvature)
+   l. other unreplayed kinds: legacy auto-scaffold, route-for-polymerization, create-near/far-ends,
+      cluster-paste, element-paste, cluster-pose, curve-path, aptamer/protein import, generate-design
+   m. old files without a recipe root (§10 says not required; removing the fallback drops editing
+      their bends/twists)
+   Removal targets once approved scope is covered: `_legacyDeformationEdit` (app/feature_editor.js),
+   `onUnsupported` in ui/deformation_tool_launcher.js and ui/blunt_end_menus.js, and the legacy
+   mutating deformation preview/PATCH routes.
+2. **Sealed-path failures (11 of 13):** uncommitted Codex work makes strict mode admit sealed preview
+   and display routes (`part_strict_http.py` hunks; untracked `part_strict_deformation_preview_http.py`,
+   `part_immutable_display_reads.py`, `part_strict_service_reads.py`, `part_strict_activity_reads.py`,
+   7 untracked test files). Contract parks the sealed path. Options: park behind an off switch,
+   delete, or finish it (R3).
+3. **Junction-balance tolerance (2 of 13):** measured O5′ placement (mandatory since `29046524`) gives
+   DX arc deltas 1.016e-3 nm (square) / 1.368e-3 nm (honeycomb) vs the pre-measured 1.0e-3 tolerance
+   (sibling test already uses 1.1e-3). Geometry oracle — approve new tolerances or review placement.
+4. **Progressive preview** (if S64 misses): draw deformed axes first (~0.1 s server), nucleotides after.
 
 ## Known gaps outside this handoff's task
 

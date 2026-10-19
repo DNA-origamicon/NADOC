@@ -44,7 +44,7 @@ def test_complete_native_candidate_and_fixed_prefix_controls(attached, posed, or
         axes = deformation.deformed_helix_axes(design)
         axes = deformation._apply_ovhg_rotations_to_axes(design, axes, records)
         assert result[name]["component_kind"] == "deformation-preview-dna"
-        assert result[name]["component_version"] == 2
+        assert result[name]["component_version"] == 3
         assert unpack_records(result[name]["nucleotides"]) == records
         assert result[name]["helix_axes"] == axes
     controls = result["control_context"]

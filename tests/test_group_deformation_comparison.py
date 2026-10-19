@@ -35,7 +35,7 @@ def test_complete_native_display_retains_groups_and_historical_ranges(stage, pre
     design = before if stage == "selected" else after
     original = design.model_dump_json()
     projected = (project_for_deformation_preview if preview else project)(design)
-    assert projected["component_version"] == (2 if preview else 3)
+    assert projected["component_version"] == 3
     assert projected["display_topology"]["group_organization"] == design.group_organization.model_dump(mode="json")
     assert projected["display_topology"]["deformations"][0]["target_ranges"] == before.deformations[0].model_dump(mode="json")["target_ranges"]
     records = design_geometry._geometry_for_design(design)

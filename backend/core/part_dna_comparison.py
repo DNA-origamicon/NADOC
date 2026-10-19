@@ -9,7 +9,7 @@ from backend.core.part_comparison_projection import _finite, _reject
 from backend.core.part_dna_comparison_contract import (
     COMPONENT_VERSION, MAX_AXIS_POINTS, MAX_SELECTORS, MAX_SLOTS, _limit, inventory,
 )
-from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records
+from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records, pack_records_compact
 
 
 RECORD_FIELDS = frozenset(RECORD_COLUMNS)
@@ -167,7 +167,7 @@ def _topology(design):
     return value
 
 
-def _project(design, *, scoped_segments=False):
+def _project(design, *, scoped_segments=False, compact=False):
     """Common native projection; callers select one closed wire schema."""
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
@@ -200,7 +200,7 @@ def _project(design, *, scoped_segments=False):
         bounds = {"minimum": [points[low[i]][i] for i in range(3)],
                   "maximum": [points[high[i]][i] for i in range(3)]}
     return {"component_version": COMPONENT_VERSION, "representation": "native-full-v1", "units": "nm",
-            "nucleotides": pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
+            "nucleotides": pack_records_compact(records) if compact else pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
 
 
 def project(design):
@@ -211,8 +211,8 @@ def project(design):
 def project_for_deformation_preview(design):
     """Private preview schema preserving native per-domain axis samples.
 
-    Preview v2 and comparison v3 share the complete native inventory. The same
+    Preview v3 (compact f64 coordinate block) and comparison v3 (JSON rows) share the complete native inventory. The same
     prospective work and emitted-site/axis limits still apply.
     """
-    return {**_project(design, scoped_segments=True),
-            "component_kind": "deformation-preview-dna", "component_version": 2}
+    return {**_project(design, scoped_segments=True, compact=True),
+            "component_kind": "deformation-preview-dna", "component_version": 3}

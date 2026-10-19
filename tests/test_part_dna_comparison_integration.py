@@ -192,5 +192,5 @@ def test_real_uuid_recipe_boundary_fits_existing_transport_without_coordinate_lo
 @pytest.mark.parametrize("rows", [None, {}, [[]], [[None] * 22], [[None] * 21] * 1025])
 def test_fixed_row_codec_refuses_unknown_shape_or_unbounded_records(rows):
     # 1025 rows exceeds the test-scale 1024-slot allowance (tests/preview_test_limits.py).
-    with pytest.raises(CommandContractError, match="fixed-row"):
+    with pytest.raises(CommandContractError, match="fixed-row|compact"):
         unpack_records(rows)
