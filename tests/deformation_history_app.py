@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+FIXTURES = {"routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 
 
 def fixture(kind):
@@ -29,6 +29,36 @@ def fixture(kind):
     if kind in FAMILIES:
         from tests.extrude_matrix_fixture import fixture as matrix_fixture
         return matrix_fixture(kind)
+    if kind == "bend-large":
+        # C8 representative large part: 18-helix x 504 bp honeycomb, scaffolded,
+        # autostapled, with one routed whole-bundle bend (S61 latency evidence).
+        from backend.api import headless_build as hb, state as design_state
+        from backend.core.models import LatticeType
+
+        with hb.scratch_session():
+            design_state.load_design(create_empty_part("__e2e__history-bend", "HONEYCOMB"))
+            hb.create_bundle([(r, c) for r in range(6) for c in range(3)], 504, lattice=LatticeType.HONEYCOMB)
+            hb.auto_scaffold(seamless=True)
+            hb.full_autostaple()
+            hb.add_bend(100, 200, curvature_deg_per_bp=0.3,
+                        affected_helix_ids=[h.id for h in design_state.get_or_404().helices])
+            return design_state.get_or_404()
+    if kind == "routing":
+        # Autostapled 6HB with one positional (v2) staple-end resize: routing step
+        # editor and region autostaple browser checks.
+        from backend.api import headless_build as hb, state as design_state
+        from backend.core.models import LatticeType
+
+        with hb.scratch_session():
+            design_state.load_design(create_empty_part("__e2e__history-bend", "HONEYCOMB"))
+            hb.create_bundle([(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 84, lattice=LatticeType.HONEYCOMB)
+            hb.auto_scaffold(seamless=True)
+            hb.full_autostaple()
+            design = design_state.get_or_404()
+            staple = min((s for s in design.strands if s.strand_type.value == "staple" and len(s.domains) >= 2),
+                         key=lambda s: max(max(d.start_bp, d.end_bp) for d in s.domains))
+            hb.resize_strand_end(staple.id, staple.domains[0].helix_id, "5p", -1)
+            return design_state.get_or_404()
     if kind == "extrude-chain":
         source = fixture("bend-sweep")
         row = source.feature_log[0]

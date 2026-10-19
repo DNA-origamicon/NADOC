@@ -7,7 +7,6 @@ The display retains historical interval provenance without re-resolving prior
 operations against current topology. No comparison or live host gate is enabled.
 """
 
-import json
 from math import isfinite
 from time import monotonic
 
@@ -143,7 +142,45 @@ def _controls(prefix, op):
     return result
 
 
-def _bounded(result, *, max_nodes=None, max_bytes=None):
+def _encoded_size(result, trusted=()):
+    """Compact UTF-8 JSON size, refusing NaN/inf like ``json.dumps(allow_nan=False)``.
+
+    orjson (the response encoder) is much faster on multi-MB native displays but
+    writes NaN/inf as null, so non-finite floats are refused by an explicit walk.
+    ``trusted`` subtrees (native nucleotide rows and helix axes) were already
+    coordinate-checked by the DNA projection and are not walked again. Sizes
+    equal the compact stdlib encoding up to float spelling.
+    """
+    import orjson
+
+    skip = {id(item) for item in trusted}
+
+    def finite(value):
+        if id(value) in skip:
+            return
+        kind = type(value)
+        if isinstance(value, float):  # includes numpy.float64
+            if not isfinite(value):
+                raise ValueError("Out of range float values are not JSON compliant")
+        elif kind is dict:
+            for item in value.values():
+                finite(item)
+        elif kind is list or kind is tuple:
+            for item in value:
+                finite(item)
+
+    finite(result)
+    # Same options as the ORJSONResponse that sends this payload.
+    return len(orjson.dumps(result, option=orjson.OPT_NON_STR_KEYS | orjson.OPT_SERIALIZE_NUMPY))
+
+
+def _validated_panes(result):
+    """Projection-checked coordinate subtrees of the before/candidate panes."""
+    panes = [result.get(name) for name in ("before", "candidate")]
+    return [pane[key] for pane in panes if type(pane) is dict for key in ("nucleotides", "helix_axes") if key in pane]
+
+
+def _bounded(result, *, max_nodes=None, max_bytes=None, trusted=()):
     # Count the entire response, not each pane separately. One finite JSON
     # encoding enforces actual wire bytes and refuses NaN/inf (the orjson response
     # would otherwise emit null). json.dumps uses the C encoder; the former chunked
@@ -154,7 +191,7 @@ def _bounded(result, *, max_nodes=None, max_bytes=None):
     max_nodes = MAX_OUTPUT_NODES if max_nodes is None else max_nodes
     max_bytes = MAX_OUTPUT_BYTES if max_bytes is None else max_bytes
     try:
-        size = len(json.dumps(result, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        size = _encoded_size(result, trusted)
         if size > max_bytes:
             raise CaptureLimit("Deformation preview exceeds its combined display byte allowance")
         if size > max_nodes:
@@ -207,7 +244,8 @@ def prepare_display(prefix, original, *, envelope=None):
     result = {**_base(_feasibility(prefix, op), op), "control_context": _controls(prefix, op),
               "before": _native(project_for_deformation_preview, prefix),
               "candidate": _native(project_for_deformation_preview, original.design)}
-    return _bounded({**result, **envelope})
+    result = {**result, **envelope}
+    return _bounded(result, trusted=_validated_panes(result))
 
 
 def prepare_creation_display(prefix, prepared, *, envelope=None):
@@ -230,7 +268,8 @@ def prepare_creation_display(prefix, prepared, *, envelope=None):
                                  "target_ranges": None if ranges is None else [r.model_dump(mode="json") for r in ranges]},
               "control_context": controls, "before": _native(project_for_deformation_preview, prefix),
               "candidate": None}
-    return _bounded({**result, **envelope})
+    result = {**result, **envelope}
+    return _bounded(result, trusted=_validated_panes(result))
 
 
 def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, creation=False):
@@ -245,4 +284,5 @@ def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None,
               "candidate": _native(project_for_deformation_preview, evaluated.design) if include_geometry else None}
     if creation:
         result.update(mode="create", awaiting_parameters=False)
-    return _bounded({**result, **envelope})
+    result = {**result, **envelope}
+    return _bounded(result, trusted=_validated_panes(result))

@@ -264,9 +264,9 @@ def test_optional_host_envelope_is_owned_and_preserves_standalone_payload(operat
     original = service._bounded
     bounded = []
 
-    def observe(value):
+    def observe(value, **options):
         bounded.append(deepcopy(value))
-        return original(value)
+        return original(value, **options)
 
     monkeypatch.setattr(service, "_bounded", observe)
     envelope = _host_envelope()

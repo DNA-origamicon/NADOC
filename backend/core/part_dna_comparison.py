@@ -28,6 +28,16 @@ TOPOLOGY_FIELDS = {
 SUBDOMAIN_FIELDS = {"id", "start_bp_offset", "length_bp", "sequence_override", "color"}
 
 
+def _finite_bulk(values):
+    """``_finite`` over many values at once: exact int/float types, all finite."""
+    import numpy as np
+
+    if not set(map(type, values)) <= {int, float}:
+        _reject("Comparison placement contains nonfinite coordinates", "invalid_comparison_geometry")
+    if values and not np.isfinite(np.fromiter(values, dtype=np.float64, count=len(values))).all():
+        _reject("Comparison placement contains nonfinite coordinates", "invalid_comparison_geometry")
+
+
 def _point(value, length=3):
     if not isinstance(value, list) or len(value) != length:
         _reject("DNA comparison has malformed native coordinates", "invalid_comparison_geometry")
@@ -41,6 +51,16 @@ def _records(records, expected):
 
     _limit(len(records), MAX_SLOTS, "emitted nucleotide count")
     seen = set()
+    # Coordinates are gathered and checked in one pass (same shape, type and
+    # finiteness rules as ``_point``/``_finite``) instead of per value.
+    values = []
+    gather = values.extend
+
+    def shaped(value, length=3):
+        if type(value) is not list or len(value) != length:
+            _reject("DNA comparison has malformed native coordinates", "invalid_comparison_geometry")
+        gather(value)
+
     for record in records:
         if set(record) != RECORD_FIELDS or record["placement_source"] != SOURCE:
             _reject("DNA comparison received an unreviewed native record", "unsupported_comparison_scope")
@@ -49,14 +69,14 @@ def _records(records, expected):
         if key in seen or expected.sites.get(key) != owner or record["is_flexible_segment"] is not False:
             _reject("DNA comparison nucleotide inventory is incomplete or ambiguous", "invalid_comparison_geometry")
         seen.add(key)
-        for field in ("backbone_position", "base_position", "base_normal", "axis_tangent", "slab_position"):
-            _point(record[field])
-        _point(record["slab_quaternion"], 4)
+        shaped(record["backbone_position"]), shaped(record["base_position"]), shaped(record["base_normal"])
+        shaped(record["axis_tangent"]), shaped(record["slab_position"]), shaped(record["slab_quaternion"], 4)
         site = record["helical_site"]
         if set(site) != SITE_FIELDS:
             _reject("DNA comparison has unreviewed native site fields", "unsupported_comparison_scope")
-        _point(site["axis_point"]), _point(site["radial_hat"])
-        _finite([site["azimuth_rad"], site["groove_offset_rad"], site["phase_roll_rad"]])
+        shaped(site["axis_point"]), shaped(site["radial_hat"])
+        gather((site["azimuth_rad"], site["groove_offset_rad"], site["phase_roll_rad"]))
+    _finite_bulk(values)
     if seen != set(expected.sites):
         _reject("DNA comparison omitted occupied nucleotides", "invalid_comparison_geometry")
     # Reuse the native authority to validate bead/base/slab registration. Do not
@@ -171,8 +191,14 @@ def _project(design, *, scoped_segments=False):
                 points.extend(segment.get("samples", ()))
         for value in axis.get("ovhg_axes", {}).values():
             points.extend([value["start"], value["end"]])
-    bounds = {"minimum": [min(point[i] for point in points) for i in range(3)],
-              "maximum": [max(point[i] for point in points) for i in range(3)]} if points else None
+    bounds = None
+    if points:
+        import numpy as np
+        array = np.asarray(points, dtype=np.float64)
+        # Bounds keep the native values themselves (min/max select, never round).
+        low, high = array.argmin(axis=0), array.argmax(axis=0)
+        bounds = {"minimum": [points[low[i]][i] for i in range(3)],
+                  "maximum": [points[high[i]][i] for i in range(3)]}
     return {"component_version": COMPONENT_VERSION, "representation": "native-full-v1", "units": "nm",
             "nucleotides": pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
 

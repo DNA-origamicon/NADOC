@@ -61,6 +61,7 @@ import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/pal
 initMenuFlyouts()
 import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey, parseForcedLigKey } from './element_keys.js'
 import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'
+import { runAutostapleCommand, strandRegion } from '../ui/region_autostaple.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
@@ -1015,18 +1016,11 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
 // Auto Crossover + Autobreak retired from the Routing menu in favour of one-click
 // Full Autostaple ('2'). The backend endpoints + autobreak modal markup remain for revival.
 
-document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-  _showProgress('Full autostaple', 'Assigning sequences and routing staples…')
-  const result = await addFullAutostaple({ scaffold_name: 'M13mp18' })
-  _hideProgress()
-  if (!result) {
-    showToast('Full autostaple failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-    return
-  }
-  const full = result.full_autostaple ?? {}
-  showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
-})
+document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', () => runAutostapleCommand({
+  design: editorStore.getState().design, region: strandRegion(editorStore.getState().design, _lastSelectedStrandIds),
+  autostaple: addFullAutostaple, lastError: () => editorStore.getState().lastError,
+  toast: showToast, showProgress: _showProgress, hideProgress: _hideProgress,
+}))
 
 document.getElementById('menu-routing-polymerization')?.addEventListener('click', async () => {
   if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }

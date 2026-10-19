@@ -27,8 +27,8 @@ const cases = [
   ['loop-skip-bend', { helix_ids: ['h1'], plane_a_bp: 1, plane_b_bp: 10, radius_nm: 20, direction_deg: 0 }, 'Direction (degrees)', '45', ['direction_deg'], 45],
   ['loop-skip-clear', { helix_ids: ['h1'], plane_a_bp: 1, plane_b_bp: 10 }, 'End plane (bp)', '12', ['plane_b_bp'], 12],
 ]
-export function packet(kind, params) {
-  return { kind, params: { ...structuredClone(params), _proof_version: 1 }, source_design_id: 'part', source_revision: 7,
+export function packet(kind, params, version = 1) {
+  return { kind, params: { ...structuredClone(params), _proof_version: version }, source_design_id: 'part', source_revision: 7,
     feature_id: 'routing', child_id: 'child', prefix: {
       helices: ['h1', 'h2'].map(id => ({ id, bp_start: 0, length_bp: 20 })),
       strands: ['s1', 's2'].map(id => ({ id, domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 9, direction: 'FORWARD' }, { helix_id: 'h2', start_bp: 9, end_bp: 0, direction: 'REVERSE' }] })),
@@ -47,8 +47,8 @@ function set(label, value) {
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }
 afterEach(() => { window.dispatchEvent(new Event('nadoc:document-reset')); document.body.innerHTML = '' })
 
-it('keeps public rollout off and rejects unversioned, unknown, and generated definitions', () => {
-  expect(ROUTING_HISTORY_EDITOR_ENABLED).toBe(false)
+it('is enabled and rejects unversioned, unknown, and generated definitions', () => {
+  expect(ROUTING_HISTORY_EDITOR_ENABLED).toBe(true)
   const parent = { feature_type: 'routing-cluster', id: 'routing' }
   const child = { feature_type: 'minor', id: 'child', op_subtype: 'nick', params: { ...site, _proof_version: 1 } }
   expect(isNativeRoutingChild(parent, child)).toBe(true)
@@ -129,4 +129,38 @@ it('retires held publication on same-ID reset and cannot close a replacement edi
   finish({ accepted: true }); await tick()
   expect(document.querySelector('[role="dialog"]').textContent).toContain('Ligate')
   button('Cancel').click(); expect(await next).toBeNull()
+})
+
+const at = { helix_id: 'h1', bp_index: 0, direction: 'FORWARD' }
+const halves = { half_a: placement().half_a, half_b: placement().half_b }
+const positionalCases = [
+  ['strand-end-resize', { entries: [{ at, helix_id: 'h1', end: '5p', delta_bp: 2 }] }, 'Entry 1 Strand end at Base index', '3', ['entries', 0, 'at', 'bp_index'], 3],
+  ['domain-shift', { entries: [{ at, delta_bp: 2 }] }, 'Entry 1 Delta (bp)', '-1', ['entries', 0, 'delta_bp'], -1],
+  ['forced-ligation-create', { three_prime_at: at, five_prime_at: { ...at, helix_id: 'h2' }, is_periodic_seam: false, _fl_id: 'created-fl' }, '5′ end at Direction', 'REVERSE', ['five_prime_at', 'direction'], 'REVERSE'],
+  ['crossover-move', { crossover: halves, new_index: 6 }, 'New index', '8', ['new_index'], 8],
+  ['crossover-move-batch', { moves: [{ crossover: halves, new_index: 6 }] }, 'Move 1 Crossover Half A Index', '7', ['moves', 0, 'crossover', 'half_a', 'index'], 7],
+  ['crossover-delete', { crossover: halves }, 'Crossover Half B Helix ID', 'h1', ['crossover', 'half_b', 'helix_id'], 'h1'],
+  ['crossover-delete-batch', { crossovers: [halves] }, 'Crossover 1 Half A Index', '9', ['crossovers', 0, 'half_a', 'index'], 9],
+  ['crossover-extra-bases', { crossover: halves, sequence: 'AC' }, 'Sequence', 'TT', ['sequence'], 'TT'],
+  ['crossover-extra-bases-batch', { entries: [{ crossover: halves, sequence: 'AC' }] }, 'Entry 1 Sequence', 'G', ['entries', 0, 'sequence'], 'G'],
+]
+
+it.each(positionalCases)('edits positional (v2) %s inputs by position', async (kind, params, label, value, path, expected) => {
+  const parent = { feature_type: 'routing-cluster', id: 'routing' }
+  expect(isNativeRoutingChild(parent, { feature_type: 'minor', id: 'child', op_subtype: kind, params: { ...params, _proof_version: 2 } })).toBe(true)
+  const source = packet(kind, params, 2), before = structuredClone(source), save = vi.fn(async () => ({ accepted: true }))
+  const pending = editRoutingFeature(source, { onSave: save }); set(label, value); button('Apply').click()
+  const submitted = await pending
+  expect(path.reduce((v, key) => v[key], submitted)).toEqual(expected)
+  expect(submitted._proof_version).toBe(2)
+  expect(save).toHaveBeenCalledOnce(); expect(source).toEqual(before)
+})
+
+it('keeps a positional resize helix in step with its end position', async () => {
+  const source = packet('strand-end-resize', { entries: [{ at, helix_id: 'h1', end: '5p', delta_bp: 2 }] }, 2)
+  const pending = editRoutingFeature(source, { onSave: vi.fn(async () => ({})) })
+  expect(document.querySelector('[aria-label="Entry 1 Helix ID"]')).toBeNull()
+  set('Entry 1 Strand end at Helix ID', 'h2'); button('Apply').click()
+  const submitted = await pending
+  expect(submitted.entries[0].helix_id).toBe('h2')
 })

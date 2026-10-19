@@ -51,7 +51,14 @@ async def _read_request(request):
                                      slot=_input_slot, read_seconds=READ_SECONDS)
 
 
-def _respond(operation, value, generation, family="deformation"):
+_LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _loopback(request):
+    return request.client is not None and request.client.host in _LOOPBACK
+
+
+def _respond(operation, value, generation, family="deformation", *, loopback=False):
     _enabled(family)
     current = policy.require_compatibility(doc_context.get_current_doc(), f"{family}_preview")
     if current.generation != generation:
@@ -62,7 +69,11 @@ def _respond(operation, value, generation, family="deformation"):
     # Returning Response avoids FastAPI's generic coordinate traversal; only the
     # actual final JSON encoding remains, on this worker thread.
     options = {} if family == "deformation" else {"family": family}
-    return ORJSONResponse(getattr(host, operation)(value, **options))
+    # A real part's display is ~15 MB; gzip (level 3) costs ~0.2 s per slider
+    # update and saves nothing on loopback. A declared encoding makes the GZip
+    # middleware pass the body through; remote clients keep compression.
+    headers = {"Content-Encoding": "identity"} if loopback else None
+    return ORJSONResponse(getattr(host, operation)(value, **options), headers=headers)
 
 
 async def _dispatch(request, operation, *, family="deformation"):
@@ -74,9 +85,10 @@ async def _dispatch(request, operation, *, family="deformation"):
     except UnsafeDocumentIdentity as error:
         _fail(422, error.code, str(error))
     value = await _read_request(request)
+    loopback = _loopback(request)
     if family == "deformation":
-        return await run_in_threadpool(_respond, operation, value, selected.generation)
-    return await run_in_threadpool(_respond, operation, value, selected.generation, family)
+        return await run_in_threadpool(_respond, operation, value, selected.generation, loopback=loopback)
+    return await run_in_threadpool(_respond, operation, value, selected.generation, family, loopback=loopback)
 
 
 @router.post(_PATH)

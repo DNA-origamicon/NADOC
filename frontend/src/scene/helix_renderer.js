@@ -500,7 +500,13 @@ export function orderStrandNucleotides(nucs) {
   return nucs
 }
 
-export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
+/**
+ * ``curvedCylinders: false`` skips the per-domain curved cylinder tubes, which
+ * are only visible at the cylinders LOD. Only for owners that keep the Full LOD
+ * for their whole lifetime and never expose LOD switching (private preview
+ * layers); the default view builds them so a later LOD switch can show them.
+ */
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true } = {}) {
   // Validate before adding any scene objects. An incomplete response must not
   // leave a half-updated scientific representation on screen.
   for (const nuc of geometry ?? []) {
@@ -1720,7 +1726,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (arrow.isCurved) {
           // ── Curved helix: TubeGeometry + straight proxy ─────────────────────
           const openAngle = (isOvhg && !isDirectFullOvhg) ? Math.PI : 2 * Math.PI
-          const built = _buildDomainTubeGeo(arrow, lo, hi, CYL_TUBE_R, openAngle)
+          const built = curvedCylinders ? _buildDomainTubeGeo(arrow, lo, hi, CYL_TUBE_R, openAngle) : null
           if (built) {
             const tubeMesh = new THREE.Mesh(
               built.geo,

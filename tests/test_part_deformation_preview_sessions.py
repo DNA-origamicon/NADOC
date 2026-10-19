@@ -514,11 +514,11 @@ def test_complete_envelope_budget_and_projection_are_outside_locks(document, mon
     # The whole response, including the host envelope, is bounded once and
     # outside both locks (byte/finite encoding; the node walk runs only when the
     # encoded size could exceed the node allowance).
-    def observed(value):
+    def observed(value, **options):
         assert not state._lock.locked() and not host._lock.locked()
         assert {"preview_id", "lease_id", "feature_id", "expected_revision"} <= value.keys()
         bounded.append(value)
-        return original(value)
+        return original(value, **options)
 
     monkeypatch.setattr(dto, "_bounded", observed)
     opened = host.prepare(opening())

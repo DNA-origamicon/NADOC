@@ -2,7 +2,14 @@
 import { fail, finite, integer, text, shape, vector, list, unique } from './part_comparison_validation.js'
 import { decodeDnaComparisonRecords } from './part_dna_comparison_codec.js'
 
-const MAX_SITES = 1024, MAX_SELECTORS = 512
+// Same allowances as backend/core/part_dna_comparison_contract.py (ordinary
+// origami parts, e.g. 18 helices x 504 bp ~ 18k nucleotides). The backend
+// projection is authoritative; these guards only bound what the client accepts.
+export const DNA_DISPLAY_LIMITS = Object.freeze({
+  helices: 512, strands: 50_000, domains: 200_000, sites: 2_000_000,
+  selectors: 50_000, operations: 2_048, axisPoints: 2_000_000,
+})
+const MAX_SITES = DNA_DISPLAY_LIMITS.sites, MAX_SELECTORS = DNA_DISPLAY_LIMITS.selectors
 const directions = new Set(['FORWARD', 'REVERSE'])
 const siteKey = n => JSON.stringify([n.helix_id, n.bp_index, n.direction, n.copy_k])
 const ownerKey = (sid, index) => JSON.stringify([sid, index])
@@ -44,20 +51,34 @@ export function validateDnaComparisonComponent(value) {
   return validateNativeComponent(value, true)
 }
 
+// Components that already passed validation. The controller validates each
+// response; the layer builder then builds from that same private object and
+// need not re-walk it (~70 ms on an 18k-nt part). The public validator below
+// always validates in full.
+const validatedPreviews = new WeakSet()
+
+/** Layer-builder entry: reuse a completed validation of this exact object. */
+export function validatedDeformationPreviewComponent(value) {
+  return value !== null && typeof value === 'object' && validatedPreviews.has(value)
+    ? value : validateDeformationPreviewComponent(value)
+}
+
 /** Preview and comparison share native scoped samples under distinct contracts. */
 export function validateDeformationPreviewComponent(value) {
   shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
   if (value.component_kind !== 'deformation-preview-dna' || value.component_version !== 2
       || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported deformation display version')
-  return validateNativeComponent(value, true)
+  validateNativeComponent(value, true)
+  validatedPreviews.add(value)
+  return value
 }
 
 function validateNativeComponent(value, scopedSamples) {
   const topology = value.display_topology
   shape(topology, ['helices', 'strands', 'overhangs', 'cluster_transforms', 'group_organization', 'deformations', 'crossovers', 'forced_ligations'])
-  list(topology.helices, 16); list(topology.strands, 128)
+  list(topology.helices, DNA_DISPLAY_LIMITS.helices); list(topology.strands, DNA_DISPLAY_LIMITS.strands)
   for (const key of ['overhangs', 'cluster_transforms', 'deformations', 'crossovers', 'forced_ligations']) list(topology[key], MAX_SELECTORS)
-  if (topology.cluster_transforms.length + topology.deformations.length > 64) fail('DNA operation allowance exceeded')
+  if (topology.cluster_transforms.length + topology.deformations.length > DNA_DISPLAY_LIMITS.operations) fail('DNA operation allowance exceeded')
   for (const [key, items] of Object.entries(topology)) if (key !== 'group_organization') unique(items)
   const helices = new Map(topology.helices.map(h => [h.id, h]))
   const strands = new Map(topology.strands.map(s => [s.id, s]))
@@ -90,8 +111,8 @@ function validateNativeComponent(value, scopedSamples) {
   for (const strand of topology.strands) {
     shape(strand, ['id', 'domains', 'strand_type', 'sequence', 'color', 'is_reference'])
     if (!['scaffold', 'staple'].includes(strand.strand_type) || strand.id.startsWith('__lnk__')) fail('unsupported DNA strand')
-    list(strand.domains, 256); domainCount += strand.domains.length
-    if (!strand.domains.length || domainCount > 256) fail('DNA domain allowance exceeded')
+    list(strand.domains, DNA_DISPLAY_LIMITS.domains); domainCount += strand.domains.length
+    if (!strand.domains.length || domainCount > DNA_DISPLAY_LIMITS.domains) fail('DNA domain allowance exceeded')
     sequence(strand.sequence); color(strand.color); boolean(strand.is_reference)
     for (const [index, domain] of strand.domains.entries()) {
       shape(domain, ['helix_id', 'start_bp', 'end_bp', 'direction', 'overhang_id', 'binds_overhang_id'])
@@ -234,13 +255,13 @@ function validateRecords(records, expected) {
 }
 
 function validateAxes(axes, helices, strands, overhangs, domains, scopedSamples) {
-  list(axes, 16)
+  list(axes, DNA_DISPLAY_LIMITS.helices)
   const seen = new Set(), seenOverhangs = new Set(), coverage = new Map()
   let points = 0, segments = 0
   for (const axis of axes) {
     shape(axis, ['helix_id', 'start', 'end', 'samples', 'segments', ...(Object.hasOwn(axis, 'ovhg_axes') ? ['ovhg_axes'] : [])])
     if (!helices.has(axis.helix_id) || seen.has(axis.helix_id)) fail('ambiguous DNA axis')
-    seen.add(axis.helix_id); vector(axis.start, 3); vector(axis.end, 3); list(axis.samples, 2048); list(axis.segments, MAX_SELECTORS)
+    seen.add(axis.helix_id); vector(axis.start, 3); vector(axis.end, 3); list(axis.samples, DNA_DISPLAY_LIMITS.axisPoints); list(axis.segments, MAX_SELECTORS)
     points += 2 + axis.samples.length; segments += axis.segments.length
     for (const point of axis.samples) vector(point, 3)
     for (const segment of axis.segments) {
@@ -249,12 +270,12 @@ function validateAxes(axes, helices, strands, overhangs, domains, scopedSamples)
         ...(scopedSamples && Object.hasOwn(segment, 'samples') ? ['samples'] : [])])
       vector(segment.start, 3); vector(segment.end, 3); points += 2
       if (scopedSamples && Object.hasOwn(segment, 'samples')) {
-        list(segment.samples, 2048); points += segment.samples.length
+        list(segment.samples, DNA_DISPLAY_LIMITS.axisPoints); points += segment.samples.length
         for (const point of segment.samples) vector(point, 3)
       }
-      if (points > 2048 || segments > MAX_SELECTORS) fail('DNA axis allowance exceeded')
+      if (points > DNA_DISPLAY_LIMITS.axisPoints || segments > MAX_SELECTORS) fail('DNA axis allowance exceeded')
       const refs = segment.domain_ids?.length ? segment.domain_ids : (segment.strand_id === null ? [] : [{ strand_id: segment.strand_id, domain_index: segment.domain_index }])
-      list(refs, 256)
+      list(refs, MAX_SELECTORS)
       for (const ref of refs) {
         const domain = domainRef(ref, strands)
         bp(segment.bp_lo); bp(segment.bp_hi)
@@ -272,7 +293,7 @@ function validateAxes(axes, helices, strands, overhangs, domains, scopedSamples)
         bp(entry.bp_min); bp(entry.bp_max); vector(entry.start, 3); vector(entry.end, 3); points += 2
       }
     }
-    if (points > 2048 || segments > MAX_SELECTORS) fail('DNA axis allowance exceeded')
+    if (points > DNA_DISPLAY_LIMITS.axisPoints || segments > MAX_SELECTORS) fail('DNA axis allowance exceeded')
   }
   if (seen.size !== helices.size || seenOverhangs.size !== overhangs.size) fail('omitted authored DNA axes')
   for (const [key, domain] of domains) {

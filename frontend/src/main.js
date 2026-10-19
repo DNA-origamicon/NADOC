@@ -103,6 +103,7 @@ import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_las
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initStrandSequenceDialog } from './ui/strand_sequence_dialog.js'
+import { runAutostapleCommand, selectionRegion } from './ui/region_autostaple.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { initWorkspaceHub } from './ui/workspace_hub.js'
@@ -3699,18 +3700,11 @@ async function main() {
   initAutoscaffoldPicker({ store, api, setRoutingCheck: _setRoutingCheck })
 
 
-  document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
-    if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-    _showProgress('Full autostaple', 'Assigning sequences and routing staples…')
-    const result = await api.addFullAutostaple({ scaffold_name: 'M13mp18' })
-    _hideProgress()
-    if (!result) {
-      showToast('Full autostaple failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-      return
-    }
-    const full = result.full_autostaple ?? {}
-    showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
-  })
+  document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', () => runAutostapleCommand({
+    design: store.getState().currentDesign, region: selectionRegion(store.getState()),
+    autostaple: api.addFullAutostaple, lastError: () => store.getState().lastError,
+    toast: showToast, showProgress: _showProgress, hideProgress: _hideProgress,
+  }))
 
   document.getElementById('menu-routing-polymerization')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }

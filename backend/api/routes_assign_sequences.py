@@ -58,11 +58,31 @@ class _ScaffoldSeqBody(BaseModel):
     strand_id: Optional[str] = None  # target strand (multi-scaffold support)
 
 
+class _RegionInterval(BaseModel):
+    """Inclusive bp interval on one helix (both directions)."""
+
+    helix_id: str
+    lo_bp: int
+    hi_bp: int
+
+
 class _FullAutostapleBody(BaseModel):
     history_seed: str | None = None
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None
     strand_id: Optional[str] = None
+    # Region autostaple: restaple only staples touching these intervals (the
+    # region grows to every touching staple); all other staples, their
+    # crossovers and sequences are kept exactly. ``None`` = the whole structure.
+    region: list[_RegionInterval] | None = None
+
+
+def autostaple_params(body: "_FullAutostapleBody") -> dict:
+    """Recorded params; whole-structure records keep their historical shape."""
+    params = body.model_dump()
+    if body.region is None:
+        params.pop("region")
+    return params
 
 
 @router.post("/design/assign-scaffold-sequence", status_code=200)
@@ -254,7 +274,9 @@ def _locked_and_overhang_staple_ids(design: Design) -> tuple[set[str], set[str]]
     return locked, overhang
 
 
-def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
+def _linearize_staple_precursors(
+    design: Design, keep_strand_ids: frozenset[str] = frozenset()
+) -> tuple[Design, dict]:
     """Drop *auto* staple crossovers and split free staples into single-domain
     precursors, leaving user-issued connections intact.
 
@@ -262,8 +284,19 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
     staples (touching a manual crossover / forced ligation) and overhang staples
     are preserved whole and excluded from the rebuild; the auto stages downstream
     route around them.
+
+    ``keep_strand_ids`` (region autostaple) are preserved whole as well, together
+    with every crossover that belongs to one of them.
     """
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
+    kept_ends = {
+        (d.helix_id, bp, d.direction)
+        for s in design.strands if s.id in keep_strand_ids
+        for d in s.domains for bp in (d.start_bp, d.end_bp)
+    }
+
+    def _kept_half(half: HalfCrossover) -> bool:
+        return (half.helix_id, half.index, half.strand) in kept_ends
 
     def _is_scaffold_half(half: HalfCrossover) -> bool:
         h = helix_map.get(half.helix_id)
@@ -279,10 +312,12 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
         if xo.process_id == "manual"
         or _is_scaffold_half(xo.half_a)
         or _is_scaffold_half(xo.half_b)
+        or _kept_half(xo.half_a)
+        or _kept_half(xo.half_b)
     ]
 
     locked_ids, overhang_ids = _locked_and_overhang_staple_ids(design)
-    preserve_ids = locked_ids | overhang_ids
+    preserve_ids = locked_ids | overhang_ids | set(keep_strand_ids)
 
     preserved_strands: list[Strand] = []
     staple_domains: dict[tuple[str, Direction], list[Domain]] = {}
@@ -300,6 +335,7 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
             )
 
     rebuilt_staples: list[Strand] = []
+    taken = {s.id for s in preserved_strands}
     for (helix_id, direction), domains in sorted(
         staple_domains.items(),
         key=lambda item: (item[0][0], item[0][1].value),
@@ -315,9 +351,13 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
         for idx, (lo, hi) in enumerate(merged):
             start_bp, end_bp = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
+            identity = f"full_auto_{helix_id}_{direction.value.lower()}_{idx}"
+            while identity in taken:  # a preserved staple can carry an earlier run's id
+                identity += "_r"
+            taken.add(identity)
             rebuilt_staples.append(
                 Strand(
-                    id=f"full_auto_{helix_id}_{direction.value.lower()}_{idx}",
+                    id=identity,
                     strand_type=StrandType.STAPLE,
                     domains=[
                         Domain(
@@ -405,7 +445,7 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
     from backend.api.part_autostaple_command import build_full_autostaple
     from uuid import uuid4
     body = body.model_copy(update={"history_seed": body.history_seed or str(uuid4())})
-    params = body.model_dump()
+    params = autostaple_params(body)
     full_report = {}
 
     def _run(design):
@@ -416,7 +456,7 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
     try:
         updated, report, _entry = design_state.mutate_with_feature_log(
             op_kind="full-autostaple",
-            label="Full autostaple",
+            label="Full autostaple" if body.region is None else "Region autostaple",
             params=params,
             fn=_run,
         )

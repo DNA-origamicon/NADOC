@@ -119,3 +119,56 @@ def test_version_one_records_still_replay(part):
     assert dependencies("strand-end-resize", v1).known
     assert dependencies("strand-end-resize", to_positional("strand-end-resize", v1, design)).known
     execute("strand-end-resize", design, v1)
+
+
+def _routing_child(design, kind):
+    for index, entry in enumerate(design.feature_log):
+        if entry.feature_type == "routing-cluster":
+            for sub, child in enumerate(entry.children):
+                if child.op_subtype == kind:
+                    return index, sub, entry, child
+    raise AssertionError(kind)
+
+
+def test_routing_step_editor_loads_and_edits_a_positional_child(part):
+    """The feature-log routing editor edits v2 children by position over real HTTP."""
+    http, headers = part
+    design = state.get_or_404()
+    staple = _low_staple_5p(design)
+    dom = staple.domains[0]
+    assert http.post("/api/design/strand-end-resize", headers=headers, json={"entries": [
+        {"strand_id": staple.id, "helix_id": dom.helix_id, "end": "5p", "delta_bp": -1}]}).status_code == 200
+    session_design = state.get_or_404()
+    index, sub, parent, child = _routing_child(session_design, "strand-end-resize")
+    _, revision = state.get_design_with_revision()
+    guards = {"expected_design_id": session_design.id, "expected_revision": revision,
+              "expected_feature_id": parent.id, "expected_child_id": child.id}
+    packet = http.get(f"/api/design/features/{index}/routing-inputs", headers=headers,
+                      params={"sub_index": sub, **guards})
+    assert packet.status_code == 200, packet.text
+    assert packet.json()["params"] == child.params and child.params["_proof_version"] == 2
+
+    entries = [{**child.params["entries"][0], "delta_bp": -2}]
+    r = http.post(f"/api/design/features/{index}/edit", headers=headers, params={"sub_index": sub},
+                  json={"params": {"entries": entries}, **guards})
+    assert r.status_code == 200, r.text
+    edited = state.get_or_404()
+    assert _routing_child(edited, "strand-end-resize")[3].params["entries"][0]["delta_bp"] == -2
+    resized = next(s for s in edited.strands if s.id == staple.id)
+    assert abs(resized.domains[0].start_bp - dom.start_bp) == 2  # the edited -2 bp, not the recorded -1
+    assert assess_part_history(edited, execute=execute, dependencies=dependencies)["status"] == "verified"
+
+
+def test_routing_step_editor_refuses_an_unoccupied_position(part):
+    from backend.api.part_routing_edit_inputs import bind_prefix, normalize
+
+    design = state.get_or_404()
+    staple = _low_staple_5p(design)
+    dom = staple.domains[0]
+    v2 = to_positional("strand-end-resize", {"entries": [
+        {"strand_id": staple.id, "helix_id": dom.helix_id, "end": "5p", "delta_bp": -1}], "_proof_version": 1}, design)
+    moved = [{**v2["entries"][0], "at": {**v2["entries"][0]["at"], "bp_index": dom.start_bp + 5}}]
+    with pytest.raises(PositionNotOccupied) as caught:
+        bind_prefix("strand-end-resize", normalize("strand-end-resize", v2, {"entries": moved}), design)
+    assert caught.value.references[0]["kind"] == "position"
+    assert caught.value.references[0]["parameter_path"] == ["entries", 0, "at"]

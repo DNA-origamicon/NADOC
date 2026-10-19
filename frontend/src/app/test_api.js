@@ -69,6 +69,7 @@ export function installTestApi({
       const ref = { kind: 'protein', id }
       selectionController?.replace([ref])
     },
+    selectRefsForTest(refs) { selectionController?.replace(refs) },
     nanoparticles: {
       importDesign: content => api.importDesign(content),
       create: (diameterNm, coating = null) => api.createGoldNanosphere(diameterNm, coating),

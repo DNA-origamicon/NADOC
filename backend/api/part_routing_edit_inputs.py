@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_operation_input import validate_operation_input
+from backend.core.positional_refs import KINDS as POSITIONAL_KINDS, V2, resolve as resolve_positions
 
 
 _NICK = frozenset({"helix_id", "bp_index", "direction"})
@@ -42,6 +43,21 @@ EDIT_FIELDS = MappingProxyType({
     "loop-skip-clear-all": frozenset(),
 })
 KINDS = frozenset(EDIT_FIELDS)
+# Proof-v2 children name their targets by position (see core/positional_refs):
+# a strand end / domain start slot, or a crossover's two halves.
+_SLOT = frozenset({"helix_id", "bp_index", "direction"})
+_HALVES = frozenset({"half_a", "half_b"})
+POSITIONAL_FIELDS = MappingProxyType({
+    "strand-end-resize": frozenset({"entries"}),
+    "domain-shift": frozenset({"entries"}),
+    "forced-ligation-create": frozenset({"three_prime_at", "five_prime_at", "is_periodic_seam"}),
+    "crossover-move": frozenset({"crossover", "new_index"}),
+    "crossover-move-batch": frozenset({"moves"}),
+    "crossover-delete": frozenset({"crossover"}),
+    "crossover-delete-batch": frozenset({"crossovers"}),
+    "crossover-extra-bases": frozenset({"crossover", "sequence"}),
+    "crossover-extra-bases-batch": frozenset({"entries"}),
+})
 MAX_WORK = 50_000
 MAX_SOURCE_ITEMS = 30_000
 _OPTIONAL = frozenset({"process_id", "is_periodic_seam", "direction_deg"})
@@ -103,6 +119,66 @@ def _sequence(value):
         _invalid("Extra-base sequences accept only A, C, G, T and N; empty clears.")
 
 
+def _positional(kind, values):
+    return kind in POSITIONAL_KINDS and type(values) is dict and values.get("_proof_version") == V2
+
+
+def _fields(kind, values):
+    return POSITIONAL_FIELDS[kind] if _positional(kind, values) else EDIT_FIELDS[kind]
+
+
+def _slot(value):
+    _shape(value, _SLOT)
+    _id(value["helix_id"])
+    _integer(value["bp_index"])
+    _choice(value["direction"], {"FORWARD", "REVERSE"})
+
+
+def _crossover_halves(value):
+    _shape(value, _HALVES)
+    for name in ("half_a", "half_b"):
+        half = value[name]
+        _shape(half, {"helix_id", "index", "strand"})
+        _id(half["helix_id"])
+        _integer(half["index"])
+        _choice(half["strand"], {"FORWARD", "REVERSE"})
+
+
+def _validate_positional(kind, values):
+    if kind in {"strand-end-resize", "domain-shift"}:
+        work = 0
+        for item in _list(values["entries"]):
+            _shape(item, {"at", "helix_id", "end", "delta_bp"} if kind == "strand-end-resize"
+                   else {"at", "delta_bp"})
+            _slot(item["at"])
+            _integer(item["delta_bp"])
+            work += abs(item["delta_bp"])
+            if kind == "strand-end-resize":
+                _id(item["helix_id"])
+                _choice(item["end"], {"5p", "3p"})
+        if work > MAX_WORK:
+            _invalid("Routing exceeds the 50000 work allowance.", code="routing_input_limit")
+    elif kind == "forced-ligation-create":
+        _slot(values["three_prime_at"])
+        _slot(values["five_prime_at"])
+        if "is_periodic_seam" in values and type(values["is_periodic_seam"]) is not bool:
+            _invalid("is_periodic_seam must be a boolean.")
+    elif kind == "crossover-delete-batch":
+        for item in _list(values["crossovers"]):
+            _crossover_halves(item)
+    else:
+        batch = kind.endswith("-batch")
+        entries = _list(values["entries" if "extra-bases" in kind else "moves"]) if batch else [values]
+        for item in entries:
+            if batch:
+                _shape(item, {"crossover", "sequence" if "extra-bases" in kind else "new_index"})
+            _crossover_halves(item["crossover"])
+            if "extra-bases" in kind:
+                _sequence(item["sequence"])
+            elif "move" in kind:
+                _integer(item["new_index"])
+
+
 def _protected(kind):
     return (frozenset({"_proof_version"})
             | ({"crossover_id"} if kind == "crossover-place" else set())
@@ -150,12 +226,17 @@ def _validate(kind, values, *, allow_new=False):
     if type(kind) is not str or kind not in KINDS:
         _invalid("Choose a supported native Fine Routing child.")
     _json(values)
-    fields = EDIT_FIELDS[kind] | _protected(kind)
+    fields = _fields(kind, values) | _protected(kind)
     _shape(values, fields, optional=_OPTIONAL)
-    if type(values["_proof_version"]) is not int or values["_proof_version"] != 1:
-        _invalid("Routing editing requires native proof version 1.", code="unsupported_routing_definition")
+    if type(values["_proof_version"]) is not int or values["_proof_version"] not in (
+            (1, V2) if kind in POSITIONAL_KINDS else (1,)):
+        _invalid("Routing editing requires native proof version 1, or 2 for positional routing.",
+                 code="unsupported_routing_definition")
     if "_fl_id" in values:
         _id(values["_fl_id"])
+    if _positional(kind, values):
+        _validate_positional(kind, values)
+        return
     if kind in {"strand-end-resize", "domain-shift"}:
         work = 0
         for item in _list(values["entries"]):
@@ -241,7 +322,7 @@ def _validate(kind, values, *, allow_new=False):
 
 def _complete(kind, values):
     _validate(kind, values)
-    schema = _native_schema(kind)
+    schema = None if _positional(kind, values) else _native_schema(kind)
     if schema is None:
         result = deepcopy(values)
     else:
@@ -262,7 +343,7 @@ def _complete(kind, values):
 def _edit_values(kind, previous, changes):
     _validate(kind, previous)
     _json(changes)
-    if type(changes) is not dict or changes.keys() - EDIT_FIELDS[kind] - _protected(kind):
+    if type(changes) is not dict or changes.keys() - _fields(kind, previous) - _protected(kind):
         _invalid("Routing edit contains unsupported fields.")
     for key in _protected(kind) & changes.keys():
         if type(changes[key]) is not type(previous[key]) or changes[key] != previous[key]:
@@ -401,6 +482,12 @@ def bind_prefix(kind, params, prefix):
     not allocate output slots or grant authority to supplied new identities.
     """
     result = _complete(kind, params)
+    if _positional(kind, result):
+        # Resolve each position to its occupant immediately before this child
+        # (structured missing_reference on an empty slot), then apply the
+        # version-1 strand/end/domain checks to the resolved targets.
+        bind_prefix(kind, resolve_positions(kind, result, prefix), prefix)
+        return result
     references = _references(kind, result)
     resources = {item["kind"] for item in references}
     output_resource = ("crossover" if kind in {"crossover-place", "crossover-place-batch"}

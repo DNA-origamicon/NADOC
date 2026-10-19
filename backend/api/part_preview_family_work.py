@@ -84,7 +84,9 @@ def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope)
     options = {"creation": _creation(family, prepared)} if family == "deformation" else {}
     if family == "transform":
         options["source_entry"] = prepared._entry
-    return display.evaluate_display(prepared.copy_prefix(), evaluated,
+    prefix = (prepared.display_prefix() if hasattr(prepared, "display_prefix")
+              else prepared.copy_prefix())
+    return display.evaluate_display(prefix, evaluated,
         include_geometry=include_geometry, envelope=envelope, **options)
 
 

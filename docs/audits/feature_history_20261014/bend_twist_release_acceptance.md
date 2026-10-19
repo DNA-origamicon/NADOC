@@ -896,3 +896,12 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Survey: 78/89 convert exactly; 34 keep editable features; 3/8 legacy bends/twists editable. Limits: 1 MB import root (manifest-hashed), unseeded extrusions, stale legacy rows.
 - Fixed workspace-save identity stamp breaking every native proof (Apply 409 after first save).
 - Browser history suite 39 passed; test-frontend 9310 passed; test-smart FAST 13 pre-existing failures only.
+
+## S61 — C8 large-part preview latency (October 19, 2026; Claude session)
+- Browser bug fixed: the frontend DNA display validator still had toy caps (16 helices, 128 strands, 1,024 nt, 16 axes), so the isolated editor refused any real part ("display allowance exceeded"). Caps now equal the backend contract (`DNA_DISPLAY_LIMITS`).
+- Server evaluate (18hb×504, in-process): 1.3–1.7 s → 0.63–0.70 s. Display reads the owned prefix (no deep copy; non-mutation pinned), orjson size check with explicit NaN/∞ refusal (projection-validated panes not re-walked), bulk coordinate finiteness, numpy bounds (native values kept), GC paused per evaluate (re-entrant), gzip skipped for loopback preview responses.
+- Client: hidden cylinder-LOD tubes not built in static preview layers; copying decode replaces structuredClone (~5×); layer builder reuses the controller's validation of the same object.
+- Browser (new `e2e/bend_preview_latency.spec.js`, fixture `bend-large`; render loop paused because this desktop's headless WebGL is SwiftShader at ~2 s/frame, so GPU raster is excluded): update median 1.75 s → 1.46 s, p95 1.98 s → 1.67 s. Split: server+headers ~0.95 s, body 0.08 s, client ~0.6 s. Open (prepare) 4.5 s server / ~6.3 s browser. 18hb×252 server evaluate 0.35 s.
+- Not kept: memoizing arm frames in `deformed_helix_axes` (0.31 → 0.10 s, byte-identical output; browser median 1.27 s / p95 1.42 s) because `deformation.py` is pinned by the CPD and duplex-relax engine manifests — needs a user-reviewed manifest transition.
+- C8 status: small/medium parts within the 2× allowance; the full-size 18hb×504 part is ~2.9× → performance task remains (contract §3), or the user revises the large-design budget.
+- Checks: `tests/test_preview_display_performance.py` 6, preview DTO/session/real-scale 84 (one unreproduced failure in 4 runs), frontend codec/limit tests, `just test-frontend` 776 files / 9331 passed, manifest tests 185 passed after reverting the frame cache; `test-smart` and history browser suite results are in the handoff.

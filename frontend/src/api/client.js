@@ -1238,8 +1238,12 @@ export async function saveAnnotations({ annotations, enabled }) {
 export function captureDimensionContext() { return { docId: docHeaders()['X-NADOC-Doc'] } }
 
 async function _dimensionsRequest(method, kind, id, changes, context = {}) {
+  const revision = currentRevisionWatermark()
   const json = await _request(method, `/${kind}/dimensions${method === 'GET' ? `?document_id=${encodeURIComponent(id)}` : ''}`,
     changes, { suppressBusy: true, ...context })
+  // A passive load superseded by a newer design revision is discarded by the
+  // request scheduler; the next poll reads the new revision. Not a failure.
+  if (!json && method === 'GET' && revision !== currentRevisionWatermark()) return null
   if (!json) throw new Error('Could not save or load dimensions')
   const field = kind === 'assembly' ? 'currentAssembly' : 'currentDesign'
   const current = store.getState()[field]

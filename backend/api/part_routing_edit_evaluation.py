@@ -6,7 +6,7 @@ from backend.core.part_command_errors import CommandContractError
 
 
 def selected_child(source, index, sub_index, *, expected_feature_id, expected_child_id):
-    from backend.api.part_routing_edit_inputs import KINDS
+    from backend.api.part_routing_edit_inputs import KINDS, POSITIONAL_KINDS
     if (type(index) is not int or not 0 <= index < len(source.feature_log)
             or type(sub_index) is not int or sub_index < 0
             or type(expected_feature_id) is not str or not 1 <= len(expected_feature_id) <= 512
@@ -18,7 +18,8 @@ def selected_child(source, index, sub_index, *, expected_feature_id, expected_ch
         raise CommandContractError("The selected routing parent changed", code="source_changed")
     child = parent.children[sub_index]
     if (child.id != expected_child_id or child.op_subtype not in KINDS
-            or type(child.params.get("_proof_version")) is not int or child.params["_proof_version"] != 1
+            or type(child.params.get("_proof_version")) is not int
+            or child.params["_proof_version"] not in ((1, 2) if child.op_subtype in POSITIONAL_KINDS else (1,))
             or "_generated_scope" in child.params or "_generator" in child.params):
         raise CommandContractError("The selected native routing child changed", code="source_changed")
     return child

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateDnaComparisonComponent } from './part_dna_comparison_model.js'
+import { DNA_DISPLAY_LIMITS, validateDnaComparisonComponent } from './part_dna_comparison_model.js'
 import { decodeDnaComparisonRecords } from './part_dna_comparison_codec.js'
 import { validatePartComparisonEnvelope } from './part_comparison_model.js'
 import { comparisonBinding } from '../test-helpers/part_comparison.js'
@@ -110,7 +110,7 @@ it('charges organization groups and membership occurrences against the shared se
     color: null, opacity: 1, is_default: false, auto_created: false }
   value.display_topology.group_organization = { version: 1, groups: [group] }
   expect(validateDnaComparisonComponent(value)).toBe(value)
-  value.display_topology.group_organization.groups = Array.from({ length: 256 }, (_, i) => ({ ...group, id: `g${i}` }))
+  value.display_topology.group_organization.groups = Array.from({ length: DNA_DISPLAY_LIMITS.selectors / 2 }, (_, i) => ({ ...group, id: `g${i}` }))  // groups + memberships = limit
   expect(validateDnaComparisonComponent(value)).toBe(value)
   value.display_topology.cluster_transforms = [{ id: 'p', name: 'Placement', helix_ids: ['h'], domain_ids: [],
     color: null, is_default: false, auto_created: false }]

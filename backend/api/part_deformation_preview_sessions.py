@@ -1,6 +1,6 @@
-"""Private mutable-part leases shared by three closed native editor families.
+"""Private standard-part leases shared by three closed native editor families.
 
-One prepared prefix per document, two globally; one nonqueued computation at a
+One preview per document, two globally; one nonqueued computation at a
 time. Native work and proof run without state/catalog locks. Apply reserves the
 commit under the state lock, then releases the catalog lock before the existing
 undo/publication transaction. Its full-source snapshot cost is not qualified by
@@ -11,8 +11,8 @@ transform histories use the existing isolated worker and separate bounded phases
 from collections import OrderedDict
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
-from threading import BoundedSemaphore, Lock, Timer
+from dataclasses import dataclass, field
+from threading import BoundedSemaphore, Event, Lock, Timer
 from time import monotonic
 from typing import Literal
 import sys
@@ -27,10 +27,12 @@ from backend.api import part_group_organization_gate as group_gate
 from backend.api import part_publication_permit as permits
 from backend.api import part_publication_policy as construction_policy
 from backend.api import part_preview_family_work as family_work
+from backend.api import part_immutable_deformation_preview as immutable
 from backend.api.part_deformation_preview import (
     PreparedCreation, prepare_creation_append,
 )
 from backend.api.part_recipe_edit import prepare_change
+from backend.api.part_source_bound_route import require_current as require_http_source
 from backend.api.part_replacement_transaction import publish_replacement
 from backend.core.models import Design
 from backend.core.part_command_errors import CommandContractError
@@ -130,6 +132,8 @@ class _Entry:
     publication: dict | None = None  # bounded scalar receipt; never a model/report
     applying_sequence: int | None = None
     family: str = "deformation"
+    sealed: bool = False
+    cancelled: Event = field(default_factory=Event)
     numerical: bool = False
     computation: object = None
     payload: dict | None = None
@@ -182,6 +186,7 @@ def _remove(entry, *, remember=True):
     if remember:
         _remember_cancel(entry)
     entry.prepared = entry.payload = entry.failure = None
+    entry.cancelled.set()
     if entry.computation is not None:
         entry.computation.cancelled.set()
     if entry.timer is not None:
@@ -240,6 +245,7 @@ def _source_current(entry):
     """State-lock owned; never creates a closed document/session."""
     if doc_context.get_current_doc() != entry.doc:
         _conflict("The request belongs to a different document")
+    require_http_source()
     session = state._sessions.get(entry.doc)
     policy = _source_policy(entry.doc, None if session is None else session.design, entry.family)
     if policy.generation != entry.policy_generation:
@@ -248,10 +254,12 @@ def _source_current(entry):
                          else entry.request.expected_revision)
     if (session is None or session.identity != entry.session_identity
             or session.revision != expected_revision
-            or session.design is not entry.source() or type(session.design) is not Design
-            or session.design.id != entry.request.expected_design_id):
+            or session.design is not entry.source()
+            or (not immutable.is_source(session.design) if entry.sealed else type(session.design) is not Design)
+            or (immutable.source_id(session.design) if entry.sealed else session.design.id) != entry.request.expected_design_id):
         _conflict("The preview's original part or session changed", "source_changed")
-    state._assert_active_loadout_editable(session.design)
+    if not entry.sealed:
+        state._assert_active_loadout_editable(session.design)
     return session
 
 
@@ -261,6 +269,10 @@ def _source_policy(doc, source, family="deformation"):
     This grants no generic mutation/publication bypass: Apply still needs its
     full recipe rebuild and exact candidate-bound host permit.
     """
+    if immutable.is_source(source):
+        if family != 'deformation':
+            _conflict('Sealed preview currently supports historical Bend/Twist only')
+        return immutable.authority.require_policy(doc_id=doc)
     if type(source) is Design and source.group_organization is not None:
         selected = construction_policy.require_compatibility(doc, f"{family}_preview")
         group_gate.require_group_edit_enabled()
@@ -354,15 +366,20 @@ def _prepare(request, *, family="deformation"):
     try:
         with _mapped_errors():
             with state._lock:
+                require_http_source()
                 doc = doc_context.get_current_doc()
                 session = state._sessions.get(doc)
                 source = None if session is None else session.design
                 policy = _source_policy(doc, source, family)
-                if type(source) is not Design:
-                    _conflict("Preview requires an existing mutable standard part")
-                if source.id != request.expected_design_id or session.revision != request.expected_revision:
+                sealed = immutable.is_source(source)
+                if type(source) is not Design and not sealed:
+                    _conflict("Preview requires an existing standard part")
+                if sealed and type(request) is Creation:
+                    _conflict('Sealed creation preview is not integrated', 'immutable_preview_creation_unavailable')
+                if (immutable.source_id(source) if sealed else source.id) != request.expected_design_id or session.revision != request.expected_revision:
                     _conflict("The part changed before preview capture", "source_changed")
-                state._assert_active_loadout_editable(source)
+                if not sealed:
+                    state._assert_active_loadout_editable(source)
                 with _lock:
                     _prune()
                     if (doc, family, request.preview_id) in _tombstones:
@@ -376,9 +393,9 @@ def _prepare(request, *, family="deformation"):
                         raise HTTPException(429, detail={"code": "preview_capacity", "detail": "Close an existing preview first"})
                     origin = Origin.model_validate({name: getattr(request, name) for name in Origin.model_fields})
                     entry = _Entry(doc, origin, str(uuid4()), ref(source), session.identity, policy.generation,
-                                   monotonic() + TTL_SECONDS, family=family)
+                                   monotonic() + TTL_SECONDS, family=family, sealed=sealed)
                     _entries[doc] = entry
-                captured = capture(source, preserve_entry_types=True)
+                captured = None if sealed else capture(source, preserve_entry_types=True)
             # Do not keep the live source/session in this computation frame.
             del source, session
             if family == "transform":
@@ -396,6 +413,9 @@ def _prepare(request, *, family="deformation"):
                 _catalog_current(entry)
                 entry.timer = timer
             timer.start()
+            if entry.sealed:
+                payload, prepared = immutable.run(sys.modules[__name__], entry, 0, action='prepare')
+                return _finish(entry, 0, payload, prepared=prepared)
             creation = ({"deformation_id": str(uuid4()), "kind": request.type,
                          "targets": request.targets, "cluster_ids": request.cluster_ids}
                         if type(request) is Creation else None)
@@ -422,10 +442,16 @@ def evaluate(value, *, family="deformation"):
     try:
         with _mapped_errors():
             _current(entry, request.request_sequence)
-            evaluated = family_work.evaluate(family, prepared, request.params)
-            payload = family_work.evaluate_display(family, prepared, evaluated,
-                include_geometry=request.include_geometry,
-                envelope=_envelope(entry, request.request_sequence))
+            if entry.sealed:
+                payload, _ = immutable.run(sys.modules[__name__], entry, request.request_sequence,
+                    action='evaluate', params=request.params, include_geometry=request.include_geometry)
+                return _finish(entry, request.request_sequence, payload)
+            from backend.core.gc_pause import paused_gc
+            with paused_gc():
+                evaluated = family_work.evaluate(family, prepared, request.params)
+                payload = family_work.evaluate_display(family, prepared, evaluated,
+                    include_geometry=request.include_geometry,
+                    envelope=_envelope(entry, request.request_sequence))
             return _finish(entry, request.request_sequence, payload)
     finally:
         _work_slot.release()
@@ -506,6 +532,8 @@ def apply(value, *, family="deformation"):
     proof_admitted = False
     transferred = False
     try:
+        if entry.sealed:
+            return immutable.apply(sys.modules[__name__], entry, prepared, request)
         if entry.numerical:
             from backend.api import part_transform_preview_computation as numerical
             with _mapped_errors():
@@ -570,8 +598,8 @@ def apply(value, *, family="deformation"):
             _work_slot.release()
 
 
-def _publish(entry, request, candidate, deadline, admission, request_sha256, *, renew_receipt=False):
-    """The sole preview publication transaction, shared by both compute lanes."""
+def _publish(entry, request, candidate, deadline, admission, request_sha256, *, renew_receipt=False, immutable_staged=None):
+    """The sole preview publication transaction, shared by all admitted compute lanes."""
     committing = False
     try:
         with state._lock:
@@ -584,9 +612,15 @@ def _publish(entry, request, candidate, deadline, admission, request_sha256, *, 
                 committing = True
             # Reservation closes cancellation/supersession. No catalog
             # lock spans preservation, native dependency checks or undo.
-            candidate = preserve_document_state(session.design, candidate)
-            state._assert_active_loadout_editable(session.design, candidate)
-            state._assert_photoproduct_dependencies(candidate)
+            if entry.sealed:
+                if (immutable_staged is None or candidate is not immutable_staged.prepared
+                        or immutable_staged.feature_id != request.feature_id
+                        or immutable_staged.request_hash != request_sha256):
+                    _conflict('Sealed Apply requires its exact staged candidate')
+            else:
+                candidate = preserve_document_state(session.design, candidate)
+                state._assert_active_loadout_editable(session.design, candidate)
+                state._assert_photoproduct_dependencies(candidate)
             # Preservation and dependency validation may consume the last
             # allowance even for legacy sources without a publication permit.
             if monotonic() > deadline:
@@ -594,13 +628,17 @@ def _publish(entry, request, candidate, deadline, admission, request_sha256, *, 
             _source_current(entry)
             with _lock:
                 _catalog_current(entry, request.request_sequence)
-            permit = (permits.issue_organized_recipe_permit(admission, candidate,
-                request_sha256=request_sha256, expires=min(deadline, entry.expires))
-                if admission is not None else None)
+            if entry.sealed:
+                from backend.api.part_immutable_geometry_host import _issue_staged
+                permit = _issue_staged(immutable_staged, session, expires=min(deadline, entry.expires))
+            else:
+                permit = (permits.issue_organized_recipe_permit(admission, candidate,
+                    request_sha256=request_sha256, expires=min(deadline, entry.expires))
+                    if admission is not None else None)
             revision = (publish_replacement(session, candidate, publication_permit=permit)
                         if permit is not None else publish_replacement(session, candidate))
             receipt = {**entry.request.model_dump(), "status": "applied",
-                       "lease_id": entry.lease_id, "design_id": candidate.id,
+                       "lease_id": entry.lease_id, "design_id": immutable.source_id(candidate) if entry.sealed else candidate.id,
                        "revision": revision, **entry.identity,
                        "doc_id": entry.doc, "request_sequence": request.request_sequence}
             with _lock:

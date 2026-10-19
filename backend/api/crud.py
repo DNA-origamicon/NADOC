@@ -3343,6 +3343,7 @@ def _place_auto_crossovers(
     protected_strand_ids: frozenset[str] = frozenset(),
     *,
     tip_only_strand_ids: frozenset[str] = frozenset(),
+    kept_strand_ids: frozenset[str] = frozenset(),
 ) -> tuple[Design, dict]:
     """Place all possible staple crossovers, skipping a margin around scaffold seams.
 
@@ -3421,6 +3422,13 @@ def _place_auto_crossovers(
                 protected_pos.add((d.helix_id, b, d.direction.value))
 
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
+
+    kept_pos = {
+        (d.helix_id, b, d.direction.value)
+        for s in design.strands if s.id in kept_strand_ids
+        for d in s.domains
+        for b in range(min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp) + 1)
+    }
 
     def _scaffold_fwd(helix_id: str) -> bool:
         h = helix_map.get(helix_id)
@@ -3526,6 +3534,16 @@ def _place_auto_crossovers(
         # loops (a comb/"teeth" cross-section) had their tooth-edge crossovers
         # silently starved, while the identical site at a bundle cap was allowed.
         required_bp = bp + 1 if lower_bp < bp else bp - 1
+        # Region autostaple keeps staples outside the region exactly. A crossover
+        # may sit at their boundary (its nick is then already a strand end) but
+        # never joins their bases: the arm (bp and its bow-side neighbour) must
+        # be free on both helices.
+        if kept_pos and any(
+            (hid, b, sd) in kept_pos
+            for hid, sd in ((hid_a, stap_a), (hid_b, stap_b))
+            for b in (bp, required_bp)
+        ):
+            continue
         if not (
             slot_covered(sr, hid_a, required_bp, stap_a)
             and slot_covered(sr, hid_b, required_bp, stap_b)

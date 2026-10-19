@@ -41,7 +41,7 @@ export function createVRRouting({ doc = document, request = fetch, onError = con
     const waiting = busy()
     const roots = ROUTING_ACTIONS.map(([id, label]) => { const element = doc.getElementById(id); return { id, label, enabled: enabled(element) && !waiting, active: element?.getAttribute('aria-checked') === 'true' || !!element?.classList.contains('is-on') || !!element?.classList.contains('is-checked'), element } })
     const auto = doc.querySelector('#autoscaffold-modal.visible')
-    const modal = [...doc.querySelectorAll('.modal__overlay')].find(el => /^(Assign Scaffold Sequence|Clear loops & skips)$/.test(clean(el.querySelector('.modal__title')?.textContent)))
+    const modal = [...doc.querySelectorAll('.modal__overlay')].find(el => /^(Assign Scaffold Sequence|Clear loops & skips|Autostaple scope)$/.test(clean(el.querySelector('.modal__title')?.textContent)))
     const root = auto || modal
     let title = '', detail = '', controls = []
     const add = (id, label, run, active = false, allowed = true) => controls.push({ id, label, active, enabled: allowed && !waiting, run })

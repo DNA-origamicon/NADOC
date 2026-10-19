@@ -443,6 +443,15 @@ class PreparedPreview:
         """Independent control-context input; contains no recovery/history rows."""
         return self._prefix.model_copy(deep=True)
 
+    def display_prefix(self):
+        """The owned prefix for read-only display/feasibility per slider evaluation.
+
+        A deep copy of a real part costs more than the display itself; the
+        display path only reads it (pinned by a non-mutation test). Native
+        evaluation still runs on ``copy_prefix()``.
+        """
+        return self._prefix
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluatedPreview:

@@ -4,8 +4,8 @@ import { el } from './primitives/dom.js'
 import { toolSection } from './tool_sections.js'
 import { cloneRepairInput } from '../features/part_repair_model.js'
 
-// This is an ordinary input editor, gated until the complete workflow is qualified.
-export const ROUTING_HISTORY_EDITOR_ENABLED = false
+// Ordinary input editor for recorded Fine Routing steps (feature log ✎ action).
+export const ROUTING_HISTORY_EDITOR_ENABLED = true
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key)
 const scalar = (key, label, type, options = {}) => ({ key, label, type, ...options })
 const id = (key, label, resource) => scalar(key, label, 'id', { resource })
@@ -47,11 +47,41 @@ const definitions = Object.freeze({
   'loop-skip-clear': ['Clear loops and skips in range', planes], 'loop-skip-clear-all': ['Clear all loops and skips', []],
 })
 
+// Proof-v2 steps name their targets by position (backend core/positional_refs):
+// a strand end / domain start slot, or a crossover's two halves. Replay applies
+// them to whatever occupies that position immediately before the step.
+const slot = (key, label) => scalar(key, label, 'object', { fields: [helix, integer('bp_index', 'Base index'), direction()] })
+const halves = (key = 'crossover', label = 'Crossover') => scalar(key, label, 'object', {
+  fields: [scalar('half_a', 'Half A', 'object', { fields: half }), scalar('half_b', 'Half B', 'object', { fields: half })] })
+const derivedHelix = scalar('helix_id', 'Helix ID', 'derived', { from: row => row.at.helix_id })
+const newSlot = () => ({ helix_id: '', bp_index: 0, direction: 'FORWARD' })
+const newHalves = () => ({ half_a: { helix_id: '', index: 0, strand: 'FORWARD' }, half_b: { helix_id: '', index: 0, strand: 'REVERSE' } })
+const positionalMove = [halves(), integer('new_index', 'New index')]
+const positional = Object.freeze({
+  'strand-end-resize': ['Resize strand ends', [list('entries', 'Entry', [slot('at', 'Strand end at'), derivedHelix,
+    scalar('end', 'End', 'choice', { choices: ['5p', '3p'] }), integer('delta_bp', 'Delta (bp)')],
+  () => ({ at: newSlot(), helix_id: '', end: '3p', delta_bp: 0 }))]],
+  'domain-shift': ['Shift domains', [list('entries', 'Entry', [slot('at', 'Domain starting at'), integer('delta_bp', 'Delta (bp)')],
+    () => ({ at: newSlot(), delta_bp: 0 }))]],
+  'forced-ligation-create': ['Create forced ligation', [slot('three_prime_at', '3′ end at'), slot('five_prime_at', '5′ end at'),
+    scalar('is_periodic_seam', 'Periodic seam', 'boolean', { optional: true, fallback: false })]],
+  'crossover-move': ['Move crossover', positionalMove],
+  'crossover-move-batch': ['Move crossovers', [list('moves', 'Move', positionalMove, () => ({ crossover: newHalves(), new_index: 0 }))]],
+  'crossover-delete': ['Delete crossover', [halves()]],
+  'crossover-delete-batch': ['Delete crossovers', [list('crossovers', 'Crossover', [halves('$value', '')], newHalves)]],
+  'crossover-extra-bases': ['Crossover extra bases', [halves(), sequence]],
+  'crossover-extra-bases-batch': ['Crossover extra bases batch', [list('entries', 'Entry', [halves(), sequence],
+    () => ({ crossover: newHalves(), sequence: '' }))]],
+})
+const definitionFor = (kind, params) => (params?._proof_version === 2 ? positional : definitions)[kind]
+const supported = (kind, params) => (params?._proof_version === 1 && own(definitions, kind))
+  || (params?._proof_version === 2 && own(positional, kind))
+
 /** UI eligibility; full native input proof and reference validation stay on the server. */
 export function isNativeRoutingChild(parent, child) {
   return parent?.feature_type === 'routing-cluster' && typeof parent.id === 'string' && !!parent.id
     && child?.feature_type === 'minor' && typeof child.id === 'string' && !!child.id
-    && own(definitions, child.op_subtype) && child.params?._proof_version === 1
+    && supported(child.op_subtype, child.params)
     && !own(child.params, '_generator') && !own(child.params, '_generated_scope')
 }
 
@@ -71,20 +101,29 @@ function checkShape(value, fields, extra = []) {
     if (field.type === 'object') checkShape(item, field.fields)
     if (field.type === 'list') {
       if (!Array.isArray(item)) throw new Error(`${field.label} needs an ordered list.`)
-      if (field.fields[0].key !== '$value') for (const row of item) checkShape(row, field.fields, field.key === 'placements' ? ['crossover_id'] : [])
+      const [first] = field.fields
+      if (first.key !== '$value') for (const row of item) checkShape(row, field.fields, field.key === 'placements' ? ['crossover_id'] : [])
+      else if (first.type === 'object') for (const row of item) checkShape(row, first.fields)
     }
   }
 }
 function draftInputs(packet) {
-  if (!own(definitions, packet?.kind) || packet?.params?._proof_version !== 1) throw new Error('This child has no supported native routing input contract.')
+  if (!supported(packet?.kind, packet?.params)) throw new Error('This child has no supported native routing input contract.')
   const values = cloneInput(packet.params)
-  checkShape(values, definitions[packet.kind][1], metadata(packet.kind))
+  checkShape(values, definitionFor(packet.kind, packet.params)[1], metadata(packet.kind))
   return values
+}
+function derive(value, fields) {
+  for (const field of fields) {
+    if (field.type === 'derived') value[field.key] = field.from(value)
+    else if (field.type === 'list' && field.fields[0].key !== '$value') for (const row of value[field.key]) derive(row, field.fields)
+  }
 }
 function validate(value, fields, prefix = '') {
   for (const field of fields) {
     const item = field.key === '$value' ? value.$value : value[field.key], label = prefix + field.label
     if (item === undefined && field.optional) continue
+    if (field.type === 'derived') continue
     if (field.type === 'object') { validate(item, field.fields, `${label} `); continue }
     if (field.type === 'list') {
       item.forEach((row, i) => validate(field.fields[0].key === '$value' ? { $value: row } : row, field.fields, `${label} ${i + 1} `)); continue
@@ -105,7 +144,7 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
   let values
   try { values = draftInputs(packet) } catch (error) { return Promise.reject(error) }
   return new Promise(resolve => {
-    const [title, fields] = definitions[kind], empty = kind === 'loop-skip-clear-all'
+    const [title, fields] = definitionFor(kind, packet.params), empty = kind === 'loop-skip-clear-all'
     let saving = false, settled = false, retired = false
     const body = el('div'), form = el('div'), error = el('p', { className: 'tool-help', attrs: { role: 'alert' } })
     error.hidden = true
@@ -126,7 +165,8 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
     function controls(target, descriptors, prefix = '', changed = () => {}) {
       const container = el('div', { className: 'tool-fields' })
       for (const field of descriptors) {
-        const label = prefix + field.label, value = target[field.key] === undefined ? field.fallback : target[field.key]
+        const label = (prefix + field.label).trim(), value = target[field.key] === undefined ? field.fallback : target[field.key]
+        if (field.type === 'derived') continue // Kept in step with its source field on Apply.
         if (field.type === 'object') { container.append(toolSection(label, [controls(target[field.key], field.fields, `${label} `)])); continue }
         if (field.type === 'list') {
           const listNode = el('div')
@@ -193,7 +233,7 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
       if (settled || saving) return
       if (!isCurrent()) { fail('The part changed. Reopen this routing editor.'); return }
       let params
-      try { validate(values, fields); params = cloneInput(values) } catch (failure) { fail(failure.message); return }
+      try { derive(values, fields); validate(values, fields); params = cloneInput(values) } catch (failure) { fail(failure.message); return }
       if (!onSave) { finish(params); modal.close(); return }
       saving = true
       const nodes = [...modal.root.querySelectorAll('input,select,button')], disabled = nodes.map(node => node.disabled)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateDeformationPreviewComponent, validateDnaComparisonComponent } from './part_dna_comparison_model.js'
+import { DNA_DISPLAY_LIMITS, validateDeformationPreviewComponent, validateDnaComparisonComponent } from './part_dna_comparison_model.js'
 import { dnaComponent } from '../test-helpers/part_dna_comparison.js'
 
 function component() {
@@ -34,7 +34,7 @@ describe('separately versioned native deformation display', () => {
     ['omitted nucleotide', d => { d.nucleotides.pop() }],
     ['nonfinite sample', d => { d.helix_axes[0].segments[0].samples = [[NaN, 0, 0]] }],
     ['malformed sample', d => { d.helix_axes[0].segments[0].samples = [[0, 0]] }],
-    ['unbounded samples', d => { d.helix_axes[0].segments[0].samples = Array.from({ length: 2049 }, () => [0, 0, 0]) }],
+    ['unbounded samples', d => { d.helix_axes[0].segments[0].samples = new Array(DNA_DISPLAY_LIMITS.axisPoints + 1).fill([0, 0, 0]) }],
     ['null samples', d => { d.helix_axes[0].segments[0].samples = null }],
     ['unknown segment data', d => { d.helix_axes[0].segments[0].pose = [] }],
   ])('refuses %s', (_name, mutate) => {
@@ -44,9 +44,10 @@ describe('separately versioned native deformation display', () => {
 
   it('counts every scoped sample occurrence together with global samples and endpoints', () => {
     const value = component(), axis = value.helix_axes[0]
-    axis.samples = Array.from({ length: 1022 }, () => [0, 0, 0])
+    const half = (DNA_DISPLAY_LIMITS.axisPoints - 4) / 2
+    axis.samples = new Array(half).fill([0, 0, 0])
     axis.segments[0].samples = axis.samples
-    expect(validateDeformationPreviewComponent(value)).toBe(value) // 2 + 1022 + 2 + 1022
+    expect(validateDeformationPreviewComponent(value)).toBe(value) // 2 + half + 2 + half = limit
     axis.segments[0].samples = [...axis.samples, [0, 0, 0]]
     expect(() => validateDeformationPreviewComponent(value)).toThrow(/allowance/)
   })

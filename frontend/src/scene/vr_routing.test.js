@@ -81,3 +81,15 @@ it('keeps generated native actions aligned with the bridge allowlist', async () 
   const tools = catalog.tabs.find(tab => tab.side === 'right' && tab.key === 'tools')
   expect(tools.rows.filter(row => row.action.startsWith('routing:')).map(row => row.action.slice(8))).toEqual(ROUTING_ACTIONS.map(([id]) => id))
 })
+it('mirrors the autostaple scope chooser so VR can restaple only the selection', async () => {
+  const { chooseAutostapleScope } = await import('../ui/region_autostaple.js')
+  const driver = setup(), chosen = []
+  document.getElementById('menu-routing-full-autostaple').onclick = async () => { chosen.push(await chooseAutostapleScope([{ helix_id: 'h0', lo_bp: 0, hi_bp: 20 }])) }
+  await driver.click('menu-routing-full-autostaple')
+  const snap = bridge.snapshot()
+  expect(snap.title).toBe('Autostaple scope')
+  expect(snap.controls.map(c => c.label)).toEqual(expect.arrayContaining(['Cancel', 'Entire structure', 'Selection only']))
+  await driver.click(snap.controls.find(c => c.label === 'Selection only').id)
+  await Promise.resolve()
+  expect(chosen).toEqual(['region'])
+})

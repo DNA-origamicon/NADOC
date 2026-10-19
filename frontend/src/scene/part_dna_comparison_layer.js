@@ -1,7 +1,7 @@
 /** Isolated static adapter for the existing native Full renderer. */
 import * as THREE from 'three'
-import { validateDnaComparisonComponent, validateDeformationPreviewComponent } from '../features/part_dna_comparison_model.js'
-import { decodeDnaComparisonRecords } from '../features/part_dna_comparison_codec.js'
+import { validateDnaComparisonComponent, validatedDeformationPreviewComponent } from '../features/part_dna_comparison_model.js'
+import { decodeDnaComparisonRecordsCopy } from '../features/part_dna_comparison_codec.js'
 import { fail } from '../features/part_comparison_validation.js'
 import { buildHelixObjects } from './helix_renderer.js'
 import { _resetStapleColorPins } from './helix_renderer/palette.js'
@@ -37,7 +37,7 @@ export function buildPartDnaComparisonLayer(component, scene, paletteToken = Sym
 }
 
 export function buildDeformationPreviewLayer(component, scene) {
-  validateDeformationPreviewComponent(component)
+  validatedDeformationPreviewComponent(component)
   return buildLayer(component, scene, Symbol('private deformation palette'), 'privateDeformationPreview', 'deformationPreview')
 }
 
@@ -71,12 +71,15 @@ function buildLayer(component, scene, paletteToken, name, arcType) {
     // Private transport values are copied before a mutable native display owner
     // sees them. No live Design, pose map or store is consulted or installed.
     const topology = structuredClone(component.display_topology)
-    const geometry = structuredClone(decodeDnaComparisonRecords(component.nucleotides))
+    const geometry = decodeDnaComparisonRecordsCopy(component.nucleotides)
     // Same raw-response adapter as api/client.js, without its store effects.
     const axes = Object.fromEntries(structuredClone(component.helix_axes).map(axis => [axis.helix_id,
       { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments,
         ovhgAxes: axis.ovhg_axes ?? null }]))
-    const native = buildHelixObjects(geometry, { ...topology, id: paletteToken }, root, {}, [], axes, 'full')
+    // Static Full-LOD layer: its renderer is never exposed, so hidden
+    // cylinder-LOD tubes (~0.26 s on an 18-helix part) are not built.
+    const native = buildHelixObjects(geometry, { ...topology, id: paletteToken }, root, {}, [], axes, 'full',
+      { curvedCylinders: false })
     if (arcType === 'deformationPreview') native.setAxisShaftMode('deformed')
     const connections = native.getCrossHelixConnections()
     checkInventory(native, geometry, topology, connections)
