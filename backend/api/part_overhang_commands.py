@@ -256,8 +256,8 @@ def build(design, params):
     from backend.core.lattice import (
         convert_strand_to_binder,
         convert_binder_to_scaffold,
-        make_binder_for_overhang,
     )
+    from backend.core.overhang_binders import make_binder_checked as make_binder_for_overhang
 
     action = params["action"]
     if action in BINDING_ACTIONS:

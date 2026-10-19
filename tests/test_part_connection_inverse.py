@@ -39,8 +39,21 @@ def test_all_native_linker_types_replace_direct_and_replay(direct_source, direct
     from backend.api import part_connection_application_commands as application
     from backend.api import part_connection_composition_commands as composition
     from tests.test_part_connection_application_commands import _legacy
+    from tests.test_part_connection_application_commands import parallel_bridge, assert_parallel_bridge_refused
     source = pending(direct_source, direct_type)
     source = append(source, 'overhang-bulk', direct_params(source), 'direct')
+    if parallel_bridge(source, connection_type):
+        if combined:
+            values = compose_params(source, connection_type)
+            staged = composition._stage(source, composition.parse_command(values))
+            assert_parallel_bridge_refused(lambda: _legacy(staged, apply_params(staged), monkeypatch),
+                                           lambda: composition.build(source, values))
+        else:
+            source = pending(source, connection_type, 'replacement')
+            values = apply_params(source)
+            assert_parallel_bridge_refused(lambda: _legacy(source, values, monkeypatch),
+                                           lambda: application.build(source, values))
+        return
     if combined:
         values = compose_params(source, connection_type)
     else:

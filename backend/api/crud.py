@@ -289,6 +289,7 @@ def _design_response(
     preserve_feature_log_id: str | None = None,
     full_feature_log: bool = False,
     normalize_legacy: bool = True,
+    revision: int | None = None,
 ) -> dict:
     if normalize_legacy:
         design = _ensure_default_cluster(design)
@@ -345,7 +346,7 @@ def _design_response(
     # client drops any design response whose revision is older than the newest
     # already applied, so out-of-order/stale responses from rapid edits can't
     # clobber newer state (see _isStaleDesignResponse in client.js).
-    rev = design_state.current_request_revision()
+    rev = revision if revision is not None else design_state.current_request_revision()
     if rev is None:
         rev = design_state.revision()
     resp = {
@@ -2516,7 +2517,7 @@ def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
     Same length as the overhang, reverse complement of its sequence when set.
     404 if the overhang (or its backing domain) is missing.
     """
-    from backend.core.lattice import make_binder_for_overhang
+    from backend.core.overhang_binders import BinderSlotOccupied, make_binder_checked as make_binder_for_overhang
 
     identity = "ohbind_" + str(_uuid.uuid4())
     before_occ = _strand_occupancy(design_state.get_or_404())
@@ -2531,6 +2532,8 @@ def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
             params={"overhang_id": overhang_id, "action": "generate-binder", "_strand_id": identity},
             fn=_build,
         )
+    except BinderSlotOccupied as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc)) from exc
 

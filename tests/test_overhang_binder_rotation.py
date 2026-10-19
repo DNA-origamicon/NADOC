@@ -291,10 +291,24 @@ def test_oh_binder_with_toehold_follows_rotated_overhang():
 # ── Case 2: end-to-root binder spliced into a STAPLE strand ───────────────────
 
 
+def _demo_with_free_root(lo=20, hi=27):
+    """Demo design with the REVERSE staple split around [lo, hi], as an overhang
+    extrusion would leave it: the overhang strand's root domain owns those bases
+    (one base per helix position, bp and direction)."""
+    base = _demo_design()
+    staple = next(s for s in base.strands if s.id == "staple_0")
+    dom = staple.domains[0]
+    left = dom.model_copy(update={"start_bp": dom.start_bp, "end_bp": lo - 1})
+    right = dom.model_copy(update={"start_bp": hi + 1, "end_bp": dom.end_bp})
+    pieces = [staple.model_copy(update={"domains": [left]}),
+              staple.model_copy(update={"id": "staple_0_right", "domains": [right]})]
+    return base.copy_with(strands=[s for s in base.strands if s.id != "staple_0"] + pieces)
+
+
 def _seed_end_to_root() -> tuple[Design, str, str]:
     """Overhang A (free) + overhang B as a 2-domain staple (root on the bundle
     helix + tip on B's own helix). Returns (design, a_id, b_id)."""
-    base = _demo_design()
+    base = _demo_with_free_root()
     oh_helix_a = Helix(
         id="oh_helix_a",
         axis_start=Vec3(x=2.5, y=0.0, z=0.0),
@@ -451,7 +465,7 @@ def _seed_diff_length_direct() -> tuple[Design, str, str]:
     """Driver overhang A = 12 bp on its own helix; driven overhang B = 8 bp as a
     2-domain staple (root on the bundle helix + tip on B's own helix). Sequences are
     complementary over the 8 bp window so the WC gate passes."""
-    base = _demo_design()
+    base = _demo_with_free_root()
     oh_helix_a = Helix(
         id="oh_helix_a",
         axis_start=Vec3(x=2.5, y=0.0, z=0.0),

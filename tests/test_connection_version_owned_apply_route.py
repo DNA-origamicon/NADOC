@@ -133,7 +133,10 @@ def test_owned_finite_apply_gate_is_disabled_by_default():
 def test_real_apply_reapply_records_inputs_once_and_replays_from_root(document, material):
     session = document.session
     prefix = document.source.copy_with(connection_versions=[], feature_log=document.source.feature_log[:-1])
-    source = _pending(prefix, f"root-to-root-{material}dna-linker")
+    # This document's overhangs have opposite polarity: root-to-root is valid for
+    # ssDNA, while a dsDNA linker needs mixed attach (root-to-root dsDNA would put
+    # both bridge strands in one direction, which is refused).
+    source = _pending(prefix, "root-to-root-ssdna-linker" if material == "ss" else "end-to-root-dsdna-linker")
     # Rebuild the pending definition through its native command, rather than
     # changing a published definition without changing its matching history.
     assert len(prefix.feature_log) == 3

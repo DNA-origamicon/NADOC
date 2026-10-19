@@ -120,7 +120,11 @@ def test_defensive_apply_readds_absent_modify_with_warning():
     Applying the later child's diff to a base WITHOUT B (the adder was deleted)
     re-adds B (POST is self-contained) and records a warning."""
     pre = _make_target()
-    b = pre.strands[0].model_copy(update={"id": "B-ENT", "color": "#111111"})
+    # B occupies free slots (far past the helix's strands), so re-adding it is valid.
+    source = pre.strands[0]
+    free = [dom.model_copy(update={"start_bp": dom.start_bp + 1000, "end_bp": dom.end_bp + 1000})
+            for dom in source.domains]
+    b = source.model_copy(update={"id": "B-ENT", "color": "#111111", "domains": free})
     mid = pre.copy_with(strands=pre.strands + [b])
     b2 = b.model_copy(update={"color": "#222222"})
     post = mid.copy_with(strands=mid.strands[:-1] + [b2])
@@ -138,6 +142,19 @@ def test_defensive_apply_readds_absent_modify_with_warning():
     readded = [s for s in got_d.strands if s.id == "B-ENT"]
     assert readded and readded[0].color == "#222222"
     assert w_d, "defensive re-add should emit a warning"
+
+
+def test_defensive_apply_drops_a_readd_that_would_double_occupy():
+    """A modified strand whose bases are now covered by another strand is not
+    re-added (two bases per slot); the drop is reported."""
+    pre = _make_target()
+    b = pre.strands[0].model_copy(update={"id": "B-ENT", "color": "#111111"})  # same slots as strand 0
+    mid = pre.copy_with(strands=pre.strands + [b])
+    post = mid.copy_with(strands=mid.strands[:-1] + [b.model_copy(update={"color": "#222222"})])
+    _a, _r, m, _s = encode_child_diff(mid, post)
+    got, warnings = apply_child_diff_forward(pre, "", "", m, defensive=True)
+    assert all(s.id != "B-ENT" for s in got.strands)
+    assert any("dropped" in w for w in warnings)
 
 
 def test_is_diff_child_flags():

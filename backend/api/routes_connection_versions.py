@@ -46,8 +46,25 @@ NATIVE_DIRECT_APPLY_ENABLED = False
 NATIVE_DIRECT_CONNECT_ENABLED = False
 
 
+def _require_valid_polarity(connection_type, overhang_a_id, overhang_b_id):
+    """Refuse dsDNA linker pairings whose bridge strands would run in the same
+    direction (two bases per slot) from every caller, not only the UI.
+
+    Other forbidden pairings are blocked in the UI; anything that still produced a
+    double occupancy is rejected by the publication occupancy check. A same-endpoint
+    request is left to the route's own validation (its error comes first).
+    """
+    from backend.core.overhang_ops import connection_type_polarity_error, DS_LINKER_TYPES
+    if connection_type not in DS_LINKER_TYPES or overhang_a_id == overhang_b_id:
+        return
+    error = connection_type_polarity_error(connection_type, overhang_a_id, overhang_b_id)
+    if error:
+        raise HTTPException(400, detail=error)
+
+
 @router.post("/design/connection-versions", status_code=201)
 def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
+    _require_valid_polarity(body.connection_type, body.overhang_a_id, body.overhang_b_id)
     from backend.api.part_connection_organized_routes import try_response
     if (response := try_response('create', body.model_dump())) is not None:
         return response
@@ -253,6 +270,7 @@ def _apply_connection_version_legacy(
     if v is None:
         raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
     a_id, b_id, vtype = v.overhang_a_id, v.overhang_b_id, v.connection_type
+    _require_valid_polarity(vtype, a_id, b_id)
     direct = _cv_is_direct(vtype)
     indirect = _cv_is_indirect(vtype)
     attach_a, attach_b = _cv_attach_pair(vtype)
@@ -401,6 +419,7 @@ def apply_connection_version(version_id: str) -> dict:
 
 def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
     """Create and materialize a first-time connection as one undoable action."""
+    _require_valid_polarity(body.connection_type, body.overhang_a_id, body.overhang_b_id)
     from backend.api.part_connection_organized_routes import try_response
     if (response := try_response('connect', body.model_dump())) is not None:
         return response

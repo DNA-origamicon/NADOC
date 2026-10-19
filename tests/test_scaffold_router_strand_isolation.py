@@ -101,9 +101,13 @@ def test_scaffold_router_leaves_a_linker_in_the_end_turn_zone_alone():
     )
 
     before = _nonscaffold(d)
-    after = _nonscaffold(auto_scaffold_seamed(d)[0])
+    routed = auto_scaffold_seamed(d)[0]
+    after = _nonscaffold(routed)
 
     assert after["endzone"] == before["endzone"]
+    # ISSUE-19: the scaffold must not extend THROUGH the linker either.
+    from backend.core.occupancy import occupancy_conflicts
+    assert occupancy_conflicts(routed)[1] == 0
 
 
 def test_a_clean_bundle_still_routes_to_one_strand():

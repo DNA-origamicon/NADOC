@@ -317,13 +317,31 @@ def apply_child_diff_forward(
                     f"{field}: {len(absent_removes)} item(s) to remove were already gone"
                 )
             absent_mods = set(post_by_id) - applied_mod
-            for mid in absent_mods:
-                # Modify of an absent object → re-add its POST state (self-contained).
-                new_list.append(model_cls.model_validate(post_by_id[mid]))
+            dropped = 0
+            for mid in sorted(absent_mods):
+                # Modify of an absent object → re-add its POST state (self-contained),
+                # except a strand whose bases are now occupied by another strand:
+                # re-adding it would put two bases in one slot.
+                item = model_cls.model_validate(post_by_id[mid])
+                if field == "strands":
+                    from backend.core.occupancy import occupancy_conflicts
+                    probe = anchor.copy_with(strands=new_list)
+                    if (occupancy_conflicts(probe.copy_with(strands=[*new_list, item]), limit=0)[1]
+                            > occupancy_conflicts(probe, limit=0)[1]):
+                        dropped += 1
+                        continue
+                new_list.append(item)
             if absent_mods:
-                warnings.append(
-                    f"{field}: {len(absent_mods)} modified item(s) were re-added (their base step was deleted)"
-                )
+                readded = len(absent_mods) - dropped
+                if readded:
+                    warnings.append(
+                        f"{field}: {readded} modified item(s) were re-added (their base step was deleted)"
+                    )
+                if dropped:
+                    warnings.append(
+                        f"{field}: {dropped} later edit(s) to strands created by the deleted step were "
+                        "dropped (their bases are now covered by the restored strand)"
+                    )
 
         overrides[field] = new_list
 

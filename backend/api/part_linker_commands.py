@@ -38,6 +38,20 @@ def create(design, body, identity):
     if err:
         raise HTTPException(400, detail=err)
 
+    # One linker per overhang: an overhang's other end is its attachment to the
+    # rest of the structure, and each linker lays a complement over the whole
+    # overhang, so a second linker would double-occupy those bases.
+    for ovhg_id in (body.overhang_a_id, body.overhang_b_id):
+        existing = next((c for c in design.overhang_connections
+                         if ovhg_id in (c.overhang_a_id, c.overhang_b_id)), None)
+        if existing is not None:
+            raise HTTPException(
+                400,
+                detail=(f"Overhang {ovhg_id!r} already has a linker"
+                        f"{' (' + existing.name + ')' if existing.name else ''}; "
+                        "an overhang can carry only one linker."),
+            )
+
     # Per-end uniqueness: a (overhang, attach) pair can only be in one connection.
     used = _used_overhang_ends(design)
     for ovhg_id, attach in (
@@ -200,14 +214,18 @@ def patch(design, conn_id, body):
                 if not snaps:
                     new_strands.append(strand)
                     continue
-                snap_by_helix = {s["helix_id"]: s for s in snaps}
+                # Match complements in 5'→3' order, not by helix: both overhangs
+                # can sit on the same helix, and a helix-keyed lookup then gave
+                # both complements the same range (double occupancy).
+                pending = list(snaps)
                 patched_doms = []
                 for d in strand.domains:
-                    s = (
-                        snap_by_helix.get(d.helix_id)
-                        if d.helix_id != bridge_helix_id
-                        else None
-                    )
+                    s = None
+                    if d.helix_id != bridge_helix_id and pending:
+                        if pending[0]["helix_id"] == d.helix_id:
+                            s = pending.pop(0)
+                        else:
+                            pending = []  # order no longer corresponds; keep regenerated ranges
                     if s is not None:
                         patched_doms.append(
                             d.model_copy(

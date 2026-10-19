@@ -38,7 +38,8 @@ def _single_helix_design() -> Design:
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+            # Antiparallel to the staple: one base per (helix, bp, direction) slot.
+            Domain(helix_id="h0", start_bp=41, end_bp=0, direction=Direction.REVERSE)
         ],
     )
     staple = Strand(

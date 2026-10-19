@@ -570,7 +570,7 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     started = time.perf_counter()
     stages_ms: dict[str, float] = {}
 
-    from backend.core.lattice import make_binder_for_overhang
+    from backend.core.lattice import make_binder_for_overhang  # own binder_cardinality validation; occupancy is checked at publication
     from backend.core.models import ProteinAttachment, ProteinTargetDesign
     from backend.core.protein import azide_attach_end
 

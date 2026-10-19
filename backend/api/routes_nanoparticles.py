@@ -793,7 +793,7 @@ def relax_np_connection_versions(nanoparticle_id: str) -> dict:
 @router.post("/design/nanoparticles/{nanoparticle_id}/strands/{strand_id}/bind")
 def bind_surface_strand(nanoparticle_id: str, strand_id: str, body: SurfaceStrandBindRequest) -> dict:
     """Turn one nanoparticle-owned surface strand into a real overhang binder."""
-    from backend.core.lattice import make_binder_for_overhang
+    from backend.core.overhang_binders import make_binder_checked as make_binder_for_overhang
 
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)
     owner = next((c for c in design.nanoparticle_conjugations

@@ -406,3 +406,46 @@ def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design
         return design
     new_ovhg = ovhg.model_copy(update={"sub_domains": new_sub_doms})
     return _replace_ovhg(design, new_ovhg)
+
+
+# ── Connection-type polarity rule (all CT variants) ──────────────────────────
+#
+# Server-side twin of the frontend's ``ctIsForbidden`` (ui/ct_icons.js). Every
+# entry point that creates or applies an overhang connection must call it, so a
+# forbidden pairing cannot be produced by API, headless or agent callers either.
+# For dsDNA linkers the forbidden combinations are exactly those that would put
+# both bridge halves in the same direction on the ``__lnk__`` helix (two bases
+# per slot); the nucleotide-occupancy invariant remains the backstop.
+
+_SAME_ATTACH_DS = frozenset({"root-to-root-dsdna-linker", "end-to-end-dsdna-linker"})
+_MIXED_ATTACH_DS = frozenset({"end-to-root-dsdna-linker", "root-to-end-dsdna-linker"})
+_SAME_ATTACH_SS = frozenset({"root-to-root-ssdna-linker", "end-to-end-ssdna-linker",
+                             "root-to-root-indirect", "end-to-end-indirect"})
+_MIXED_ATTACH_SS = frozenset({"end-to-root-ssdna-linker", "root-to-end-ssdna-linker"})
+DS_LINKER_TYPES = _SAME_ATTACH_DS | _MIXED_ATTACH_DS
+
+
+def connection_type_forbidden(type_id: Optional[str], end_a: Optional[str], end_b: Optional[str]) -> bool:
+    """True when (type, polarity A, polarity B) is not a valid Watson-Crick pairing."""
+    if type_id is None or end_a not in ("5p", "3p") or end_b not in ("5p", "3p"):
+        return False
+    same = end_a == end_b
+    if type_id in _SAME_ATTACH_DS or type_id in _MIXED_ATTACH_SS or type_id == "end-to-root":
+        return not same
+    if type_id in _MIXED_ATTACH_DS or type_id in _SAME_ATTACH_SS or type_id == "root-to-root":
+        return same
+    return False
+
+
+def connection_type_polarity_error(type_id: Optional[str], overhang_a_id: str, overhang_b_id: str) -> Optional[str]:
+    """Human-readable reason a connection between these overhangs is forbidden, else None."""
+    end_a, end_b = _overhang_end(overhang_a_id), _overhang_end(overhang_b_id)
+    if not connection_type_forbidden(type_id, end_a, end_b):
+        return None
+    pair = f"{end_a[0]}'/{end_b[0]}'"
+    if type_id in _SAME_ATTACH_DS | _MIXED_ATTACH_DS:
+        return (f"{type_id}: a {pair} overhang pair would put both dsDNA bridge strands in the same "
+                "direction (two bases per position). Choose overhangs with compatible polarity.")
+    if type_id in _SAME_ATTACH_SS | _MIXED_ATTACH_SS:
+        return f"{type_id}: one continuous 5'→3' bridge strand cannot join a {pair} overhang pair."
+    return f"{type_id}: a {pair} overhang pair would force a parallel duplex."

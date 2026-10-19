@@ -828,73 +828,68 @@ class TestCrossoverMove:
 class TestBatchMoveCrossovers:
     """Tests for POST /design/crossovers/batch-move."""
 
+    def _two_independent_pairs(self):
+        """Crossovers at bp 7 on two independent helix pairs. Moving each to 28
+        shrinks its adjoining domains (frees bases), as in the single-move test."""
+        design = _make_bundle([[0, 0], [0, 1], [0, 2], [0, 3]])
+        ids = []
+        for col in (0, 2):
+            ha, hb = _hid_at(design, 0, col), _hid_at(design, 0, col + 1)
+            da, db = _staple_dirs(0, col)
+            r = _place(ha, hb, 7, da, db)
+            assert r.status_code == 201, r.json()
+            ids.append(next(x["id"] for x in r.json()["design"]["crossovers"] if x["id"] not in ids))
+        return ids
+
     def test_batch_move_two_crossovers(self):
-        """Move two crossovers on the same helix pair by +21 in one atomic call."""
-        design = _make_bundle([[0, 0], [0, 1]])
-        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
-        da, db = _staple_dirs(0, 0)
-
-        # Place first crossover at bp 6
-        r1 = _place(ha, hb, 6, da, db)
-        assert r1.status_code == 201
-        xo1_id = r1.json()["design"]["crossovers"][0]["id"]
-
-        # Place second crossover at bp 27 (6 + 21, same col-adjacent pair)
-        r2 = _place(ha, hb, 27, da, db)
-        assert r2.status_code == 201, f"place at bp 27 failed: {r2.json()}"
-        xos = r2.json()["design"]["crossovers"]
-        xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
-
-        # Batch move: both by +21 (one full period)
+        """Move two crossovers on independent helix pairs in one atomic call."""
+        xo1_id, xo2_id = self._two_independent_pairs()
         r3 = client.post(
             "/api/design/crossovers/batch-move",
-            json={
-                "moves": [
-                    {"crossover_id": xo1_id, "new_index": 27},
-                    {"crossover_id": xo2_id, "new_index": 48},
-                ]
-            },
+            json={"moves": [{"crossover_id": xo1_id, "new_index": 28},
+                            {"crossover_id": xo2_id, "new_index": 28}]},
         )
         assert r3.status_code == 200, r3.json().get("detail")
-        result = r3.json()["design"]
-        xo_map = {x["id"]: x for x in result["crossovers"]}
-        assert xo_map[xo1_id]["half_a"]["index"] == 27
-        assert xo_map[xo2_id]["half_a"]["index"] == 48
+        xo_map = {x["id"]: x for x in r3.json()["design"]["crossovers"]}
+        assert xo_map[xo1_id]["half_a"]["index"] == 28
+        assert xo_map[xo2_id]["half_a"]["index"] == 28
 
     def test_batch_move_single_undo(self):
         """Batch move should be one undo step — undo restores both crossovers."""
+        xo1_id, xo2_id = self._two_independent_pairs()
+        r3 = client.post(
+            "/api/design/crossovers/batch-move",
+            json={"moves": [{"crossover_id": xo1_id, "new_index": 28},
+                            {"crossover_id": xo2_id, "new_index": 28}]},
+        )
+        assert r3.status_code == 200, r3.json().get("detail")
+        r4 = client.post("/api/design/undo")
+        assert r4.status_code == 200
+        xo_map = {x["id"]: x for x in r4.json()["design"]["crossovers"]}
+        assert xo_map[xo1_id]["half_a"]["index"] == 7
+        assert xo_map[xo2_id]["half_a"]["index"] == 7
+
+    def test_batch_move_into_a_neighbouring_staple_is_refused(self):
+        """Shifting two crossovers by one period on a fully stapled pair extends the
+        first staple over the second one's bases: refused, nothing changes."""
         design = _make_bundle([[0, 0], [0, 1]])
         ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
         da, db = _staple_dirs(0, 0)
-
         r1 = _place(ha, hb, 6, da, db)
         assert r1.status_code == 201
         xo1_id = r1.json()["design"]["crossovers"][0]["id"]
-
         r2 = _place(ha, hb, 27, da, db)
         assert r2.status_code == 201
-        xos = r2.json()["design"]["crossovers"]
-        xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
-
-        # Batch move both by +21
+        xo2_id = next(x["id"] for x in r2.json()["design"]["crossovers"] if x["id"] != xo1_id)
+        before = client.get("/api/design").json()["design"]
         r3 = client.post(
             "/api/design/crossovers/batch-move",
-            json={
-                "moves": [
-                    {"crossover_id": xo1_id, "new_index": 27},
-                    {"crossover_id": xo2_id, "new_index": 48},
-                ]
-            },
+            json={"moves": [{"crossover_id": xo1_id, "new_index": 27},
+                            {"crossover_id": xo2_id, "new_index": 48}]},
         )
-        assert r3.status_code == 200
-
-        # Single undo should revert both
-        r4 = client.post("/api/design/undo")
-        assert r4.status_code == 200
-        after = r4.json()["design"]
-        xo_map = {x["id"]: x for x in after["crossovers"]}
-        assert xo_map[xo1_id]["half_a"]["index"] == 6
-        assert xo_map[xo2_id]["half_a"]["index"] == 27
+        assert r3.status_code == 422 and "overlap" in r3.json()["detail"]
+        after = client.get("/api/design").json()["design"]
+        assert after["strands"] == before["strands"] and after["crossovers"] == before["crossovers"]
 
     def test_batch_move_noop_empty(self):
         """Empty moves list should be a no-op (200)."""

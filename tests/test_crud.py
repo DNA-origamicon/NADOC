@@ -509,11 +509,23 @@ def test_reorder_helices_preserves_topology():
 # ── Strand endpoints ──────────────────────────────────────────────────────────
 
 
+def _empty_helix() -> str:
+    """A helix with no strands, so new test strands occupy free slots."""
+    r = client.post("/api/design/helices", json={
+        "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
+        "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
+        "length_bp": 42,
+    })
+    assert r.status_code == 201, r.text
+    return r.json()["helix"]["id"]
+
+
 def test_add_strand():
+    helix_id = _empty_helix()
     payload = {
         "domains": [
             {
-                "helix_id": "demo_helix",
+                "helix_id": helix_id,
                 "start_bp": 0,
                 "end_bp": 10,
                 "direction": "FORWARD",
@@ -529,14 +541,7 @@ def test_add_strand():
 def test_delete_strand_cascades_crossovers():
     """Deleting a strand should also remove any crossovers that reference it."""
     # Add a second helix so we can add a crossover
-    client.post(
-        "/api/design/helices",
-        json={
-            "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
-            "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
-            "length_bp": 42,
-        },
-    )
+    helix_id = _empty_helix()
 
     # Add a strand on the new helix
     r = client.post(
@@ -544,7 +549,7 @@ def test_delete_strand_cascades_crossovers():
         json={
             "domains": [
                 {
-                    "helix_id": "demo_helix",
+                    "helix_id": helix_id,
                     "start_bp": 0,
                     "end_bp": 41,
                     "direction": "FORWARD",
@@ -572,10 +577,11 @@ def test_add_domain_to_strand():
     )
     strand_id = r.json()["strand"]["id"]
 
+    helix_id = _empty_helix()
     r = client.post(
         f"/api/design/strands/{strand_id}/domains",
         json={
-            "helix_id": "demo_helix",
+            "helix_id": helix_id,
             "start_bp": 0,
             "end_bp": 5,
             "direction": "FORWARD",

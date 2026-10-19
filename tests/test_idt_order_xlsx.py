@@ -22,7 +22,10 @@ def _reset_design():
 def test_idt_order_xlsx_uses_saved_wells_and_separate_sheets():
     design = _demo_design()
     staples = [s for s in design.strands if s.strand_type.value == "staple"]
-    second = staples[0].model_copy(deep=True, update={"id": "staple_1"})
+    # A second staple on free slots (a copy on the same slots would double-occupy them).
+    second = staples[0].model_copy(deep=True, update={"id": "staple_1", "domains": [
+        d.model_copy(update={"start_bp": d.start_bp + 1000, "end_bp": d.end_bp + 1000})
+        for d in staples[0].domains]})
     design.strands.append(second)
     staples.append(second)
     staples[0].sequence = "ACGT"

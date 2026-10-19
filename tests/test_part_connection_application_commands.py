@@ -10,6 +10,8 @@ from copy import deepcopy
 from fastapi import HTTPException
 import pytest
 
+from backend.api import state
+
 from backend.api import routes_connection_versions as routes
 from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import NucleotideTransform, OverhangBinding
@@ -70,6 +72,30 @@ def _build(design, params):
     # production exists; the red failure must identify the absent pure adapter.
     from backend.api.part_connection_application_commands import build
     return build(design, params)
+
+
+def parallel_bridge(design, connection_type):
+    """True when this dsDNA linker type on the fixture's endpoint pair would run both
+    bridge strands in one direction (two bases per slot). Such pairings are refused
+    by the routes and the native builder; there is no valid output to compare."""
+    from backend.core.overhang_ops import DS_LINKER_TYPES, connection_type_polarity_error
+    a, b = (o.id for o in design.overhangs[:2])
+    return connection_type in DS_LINKER_TYPES and connection_type_polarity_error(connection_type, a, b) is not None
+
+
+def assert_parallel_bridge_refused(route_call, *builder_calls):
+    """The route refuses the pairing; a native builder's raw output (never published
+    directly) is rejected by the publication occupancy check."""
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as caught:
+        route_call()
+    assert "same direction" in str(caught.value.detail), caught.value.detail
+    for call in builder_calls:
+        result = call()
+        built = result[0] if isinstance(result, tuple) else result
+        with pytest.raises(HTTPException) as rejected:
+            state._assert_occupancy(built, None)
+        assert rejected.value.detail["code"] == "nucleotide_double_occupancy"
 
 
 def _legacy(design, params, monkeypatch):
@@ -140,6 +166,11 @@ def test_partial_or_multiply_owned_host_refuses_before_sequence_patch(source, mo
 def test_existing_callback_oracle_materializes_real_native_prefix(source, monkeypatch, connection_type):
     source = _pending(source, connection_type)
     before = source.model_dump_json()
+    if parallel_bridge(source, connection_type):
+        assert_parallel_bridge_refused(lambda: _legacy(source, _params(source), monkeypatch),
+                                       lambda: _build(source, _params(source)))
+        assert source.model_dump_json() == before
+        return
     result, report = _legacy(source, _params(source), monkeypatch)
     assert isinstance(report, MutationReport)
     assert report.new_helix_origins == {"__lnk__applied-linker": None}
@@ -153,6 +184,10 @@ def test_existing_callback_oracle_materializes_real_native_prefix(source, monkey
 def test_finite_apply_exactly_matches_existing_callback_and_preserves_source(source, monkeypatch, connection_type):
     source = _pending(source, connection_type)
     values, before = _params(source), source.model_dump_json()
+    if parallel_bridge(source, connection_type):
+        assert_parallel_bridge_refused(lambda: _legacy(source, values, monkeypatch), lambda: _build(source, values))
+        assert source.model_dump_json() == before
+        return
     expected, expected_report = _legacy(source, values, monkeypatch)
     actual, report = _build(source, values)
     assert authored(actual) == authored(expected)
@@ -180,7 +215,9 @@ def test_stale_sequences_preserve_live_lengths_and_finite_zero_clamps_to_one(sou
 
 
 def test_sequenced_scaffolds_preserve_unrelated_manual_strand_sequence(source, monkeypatch):
-    source = _pending(source, "end-to-end-dsdna-linker")
+    # Mixed-attach dsDNA is the valid dsDNA linker for this fixture's 3'/5' pair
+    # (end-to-end would run both bridge strands in one direction).
+    source = _pending(source, "end-to-root-dsdna-linker")
     unrelated = next(item for item in source.strands if not item.is_scaffold
                      and all(domain.overhang_id is None for domain in item.domains))
     source = source.copy_with(strands=[item.model_copy(update={"sequence":

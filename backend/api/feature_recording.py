@@ -67,6 +67,7 @@ def _run(session, before, fn, state, *, retry=True, command=None):
             "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
             "photoproduct_ids": stale,
         })
+    state._assert_occupancy(session.design, before)
 
 
 def _publish(session, before, parent_id, state):

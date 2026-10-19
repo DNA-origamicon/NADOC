@@ -206,7 +206,7 @@ def evaluate(kind, design, params):
     from backend.core.conjugation import conjugation_candidate_for_serial
     from backend.core.design_geometry import _geometry_for_helices
     from backend.core.feature_identity import identity_factory
-    from backend.core.lattice import make_binder_for_overhang
+    from backend.core.lattice import make_binder_for_overhang  # own binder_cardinality validation; occupancy is checked at publication
     from backend.core.models import Mat4x4, ProteinAttachment, ProteinTargetDesign
     from backend.core.protein import _conjugate_terminus_position, azide_attach_end, resolve_overhang_anchor
     from backend.core.protein_validation import validate_protein_conjugate

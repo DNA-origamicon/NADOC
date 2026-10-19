@@ -80,6 +80,7 @@ def validate_design(design: Design) -> ValidationReport:
     Currently implemented:
     - Unique helix IDs
     - Unique strand IDs
+    - One base per (helix, bp, direction) slot
     - Domain helix references exist
     - Scaffold strand count (exactly 1)
     - Sequence length consistency (if sequence provided)
@@ -95,6 +96,18 @@ def validate_design(design: Design) -> ValidationReport:
         report.results.append(ValidationResult(True, "Helix IDs are unique."))
     else:
         report.results.append(ValidationResult(False, "Duplicate helix IDs detected."))
+
+    # ── One base per (helix, bp, direction) slot ──────────────────────────
+    from backend.core.occupancy import occupancy_conflicts
+
+    conflicts, conflicting_slots = occupancy_conflicts(design, limit=3)
+    if conflicting_slots:
+        where = "; ".join(f"{c['helix_id']} bp {c['bp']}..{c['bp_end']} {c['direction']} "
+                          f"({' and '.join(c['strand_ids'])})" for c in conflicts)
+        report.results.append(ValidationResult(
+            False, f"{conflicting_slots} nucleotide slot(s) are occupied by more than one base: {where}"))
+    else:
+        report.results.append(ValidationResult(True, "Every nucleotide slot holds at most one base."))
 
     # ── Unique strand IDs ─────────────────────────────────────────────────
     if len(strand_ids) == len(design.strands):

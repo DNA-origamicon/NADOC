@@ -61,6 +61,22 @@ Checks: focused recipe/preview/repair/routing modules pass; `tests/test_part_rep
 14 failed / 18964 passed / 19 skipped, DEFERRED full, FAST SUITE TOO SLOW (386 s). One failure was
 this change (service-read budget test retargeted; 28 pass); 13 pre-existing as before.
 
+## Occupancy invariant — enforced (October 18, 2026, user rule)
+
+Every (helix, bp, direction) slot holds at most one base of one strand (`core/occupancy.py`).
+Validation reports violations; every mutable publication path (state mutation helpers, recording,
+silent setter, branch navigation, `publish_replacement`) rejects an edit that adds conflicting
+slots (409 `nucleotide_double_occupancy`, full rollback). Sealed/immutable publication is not
+decoded in the parent; that parked path must check in its worker before re-enabling (R3).
+Sources fixed: ss linker length patch (same-helix complements), batch crossover move (final-state
+check), defensive routing-child delete (no colliding strand re-add), Generate binder (refuses an
+occupied slot), one linker per overhang (backend + Overhangs Manager popup), dsDNA linker polarity
+refused server-side on connection-version create/connect/apply (UI already blocked it). ISSUE-19's
+router half no longer reproduces. One workspace file (`final_square__nut.nadoc`, caDNAno import)
+violates the rule; source unavailable, not investigated further. Test fixtures that built
+impossible designs were corrected; the headless linker-relax oracle was restated (balanced arcs,
+chord within 0.05 nm of span) because exact landing was an artefact of a parallel-bridge fixture.
+
 ## Single next bounded task
 
 **ID:** S61 (still next) — Partial display projection for Bend/Twist preview (R1 follow-on, C8).

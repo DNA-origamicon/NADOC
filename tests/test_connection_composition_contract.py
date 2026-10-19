@@ -62,9 +62,17 @@ def version_from(params):
 def test_fixed_pending_then_apply_composition_matches_actual_combined_callback(
     application_prefix, monkeypatch, connection_type,
 ):
+    from tests.test_part_connection_application_commands import parallel_bridge, assert_parallel_bridge_refused
     source = application_prefix.model_copy(deep=True)
     values = definition(source, connection_type)
     before = source.model_dump_json()
+    if parallel_bridge(source, connection_type):
+        staged = pending.build(source, values)
+        assert_parallel_bridge_refused(
+            lambda: legacy_combined(source, version_from(values), monkeypatch),
+            lambda: application.build(staged, _params(staged, connection_id='composed-output')))
+        assert source.model_dump_json() == before
+        return
     expected, expected_report, receipt = legacy_combined(source, version_from(values), monkeypatch)
     staged = pending.build(source, values)
     actual, report = application.build(staged, _params(staged, connection_id='composed-output'))

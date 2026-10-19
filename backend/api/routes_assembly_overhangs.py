@@ -280,31 +280,13 @@ def _validate_overhang_in_instance(design, overhang_id: str, side: str) -> None:
 
 
 def _check_polarity_allowed(type_id: str, end_a: str, end_b: str) -> bool:
-    """Mirror the frontend's _ctIsForbidden rule set, server-side.
+    """Server-side twin of the frontend's ``ctIsForbidden`` (shared core rule).
 
     end_a / end_b are '5p' or '3p' (the overhang free-end polarity, derived
-    from the overhang id suffix). Returns False (= forbidden) for the same
-    combinations the frontend rejects so the two layers stay in sync.
+    from the overhang id suffix). Returns False (= forbidden).
     """
-    # Derive from canonical type id.
-    if type_id in ("end-to-root",):
-        return end_a == end_b
-    if type_id in ("root-to-root",):
-        return end_a != end_b
-    if type_id in ("root-to-root-dsdna-linker", "end-to-end-dsdna-linker"):
-        return end_a == end_b
-    if type_id in (
-        "root-to-root-ssdna-linker",
-        "end-to-end-ssdna-linker",
-        "root-to-root-indirect",
-        "end-to-end-indirect",
-    ):
-        return end_a != end_b
-    if type_id in ("end-to-root-dsdna-linker", "root-to-end-dsdna-linker"):
-        return end_a != end_b
-    if type_id in ("end-to-root-ssdna-linker", "root-to-end-ssdna-linker"):
-        return end_a == end_b
-    return True
+    from backend.core.overhang_ops import connection_type_forbidden
+    return not connection_type_forbidden(type_id, end_a, end_b)
 
 
 def _overhang_polarity(overhang_id: str) -> Optional[str]:

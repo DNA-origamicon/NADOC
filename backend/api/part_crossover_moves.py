@@ -480,6 +480,15 @@ def batch_move(design, body):
         crossovers=list(design.crossovers),
     )
     _apply(candidate)
+    # Per-move checks skip crossovers moved in the same batch, so validate the
+    # combined result: a batch must never put two strands on the same slots.
+    from backend.core.occupancy import occupancy_conflicts
+    if occupancy_conflicts(candidate, limit=0)[1] > occupancy_conflicts(design, limit=0)[1]:
+        raise HTTPException(
+            422,
+            detail="Moving these crossovers together would overlap existing domains "
+                   "(two bases in the same helix position, bp and direction).",
+        )
     return candidate, list(changed_helix_ids)
 
 

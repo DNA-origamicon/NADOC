@@ -440,13 +440,19 @@ function _refreshConnectionTypesUI() {
       const L         = hasBoth ? _endOf(_ctSelectedA) : null
       const R         = hasBoth ? _endOf(_ctSelectedB) : null
       const forbidden = hasBoth && _ctIsForbidden(_ctSelectedId, L, R)
+      // One linker per overhang (the backend refuses a second one): each linker
+      // lays a complement over the whole overhang.
+      const linked = hasBoth && _connections().find(c =>
+        [c.overhang_a_id, c.overhang_b_id].some(id => id === _ctSelectedA || id === _ctSelectedB))
       generateBtn.textContent = 'Generate Linker'
-      generateBtn.disabled = !hasBoth || forbidden
+      generateBtn.disabled = !hasBoth || forbidden || !!linked
       generateBtn.title = !hasBoth
         ? 'Select an overhang on each side first'
         : forbidden
           ? "This polarity combination isn't valid for the selected connection type"
-          : 'Generate a linker for the selected connection type'
+          : linked
+            ? `An overhang here already has a linker${linked.name ? ` (${linked.name})` : ''}; an overhang can carry only one linker`
+            : 'Generate a linker for the selected connection type'
     }
   }
   _refreshCtSeqRows()

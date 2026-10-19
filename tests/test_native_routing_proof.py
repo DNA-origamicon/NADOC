@@ -229,8 +229,10 @@ def test_structural_native_commands(operation):
     else:
         crud.add_domain(
             s.id,
+            # Beyond the edited length (48): at 45–46 the regenerated scaffold
+            # would cover the same slots, which is refused as double occupancy.
             crud.DomainRequest(
-                helix_id=h.id, start_bp=45, end_bp=46, direction="FORWARD"
+                helix_id=h.id, start_bp=50, end_bp=51, direction="FORWARD"
             ),
         )
     assert_verified()

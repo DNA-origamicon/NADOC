@@ -887,7 +887,9 @@ def test_relax_endpoint_one_dof_brings_arc_chords_toward_target():
         overhang_a_id="oh_a_5p",
         overhang_a_attach="free_end",
         overhang_b_id="oh_b_5p",
-        overhang_b_attach="root",
+        # end-to-end 5'/5' is a valid dsDNA linker; free_end/root put both
+        # bridge strands in one direction on __lnk__ (two bases per slot).
+        overhang_b_attach="free_end",
         linker_type="ds",
         length_value=8,
         length_unit="bp",
@@ -962,7 +964,9 @@ def test_relax_respects_joint_angle_bounds():
         overhang_a_id="oh_a_5p",
         overhang_a_attach="free_end",
         overhang_b_id="oh_b_5p",
-        overhang_b_attach="root",
+        # end-to-end 5'/5' is a valid dsDNA linker; free_end/root put both
+        # bridge strands in one direction on __lnk__ (two bases per slot).
+        overhang_b_attach="free_end",
         linker_type="ds",
         length_value=8,
         length_unit="bp",
@@ -1296,7 +1300,7 @@ def test_reusing_overhang_end_is_400():
     _post_conn()  # uses (OH1, free_end) and (OH2, root)
     r = _post_conn(overhang_b_id="ovhg_inline_b_3p")  # would re-use (OH1, free_end)
     assert r.status_code == 400
-    assert "already linked" in r.text
+    assert "already has a linker" in r.text
 
 
 def test_reusing_root_end_is_400():
@@ -1306,10 +1310,12 @@ def test_reusing_root_end_is_400():
     assert r.status_code == 400
 
 
-def test_two_connections_per_overhang_when_other_end_is_free():
-    """OH can appear in two connections if it uses both root and free_end."""
+def test_an_overhang_carries_only_one_linker():
+    """An overhang's other end attaches it to the structure, so it has one end for a
+    linker; a second linker (at the other attach end) would lay a second complement
+    over the same bases (double occupancy) and is refused."""
     _post_conn()  # (OH1 free_end) + (OH2 root)
-    # Second connection uses OH1's root end + a fresh OH3.
+    before = design_state.get_or_404().model_dump(mode="json")
     r = client.post(
         "/api/design/overhang-connections",
         json={
@@ -1322,7 +1328,9 @@ def test_two_connections_per_overhang_when_other_end_is_free():
             "length_unit": "bp",
         },
     )
-    assert r.status_code == 201, r.text
+    assert r.status_code == 400, r.text
+    assert "only one linker" in r.json()["detail"]
+    assert design_state.get_or_404().model_dump(mode="json") == before
 
 
 # ── Linker topology generation ────────────────────────────────────────────────
@@ -2085,7 +2093,9 @@ def _seed_ds_linker_design():
         overhang_a_id="oh_a_5p",
         overhang_a_attach="free_end",
         overhang_b_id="oh_b_5p",
-        overhang_b_attach="root",
+        # end-to-end 5'/5' is a valid dsDNA linker; free_end/root put both
+        # bridge strands in one direction on __lnk__ (two bases per slot).
+        overhang_b_attach="free_end",
         linker_type="ds",
         length_value=8,
         length_unit="bp",

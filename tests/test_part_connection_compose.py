@@ -29,9 +29,15 @@ def commands():
 
 @pytest.mark.parametrize('connection_type', FINITE_TYPES)
 def test_complete_native_output_matches_combined_legacy(application_prefix, monkeypatch, connection_type):
+    from tests.test_part_connection_application_commands import parallel_bridge, assert_parallel_bridge_refused
     source = application_prefix.model_copy(deep=True)
     values = params(source, connection_type)
     before = source.model_dump_json()
+    if parallel_bridge(source, connection_type):
+        assert_parallel_bridge_refused(lambda: legacy_combined(source, version_from(values), monkeypatch),
+                                       lambda: commands().build(source, values))
+        assert source.model_dump_json() == before
+        return
     expected, report, _ = legacy_combined(source, version_from(values), monkeypatch)
     actual, actual_report = commands().build(source, values)
     assert authored(actual) == authored(expected)

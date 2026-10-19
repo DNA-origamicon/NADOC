@@ -354,14 +354,24 @@ def test_make_binder_for_overhang_without_sequence():
 
 
 def test_generate_binder_endpoint():
-    design_state.set_design(
-        _design_with_overhang_and_complement(overhang_seq="AAACCCGG")
-    )
+    # Free overhang: drop the fixture's prospective complement strand first.
+    d = _design_with_overhang_and_complement(overhang_seq="AAACCCGG")
+    design_state.set_design(d.copy_with(strands=[s for s in d.strands if s.id != "bind"]))
     r = client.post("/api/design/overhang/ovhg_test/generate-binder")
     assert r.status_code == 201, r.text
     strands = r.json()["design"]["strands"]
     binders = [s for s in strands if s["strand_type"] == "oh_binder"]
     assert any(b["domains"][0]["binds_overhang_id"] == "ovhg_test" for b in binders)
+
+
+def test_generate_binder_refuses_an_already_paired_overhang():
+    """A strand already occupies the complementary slots: a second binder would put
+    two bases in one slot, so the request is refused and nothing changes."""
+    design_state.set_design(_design_with_overhang_and_complement(overhang_seq="AAACCCGG"))
+    before = design_state.get_or_404().model_dump(mode="json")
+    r = client.post("/api/design/overhang/ovhg_test/generate-binder")
+    assert r.status_code == 409 and "already paired" in r.json()["detail"]
+    assert design_state.get_or_404().model_dump(mode="json") == before
 
 
 def test_generate_binder_endpoint_404():

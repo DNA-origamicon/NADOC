@@ -608,6 +608,7 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
         if not (_is_immutable(s.design) or _is_immutable(d)):
             _assert_active_loadout_editable(s.design, d)
             _assert_photoproduct_dependencies(d)
+            _assert_occupancy(d, s.design)
         from backend.api.part_replacement_transaction import publish_replacement
         return publish_replacement(s, d, publication_permit=publication_permit)
 
@@ -621,6 +622,7 @@ def set_design_branch(d: Design, *, expected_revision: int | None = None) -> Non
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
         _assert_photoproduct_dependencies(d)
+        _assert_occupancy(d, s.design)
         if s.design is None or s.design.id != d.id:
             s.workspace_heads.clear()
         s.history.clear()
@@ -648,6 +650,34 @@ def redo_depth() -> int:
     """Current document's redo stack depth."""
     with _lock:
         return len(_session().redo)
+
+
+def _assert_occupancy(design: Design | None, before: Design | None = None) -> None:
+    """Reject edits that make any (helix, bp, direction) slot hold more than one base.
+
+    Every helix position + bp + direction is one nucleotide of one strand. A
+    design that already violates this (e.g. an old import) may still be edited
+    and repaired, but no edit may add conflicting slots.
+    """
+    if design is None:
+        return
+    from backend.core.occupancy import occupancy_conflicts
+
+    conflicts, total = occupancy_conflicts(design, limit=5)
+    if not total:
+        return
+    if before is not None and occupancy_conflicts(before, limit=0)[1] >= total:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "nucleotide_double_occupancy",
+            "message": "This edit would place two bases in the same helix position, bp and direction. "
+                       "Each slot can hold one base of one strand.",
+            "conflicting_slots": total,
+            "conflicts": conflicts,
+        },
+    )
 
 
 def _assert_photoproduct_dependencies(design: Design | None) -> None:
@@ -689,6 +719,7 @@ def mutate_and_validate(
         try:
             fn(s.design)
             _assert_photoproduct_dependencies(s.design)
+            _assert_occupancy(s.design, before)
         except Exception:
             s.design = before
             s.history.pop()
@@ -753,6 +784,7 @@ def mutate_with_reconcile(
             reconciled = reconcile_cluster_membership(before, s.design, report)
             s.design = _retry_pending_ligations(before, reconciled)
             _assert_photoproduct_dependencies(s.design)
+            _assert_occupancy(s.design, before)
         except Exception:
             s.design = before
             s.history.pop()
@@ -789,6 +821,7 @@ def replace_with_reconcile(
             reconciled = reconcile_cluster_membership(before, new_design, report)
             s.design = _retry_pending_ligations(before, reconciled)
             _assert_photoproduct_dependencies(s.design)
+            _assert_occupancy(s.design, before)
         except Exception:
             s.design = before
             s.history.pop()
@@ -1124,5 +1157,6 @@ def set_design_silent(d: Design) -> None:
         s = _session()
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)
+        _assert_occupancy(d, s.design)
         s.design = d
         _bump_revision(s)

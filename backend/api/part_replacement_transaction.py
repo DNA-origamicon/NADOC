@@ -27,6 +27,12 @@ def publish_replacement(session, candidate, *, publication_permit=None):
 
     before = session.design
     immutable = is_immutable(before) or is_immutable(candidate)
+    # Publication chokepoint: no mutable candidate may add a second base to any
+    # (helix, bp, direction) slot. Sealed revisions are never decoded in the parent
+    # (immutable host invariant); that gated path is parked (re-plan R3) and must
+    # check occupancy in its worker before it is re-enabled.
+    if not immutable:
+        state._assert_occupancy(candidate, before)
     if immutable and checked is None:
         from fastapi import HTTPException
         raise HTTPException(409, detail={"code": "immutable_publication_scope", "detail": "Immutable content requires a registered publication permit"})

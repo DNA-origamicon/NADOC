@@ -833,6 +833,14 @@ def _linker_hinge_chord_bounds(design, conn_id):
     return float(np.hypot(ra-rb, za-zb)), float(np.hypot(ra+rb, za-zb))
 
 
+def _relabel_overhang(design, old_id, new_id):
+    """Rename an overhang id (and its backing domain) to set its end-polarity label."""
+    strands = [s.model_copy(update={"domains": [d.model_copy(update={"overhang_id": new_id})
+               if d.overhang_id == old_id else d for d in s.domains]}) for s in design.strands]
+    overhangs = [o.model_copy(update={"id": new_id}) if o.id == old_id else o for o in design.overhangs]
+    return design.model_copy(update={"strands": strands, "overhangs": overhangs})
+
+
 def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
     """Two real extruded-overhang leaves, each in its own helix-level cluster,
     with ONE revolute joint on cluster A (the 1-DOF relax case) and a ds linker
@@ -851,7 +859,7 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
     fixture's ``canonical_topology`` is well-defined (every helix keyed by cell).
     The ``__lnk__`` virtual helix this adds is fine — it carries a grid_pos.
     """
-    base = _seed_with_real_oh_domains_for_relax()
+    base = _relabel_overhang(_seed_with_real_oh_domains_for_relax(), "oh_b_5p", "oh_b_3p")
     ca = ClusterRigidTransform(
         id="cluster_a",
         name="A",
@@ -881,7 +889,10 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
         name="L1",
         overhang_a_id="oh_a_5p",
         overhang_a_attach="free_end",
-        overhang_b_id="oh_b_5p",
+        # 5'(free end) + 3'(root) is a valid mixed-attach dsDNA linker. The former
+        # 5'/5' free_end/root pairing put both bridge strands in the same
+        # direction on __lnk__ (two bases per slot), which is now refused.
+        overhang_b_id="oh_b_3p",
         overhang_b_attach="root",
         linker_type="ds",
         length_value=length_bp,
@@ -1037,11 +1048,22 @@ def test_relax_overhang_connection_pulls_linker_toward_natural_span():
     after = hb.relax_overhang_connection(conn_id)
     assert_linker_relaxed_pose(before, after, conn_id)
 
-    # Stronger than strain-reduction (AF-42): _DS_LINKER_BP's span is inside the
-    # reachable chord range, so the relax must land ON it, not merely approach it.
+    # Stronger than strain-reduction (AF-42). The relax fits both connector arcs to
+    # the canonical bridge endpoints; it does not target the chord directly. For a
+    # valid (antiparallel) dsDNA bridge one hinge leaves an equal ~0.31 nm residual
+    # on each arc, so at the optimum the chord sits ~0.03 nm past the natural span
+    # (5.041 vs 5.010 nm; reachable range here is 2.08–7.75 nm). The former exact
+    # landing was an artefact of a fixture whose bridge strands ran parallel
+    # (two bases per slot), which is now refused.
+    from backend.core.linker_relax import relax_linker
     span = (_DS_LINKER_BP - 1) * BDNA_RISE_PER_BP
-    assert _ds_anchor_chord_nm(after, conn_id) == pytest.approx(span, abs=1e-2), (
-        "the relax should settle the chord exactly on the duplex's natural span"
+    conn = next(c for c in before.overhang_connections if c.id == conn_id)
+    _relaxed, info = relax_linker(before, conn)
+    assert info["final_arc_a_nm"] == pytest.approx(info["final_arc_b_nm"], abs=1e-3), (
+        "the relax should balance the two connector arcs at its optimum"
+    )
+    assert _ds_anchor_chord_nm(after, conn_id) == pytest.approx(span, abs=5e-2), (
+        "the relax should settle the chord at the duplex's natural span"
     )
 
     report = headless_coverage_report()
