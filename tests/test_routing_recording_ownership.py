@@ -10,6 +10,7 @@ from tests.test_geometry_routing_recording import (
     _GuardedLock, _authoring, _signature, _verified, document as document,
 )
 from tests.test_group_lineage_crossovers import placement
+from backend.core.positional_refs import KINDS as POSITIONAL
 
 
 KINDS = ("loop-skip-insert", "loop-skip-twist", "loop-skip-bend",
@@ -101,7 +102,8 @@ def test_ordinary_edit_records_one_native_child_and_undo_reload_cold_prove(docum
     result = invoke(kind, source)
     current = state.get_or_404()
     row = current.feature_log[-1].children[-1]
-    assert row.op_subtype == kind and row.params["_proof_version"] == 1
+    # Crossover edits record the junction by position (proof v2; see positional_refs).
+    assert row.op_subtype == kind and row.params["_proof_version"] == (2 if kind in POSITIONAL else 1)
     assert state.undo_depth() == depth + 1 and state.revision() == revision + 1 == result["revision"]
     if kind.startswith("crossover"):
         assert result["partial_geometry"] is True

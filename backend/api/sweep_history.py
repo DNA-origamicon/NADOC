@@ -183,7 +183,8 @@ def prepare_sweep_edit(design, index, params, *, history=True):
                 changes['pre_state_gz_b64'], changes['pre_state_size_bytes'] = state.encode_design_snapshot(mapped)
             for child in item.children:
                 if child.op_subtype == 'strand-end-resize':
-                    for resize in child.params.get('entries', []):
+                    from backend.core.positional_refs import resolve
+                    for resize in resolve(child.op_subtype, child.params, original).get('entries', []):
                         sid, end, hid = resize['strand_id'], resize['end'], resize['helix_id']
                         strand = next((s for s in original.strands if s.id == sid), None)
                         if strand and strand.domains:

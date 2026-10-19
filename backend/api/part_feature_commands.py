@@ -46,7 +46,8 @@ def replay_minor(kind, design, params):
             f"Mid-cluster replay for op_subtype {kind!r} is not implemented in v1. "
             "Falling back to cluster post-state."
         )
-    return _execute(spec, design, params)
+    from backend.core.positional_refs import resolve
+    return _execute(spec, design, resolve(kind, params, design))
 
 
 def delete_helix(design, params):

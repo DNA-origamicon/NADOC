@@ -251,8 +251,10 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None, inp
             if isinstance(result, dict):
                 return {"status": "preview", "issues": [], "preview": result}
             candidate, validation = result
+        removed = list(getattr(validation, "auto_removed_features", []) or [])
         return {"status": "ready", "issues": [], "candidate": candidate.model_dump(mode="json"),
-                "validation": {"passed": validation.passed, **asdict(validation)}, **metadata}
+                "validation": {"passed": validation.passed, **asdict(validation)}, **metadata,
+                **({"removed_features": removed} if removed else {})}
     except ProofBudgetExceeded as exc:
         return {"status": "unverified", "issues": [{"code": "command_limit", "detail": str(exc)}],
                 "native_editable": False}

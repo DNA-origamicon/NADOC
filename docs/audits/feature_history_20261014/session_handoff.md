@@ -77,6 +77,28 @@ violates the rule; source unavailable, not investigated further. Test fixtures t
 impossible designs were corrected; the headless linker-relax oracle was restated (balanced arcs,
 chord within 0.05 nm of span) because exact landing was an artefact of a parallel-bridge fixture.
 
+## Fine-routing auto-removal and positional references — delivered (October 18, 2026, user rules)
+
+**Auto-removal (cadnano-style).** An upstream edit that leaves a Fine Routing child with no strand
+at any of its targets removes that child instead of refusing the edit
+(`core/fine_routing_targets.py`; loop in `part_recipe_edit.prepare_change`). Guardrails: routing-
+cluster children only; *every* target unoccupied (positions) or gone (ids); partial applicability
+and every other failure still refuse and name the feature; removals are reported as
+`removed_features` + a `placement_warnings` line on change/evaluate/commit/extrusion responses;
+one undo restores the edit and the removed child.
+
+**Positional references (proof v2).** Resize, domain shift, forced-ligation create and crossover
+move/delete/extra-bases (+ batches) record the (helix, bp_index, direction) slot / crossover halves
+they act on (`core/positional_refs.py`, at `feature_recording.record_minor`) and resolve to the
+current occupant before execution (`part_proof_commands._execute`, preview `_run`, legacy
+`replay_minor`, sweep history). Valid because occupancy is unique. Unresolvable positions are
+structured `missing_reference` issues (kind `position`). Slot key is `bp_index` so sweep site
+remapping carries it. v1 records still replay. Open: the gated routing-child input editor
+(`ROUTING_HISTORY_EDITOR_ENABLED = false`) accepts only v1 children.
+
+Checks: focused files pass; `just test-smart` FAST 15→13 failed after test updates (same 13
+pre-existing) / 19001 passed, DEFERRED full; history browser suite 39 passed, cleanup verified.
+
 ## Single next bounded task
 
 **ID:** S61 (still next) — Partial display projection for Bend/Twist preview (R1 follow-on, C8).

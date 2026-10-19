@@ -389,6 +389,8 @@ def execute_long(kind, design, params):
 def _execute(kind, design, params, *, expensive):
     if not dependencies(kind, params).known:
         raise NotImplementedError("Command lacks a versioned proof contract")
+    from backend.core.positional_refs import resolve as resolve_positions
+    params = resolve_positions(kind, params, design)
     if design.group_organization is not None:
         from backend.api.part_group_organization_gate import require_native_command
         require_native_command(kind, params)

@@ -21,5 +21,11 @@ def edit_response(index, body, *, sub_index=None):
         expected_feature_id=body.expected_feature_id)
     # Native rebuild already owns the complete authoring result. Do not infer
     # legacy owners or ask the client to fetch geometry from a later revision.
-    return _design_response_with_geometry(candidate, report, embed_straight=True,
+    response = _design_response_with_geometry(candidate, report, embed_straight=True,
         normalize_legacy=False, preserve_feature_log_id=entry.id, full_feature_log=True)
+    if removed := getattr(report, "auto_removed_features", None):
+        response["removed_features"] = removed
+        response["placement_warnings"] = [*response.get("placement_warnings", []),
+            f"Removed {len(removed)} fine-routing feature(s) whose positions are no longer "
+            "occupied by a strand: " + ", ".join(r["label"] for r in removed)]
+    return response

@@ -129,7 +129,9 @@ def test_missing_frame_source_returns_exact_reference_without_publication(docume
     assert worker.instances and all(instance.closed for instance in worker.instances)
 
 
-def test_removing_output_required_by_later_routing_refuses_entire_edit(document, worker):
+def test_removing_output_required_by_later_routing_removes_that_routing(document, worker):
+    """cadnano-style: removing the helix a later nick acts on removes the nick
+    (reported) instead of refusing the extrusion edit."""
     source = create_empty_part("Dependent extrusion output", "HONEYCOMB")
     source = append(source, "extrude-frame", {
         "history_seed": SEEDS[0], "cells": [[0, 0], [0, 1]], "length_bp": 14,
@@ -145,18 +147,15 @@ def test_removing_output_required_by_later_routing_refuses_entire_edit(document,
     _verified(source)
     session, client = install(_poison(source))
     session.redo.append(m.Design())
-    before = saved(session)
     response = client.post("/api/design/features/0/edit", json={
         "params": {"cells": [[0, 0]]}, **guards(session, 0)})
-    assert response.status_code == 409, response.text[:600]
-    issue = response.json()["detail"]["assessment"]["issues"][0]
-    # The existing recipe evaluator wraps the downstream typed diagnostic;
-    # the missing helix and nicks path identify the later authored dependency.
-    assert issue["code"] == "evaluation_rejected"
-    assert issue["detail"]["code"] == "missing_reference"
-    assert issue["detail"]["references"] == [{"kind": "helix", "identity": removed_id,
-        "parameter_path": ["nicks", 0, "helix_id"]}]
-    unchanged(session, before)
+    assert response.status_code == 200, response.text[:600]
+    payload = response.json()
+    assert [r["kind"] for r in payload["removed_features"]] == ["nick-batch"]
+    assert any("no longer occupied" in w for w in payload["placement_warnings"])
+    published = session.design
+    assert not any(e.feature_type == "routing-cluster" for e in published.feature_log)
+    assert all(h.id != removed_id for h in published.helices)
     assert worker.instances and all(instance.closed for instance in worker.instances)
 
 

@@ -158,22 +158,21 @@ def test_apply_rebuilds_fixed_downstream_inputs_once_and_cold_replays(document, 
     verified(state.get_or_404())
 
 
-def test_removed_sweep_cell_reports_later_missing_reference_without_publication(document):
+def test_removed_sweep_cell_removes_the_later_nick_on_its_helix(document):
+    """cadnano-style: a sweep edit that removes the helix a later nick acts on
+    removes that nick instead of refusing the edit."""
     state.load_design(recipe(downstream=True))
     before = checkpoint()
+    nick_helix = before["source"].feature_log[-1].children[0].params["helix_id"]
     opened = host.prepare(opening(), family="sweep")
-    with pytest.raises(HTTPException) as caught:
-        host.apply(update(opened, params={"cells": [[0, 0]]}), family="sweep")
-    assert caught.value.status_code == 409
-    detail = caught.value.detail
-    assert detail["code"] == "missing_reference"
-    assert detail["feature_id"] == "later-nick"
-    assert detail["references"] == [{"kind": "helix",
-        "identity": before["source"].feature_log[-1].children[0].params["helix_id"],
-        "parameter_path": ["helix_id"]}]
-    unchanged(before)
-    # A failed suffix does not erase the lease or prevent a corrected draft.
-    assert host.evaluate(update(opened, sequence=2), family="sweep")["request_sequence"] == 2
+    receipt = host.apply(update(opened, params={"cells": [[0, 0]]}), family="sweep")
+    assert receipt["status"] == "applied"
+    published = state.get_or_404()
+    assert all(c.id != "later-nick" for e in published.feature_log
+               if e.feature_type == "routing-cluster" for c in e.children)
+    assert all(h.id != nick_helix for h in published.helices)
+    state.undo()
+    assert state.get_or_404().model_dump(mode="json") == before["json"]
 
 
 def test_full_source_mismatch_cannot_be_promoted_by_feature_stage_preview(document):

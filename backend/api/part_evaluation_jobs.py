@@ -323,8 +323,14 @@ def commit(identity):
                 publication_permit=permit)
             job.result.pop("candidate", None)
             job.status = "committed"
-            return {"job_id": identity, "status": "committed", "revision": job.committed_revision,
-                    "design_id": content_identity(candidate)}
+            response = {"job_id": identity, "status": "committed", "revision": job.committed_revision,
+                        "design_id": content_identity(candidate)}
+            if removed := job.result.get("removed_features"):
+                response["removed_features"] = removed
+                response["placement_warnings"] = [
+                    f"Removed {len(removed)} fine-routing feature(s) whose positions are no longer "
+                    "occupied by a strand: " + ", ".join(r["label"] for r in removed)]
+            return response
     finally:
         _slot.release()
 

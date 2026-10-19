@@ -77,16 +77,21 @@ def test_delete_producer_warns_then_cascades_consumers():
 def test_deleted_domain_producer_has_structured_cascade_diagnostics():
     from backend.api.crud import DomainShiftRequest, domain_shift
 
-    strand_id = state.get_or_404().strands[0].id
+    strand = state.get_or_404().strands[0]
     domain_shift(DomainShiftRequest(entries=[
-        {"strand_id": strand_id, "domain_index": 0, "delta_bp": 2}
+        {"strand_id": strand.id, "domain_index": 0, "delta_bp": 2}
     ]))
+    # Fine Routing records the domain by position (proof v2); the missing target
+    # is that (helix, bp, direction) slot.
+    first = strand.domains[0]
+    slot = f"{first.helix_id}:{first.start_bp}:{first.direction.value}"
     source, revision = state.get_design_with_revision()
     response = delete_feature(0)
     assert response["needs_cascade_decision"]
     issues = [issue for row in response["dependents"] for issue in row["issues"].values()]
     missing = [issue for issue in issues if issue["code"] == "missing_reference"]
-    assert any(ref["identity"] == strand_id for issue in missing for ref in issue["references"])
+    assert any(ref == {"kind": "position", "identity": slot, "parameter_path": ["entries", 0, "at"]}
+               for issue in missing for ref in issue["references"])
     assert state.get_design_with_revision() == (source, revision)
     delete_feature(0, cascade=True)
     assert not state.get_or_404().strands

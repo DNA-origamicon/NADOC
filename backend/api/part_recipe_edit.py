@@ -96,7 +96,10 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
                 isinstance(exc, HTTPException) and exc.status_code in {408, 413, 429}
             ):
                 raise
-            raise CommandReplayError(entry.id, exc) from exc
+            error = CommandReplayError(entry.id, exc)
+            # Edit-time fine-routing removal decides from the exact input state.
+            error.input_design, error.command = current, (kind, arguments)
+            raise error from exc
 
     current = (
         prefix.design.model_copy(deep=True)
@@ -340,10 +343,22 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
                     & (removed - targets)
                 ],
             }
+    auto_removed = []
     try:
-        if candidate is None:
-            candidate = regenerate(source, log, checkpoint, prefix=prefix, executor=executor,
-                                   attribute_failures=True)
+        working_log = log
+        while candidate is None:
+            try:
+                candidate = regenerate(source, working_log, checkpoint, prefix=prefix,
+                                       executor=executor, attribute_failures=True)
+            except CommandReplayError as exc:
+                # cadnano-style: an edit that leaves a fine-routing feature with no
+                # strand at any of its positions removes that feature (reported);
+                # every other failure still refuses and names the feature.
+                removal = _fine_routing_removal(working_log, exc) if params is not None else None
+                if removal is None:
+                    raise
+                auto_removed.append(removal)
+                working_log = without_commands(working_log, {exc.feature_id})
         from backend.core.part_structure_gate import require_valid_structure
         require_valid_structure(candidate, checkpoint=checkpoint)
     except CommandReplayError as exc:
@@ -359,8 +374,29 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
             409, detail={"code": "regeneration_failed", "message": str(exc)}
         ) from exc
     report = validate_design(candidate)
+    report.auto_removed_features = auto_removed
     checkpoint()
     return candidate, report
+
+
+def _fine_routing_removal(log, exc):
+    """Report entry when the failing command is a Fine Routing child whose targets
+    are all unoccupied (or gone) in the state just before it; otherwise None."""
+    from backend.core.fine_routing_targets import describe, no_longer_applies
+
+    design = getattr(exc, "input_design", None)
+    command = getattr(exc, "command", None)
+    if design is None or command is None:
+        return None
+    child = next((c for e in log if e.feature_type == "routing-cluster"
+                  for c in e.children if c.id == exc.feature_id), None)
+    if child is None:
+        return None
+    kind, params = command
+    if not no_longer_applies(kind, params, design):
+        return None
+    return {"feature_id": exc.feature_id, "kind": kind, "label": child.label or describe(kind, params),
+            "reason": exc.reason}
 
 
 def change_recipe(index, *, params=None, sub_index=None, cascade=False):
@@ -383,7 +419,14 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
             return prepared
         candidate, report = prepared
         state.set_design(candidate, expected_revision=revision, expected_source=source)
-        return _design_replace_response(source, candidate, report)
+        response = _design_replace_response(source, candidate, report)
+        removed = getattr(report, "auto_removed_features", [])
+        if removed:
+            response["removed_features"] = removed
+            response["placement_warnings"] = [*response.get("placement_warnings", []),
+                f"Removed {len(removed)} fine-routing feature(s) whose positions are no longer "
+                "occupied by a strand: " + ", ".join(r["label"] for r in removed)]
+        return response
     except ValidationError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     except (CaptureLimit, ProofBudgetExceeded) as exc:

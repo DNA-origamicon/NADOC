@@ -11,7 +11,6 @@ import json
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
 
 from backend.api import crud, doc_context, part_proof_commands as commands, state
 from backend.api import part_group_organization_gate as gate
@@ -312,11 +311,12 @@ def test_batch_creation_add_remove_reorder_preserves_slots_and_later_consumer(or
     assert {item.id for item in candidate.crossovers} == {new_id, SECOND}
     _verified(candidate)
     session.redo.append(m.Design())
-    before = saved(session)
-    with pytest.raises(HTTPException) as caught:
-        edit(session, index, {"placements": [row.children[0].params["placements"][0]]})
-    assert caught.value.status_code == 409 and "dependent-child" in str(caught.value.detail)
-    unchanged(session, before)
+    # Removing the slot the later extra-bases child acts on removes that child
+    # (cadnano-style) instead of refusing the edit.
+    candidate, report, row = edit(session, index, {"placements": [row.children[0].params["placements"][0]]})
+    assert [r["feature_id"] for r in report.auto_removed_features] == ["dependent-child"]
+    assert all(c.id != "dependent-child" for c in row.children)
+    assert {item.id for item in candidate.crossovers} == {new_id}
 
 
 @pytest.mark.parametrize("organized", [False, True], ids=["legacy", "organized"])

@@ -411,7 +411,8 @@ def _before_command(kind, params, design):
 def _run(kind, design, params, check, executor=None):
     check()
     try:
-        _before_command(kind, params, design)
+        from backend.core.positional_refs import resolve as resolve_positions
+        _before_command(kind, resolve_positions(kind, params, design), design)
         check()
         updated = (executor or execute)(kind, design, params)
     except CommandContractError:

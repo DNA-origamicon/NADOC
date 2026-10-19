@@ -6,8 +6,9 @@ GROUP_CREATE_VERSION = 2
 
 def proof_version_supported(kind, version):
     """Local grouping/extension revisions do not upgrade other command kinds."""
+    from backend.core.positional_refs import KINDS as POSITIONAL_KINDS
     versions = ((1, GROUP_CREATE_VERSION) if kind == "cluster_create" else
-                (1, 2) if kind == "extension-upsert" else (1,))
+                (1, 2) if kind == "extension-upsert" or kind in POSITIONAL_KINDS else (1,))
     return type(version) is int and version in versions
 
 

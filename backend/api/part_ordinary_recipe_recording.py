@@ -244,6 +244,7 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
             require_group_geometry_budget(candidate)
         report = _validation(result.get("validation"),
             code=f"invalid_{error_prefix}_result")
+        report.auto_removed_features = list(result.get("removed_features") or [])
         copy_report = None
         if family == "pattern":
             if "pattern_report" not in result:

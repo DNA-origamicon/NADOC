@@ -119,6 +119,14 @@ def record_minor(session, op_subtype, label, params, fn):
         params = {**params, "_proof_version": PROOF_VERSION}
 
     with _transaction(session, state) as before:
+        # Fine Routing commands record the positions they act on (version 2), so
+        # replay after an upstream routing rerun finds whatever strand/crossover
+        # occupies them, not a stale id. A position that cannot be named keeps v1.
+        from backend.core.positional_refs import PositionNotOccupied, to_positional
+        try:
+            params = to_positional(op_subtype, params, before)
+        except (PositionNotOccupied, KeyError, IndexError, TypeError):
+            pass
         last = session.design.feature_log[-1] if session.design.feature_log else None
         append = isinstance(last, RoutingClusterLogEntry) and not last.evicted and bool(last.pre_state_gz_b64)
         if not append:

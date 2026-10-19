@@ -14,6 +14,7 @@ from backend.core import lattice
 from backend.core.models import Design, DesignLoadout, StrandExtension
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_history_proof import AUTHORING_FIELDS, command_rows
+from backend.core.positional_refs import resolve
 
 
 @pytest.fixture
@@ -144,8 +145,10 @@ def test_one_record_undo_revision_and_input_only_replay_match_native_builder(doc
     assert cluster.feature_type == "routing-cluster" and len(cluster.children) == 1
     row = cluster.children[0]
     assert row.op_subtype == "forced-ligation-create"
-    assert row.params == {**body.model_dump(mode="json"), "_fl_id": updated.forced_ligations[-1].id,
-                          "_proof_version": 1}
+    # Recorded by position (v2); resolving against the source gives the native request.
+    assert row.params["_proof_version"] == 2
+    assert resolve("forced-ligation-create", row.params, source) == {
+        **body.model_dump(mode="json"), "_fl_id": updated.forced_ligations[-1].id, "_proof_version": 1}
     expected = execute("forced-ligation-create", source, row.params)
     assert _authoring(updated) == _authoring(expected)
     assert _authoring(document) == before
@@ -356,7 +359,9 @@ def test_valid_and_empty_routing_batches_preserve_native_recording_and_replay(do
     updated = state.get_or_404()
     row = updated.feature_log[-1].children[-1]
     assert row.op_subtype == operation
-    assert row.params == {**body.model_dump(mode="json"), "_proof_version": 1}
+    native = {**body.model_dump(mode="json"), "_proof_version": 1}
+    assert resolve(operation, row.params, source) == native
+    assert row.params["_proof_version"] == (2 if operation == "strand-end-resize" else 1)
     expected = execute(operation, source, row.params)
     assert _authoring(updated) == _authoring(expected)
     assert state.undo_depth() == depth + 1
