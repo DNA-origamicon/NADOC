@@ -87,7 +87,9 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
   // engineOf lets a MIXED list (the unified Simulate list) resolve each row's engine
   // per-node; single-engine panels omit it and fall back to the ctx-wide engine.
   const engine = ctx.engineOf ? ctx.engineOf(job) : ctx.engine
-  const statusKey = statusKeyFor(engine, job.status, prodState)
+  const transferState = job.execution_target === 'alpine' ? job.download_status?.state : null
+  const transferring = ['queued', 'downloading', 'processing'].includes(transferState)
+  const statusKey = transferring ? `download-${transferState}` : statusKeyFor(engine, job.status, prodState)
   const isActive = ctx.isActive ? !!ctx.isActive(job) : _DEFAULT_ACTIVE(job)
   const archived = ctx.archived ? !!ctx.archived(job) : !!job?.archived
   const sizeBytes = ctx.sizeBytes ? ctx.sizeBytes(job) : (job?.size_bytes ?? null)
@@ -103,14 +105,14 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     indentPx: depth ? indentBase + depth * indentStep : 0,
     selected: job.job_id === ctx.selectedId,
     statusKey,
-    isActive,
+    isActive: transferring ? transferState !== 'queued' : isActive,
     indexLabel: isChild || ctx.showIndex === false
       || (typeof ctx.showIndex === 'function' && !ctx.showIndex(job)) ? '' : `[${listIndex}]`,
     label: job.restart_snapshot ? `${label} · interrupted attempt${job.live_metrics?.step && job.live_metrics?.timestep_fs ? ` (${(job.live_metrics.step * job.live_metrics.timestep_fs / 1e6).toFixed(2)} ns)` : ''}` : label,
     restartEvents: job.restart_events || [],
     restartHistoryOnly: !!job.restart_snapshot,
     title: isChild && ctx.childTitle ? ctx.childTitle(job) : null,
-    progressFraction: Number.isFinite(job.progress_fraction) ? job.progress_fraction : null,
+    progressFraction: transferring ? null : Number.isFinite(job.progress_fraction) ? job.progress_fraction : null,
     timeStr: ctx.formatTime ? ctx.formatTime(job.created_at) : '',
     sizeStr: ctx.sizeLabel
       ? ctx.sizeLabel(job, sizeBytes)
@@ -177,6 +179,7 @@ export function jobListSignature(jobs, ctx) {
   const sorted = (jobs || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const per = ctx.rowSig || ((j) => `${j.job_id}:${j.status}`)
   return sorted.map(j => per(j) + JSON.stringify(j.restart_events || [])
+    + (j.execution_target === 'alpine' ? `:transfer=${j.download_status?.state ?? ''}` : '')
     + JSON.stringify(inputFreshnessMarker(j))).join(',') + `|sel=${ctx.selectedId ?? ''}`
 }
 

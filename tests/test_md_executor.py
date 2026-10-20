@@ -1008,7 +1008,7 @@ def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
     assert not any(k.endswith(".resume.conf") for k in conn.put_contents)
 
 
-def test_reconcile_completed_records_learned_throughput(tmp_path):
+def test_reconcile_completed_records_learned_throughput(tmp_path, monkeypatch):
     from backend.core import cluster_throughput
 
     job = _make_prepared_job(tmp_path)
@@ -1032,6 +1032,10 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
             "find": RunResult(0, "", ""),
         }
     )
+    async def verified_fetch(job, workspace, **kwargs):
+        job.download_status = {"state": "verified"}
+        return True
+    monkeypatch.setattr(ex, "fetch_outputs", verified_fetch)
     _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     learned = cluster_throughput.lookup_throughput(
         tmp_path, cluster="alpine", partition="acpu", n_atoms=100_000
@@ -1112,7 +1116,7 @@ def test_poll_remote_jobs_recovers_completed_unverified_job_on_login(
     job.save(tmp_path)
     called = []
 
-    async def _reconcile(j, ws, conn=None):
+    async def _reconcile(j, ws, conn=None, defer_download=False):
         called.append(j.job_id)
         j.download_status = {"state": "verified", "total_bytes": 7, "verified_bytes": 7}
         j.save(ws)
@@ -1141,7 +1145,7 @@ def test_concurrent_remote_poll_does_not_duplicate_completion_reconcile(
     release = asyncio.Event()
     calls = []
 
-    async def _reconcile(j, ws, conn=None):
+    async def _reconcile(j, ws, conn=None, defer_download=False):
         calls.append(j.job_id)
         entered.set()
         await release.wait()

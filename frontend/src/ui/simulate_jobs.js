@@ -93,7 +93,7 @@ export function nodeIsActive(node) {
  *  master Stop button, where "queued" genuinely should read as pending. */
 export function nodeNeedsPolling(node) {
   if (node?.remote_submit_progress) return true
-  if (['downloading', 'processing'].includes(node?.download_status?.state)) return true
+  if (['queued', 'downloading', 'processing'].includes(node?.download_status?.state)) return true
   if (!nodeIsActive(node)) return false
   if (node?.status !== 'queued') return true
   return !!(node?.slurm_job_id || node?.runpod_pod_id)
@@ -796,6 +796,7 @@ export function initSimulateJobs({
     if (!transfer && node?.execution_target === 'alpine') {
       const ds = node.download_status
       if (ds?.state === 'verified') transfer = { phase: 'done', pct: 100, ...ds }
+      else if (ds?.state === 'queued') transfer = { phase: 'queued', pct: 0, ...ds }
       else if (ds?.state === 'processing') transfer = { phase: 'processing', pct: 100, ...ds }
       else if (ds?.state === 'downloading') {
         const moved = Math.min(Number(ds.transferred_bytes ?? ds.verified_bytes) || 0,
@@ -814,7 +815,8 @@ export function initSimulateJobs({
         + `${_transferEta(transfer.eta_seconds) ? ` · ETA ${_transferEta(transfer.eta_seconds)}` : ''}`
         + `${transfer.current_file ? ` · ${transfer.current_file}` : ''}`
       : ''
-    const transferText = transfer?.phase === 'queued' ? 'Simulation transfer queued…'
+    const transferText = transfer?.phase === 'queued' ? (node?.execution_target === 'alpine'
+      ? 'Finished on Alpine — waiting to download results…' : 'Simulation transfer queued…')
       : transfer?.phase === 'cancelling' ? 'Cancelling simulation transfer…'
       : transfer?.phase === 'downloading'
       ? (transfer.peer_id ? `Transferring simulation from ${transfer.source_peer_name || 'peer'}${peerDetail}…`
@@ -872,7 +874,7 @@ export function initSimulateJobs({
     _renderActions(node)
     if (endDownloadBtn) {
       const show = canEndAndDownload(node)
-      const transferLocked = ['downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
+      const transferLocked = ['queued', 'downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
       const sourceConnected = remoteSourceConnected(node, {
         clusterState: getClusterState?.() ?? 'disconnected',
         runpodConnected: getRunpodConnected?.() ?? false,
@@ -880,6 +882,7 @@ export function initSimulateJobs({
       endDownloadBtn.style.display = show ? '' : 'none'
       endDownloadBtn.disabled = _busy || transferLocked || !sourceConnected
       endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
+        : transfer?.phase === 'queued' ? 'Waiting to download…'
         : transfer?.phase === 'processing' ? 'Processing…'
           : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
           : transfer ? 'Retry download' : 'Terminate run and download'

@@ -497,14 +497,16 @@ export function mdRunControl(selectedJob, {
     // that download can run for hours, during which the button must not lie.
     // Represent the real local transfer phase instead.
     const downloadState = selectedJob.download_status?.state
-    if (['downloading', 'processing'].includes(downloadState)) {
+    if (['queued', 'downloading', 'processing'].includes(downloadState)) {
       const processing = downloadState === 'processing'
       return {
         action: RUN_ACTION.PREPARING,
-        label: processing ? 'Processing results…' : 'Downloading results…',
+        label: downloadState === 'queued' ? 'Waiting to download…' : processing ? 'Processing results…' : 'Downloading results…',
         disabled: true,
-        spinner: true,
-        title: processing
+        spinner: downloadState !== 'queued',
+        title: downloadState === 'queued'
+          ? 'Finished on Alpine — waiting to download results.'
+          : processing
           ? 'The Alpine results are being indexed locally.'
           : 'The Alpine run has ended on the cluster — its results are being downloaded and verified locally.',
       }
@@ -789,7 +791,7 @@ export function hasActiveRemoteJob(jobs) {
   // older backend (or a restart between the two saves) can already be terminal.  Keep the
   // REST poll armed from the durable download state instead of freezing that edge case.
   return (jobs ?? []).some(j => mdIsRemoteJob(j) && (
-    mdJobIsActive(j) || ['downloading', 'processing'].includes(j?.download_status?.state)
+    mdJobIsActive(j) || ['queued', 'downloading', 'processing'].includes(j?.download_status?.state)
   ))
 }
 

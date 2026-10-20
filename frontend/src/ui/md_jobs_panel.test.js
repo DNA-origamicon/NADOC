@@ -710,6 +710,8 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     expect(mdRunControl(downloading, connected)).toMatchObject({
       action: 'preparing', label: 'Downloading results…', disabled: true, spinner: true,
     })
+    expect(mdRunControl({ ...downloading, download_status: { state: 'queued' } }, connected))
+      .toMatchObject({ label: 'Waiting to download…', disabled: true, spinner: false })
     expect(mdRunControl({ ...downloading, download_status: { state: 'processing' } }, connected))
       .toMatchObject({ label: 'Processing results…', disabled: true, spinner: true })
   })

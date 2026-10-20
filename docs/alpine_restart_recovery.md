@@ -1,5 +1,41 @@
 # Alpine restart recovery
 
+## Finished-job download queue
+
+Scheduler discovery no longer waits for result downloads or local indexing. A
+terminal allocation immediately publishes `download_status.state = queued`;
+the desktop shows **Finished on Alpine — waiting to download**, with no simulation
+spinner or remaining-step progress. Slurm's actual COMPLETED, TIMEOUT, CANCELLED,
+or FAILED outcome remains separate from local result readiness.
+
+Bulk result transfers use one FIFO admission slot per owner process, shared by
+automatic completion, recovery and explicit fetches. Duplicate API requests for
+the same workspace/job/submission join one transfer; cancelling an API waiter
+does not release the slot while its transfer continues. The detached worker also
+enforces admission and retains its existing explicit-disconnect cancellation.
+Queue identity includes Slurm allocation and submission time, and is rechecked
+before touching output files. A failed transfer releases its slot so other jobs
+can proceed.
+
+Queue intent and its enqueue timestamp are persisted with the job or worker
+sidecar. On backend restart, existing downloads reattach first, then waiting
+entries are admitted in saved enqueue order. Entries not yet sent to the worker
+need the backend to return before they start; an already accepted transfer
+survives API reloads. Reconnect recovers interrupted transfers at the existing
+recovery boundary. No new Slurm allocation is submitted automatically.
+
+Downloading, processing, verified and interrupted remain distinct phases.
+Successful completion requires a successful fetch and the existing checkpoint
+checks; an old local checkpoint alone cannot turn a failed fetch into success.
+Local indexing runs separately from scheduler polling. Queue admission/release
+events record wait and elapsed times in `alpine_operations.jsonl`; transfer
+metadata records enqueue/start/finish and latest progress timestamps.
+
+The API admission policy also works with an already-authenticated older worker.
+Worker-side enforcement loads at the next ordinary worker restart; deployment
+must not restart an authenticated worker merely to load it. No queue position or
+ETA is displayed unless it can be reported authoritatively.
+
 NADOC now distinguishes a Slurm allocation restart from a new sampling trajectory.
 The backend reads `scontrol Restarts/StartTime` and a compute-node execution journal.
 A same-segment step regression is supporting evidence, never sufficient proof of

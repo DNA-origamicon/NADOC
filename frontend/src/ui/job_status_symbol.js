@@ -15,6 +15,9 @@ const C = {
 // status key → { symbol, color, label }. Active states (running/preparing) render
 // as an animated spinner in the row; their badge here is the legend fallback glyph.
 export const STATUS_BADGE = {
+  'download-queued': { symbol: '↓', color: C.amber, label: 'Finished on Alpine — waiting to download' },
+  'download-downloading': { symbol: '↓', color: C.blue, label: 'Downloading results' },
+  'download-processing': { symbol: '⟳', color: C.blue, label: 'Processing results' },
   'draft':             { symbol: '✎', color: C.grey,  label: 'Draft (not started)' },
   'running':           { symbol: '⟳', color: C.amber, label: 'Running' },
   'preparing':         { symbol: '⟳', color: C.amber, label: 'Preparing' },

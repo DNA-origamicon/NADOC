@@ -1107,6 +1107,14 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     entire remote inventory.  The asyncio lock handles concurrent routes in this
     process; flock also covers a dev-server reload or a second server process.
     """
+    if job.execution_target != "alpine":
+        return await _fetch_outputs_admitted(job, workspace_dir, conn=conn)
+    from backend.core.alpine_download_queue import run_transfer
+    return await run_transfer(job, workspace_dir, lambda: _fetch_outputs_admitted(
+        job, workspace_dir, conn=conn))
+
+
+async def _fetch_outputs_admitted(job, workspace_dir, *, conn=None):
     conn = conn or _default_conn()
     from backend.core.alpine_worker import WorkerClient
     if isinstance(conn, WorkerClient):
@@ -1161,6 +1169,8 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
     rels = sorted(inventory, key=_fetch_priority)
     total_bytes = sum(inventory.values())
     job.download_status = {
+        **{key: value for key, value in (job.download_status or {}).items()
+           if key in {"enqueued_at", "transfer_started_at"}},
         "state": "downloading", "total_bytes": total_bytes, "verified_bytes": 0,
         "dcd_bytes": sum(size for rel, size in inventory.items() if rel.endswith(".dcd")),
         "inventory": inventory,
@@ -1203,6 +1213,7 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
             transferred = min(total_bytes, verified_bytes + current)
             job.download_status["transferred_bytes"] = transferred
             job.download_status["current_file_bytes"] = current
+            job.download_status["last_progress_at"] = time.time()
             if current == _file_total or transferred - last_saved["bytes"] >= 16 * 1024**2:
                 job.save(workspace_dir)
                 last_saved["bytes"] = transferred
@@ -1260,6 +1271,7 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
         verified_bytes=verified_bytes,
         current_file=None,
         failed_files=failed,
+        transfer_finished_at=time.time(),
     )
     job.save(workspace_dir)
     from backend.core.design_disk_usage import invalidate_dir_size
@@ -1280,7 +1292,7 @@ def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
     # Never inspect/promote a .part owned by the active downloader. At exact size it
     # has not necessarily fsync'd or performed its own atomic rename yet; stealing it
     # here makes the downloader raise ENOENT and used to disconnect Alpine.
-    if status.get("state") == "downloading":
+    if status.get("state") in {"queued", "downloading"}:
         return False
     total = status.get("total_bytes")
     files_total = status.get("files_total")
@@ -1459,7 +1471,7 @@ def _completion_checkpoint_present(job: MdJob, workspace_dir: Path) -> bool:
     return any(_segment_outputs_complete(output_dir, seg.name) for seg in job.segments)
 
 
-async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) -> MdJob:
+async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None, defer_download=False) -> MdJob:
     """Poll one remote job and advance its persisted state.
 
     - pending/running  → update ``slurm_state`` + status (queued/running), save.
@@ -1502,30 +1514,29 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
             job.save(workspace_dir)
         return job
 
-    # Terminal — publish scheduler + final stage progress *before* the potentially
-    # multi-hour mirror/download. A user reconnecting after completion must immediately
-    # see that Alpine is done, every remotely-finished relax stage filled in, and the
-    # progress bar repurposed for result transfer instead of the last pre-logout step.
-    try:
-        await poll_remote_progress(job, conn=conn)
-    except Exception as exc:  # noqa: BLE001 — final listing is advisory
-        logger.warning("[%s] terminal remote progress poll failed: %s", job.job_id, exc)
-    job.download_status = {
-        "state": "downloading",
-        "total_bytes": None,
-        "verified_bytes": 0,
-        "transferred_bytes": 0,
-        "files_total": None,
-        "files_verified": 0,
-        "current_file": None,
-    }
+    from backend.core.alpine_download_queue import mark_queued, schedule
+    mark_queued(job, workspace_dir)
     job.save(workspace_dir)
+    if defer_download:
+        schedule(job, workspace_dir, lambda: _complete_remote_job(
+            job, workspace_dir, conn=conn, raw=raw, bucket=bucket))
+        return job
+    return await _complete_remote_job(job, workspace_dir, conn=conn, raw=raw, bucket=bucket)
 
+
+async def _complete_remote_job(job, workspace_dir, *, conn, raw, bucket):
+    from backend.core.alpine_download_queue import terminal_fetch
     # Pull results back (restart files for a resume; logs to diagnose).
+    fetched = False
     try:
-        await fetch_outputs(job, workspace_dir, conn=conn)
+        fetched = await terminal_fetch(job, workspace_dir, conn)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[%s] output fetch failed: %s", job.job_id, exc)
+
+    from backend.core.alpine_download_queue import key
+    latest = MdJob.load(job.job_id, workspace_dir)
+    if key(latest, workspace_dir) != key(job, workspace_dir):
+        return latest
 
     # A SLURM-completed job whose checkpoint restart files did not (fully) download
     # must NOT be reported ``completed`` — a completed job leaves the poll set
@@ -1533,12 +1544,12 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     # downstream chain-stage seed (spawn_md_production) 400s on the absent checkpoint.
     # Keep it re-pollable so the next supervisor pass re-fetches; only give up (→
     # failed) once the bounded retries exhaust.  (ISSUE-15)
-    if bucket == "completed" and not _completion_checkpoint_present(job, workspace_dir):
+    if bucket == "completed" and (fetched is False or not _completion_checkpoint_present(job, workspace_dir)):
         job.fetch_attempts += 1
         if job.fetch_attempts < _MAX_FETCH_ATTEMPTS:
             logger.warning(
-                "[%s] remote job %s COMPLETED but no checkpoint restart files "
-                "downloaded — keeping re-pollable, retry %d/%d on next poll",
+                "[%s] remote job %s COMPLETED but result inventory or checkpoint "
+                "is incomplete — keeping re-pollable, retry %d/%d on next poll",
                 job.job_id,
                 job.slurm_job_id,
                 job.fetch_attempts,
@@ -1548,8 +1559,8 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
                 MdStatus.running
             )  # stays is_remote_active → re-polled + re-fetched
             job.error = (
-                "Completed remotely but the checkpoint restart files failed to "
-                f"download (attempt {job.fetch_attempts}/{_MAX_FETCH_ATTEMPTS}) — retrying."
+                "Completed remotely but result files or the required checkpoint did not "
+                f"fully download (attempt {job.fetch_attempts}/{_MAX_FETCH_ATTEMPTS}) — retrying."
             )
             job.save(workspace_dir)
             return job
@@ -1559,8 +1570,8 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
         job.resumable = False
         job.failure_kind = "fetch_incomplete"
         job.error = (
-            f"Remote job {job.slurm_job_id} finished but its checkpoint restart files "
-            f"(.coor/.vel/.xsc) failed to download after {_MAX_FETCH_ATTEMPTS} attempts. "
+            f"Remote job {job.slurm_job_id} finished but its result inventory or checkpoint "
+            f"restart files (.coor/.vel/.xsc) remain incomplete after {_MAX_FETCH_ATTEMPTS} attempts. "
             "Check the SSH connection and re-run."
         )
         job.save(workspace_dir)
@@ -1645,14 +1656,17 @@ async def _finish_local_processing(job: MdJob, workspace_dir: Path) -> None:
     job.fetch_attempts = 0
 
 
-async def resume_local_processing_jobs(workspace_dir: Path) -> list[str]:
+async def resume_local_processing_jobs(workspace_dir: Path, *, defer_processing=False) -> list[str]:
     """Finish verified Alpine results after a restart, without an SSH connection.
 
     ``processing`` is persisted only after the complete remote inventory has been
     downloaded and verified, so this phase is entirely local and safe to resume.
     """
+    from backend.core.alpine_download_queue import pending, schedule
     finished: list[str] = []
     for job in MdJob.list_jobs(workspace_dir):
+        if pending(job, workspace_dir):
+            continue
         if (
             job.execution_target == "alpine"
             and job.slurm_state == "COMPLETED"
@@ -1663,8 +1677,13 @@ async def resume_local_processing_jobs(workspace_dir: Path) -> list[str]:
         ):
             job.download_status["state"] = "processing"
             job.save(workspace_dir)
-            await _finish_local_processing(job, workspace_dir)
-            job.save(workspace_dir)
+            async def finish(job=job):
+                await _finish_local_processing(job, workspace_dir)
+                job.save(workspace_dir)
+            if defer_processing:
+                schedule(job, workspace_dir, finish)
+            else:
+                await finish()
             finished.append(job.job_id)
     return finished
 
@@ -1688,7 +1707,7 @@ def _needs_remote_reconcile(job: MdJob, *, recover_incomplete: bool = False) -> 
         return False
     if is_remote_active(job.status):
         return True
-    if not recover_incomplete or transfer_state not in {"downloading", "interrupted"}:
+    if not recover_incomplete or transfer_state not in {"queued", "downloading", "interrupted"}:
         return False
     if job.status == MdStatus.completed:
         return True
@@ -1710,10 +1729,10 @@ async def poll_remote_jobs(
     conn = conn or _default_conn()
     if not getattr(conn, "is_connected", lambda: False)():
         return []
+    from backend.core.alpine_download_queue import pending, recovery_order
     from backend.core.alpine_transfer_state import recover_downloads
-    await recover_downloads(workspace_dir, conn, reconnect=recover_incomplete)
     touched: list[str] = []
-    for job in MdJob.list_jobs(workspace_dir):
+    for job in sorted(MdJob.list_jobs(workspace_dir), key=recovery_order):
         if job.execution_target != "alpine":
             continue
         # Drain a DEFERRED cancel first: a Stop issued while the session was down set
@@ -1736,6 +1755,8 @@ async def poll_remote_jobs(
             job.save(workspace_dir)
             touched.append(job.job_id)
             continue  # already stopped locally — nothing else to reconcile
+        if pending(job, workspace_dir):
+            continue
         if not _needs_remote_reconcile(job, recover_incomplete=recover_incomplete):
             continue
         # cluster/connect starts a pass immediately while the 30 s supervisor may
@@ -1757,10 +1778,13 @@ async def poll_remote_jobs(
                     latest, recover_incomplete=recover_incomplete
                 ):
                     continue
-                await reconcile_remote_job(latest, workspace_dir, conn=conn)
+                await reconcile_remote_job(latest, workspace_dir, conn=conn, defer_download=True)
                 touched.append(job.job_id)
         except Exception:  # noqa: BLE001 — one job must not kill the pass
             logger.exception("[%s] remote reconcile failed", job.job_id)
+    # Reattach scheduler-owned transfers first; stopped/preserved snapshots must
+    # not jump ahead of an existing download when an older worker is still alive.
+    await recover_downloads(workspace_dir, conn, reconnect=recover_incomplete)
     return touched
 
 

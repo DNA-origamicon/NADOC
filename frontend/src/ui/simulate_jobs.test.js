@@ -834,6 +834,19 @@ describe('Terminate run and download feedback', () => {
       .toContain('processing trajectory health and metrics')
   })
 
+  it('renders an Alpine queue without stale simulation progress or a retry action', async () => {
+    mount()
+    const node = mdNode({ status: 'running', execution_target: 'alpine',
+      slurm_state: 'COMPLETED', download_status: { state: 'queued' } })
+    const { sim } = make([node])
+    await sim.refresh()
+    sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('Finished on Alpine — waiting to download')
+    expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('0%')
+    expect(document.getElementById('simulate-jobs-end-download-btn').disabled).toBe(true)
+  })
+
   it('locks and greys the button immediately and repurposes the master progress bar', async () => {
     localStorage.setItem('nadoc.runDir', '/storage')
     let finish

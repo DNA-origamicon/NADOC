@@ -20,6 +20,14 @@ JS). What transfers is the lifecycle design, the CURC/Alpine specifics, and two
 pieces of portable *data* — all captured in the Appendix below so the reference
 clone is not needed.
 
+**2026-10-20 download queue:** Completion discovery and recovery no longer await
+multi-GB transfers; queued result jobs show “Finished on Alpine — waiting to download.”
+API and worker admission serialize bulk downloads, deduplicate submission-scoped
+requests, and preserve queued intent across reloads. Local indexing is scheduled
+separately. Existing authenticated workers are preserved; their own admission
+enforcement loads on the next ordinary restart. See the queue policy in
+[restart recovery](../docs/alpine_restart_recovery.md).
+
 **2026-09-13 restart recovery:** Slurm requeues are now detected and journaled on the
 compute node. Interrupted dynamics resume from a validated checkpoint without NADOC
 connected; outputs and input checkpoints are preserved per attempt. Legacy resets

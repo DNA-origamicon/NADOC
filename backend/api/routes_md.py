@@ -5091,6 +5091,7 @@ async def md_download_status(job_id: str) -> dict:
     """Persisted, server-owned result-transfer truth; safe across browser reloads."""
     job = _load_job(job_id)
     if (job.download_status or {}).get("state") not in {
+        "queued",
         "verified",
         "downloading",
         "processing",

@@ -166,9 +166,9 @@ async def _md_supervisor_loop() -> None:
         try:
             from backend.core.md_executor import resume_local_processing_jobs
 
-            finalized = await resume_local_processing_jobs(_WORKSPACE_DIR)
+            finalized = await resume_local_processing_jobs(_WORKSPACE_DIR, defer_processing=True)
             if finalized:
-                logger.info("MD supervisor finalized downloaded jobs: %s", ", ".join(finalized))
+                logger.info("MD supervisor scheduled downloaded jobs for finalization: %s", ", ".join(finalized))
         except asyncio.CancelledError:
             raise
         except Exception:
