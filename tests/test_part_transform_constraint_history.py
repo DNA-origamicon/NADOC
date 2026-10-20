@@ -42,10 +42,10 @@ def _create_owner(source, identity, helices, *, parent=None, translation=None):
         domain_ids=owner.domain_ids, cluster_snapshot=owner))
 
 
-def _flexible_prefix():
-    source = snapshot(create_empty_part("Native constrained movement", "HONEYCOMB"),
+def _flexible_prefix(name=None):
+    source = snapshot(create_empty_part(name or "Native constrained movement", "HONEYCOMB"),
         "bundle-create", crud.BundleRequest(cells=[[0, 0], [0, 1], [1, 0]], length_bp=12,
-            strand_filter="scaffold", ligate_adjacent=False, history_seed=_seed(1)).model_dump(mode="json"), "bundle")
+            name=name or "Bundle", strand_filter="scaffold", ligate_adjacent=False, history_seed=_seed(1)).model_dump(mode="json"), "bundle")
     helices = [helix.id for helix in source.helices]
     ids = {"primary": "moving-arm", "auxiliary": "linked-arm", "fixed": "fixed-arm"}
     for role, helix in zip(("primary", "auxiliary", "fixed"), helices, strict=True):
@@ -73,10 +73,10 @@ def _flexible_prefix():
     return source, ids
 
 
-def _overhang_prefix():
-    source = snapshot(create_empty_part("Native overhang constraints", "HONEYCOMB"),
+def _overhang_prefix(name=None):
+    source = snapshot(create_empty_part(name or "Native overhang constraints", "HONEYCOMB"),
         "bundle-create", {"cells": [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]],
-            "length_bp": 42, "name": "Native overhang constraints", "lattice_type": "HONEYCOMB",
+            "length_bp": 42, "name": name or "Native overhang constraints", "lattice_type": "HONEYCOMB",
             "history_seed": _seed(2)}, "bundle")
     sites = valid_overhang_sites(source)
     first = next(site for site in sites if not site["is_five_prime"])
@@ -112,12 +112,12 @@ def _definition(source, ids, kind):
         "primary_authored_fields": {}, "legacy_source": None}
 
 
-def constraint_recipe(kind="flexible", *, suffix=True, driver=False):
+def constraint_recipe(kind="flexible", *, suffix=True, driver=False, name=None):
     """Return (native source history, stable role IDs) for backend/JS bridges."""
     if kind not in KINDS:
         raise ValueError(kind)
     if kind in {"flexible", "joint"}:
-        source, ids = _flexible_prefix()
+        source, ids = _flexible_prefix(name)
         if kind == "joint":
             ids["joint"] = "native-hinge"
             source = snapshot(source, "joint-place", {"cluster_id": ids["primary"], "joint_id": ids["joint"],
@@ -128,7 +128,7 @@ def constraint_recipe(kind="flexible", *, suffix=True, driver=False):
                 "name": "Other owner hinge", "local_axis_origin": [0, 0, 0], "local_axis_direction": [1, 0, 0],
                 "min_angle_deg": -15, "max_angle_deg": 15}, "auxiliary-joint-create")
     else:
-        source, ids = _overhang_prefix()
+        source, ids = _overhang_prefix(name)
         if kind == "duplex":
             source = snapshot(source, "duplex-connect", {"history_seed": _seed(5), "duplex_id": "native-duplex",
                 "created_at": 1.0, "binding_ids": [], "overhang_a_id": ids["driver"],

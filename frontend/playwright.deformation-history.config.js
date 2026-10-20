@@ -6,7 +6,7 @@ const frontend = path.dirname(fileURLToPath(import.meta.url))
 const root = process.env.NADOC_HISTORY_E2E_ROOT
 if (!root || !path.isAbsolute(root)) throw new Error('Use scripts/run_deformation_history_e2e.py')
 export default defineConfig({
-  testDir: './e2e', testMatch: process.env.NADOC_HISTORY_E2E_SEALED === '1' ? ['sealed_history.spec.js'] : ['deformation_history.spec.js', 'bend_release.spec.js', 'sweep_history.spec.js', 'extrude_history.spec.js', 'routing_history.spec.js', 'bend_preview_latency.spec.js'],
+  testDir: './e2e', testMatch: process.env.NADOC_HISTORY_E2E_TRANSFORMS === '1' ? ['transform_history.spec.js'] : process.env.NADOC_HISTORY_E2E_SEALED === '1' ? ['sealed_history.spec.js'] : ['deformation_history.spec.js', 'bend_release.spec.js', 'sweep_history.spec.js', 'extrude_history.spec.js', 'routing_history.spec.js', 'bend_preview_latency.spec.js'],
   grep: process.env.NADOC_HISTORY_E2E_GREP ? new RegExp(process.env.NADOC_HISTORY_E2E_GREP) : undefined,
   workers: 1, fullyParallel: false, retries: 0, timeout: 60000,
   outputDir: path.join(root, 'playwright'), reporter: 'list',

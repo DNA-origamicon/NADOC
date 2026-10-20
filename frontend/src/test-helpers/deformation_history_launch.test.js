@@ -10,6 +10,15 @@ import configuration, { historyGatePlugin } from '../../e2e/deformation_history_
 
 const editor = fileURLToPath(new URL('../app/feature_editor.js', import.meta.url))
 describe('test-only history gate transform', () => {
+  it('enables transforms only for an explicit isolated acceptance run', () => {
+    const file = fileURLToPath(new URL('../app/transform_history_editor.js', import.meta.url))
+    const source = readFileSync(file, 'utf8')
+    expect(historyGatePlugin({ transforms: false }).transform(source, file)).toBeNull()
+    expect(historyGatePlugin({ transforms: true }).transform(source, file).code)
+      .toContain('export const TRANSFORM_HISTORY_EDITOR_ENABLED = true')
+    expect(() => historyGatePlugin({ transforms: true }).transform('', file)).toThrow('Missing unique transform test gate')
+    expect(readFileSync(file, 'utf8')).toBe(source)
+  })
   it('verifies the production-enabled Bend/Twist gates without transforming them', () => {
     const source = readFileSync(editor, 'utf8')
     const plugin = historyGatePlugin()

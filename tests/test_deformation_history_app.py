@@ -34,6 +34,53 @@ def test_legacy_and_downstream_failure_fixtures():
     assert assess_part_history(fixed, execute=execute, dependencies=dependencies)["status"] == "verified"
 
 
+def test_transform_fixture_has_native_downstream_replay():
+    from backend.api.part_proof_commands import dependencies, execute
+    from backend.core.part_history_contract import assess_part_history
+
+    source = fixture("transform-owner")
+    assert source.metadata.name.startswith("__e2e__")
+    assert source.feature_log[-2].id == "selected-transform"
+    assert source.feature_log[-1].id == "later-extrusion"
+    assert assess_part_history(source, execute=execute, dependencies=dependencies)["status"] == "verified"
+
+
+@pytest.mark.parametrize("kind", ["transform-joint", "transform-linked"])
+def test_transform_constraint_fixture_cold_replay(kind):
+    from backend.api.part_proof_commands import dependencies, execute
+    from backend.core.part_history_contract import assess_part_history
+
+    source = fixture(kind)
+    assert source.metadata.name.startswith("__e2e__")
+    selected = next(row for row in source.feature_log if row.id == "selected-transform")
+    assert selected.op_kind == "placement-poses"
+    assert len(selected.params["poses"]) == 2
+    assert assess_part_history(source, execute=execute, dependencies=dependencies)["status"] == "verified"
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_transform_gate_is_opt_in_and_restored(monkeypatch, fail):
+    from backend.api import routes_part_transform_preview as routes, state
+
+    headers = {"X-NADOC-Doc": "__e2e__history-transform"}
+    previous = routes.TRANSFORM_PREVIEW_ENABLED
+    monkeypatch.delenv("NADOC_HISTORY_E2E_TRANSFORMS", raising=False)
+    with TestClient(create_app()) as client:
+        assert routes.TRANSFORM_PREVIEW_ENABLED is previous
+        assert client.post("/api/__e2e__/history/seed/transform-owner", headers=headers).status_code == 403
+    monkeypatch.setenv("NADOC_HISTORY_E2E_TRANSFORMS", "1")
+    try:
+        with TestClient(create_app()) as client:
+            assert routes.TRANSFORM_PREVIEW_ENABLED
+            assert client.post("/api/__e2e__/history/seed/transform-owner", headers=headers).status_code == 200
+            if fail:
+                raise RuntimeError("fixture failure")
+    except RuntimeError as error:
+        assert fail and str(error) == "fixture failure"
+    assert routes.TRANSFORM_PREVIEW_ENABLED is previous
+    assert headers["X-NADOC-Doc"] not in state._sessions
+
+
 def test_test_app_restores_gate_and_preserves_production_app():
     from backend.api import main, state, routes_part_deformation_preview as routes
     from backend.api import routes_part_sweep_preview as sweep_routes

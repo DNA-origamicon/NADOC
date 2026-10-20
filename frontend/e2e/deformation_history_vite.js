@@ -6,11 +6,17 @@ import { preparedSharePlugin } from '../prepared_share_server.js'
 
 const sweepEditor = fileURLToPath(new URL('../src/app/sweep_history_editor.js', import.meta.url))
 const editor = fileURLToPath(new URL('../src/app/feature_editor.js', import.meta.url))
-export function historyGatePlugin() {
+const transformEditor = fileURLToPath(new URL('../src/app/transform_history_editor.js', import.meta.url))
+export function historyGatePlugin({ transforms = process.env.NADOC_HISTORY_E2E_TRANSFORMS === '1' } = {}) {
   return {
     name: 's03-history-test-gates', enforce: 'pre',
     transform(source, id) {
       const target = id.split('?')[0]
+      if (target === transformEditor && transforms) {
+        const gate = 'export const TRANSFORM_HISTORY_EDITOR_ENABLED = false'
+        if (source.split(gate).length !== 2) throw new Error('Missing unique transform test gate')
+        return { code: source.replace(gate, 'export const TRANSFORM_HISTORY_EDITOR_ENABLED = true'), map: null }
+      }
       if (target !== editor && target !== sweepEditor) return null
       const result = source
       if (target === editor) {

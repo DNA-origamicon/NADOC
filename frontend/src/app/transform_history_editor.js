@@ -7,6 +7,8 @@ import { createTransformHistoryTool } from '../scene/transform_history_tool.js'
 import { getDocId } from '../shared/doc_id.js'
 import { sameRepairContext } from '../features/part_repair_model.js'
 import { createTransformHistoryProgress } from '../ui/transform_history_progress.js'
+import { attributeFailure } from '../features/feature_history_failure.js'
+import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
 
 export const TRANSFORM_HISTORY_EDITOR_ENABLED = false
 const SNAPSHOTS = new Set(['placement-poses', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete'])
@@ -23,6 +25,8 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
   createTool = createTransformHistoryTool, validateDisplay = validateTransformPreviewDisplay }) {
   let opening = false, boundOpening = false, ready = false, disposed = false, generation = 0
   let preview = null, tool = null, lastProjection = null, localError = null, progress = null
+  let editedFeatureId = null
+  const feedback = createFeatureHistoryFeedback(store, events)
   function context() {
     const state = store.getState(), design = state.currentDesign
     if (!design || state.assemblyActive) return null
@@ -36,6 +40,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
     validateDisplay: (packet, options) => validateDisplay(packet, { ...options, requireEnvelope: true }),
     applyPublished: packet => api.syncDesignResponse(packet) })
   function teardown() {
+    feedback.clear()
     const ownedTool = tool, ownedPreview = preview
     ready = false; tool = preview = lastProjection = null
     closeProgress()
@@ -67,7 +72,9 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
         lastProjection = state.projection; localError = null
       } catch (failure) { localError = failure; preview.show('before') }
     }
-    tool.setStatus({ busy: state.busy, expired: state.expired, error: localError ?? state.error,
+    feedback.update(state.busy ? null : state.error)
+    tool.setStatus({ busy: state.busy, expired: state.expired,
+      error: localError ?? attributeFailure(state.error, store.getState().currentDesign, editedFeatureId),
       publicationUnknown: state.publicationUnknown, refreshNeeded: state.refreshNeeded,
       computation: state.computation })
   }
@@ -113,6 +120,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
     const requestedContext = context()
     if (disposed || opening || controller.getState().open || !isNativeTransformFeature(entry) || !requestedContext?.editable) return false
     const token = ++generation
+    editedFeatureId = entry.id
     opening = true; boundOpening = false; localError = null
     showProgress({ busy: 'prepare' })
     try {
@@ -138,7 +146,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
   }
   return { open, cancel, active: () => opening || controller.getState().open,
     dispose() { if (!disposed) {
-      disposed = true; generation++; opening = false; unsubscribe(); controller.dispose(); teardown()
+      disposed = true; generation++; opening = false; unsubscribe(); controller.dispose(); teardown(); feedback.dispose()
       events?.removeEventListener('nadoc:document-reset', resetOpening)
       events?.removeEventListener('nadoc:comparison-mode', comparisonMode)
     } } }

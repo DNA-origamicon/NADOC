@@ -45,10 +45,10 @@ def snapshot(source, kind, params, identity):
         design_snapshot_gz_b64="poisoned-pre", post_state_gz_b64="poisoned-post"))
 
 
-def source_recipe(kind="cluster_op", *, extra=False, organized=False, suffix=True):
-    source = create_empty_part("Transform preview", "HONEYCOMB")
+def source_recipe(kind="cluster_op", *, extra=False, organized=False, suffix=True, name=None):
+    source = create_empty_part(name or "Transform preview", "HONEYCOMB")
     source = snapshot(source, "bundle-create", crud.BundleRequest(cells=[[0, 0], [0, 1]],
-        length_bp=12, ligate_adjacent=False, history_seed=uuid4()).model_dump(mode="json"), "bundle")
+        name=name or "Bundle", length_bp=12, ligate_adjacent=False, history_seed=uuid4()).model_dump(mode="json"), "bundle")
     if extra:
         first, second = source.helices
         request = crud.PlaceCrossoverRequest(

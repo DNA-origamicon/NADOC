@@ -24,6 +24,12 @@ def fixture(kind):
     from backend.core.part_history_contract import create_empty_part
     from tests.test_part_deformation_preview import _append
 
+    if kind in {"transform-joint", "transform-linked"}:
+        from tests.test_part_transform_constraint_history import constraint_recipe
+        return constraint_recipe("joint" if kind == "transform-joint" else "duplex", name=f"__e2e__{kind}")[0]
+    if kind == "transform-owner":
+        from tests.test_part_transform_preview import source_recipe
+        return source_recipe(name="__e2e__transform-owner")
     if kind not in FIXTURES:
         raise ValueError("Unknown fixture")
     if kind in {'repair-sweep-source', 'repair-extrude-source'}:
@@ -236,18 +242,23 @@ def cold_replay(source):
 
 def create_app():
     sealed = os.environ.get("NADOC_HISTORY_E2E_SEALED") == "1"
+    transforms = os.environ.get("NADOC_HISTORY_E2E_TRANSFORMS") == "1"
     from tests import sealed_history_fixture as sealed_fixture
 
     from backend.api import assembly, doc_context, main, state
     from backend.api import part_deformation_preview_sessions as host
     from backend.api import routes_part_deformation_preview as routes
     from backend.api import routes_part_sweep_preview as sweep_routes
+    from backend.api import routes_part_transform_preview as transform_routes
 
     @asynccontextmanager
     async def lifespan(_app):
         assert sweep_routes.SWEEP_PREVIEW_ENABLED, "Sweep production preview must be enabled"
         previous = routes.DEFORMATION_PREVIEW_ENABLED
+        previous_transform = transform_routes.TRANSFORM_PREVIEW_ENABLED
         routes.DEFORMATION_PREVIEW_ENABLED = True
+        if transforms:
+            transform_routes.TRANSFORM_PREVIEW_ENABLED = True
         try:
             with sealed_fixture.enabled() if sealed else nullcontext():
                 yield
@@ -257,6 +268,7 @@ def create_app():
                 if identity.startswith("__e2e__history-"):
                     state.drop_doc(identity)
             routes.DEFORMATION_PREVIEW_ENABLED = previous
+            transform_routes.TRANSFORM_PREVIEW_ENABLED = previous_transform
 
     # Copy route list; never add fixture routes to main.app or replace its lifespan.
     from starlette.middleware import Middleware
@@ -268,13 +280,16 @@ def create_app():
                   exception_handlers=dict(main.app.exception_handlers), lifespan=lifespan)
 
     def require_doc():
-        if doc_context.get_current_doc() not in {"__e2e__history-bend", "__e2e__history-twist"}:
-            raise HTTPException(403, "Only the two isolated history fixtures are admitted")
+        admitted = {"__e2e__history-bend", "__e2e__history-twist"}
+        if transforms:
+            admitted.add("__e2e__history-transform")
+        if doc_context.get_current_doc() not in admitted:
+            raise HTTPException(403, "Only explicitly enabled isolated history fixtures are admitted")
 
     @app.post("/api/__e2e__/history/seed/{kind}")
     def seed(kind: str):
         require_doc()
-        if kind not in FIXTURES:
+        if kind not in FIXTURES and not (transforms and kind in {"transform-owner", "transform-joint", "transform-linked"}):
             raise HTTPException(422, "Unknown fixture")
         if sealed:
             if kind not in {"bend", "twist"}:

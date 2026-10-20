@@ -664,3 +664,14 @@ remaining integration; neither is implemented by this qualification checkpoint.
 Next implement the complete extension-only v2 contract/owned transaction, then
 resolve arbitrary member motion through its isolated native-consumer comparison.
 No milestone split, exclusion or new completion credit.
+
+## Ordinary movement app acceptance — October20,2026
+- Opt-in fixture gates exercise the existing native host/panel; production transform gates remain OFF.
+- Five native app workflows pass: menu/keyboard creation, ordinary historical owner, historical joint limit, and linked-owner gesture. Cancel, one Apply/undo, downstream IDs, save/reopen and independent cold replay are checked.
+- Joint uses prefix25° despite later75°; linked gesture publishes the auxiliary pose and preserves fixed owners. The first linked test selected an inactive canonical gizmo; selecting the single active native gizmo corrected the harness.
+- Shared failure attribution/feature-log feedback is now wired into the transform editor. Focused35pass; injected409 app check verifies earliest error/blocked rows, unchanged canonical state, Cancel and successful retry.
+- Injected refusal proves feedback transport/lifecycle, not a native pose-edit-caused downstream failure. That causal C4 qualification remains open.
+- Native fixture replay9pass; isolated fixture checks5pass; launcher6pass. Final frontend779files/9380pass/1skip (341.63s).
+- Evidence: transform-{owner,constraints,linked,creation,failure}-app.log, transform-native-fixtures.log and transform-final-frontend.log under .development-artifacts/feature-history-focus/.
+- Browser scratch xlp40m5x/ngply6l9/6lpi_k00/v9lu5ilh/fin99kfk independently absent. No native placement, constants, manifests or goldens changed.
+- This is an ordinary-owner acceptance checkpoint, not FH-23/MV-52 closure. Named-group semantics, representative latency, remaining C1–C9 and coordinated gates remain open; current counts live in the handoff.

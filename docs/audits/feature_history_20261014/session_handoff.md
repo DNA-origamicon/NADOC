@@ -8,10 +8,11 @@ The overall overhaul remains open. Commit locally under the operating contract; 
 
 ## Scope and next work
 
-Next task: qualify geometric Move/Rotate history editing in the isolated running app,
-using its existing native preview host and panel. The test-only transform gate is opt-in;
-production gates remain OFF. Finish ordinary owner translation/rotation, downstream replay,
-Cancel, undo/redo and save/reopen before extending to linked/named movement semantics.
+Next task: finish the isolated real-axis TubeGeometry cost experiment before choosing
+another Bend/Twist latency change. No unchanged C8 rerun. Move/Rotate ordinary owner,
+joint/linked controls and menu/keyboard creation now pass app acceptance; shared downstream
+failure feedback is wired, with injected-refusal UI checks. Production gates remain OFF.
+Named-group semantics, representative transform latency and causal C4 acceptance remain open.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
 Do not repeat unchanged C8 benchmarks. Retain scientific authorization, constants,
@@ -32,9 +33,15 @@ not geometric Move. Old files remain excluded.
   as a gate pair. Logs: static-preview-reuse.log and static-preview-reuse-c8.log under
   .development-artifacts/feature-history-focus/; root /tmp/__e2e__history-llcbiwr6 absent.
 - Final full frontend regression:779files/9377pass/1skip (342.94s), including compact
-  buffer reuse. Log: static-preview-final-frontend.log. Move/Rotate harness work ongoing.
+  buffer reuse. Log: static-preview-final-frontend.log. Committed a72d9195.
 - Direct scripts/validation_guard.sh preserves serialization/worker caps because Snap
   just fails here. User systemd unavailable; memory scope unavailable.
+
+- Move/Rotate:5 native app workflows plus1 injected-refusal workflow pass; fixtures5,
+  launcher6, native replay9, focused35. Final frontend779files/9380pass/1skip (341.63s).
+  Logs under feature-history-focus: transform-{owner,constraints,linked,creation,failure}-app.log
+  and transform-final-frontend.log. All five browser roots independently absent.
+  No FH/tool completion credit; the injected refusal does not establish causal native C4.
 
 ## Completed user-facing behavior
 

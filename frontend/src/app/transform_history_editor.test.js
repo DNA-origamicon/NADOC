@@ -60,6 +60,28 @@ it('keeps the panel open after native rejection and publishes one successful ret
   expect(await f.callbacks().onApply()).toBe(false); expect(f.tool.dispose).not.toHaveBeenCalled()
   expect(await f.callbacks().onApply()).toBe(true); expect(f.api.syncDesignResponse).toHaveBeenCalledOnce()
 })
+it.each(['cancel', 'retry', 'document-reset'])('attributes downstream refusal and clears transient history feedback on %s', async exit => {
+  const f = fixture()
+  f.source.feature_log.push(
+    { id: 'later', feature_type: 'snapshot', op_kind: 'extrude-segment', label: 'Extrude' },
+    { id: 'tail', feature_type: 'snapshot', op_kind: 'bundle-create', label: 'Bundle' })
+  const original = structuredClone(f.source)
+  await f.open()
+  f.previewAPI.apply.mockRejectedValueOnce(Object.assign(new Error('Construction frame is missing'), {
+    status: 409, detail: { code: 'missing_reference', feature_id: 'later' },
+  }))
+  expect(await f.callbacks().onApply()).toBe(false)
+  expect(f.tool.setStatus.mock.lastCall[0].error.message).toBe('F2 Extrude cannot regenerate after this edit: Construction frame is missing')
+  expect(f.store.getState().featureHistoryFailure).toMatchObject({
+    source: f.source, featureId: 'later', blockedIds: new Set(['tail']),
+  })
+  expect(f.source).toEqual(original)
+  expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+  if (exit === 'cancel') await f.callbacks().onCancel()
+  else if (exit === 'retry') await f.callbacks().onApply()
+  else f.events.dispatchEvent(new Event('nadoc:document-reset'))
+  expect(f.store.getState().featureHistoryFailure).toBeNull()
+})
 it('uses status and private refresh after lost Apply, never automatically recommits', async () => {
   const f = fixture(); await f.open(); f.previewAPI.apply.mockRejectedValueOnce(new Error('Disconnected'))
   expect(await f.callbacks().onApply()).toBe(false)
