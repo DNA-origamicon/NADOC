@@ -8,9 +8,9 @@ The overall overhaul remains open. Commit locally under the operating contract; 
 
 ## Scope and next work
 
-Next task: finish Move/Rotate's measured large-preview latency and required named-member
-motion. Fresh browser CPU profiling is running after the settled batch; use its dominant
-cost to choose the next change. Ordinary owner, joint/linked controls, menu/keyboard creation
+Next task: isolate the terminal-tail Full/atomistic discrepancy within required named-member motion.
+Fixed C8 now passes; tools/member_motion_audit.py produces an isolated 2HB ordering review.
+Ordinary owner, joint/linked controls, menu/keyboard creation
 and causal downstream refusal pass app acceptance. Production transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
@@ -27,16 +27,27 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   GPU raster excluded (SwiftShader). C8 closes the last paired exit; FH-20 is complete.
 - Move/Rotate real6×84/18×504 transport uses lossless f64, exact lease-bound scalar deltas,
   finite real-part capacities, immutable JSON accounting and detached native buffer reuse.
-  Latest C8:7pass/1fail overall; small Move/Rotate93/96ms, large1134/1275ms;
-  Apply425/2796ms, Cancel43/44ms. Large preview remains above1000ms.
+  Latest app10pass; small Move/Rotate72/60ms, large960/894ms;
+  Apply422/2789ms, Cancel59/50ms. Fixed C8 passes; native validation semantics unchanged.
+  Checked-block authority/DTO133pass2deselected; scalar/native UI162pass plus guides16pass.
+  Log transform-block-final-app.log; root k7fzbcc9 independently absent. Frontend780files/9425pass/1skip;
+  backend19185pass/83same known failures/19skip; final audit-view frontend781files/9426pass/1skip.
+- Offline ordering review: .development-artifacts/member-motion-ordering-review/index.html,144cases
+  across36phases/both prior-residue directions/control. All72controls exact;72Ncases displaced6.892–7.169nm.
+  Native10/UI11pass; browser3cases per artifact/both representations/all4panels, no errors/network; Full and atoms
+  visually inspected. Exact atoms/bonds/rings and per-boundary metrics retained; diagnostic hit caps stated.
+  Chronological sibling member-motion-chronological-review adds native D after M:144cases/72exact controls;
+  browser scratch z6zq8uxf independently absent. Both probes retain stretched bonds; neither authorizes placement.
+  This is a limited ordering probe, not full named-motion authorization. Birth/partial/overlap/frame
+  and companion semantics remain required; no placement promotion or transform gate change.
 - Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
   feature error and blocked descendant appear, refusal preserves canonical state and Cancel
   clears feedback. Native4/browser2pass; capacity/unsupported refusals remain unverified.
 - Focused native scale2, DTO/host/bounds96, UI149, private-guide23 and native-render14pass.
   Full frontend780files/9395pass/1skip (344.92s), including resized-buffer ownership.
-- Final backend FAST:19099pass/83fail/19skip (365.48s), no setup errors. Exact failure-set
+- Final backend FAST:19185pass/83fail/19skip (361.33s), no setup errors. Exact failure-set
   comparison matches stop-backend-final.log; zero new failures. Broad suite is not green.
-  Aggregate381s exceeds90s; no individual violators, slowest4.53s. Timing skill applied;
+  Aggregate378s exceeds90s; no individual violators, slowest4.46s. Timing skill applied;
   no arbitrary reclassification, scientific manifest regeneration or guard changes.
 - Evidence: axis-lines-c8.log, transform-causal-app-final.log, geometry-final-frontend.log,
   geometry-final-test-smart.log under .development-artifacts/feature-history-focus/.
@@ -110,7 +121,8 @@ No test session requested; focused development checks are authorized. Keep guard
 
 ## Commit and shared-worktree boundaries
 
-This task owns only the explicit34 paths in the local commit-paths.json plus the new memory
-milestone note. Earlier same-subsystem plan evidence is eligible under the operating contract.
+Performance batch committed as1336fb3a. The next bounded batch owns offline ordering/chronological
+audit tools, their tests, detached Full-side audit rendering and these plan/handoff updates.
+No production motion compiler or molecular placement is promoted.
 Preserve unrelated VR, activity/readiness, scientific-selection and memory-hygiene edits.
 No stash/reset/restore, push, amend or broad staging.

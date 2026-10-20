@@ -13,6 +13,7 @@ import { computeAtomStrandColors } from '../scene/color_util.js'
 import { buildCrossoverConnections } from '../scene/crossover_connections.js'
 import { buildHelixObjects, buildStapleColorMap } from '../scene/helix_renderer.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { baseKey } from '../scene/base_ref.js'
 import './molecular_placement_audit.css'
 
 const PANEL_DEFS = [
@@ -156,12 +157,20 @@ function _axesMap(rows) {
   return Object.fromEntries((rows ?? []).map(row => [row.helix_id, row]))
 }
 
-function _buildFullLayer(scene, bundle, design, { serials = null } = {}) {
-  const geometry = bundle.nucleotides
+export function buildAuditFullLayer(scene, bundle, design, { serials = null, side = 'current' } = {}) {
+  // Offline member-motion evidence supplies each side's exact native-derived
+  // records. Never substitute Current's coordinates for the candidate.
+  const detached = bundle.schema === 'nadoc.member-motion-ordering-audit.v1'
+  let geometry = detached ? bundle[side].nucleotides : bundle.nucleotides
+  const axes = detached ? bundle[side].helix_axes : bundle.helix_axes
+  if (detached && serials) {
+    const selected = new Set(serials.map(i => bundle[side].atoms[i]).filter(Boolean).map(a => baseKey(a)))
+    geometry = geometry.filter(n => selected.has(baseKey(n)))
+  }
   const customColors = Object.fromEntries(bundle.strand_colors)
   const affectedIds = new Set((serials ?? [])
     .map(i => bundle.current.atoms[i]?.crossover_id).filter(Boolean))
-  if (serials) {
+  if (serials && !detached) {
     const filtered = {
       ...design,
       crossovers: (design.crossovers ?? []).filter(xo => affectedIds.has(xo.id)),
@@ -174,7 +183,7 @@ function _buildFullLayer(scene, bundle, design, { serials = null } = {}) {
   }
 
   const ctrl = buildHelixObjects(
-    geometry, design, scene, customColors, [], _axesMap(bundle.helix_axes), 'full',
+    geometry, design, scene, customColors, [], _axesMap(axes), 'full', { axisMeshes: !serials },
   )
   ctrl.setMode('normal')
   const colorMap = buildStapleColorMap(geometry, design)
@@ -389,7 +398,7 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
     const design = bundle[`${which}_design`]
     const data = bundle[which]
     const layer = representation === 'full'
-      ? _buildFullLayer(scene, bundle, design, { serials })
+      ? buildAuditFullLayer(scene, bundle, design, { serials, side: which })
       : _buildBallstickLayer(scene, data, bundle.strand_colors, serials)
     if (ghost) _tint(layer.root, 0x2f81f7, 0.42)
     else if (panelId === 'difference') _tint(layer.root, 0xff4da6, 0.9)
