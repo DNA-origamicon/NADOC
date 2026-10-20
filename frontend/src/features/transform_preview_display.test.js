@@ -82,6 +82,20 @@ describe('closed native transform display', () => {
     truncated.nucleotides.f64 = truncated.nucleotides.f64.slice(4)
     expect(() => validateTransformPreviewComponent(truncated)).toThrow(/compact native DNA transport/)
   })
+  it.each(Array.from({ length: 28 }, (_, i) => i))('checks fresh compact coordinate %i without allocating record vectors', offset => {
+    const value = compactTransformComponent()
+    const bytes = Uint8Array.from(atob(value.nucleotides.f64), c => c.charCodeAt(0))
+    new DataView(bytes.buffer).setFloat64(offset * 8, NaN, true)
+    value.nucleotides.f64 = btoa(String.fromCharCode(...bytes))
+    expect(() => validateTransformPreviewComponent(value)).toThrow(/nonfinite/)
+  })
+  it.each([9, 15])('retains the compact native frame unit check at offset %i', offset => {
+    const value = compactTransformComponent()
+    const bytes = Uint8Array.from(atob(value.nucleotides.f64), c => c.charCodeAt(0))
+    new DataView(bytes.buffer).setFloat64(offset * 8, 2, true)
+    value.nucleotides.f64 = btoa(String.fromCharCode(...bytes))
+    expect(() => validateTransformPreviewComponent(value)).toThrow(/invalid native frame/)
+  })
   it.each([true, false])('validates complete Prepare/Evaluate controls without copying (prepare=%s)', prepare => {
     const packet = transformPacket({ prepare, envelope: true }), original = JSON.stringify(packet)
     expect(validateTransformPreviewDisplay(packet, { prepare, requireEnvelope: true })).toBe(packet)

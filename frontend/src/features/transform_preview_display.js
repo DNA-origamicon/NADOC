@@ -3,7 +3,7 @@
 import { finite, integer, text, shape, vector, list } from './part_comparison_validation.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 import { linkerLengthToBases } from '../scene/overhang_link_arcs.js'
-import { decodeDnaComparisonRecords } from './part_dna_comparison_codec.js'
+import { visitDnaComparisonScalars, SCALAR_COLUMNS } from './part_dna_comparison_codec.js'
 import { TRANSFORM_DISPLAY_LIMITS as limits } from './transform_preview_limits.js'
 
 const fail = message => { throw new Error(`Transform preview unavailable: ${message}`) }
@@ -241,6 +241,7 @@ const recordOptional = { copy_k: uint, helical_site: object({ axis_point: vec(3)
   is_reference: bool, is_flexible_segment: bool, is_unpaired: bool, slab_position: nullable(vec(3)), slab_quaternion: nullable(vec(4)),
   extension_id: id, nucleobase: nstr, is_modification: bool, modification: nstr }
 const requiredRecordChecks = Object.entries(recordRequired), optionalRecordChecks = Object.entries(recordOptional)
+const compactRecordChecks = SCALAR_COLUMNS.map(k => [k, recordRequired[k] ?? recordOptional[k]])
 const recordKeys = new Set([...Object.keys(recordRequired), ...Object.keys(recordOptional)])
 function checkRecord(n) {
   if (!n || Object.getPrototypeOf(n) !== Object.prototype || Object.keys(n).some(k => !recordKeys.has(k))
@@ -251,13 +252,13 @@ function checkRecord(n) {
 function component(value) {
   shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'required_renderers', 'bounds_nm'])
   if (value.component_kind !== 'transform-preview-dna' || ![1, 2].includes(value.component_version) || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported component version')
-  if (value.component_version === 2) {
+  const compact = value.component_version === 2
+  if (compact) {
     if (!value.nucleotides || Array.isArray(value.nucleotides) || value.nucleotides.count > limits.records) fail('invalid compact record inventory')
-    value = { ...value, nucleotides: decodeDnaComparisonRecords(value.nucleotides) }
-  }
+  } else list(value.nucleotides, limits.records)
+  const recordCount = compact ? value.nucleotides.count : value.nucleotides.length
   const t = value.display_topology; shape(t, [...Object.keys(schemas), 'group_organization'])
   const indices = inventories(t), expected = new Map(), extensions = new Map(), changes = new Map()
-  renderWork(value.nucleotides, t)
   for (const h of t.helices) for (const mark of h.loop_skips) {
     if (mark.bp_index < h.bp_start || mark.bp_index >= h.bp_start + h.length_bp) fail('out-of-range loop/skip')
     const k = JSON.stringify([h.id, mark.bp_index]); changes.set(k, (changes.get(k) ?? 0) + mark.delta)
@@ -283,9 +284,14 @@ function component(value) {
     if (count + expected.size + extensions.size > limits.records) fail('extension allowance exceeded')
     for (let i = 0; i < count; i++) extensions.set(key(`__ext_${e.id}`, i, d.direction), e)
   }
-  list(value.nucleotides, limits.records); const seen = new Set()
-  for (const n of value.nucleotides) {
-    checkRecord(n)
+  const seen = new Set(), bridgeBoundaries = new Set()
+  let rigidCount = 0
+  const visitRecord = (n, floats = null, offset = 0) => {
+    if (floats) {
+      for (const [k, check] of compactRecordChecks) check(n[k])
+    } else checkRecord(n)
+    if (!n.is_flexible_segment) rigidCount++
+    if (n.helix_id.startsWith('__lnk__')) bridgeBoundaries.add(JSON.stringify([n.helix_id, n.strand_id, n.bp_index]))
     const k = key(n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0), ext = extensions.get(k), owner = expected.get(k)
     if (seen.has(k)) fail('duplicate occupied record'); seen.add(k)
     if (ext) {
@@ -296,10 +302,20 @@ function component(value) {
     } else {
       if (!owner || n.strand_id !== owner.s.id || n.domain_index !== owner.ordinal || n.overhang_id !== owner.d.overhang_id
           || (n.is_reference ?? false) !== owner.s.is_reference || n.placement_source !== 'native-full-o5-v1') fail('record/source mismatch')
-      recordOptional.helical_site(n.helical_site); vec(3)(n.slab_position); vec(4)(n.slab_quaternion)
-      if (Math.abs(Math.hypot(...n.slab_quaternion) - 1) > 1e-5 || Math.abs(Math.hypot(...n.axis_tangent) - 1) > 1e-5) fail('invalid native frame')
+      if (floats) {
+        // The codec validates all 28 doubles and fixes every vector/site shape.
+        // Retain this validator's native quaternion/axis unit-length checks.
+        if (Math.abs(Math.hypot(floats[offset + 15], floats[offset + 16], floats[offset + 17], floats[offset + 18]) - 1) > 1e-5
+            || Math.abs(Math.hypot(floats[offset + 9], floats[offset + 10], floats[offset + 11]) - 1) > 1e-5) fail('invalid native frame')
+      } else {
+        recordOptional.helical_site(n.helical_site); vec(3)(n.slab_position); vec(4)(n.slab_quaternion)
+        if (Math.abs(Math.hypot(...n.slab_quaternion) - 1) > 1e-5 || Math.abs(Math.hypot(...n.axis_tangent) - 1) > 1e-5) fail('invalid native frame')
+      }
     }
   }
+  if (compact) visitDnaComparisonScalars(value.nucleotides, visitRecord)
+  else for (const n of value.nucleotides) visitRecord(n)
+  renderWork(rigidCount, t)
   if (seen.size !== expected.size + extensions.size) fail('omitted occupied records')
   for (const c of t.overhang_connections) if (c.linker_type === 'ds' && linkerLengthToBases(c) > 0) {
     // The existing DS companion deliberately omits zero-length connector arcs.
@@ -307,7 +323,7 @@ function component(value) {
     // arcs or accepting the native helper's initial-render anchor fallback.
     const hid = `__lnk__${c.id}`, count = linkerLengthToBases(c)
     for (const [side, bp] of [['a', 0], ['b', count - 1]])
-      if (!value.nucleotides.some(n => n.helix_id === hid && n.strand_id === `${hid}__${side}` && n.bp_index === bp)) fail('missing native DS bridge boundary')
+      if (!bridgeBoundaries.has(JSON.stringify([hid, `${hid}__${side}`, bp]))) fail('missing native DS bridge boundary')
   }
   axes(value.helix_axes, t, indices)
   const required = []
@@ -339,16 +355,15 @@ function component(value) {
   if (value.bounds_nm !== null) {
     object({ minimum: vec(3), maximum: vec(3) })(value.bounds_nm)
     if (value.bounds_nm.minimum.some((v, i) => v > value.bounds_nm.maximum[i])) fail('invalid component bounds')
-  } else if (value.nucleotides.length || value.helix_axes.length) fail('missing component bounds')
+  } else if (recordCount || value.helix_axes.length) fail('missing component bounds')
   return indices
 }
 
 /** Native companion meshes expand scalar counts, independently of JSON size.
  * Charge the actual render families together before any Three allocation. The
  * conversion is the ordinary renderer's own helper, not a second physical rule. */
-function renderWork(records, topology) {
-  list(records, limits.records)
-  let work = records.filter(n => !n?.is_flexible_segment).length
+function renderWork(rigidCount, topology) {
+  let work = rigidCount
   const charge = amount => {
     if (!Number.isSafeInteger(amount) || amount < 0 || (work += amount) > limits.nativeWork) fail('native render work allowance exceeded')
   }

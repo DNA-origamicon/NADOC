@@ -7,6 +7,7 @@ admitted and cooperative deadlines are checked between native calls.
 """
 
 from copy import deepcopy
+import json
 from math import isfinite
 
 from backend.api.part_transform_inputs import KINDS, normalize
@@ -90,7 +91,7 @@ def _control_cost(design, admitted):
             + regular * connections * 4 * (admitted.work + domains + owners + len(design.overhangs) + 1))
 
 
-def _controls(design, params, check):
+def _controls(design, params, check, gate_cache=None):
     from backend.core.connection_tethers import cluster_connection_tethers, cluster_movable_links
     from backend.core.duplex_cluster import duplex_cluster_rotation_points, duplex_cluster_tethers
     from backend.core.flexible_segments import all_cluster_gates
@@ -110,7 +111,22 @@ def _controls(design, params, check):
             "owner_id": joint["cluster_id"], "parent_cluster_id": owners[joint["cluster_id"]].parent_cluster_id,
             "parent_composed": False}
     check()
-    result["flexible_gates"] = all_cluster_gates(design)
+    # Native gates depend on ordered connectivity and ownership, not poses.
+    # Retain complete collections rather than another hand-maintained schema.
+    # Order matters for both domain lookup and equal-specificity owner ties.
+    gate_key = None
+    if gate_cache is not None:
+        gate_key = json.dumps([
+            *[result[field] for field in ("strands", "forced_ligations", "crossovers", "flexible_segment_marks")],
+            [{key: value for key, value in owner.items() if key not in {"translation", "rotation", "pivot"}}
+             for owner in result["cluster_transforms"]],
+        ], allow_nan=False, separators=(",", ":"))
+    if gate_cache is not None and gate_cache.get("key") == gate_key:
+        result["flexible_gates"] = deepcopy(gate_cache["gates"])
+    else:
+        result["flexible_gates"] = all_cluster_gates(design)
+        if gate_cache is not None:
+            gate_cache.update(key=gate_key, gates=result["flexible_gates"])
     check()
     result["placement_constraints"] = []
     for owner in design.cluster_transforms:
@@ -150,6 +166,9 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
             or (source_kind != kind and (source_kind, kind) != ("cluster_op", "placement-poses"))):
         reject("Transform source and evaluated command roles differ", "invalid_preview_definition")
     envelope = _envelope(envelope, prefix, evaluated, source_kind)
+    cache_owned = (display_cache is not None and bool(envelope.get("lease_id"))
+                   and (prepare or display_cache.get("lease_id") == envelope["lease_id"]))
+    gate_cache = dict(display_cache.get("gate_cache", {})) if cache_owned and not prepare else {}
     # Evaluation emits only the independently owned candidate. Admit the
     # historical prefix when it actually supplies a before pane at preparation.
     before = inventory(prefix, check) if prepare else None
@@ -160,7 +179,7 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         "evaluated_command_kind": kind,
         "feature_id": evaluated.entry.id, "stage": "feature", "source_equivalence_checked": False,
         "downstream_evaluated": False, "physical_validity": False,
-        "control_state": _controls(evaluated.design, evaluated.params, check),
+        "control_state": _controls(evaluated.design, evaluated.params, check, gate_cache if cache_owned else None),
         "candidate": project_admitted(evaluated.design, after, check, compact=True) if include_geometry else None}
     if prepare:
         result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check, compact=True))
@@ -182,6 +201,10 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         if result.get("lease_id") and result["before"]["component_version"] == 2:
             display_cache.update(lease_id=result["lease_id"],
                                  rows=deepcopy(result["before"]["nucleotides"]["rows"]))
+    if cache_owned and display_cache.get("lease_id") == envelope["lease_id"]:
+        # Publish only after whole-response admission. The response and lease
+        # never share mutable native gate values.
+        display_cache["gate_cache"] = deepcopy(gate_cache)
     return result
 
 

@@ -11,6 +11,7 @@ import { flexAnchorKey, initFlexibleArcs } from './flexible_arcs.js'
 import { initOverhangLinkArcs, linkerLengthToBases } from './overhang_link_arcs.js'
 import { buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 import { createDeformationPreviewCamera } from './deformation_preview_camera.js'
+import { buildDeformationAxisGuides } from './deformation_axis_guides.js'
 import { baseKey, xbKey } from './base_ref.js'
 import { decodeDnaComparisonRecordsCopy } from '../features/part_dna_comparison_codec.js'
 
@@ -65,8 +66,12 @@ export function buildTransformPreviewLayer(component, scene) {
     const privateState = { currentDesign: design, currentGeometry: records, currentHelixAxes: axes,
       coloringMode: 'strand', showReferenceGeometry: true, simulationTabActive: false }
     const privateStore = { getState: () => privateState, subscribe: () => () => {} }
-    const native = buildHelixObjects(records, design, root, {}, [], axes, 'full', { curvedCylinders: false })
-    native.setAxisShaftMode('deformed')
+    const sampledAxes = reusable(component)
+    const native = buildHelixObjects(records, design, root, {}, [], axes, 'full',
+      { curvedCylinders: false, axisMeshes: !sampledAxes })
+    const axisGuides = sampledAxes ? buildDeformationAxisGuides(design, axes) : null
+    if (axisGuides) root.add(axisGuides.line)
+    else native.setAxisShaftMode('deformed')
     const fluoroEntries = native.getFluoroEntries()
     const rigid = records.filter(n => !n.is_flexible_segment && !n.is_modification)
     const slabs = rigid.filter(n => n.slab_position !== null)
@@ -184,6 +189,7 @@ export function buildTransformPreviewLayer(component, scene) {
         const nextAxes = Object.fromEntries(structuredClone(component.helix_axes).map(a => [a.helix_id,
           { start: a.start, end: a.end, samples: a.samples, segments: a.segments, ovhgAxes: a.ovhg_axes ?? null }]))
         native.updateStaticFullGeometry(next, nextAxes)
+        axisGuides?.update(nextAxes)
         Object.assign(design, nextDesign, { id: paletteToken })
         geometry.helixAxes = nextAxes
         for (const arc of connections) {

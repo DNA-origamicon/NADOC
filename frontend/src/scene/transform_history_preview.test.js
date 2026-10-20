@@ -35,7 +35,14 @@ it('reused native buffers match fresh rotated Full meshes and retain current ges
   const reused = buildTransformPreviewLayer(compactTransformComponent(source), new THREE.Scene())
   const fresh = buildTransformPreviewLayer(compactTransformComponent(next), new THREE.Scene())
   owners.push(reused, fresh)
+  const guide = reused.root.getObjectByName('axisLine')
+  expect(guide.isLineSegments).toBe(true)
+  const attribute = guide.geometry.getAttribute('position')
+  const originalPositions = [...attribute.array]
   expect(reused.update(compactTransformComponent(next))).toBe(true)
+  expect(guide.geometry.getAttribute('position')).toBe(attribute)
+  expect([...attribute.array]).not.toEqual(originalPositions)
+  expect(attribute.array).toEqual(fresh.root.getObjectByName('axisLine').geometry.getAttribute('position').array)
   expect(reused.geometry.records).toEqual(fresh.geometry.records)
   expect(reused.geometry.design.cluster_transforms).toEqual(next.display_topology.cluster_transforms)
   for (const field of ['backboneEntries', 'slabEntries']) {
@@ -111,6 +118,7 @@ describe('private complete transform renderer', () => {
   it('renders an authored junction owned by consecutive native flexible-run beads', () => {
     const component = flexibleJunctionComponent(), original = JSON.stringify(component), scene = new THREE.Scene()
     const layer = buildTransformPreviewLayer(component, scene); owners.push(layer)
+    expect(layer.root.getObjectByName('axisLine')?.isLineSegments).not.toBe(true)
     const flexible = layer.root.getObjectByName('flexibleArcs')
     expect(flexible.getObjectByName('flexSegmentBeads').count).toBe(4)
     expect(flexible.getObjectByName('flexSegmentSlabs').count).toBe(4)

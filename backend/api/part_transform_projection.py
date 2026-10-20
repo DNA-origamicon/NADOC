@@ -28,10 +28,47 @@ def point(value, length=3):
         reject("Malformed native transform display coordinates", "invalid_preview_geometry")
 
 
+def _check_slab_block(records, block):
+    """Validate an already checked codec block with unchanged native arithmetic.
+
+    This private adapter consumes only the block collected from these records.
+    Unsupported or failed batches retain the original authority's diagnostics.
+    No pose is constructed, repaired, cached, or returned to a consumer.
+    """
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+    from backend.core.native_full_placement import SOURCE
+    from backend.core.native_slab_placement import (
+        _native_registration, _native_slab_array_poses, authoritative_slab_poses,
+    )
+
+    if records and block.size == len(records) * 28:
+        try:
+            registration = _native_registration()
+            if all(r.get("placement_source") == SOURCE and r.get("direction") in registration for r in records):
+                values = block.reshape((-1, 28))
+                # Match the original contiguous array layout, including at
+                # acceptance boundaries; avoid Python per-record extraction.
+                arrays = [np.ascontiguousarray(values[:, start:start + 3]) for start in (0, 3, 6, 9)]
+                offsets = np.asarray([registration[r["direction"]] for r in records])
+                poses = _native_slab_array_poses(*arrays,
+                    np.ascontiguousarray(offsets[:, 0]), np.ascontiguousarray(offsets[:, 1]))
+                quaternions = np.ascontiguousarray(values[:, 15:19])
+                if (poses is not None and np.all(np.isfinite(quaternions))
+                        and np.all(abs(np.linalg.norm(quaternions, axis=1) - 1.) <= 1e-6)):
+                    frames = Rotation.from_quat(quaternions).as_matrix()
+                    if (np.allclose(values[:, 12:15], poses[0], rtol=0, atol=1e-7)
+                            and np.allclose(frames, poses[1], rtol=0, atol=1e-7)):
+                        return
+        except (TypeError, ValueError, OverflowError):
+            pass
+    authoritative_slab_poses(records)
+
+
 def _records(records, expected):
     import numpy as np
     from backend.core.native_full_placement import SOURCE
-    from backend.core.native_slab_placement import SLABLESS_SOURCES, authoritative_slab_poses
+    from backend.core.native_slab_placement import SLABLESS_SOURCES
 
     limit(len(records), MAX_RECORDS, "emitted records")
     seen = set()
@@ -62,17 +99,22 @@ def _records(records, expected):
             site = value.get("helical_site")
             if type(site) is not dict or set(site) != {"axis_point", "radial_hat", "azimuth_rad", "groove_offset_rad", "phase_roll_rad"}:
                 reject("Unreviewed native transform helical site")
+            # Match the existing compact codec's vector-then-site layout so
+            # its encoder can consume this exact checked coordinate block.
+            point(value.get("slab_position")), point(value.get("slab_quaternion"), 4)
             point(site["axis_point"]), point(site["radial_hat"])
             coordinates.extend(site[name] for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"))
-            point(value.get("slab_position")), point(value.get("slab_quaternion"), 4)
     if seen != expected.sites.keys() | expected.extensions.keys():
         reject("Native transform display omitted occupied records", "invalid_preview_geometry")
     # Same exact numeric-type/finiteness checks, batched before the unchanged
     # native bead/base/slab authority. Avoid a Python generator per vector.
-    if (not set(map(type, coordinates)) <= {int, float}
-            or not np.isfinite(np.fromiter(coordinates, dtype=np.float64, count=len(coordinates))).all()):
+    if not set(map(type, coordinates)) <= {int, float}:
         reject("Malformed native transform display coordinates", "invalid_preview_geometry")
-    authoritative_slab_poses(records)
+    block = np.fromiter(coordinates, dtype="<f8", count=len(coordinates))
+    if not np.isfinite(block).all():
+        reject("Malformed native transform display coordinates", "invalid_preview_geometry")
+    _check_slab_block(records, block)
+    return block
 
 
 def _axes(values, expected, design):
@@ -155,7 +197,7 @@ def project_admitted(design, expected, check, *, compact=False):
     try:
         records = _geometry_for_design(design)
         check()
-        _records(records, expected)
+        coordinates = _records(records, expected)
         axes = deformed_helix_axes(design)
         check()
         axes = _apply_ovhg_rotations_to_axes(design, axes, records)
@@ -189,7 +231,7 @@ def project_admitted(design, expected, check, *, compact=False):
                             and n["slab_position"] is not None and n["slab_quaternion"] is not None
                             for n in records)
     return {"component_kind": "transform-preview-dna", "component_version": 2 if packed else 1, "representation": "native-full-v1",
-            "units": "nm", "nucleotides": pack_records_compact(records) if packed else records, "helix_axes": axes, "display_topology": display,
+            "units": "nm", "nucleotides": pack_records_compact(records, coordinate_values=coordinates) if packed else records, "helix_axes": axes, "display_topology": display,
             "required_renderers": companions, "bounds_nm": bounds}
 
 

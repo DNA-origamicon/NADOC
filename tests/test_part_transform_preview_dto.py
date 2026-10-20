@@ -433,3 +433,63 @@ def test_short_connection_control_traversals_are_charged_before_helpers(applicat
     with pytest.raises(CommandContractError) as caught:
         dto().evaluate_display(prefix, evaluated, include_geometry=False)
     assert caught.value.code == "preview_limit"
+
+
+def test_native_gate_cache_retains_pose_independence_order_and_ownership(monkeypatch):
+    from backend.core import flexible_segments
+    source = flexible_source()
+    original = flexible_segments.all_cluster_gates
+    calls = []
+    def native_gates(design):
+        calls.append(1)
+        return original(design)
+    monkeypatch.setattr(flexible_segments, "all_cluster_gates", native_gates)
+    cache = {}
+    def controls():
+        result = dto()._controls(source, {}, lambda: None, cache)
+        assert result["flexible_gates"] == original(source)
+        return result
+    controls()
+    source.cluster_transforms[0].translation = [9, 2, 1]
+    source.cluster_transforms[0].rotation = [0, 0, .6, .8]
+    source.cluster_transforms[0].pivot = [1, 2, 3]
+    controls()
+    assert len(calls) == 1
+    source.cluster_transforms.reverse()
+    controls()
+    source.cluster_transforms[0].helix_ids.append("h0")
+    controls()
+    source.flexible_segment_marks.pop()
+    controls()
+    source.cluster_transforms[0].is_default = True
+    controls()
+    assert len(calls) == 5
+
+
+def test_gate_cache_is_lease_owned_and_not_changed_by_failed_packet(monkeypatch):
+    from backend.core import flexible_segments
+    prefix, evaluated = moved(small())
+    cache = {}
+    opened = dto().prepare_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache)
+    expected = deepcopy(cache)
+    opened["control_state"]["flexible_gates"].clear()
+    assert cache == expected
+    original = flexible_segments.all_cluster_gates
+    calls = []
+    def native_gates(design):
+        calls.append(1)
+        return original(design)
+    monkeypatch.setattr(flexible_segments, "all_cluster_gates", native_gates)
+    result = dto().evaluate_display(prefix, evaluated, include_geometry=False,
+        envelope={"lease_id": "owned"}, display_cache=cache)
+    assert calls == []
+    result["control_state"]["flexible_gates"].clear()
+    assert cache == expected
+    dto().evaluate_display(prefix, evaluated, include_geometry=False,
+        envelope={"lease_id": "different"}, display_cache=cache)
+    assert len(calls) == 1 and cache == expected
+    monkeypatch.setattr(dto(), "MAX_OUTPUT_BYTES", 1)
+    with pytest.raises(CommandContractError):
+        dto().evaluate_display(prefix, evaluated, include_geometry=False,
+            envelope={"lease_id": "owned"}, display_cache=cache)
+    assert cache == expected

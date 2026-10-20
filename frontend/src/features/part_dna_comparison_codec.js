@@ -117,16 +117,18 @@ function decodeCompact(value, reuse = null, checked = null) {
 }
 
 /** Validate compact ownership without allocating molecular arrays. The visitor
- * receives one ephemeral scalar record; it must not retain that record. */
+ * receives one ephemeral scalar record and a read-only numeric block/offset;
+ * it must neither retain the record nor mutate the numeric block. */
 export function visitDnaComparisonScalars(value, visit) {
   if (Array.isArray(value)) {
     for (const record of decodeDnaComparisonRecords(value)) visit(record)
     return
   }
   const block = readCompact(value), record = {}
-  for (const row of block.rows) {
+  for (let index = 0; index < block.rows.length; index++) {
+    const row = block.rows[index]
     for (let i = 0; i < SCALAR_COLUMNS.length; i++) record[SCALAR_COLUMNS[i]] = row[i]
-    visit(record)
+    visit(record, block.floats, index * STRIDE)
   }
   decodedCompact.delete(value)
   checkedBlocks.set(value, block)
