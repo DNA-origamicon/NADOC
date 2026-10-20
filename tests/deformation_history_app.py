@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+FIXTURES = {"repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 
 
 def fixture(kind):
@@ -26,6 +26,63 @@ def fixture(kind):
 
     if kind not in FIXTURES:
         raise ValueError("Unknown fixture")
+    if kind in {'repair-sweep-source', 'repair-extrude-source'}:
+        from tests.test_part_geometry_reference_repair import fixture as repair_fixture
+        family, field = ('sweep', 'source_helix_id') if kind == 'repair-sweep-source' else ('extrude-continuation', 'source_frame_id')
+        return repair_fixture(family, field)[1]
+    if kind == "history-scoped-order":
+        from tests.test_part_history_reorder import scoped_sweep_source
+        return scoped_sweep_source()
+    if kind == "history-reorder":
+        from backend.api.crud import _build_bundle
+        from backend.api.part_proof_commands import execute
+        from backend.core.models import ClusterRigidTransform
+        from backend.core.part_history_proof import import_root
+        source = _build_bundle([(0, 0)], BundleRequest(cells=[[0, 0]], length_bp=21, name="__e2e__history-reorder"))
+        source.cluster_transforms.extend(ClusterRigidTransform(id=i) for i in ["a", "b", "c"])
+        source.recipe_root = import_root(source)
+        log = []
+        for identity in ["a", "b", "c"]:
+            params = {"joint_id": identity, "cluster_id": identity, "local_axis_origin": [0, 0, 0],
+                      "local_axis_direction": [0, 0, 1], "_proof_version": 1}
+            source = execute("joint-place", source, params)
+            log.append(RoutingClusterLogEntry(id=identity, children=[MinorMutationLogEntry(
+                id=identity + "-child", op_subtype="joint-place", label=identity, params=params)]))
+        return source.copy_with(feature_log=log)
+    if kind == "sweep-large":
+        from backend.core.sweep import SweepRequest
+        from tests.test_part_sweep_preview import snapshot
+        from tests.test_group_lineage_resize_pipeline import minor
+        source = create_empty_part("__e2e__history-sweep-large", "HONEYCOMB")
+        source = snapshot(source, "sweep", SweepRequest(
+            sweep_id=str(uuid4()), cells=[[r, c] for r in range(6) for c in range(3)],
+            points_nm=[[0, 0, 0], [0, 0, 171.36]], ligate_adjacent=False,
+        ).model_dump(mode="json"), "selected-sweep")
+        return minor(source, "nick-batch", {"nicks": [
+            {"helix_id": source.helices[0].id, "bp_index": 200, "direction": "FORWARD"}]})
+    if kind in {"extrude-nick-batch", "extrude-blocked", "extrude-large"}:
+        from tests.test_part_extrusion_edit_routes import append
+        from tests.test_group_lineage_resize_pipeline import minor
+        source = create_empty_part("__e2e__history-extrude", "HONEYCOMB")
+        source = append(source, "extrude-frame", {
+            "history_seed": str(uuid4()),
+            "cells": [[r, c] for r in range(6) for c in range(3)] if kind == "extrude-large" else [[0, 0]],
+            "length_bp": 504 if kind == "extrude-large" else 14,
+            "plane": "XY", "translation_nm": [4, 0, 0],
+            "expected_design_id": source.id, "expected_revision": 0,
+        }, "selected-extrude")
+        source = minor(source, "nick-batch", {"nicks": [
+            {"helix_id": source.helices[0].id, "bp_index": bp, "direction": "FORWARD"}
+            for bp in (1, 10)]})
+        source.feature_log[-1].children[0].label = "Output nick pair"
+        if kind == "extrude-blocked":
+            source = minor(source, "nick-batch", {"nicks": [
+                {"helix_id": source.helices[0].id, "bp_index": 3, "direction": "FORWARD"}]})
+            source.feature_log[-1].children[-1].label = "Later nick"
+        return source
+    if kind in {"sweep-nick", "sweep-nick-batch"}:
+        from tests.test_part_sweep_preview_sessions import recipe
+        return recipe(downstream="batch" if kind.endswith("-batch") else True, name="__e2e__history-sweep")
     if kind in FAMILIES:
         from tests.extrude_matrix_fixture import fixture as matrix_fixture
         return matrix_fixture(kind)
@@ -182,8 +239,7 @@ def create_app():
 
     @asynccontextmanager
     async def lifespan(_app):
-        previous_sweep = sweep_routes.SWEEP_PREVIEW_ENABLED
-        sweep_routes.SWEEP_PREVIEW_ENABLED = True
+        assert sweep_routes.SWEEP_PREVIEW_ENABLED, "Sweep production preview must be enabled"
         previous = routes.DEFORMATION_PREVIEW_ENABLED
         routes.DEFORMATION_PREVIEW_ENABLED = True
         try:
@@ -195,7 +251,6 @@ def create_app():
                 if identity.startswith("__e2e__history-"):
                     state.drop_doc(identity)
             routes.DEFORMATION_PREVIEW_ENABLED = previous
-            sweep_routes.SWEEP_PREVIEW_ENABLED = previous_sweep
 
     # Copy route list; never add fixture routes to main.app or replace its lifespan.
     from starlette.middleware import Middleware
@@ -258,7 +313,7 @@ def create_app():
             with state._lock:
                 source = state._session().design.model_copy(deep=True)
         result = assess_part_history(source, execute=execute, dependencies=dependencies)
-        if source.feature_log[-1].id == "downstream-nick":
+        if source.feature_log[-1].id == "downstream-nick" or source.feature_log[0].id == "selected-sweep":
             from backend.core.design_geometry import _geometry_for_design
             from tests.test_part_deformation_preview import authoring
             expected = cold_replay(source)

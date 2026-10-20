@@ -127,3 +127,55 @@ def test_capabilities_distinguish_executors_from_proof_contracts():
     assert result["command_editors"]["extrude-frame"]["history_ui"] == "complete_native_inputs"
     assert result["command_editors"]["circle-segment"]["history_ui"] == "complete_native_inputs"
     assert "expected_feature_id" in result["extrusion_history_editor"]["requires"]
+
+
+def test_fresh_bundle_is_one_revision_and_undo_restores_the_exact_empty_part():
+    source = create_empty_part("Empty source", "HONEYCOMB")
+    state.load_design(source)
+    session = state._session()
+    revision = session.revision
+    before = source.model_dump()
+    create_bundle(BundleRequest(cells=[[0, 0]], length_bp=14))
+    assert session.revision == revision + 1
+    assert session.design.id == source.id
+    assert len(session.history) == 1
+    assert verify_current_part()["status"] == "verified"
+    state.undo()
+    assert session.design.model_dump() == before
+    state.redo()
+    assert verify_current_part()["status"] == "verified"
+
+
+def test_replacement_bundle_has_an_empty_recipe_and_one_undo_to_the_previous_part():
+    create_bundle(BundleRequest(cells=[[0, 0]], length_bp=14))
+    session = state._session()
+    before, revision, history_count = session.design.model_dump(), session.revision, len(session.history)
+    create_bundle(BundleRequest(cells=[[0, 1]], length_bp=21))
+    assert session.revision == revision + 1
+    assert len(session.history) == history_count + 1
+    assert len(session.design.feature_log) == 1
+    assert verify_current_part()["status"] == "verified"
+    state.undo()
+    assert session.design.model_dump() == before
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_refused_bundle_build_preserves_source_and_undo_redo(monkeypatch, existing):
+    from backend.api import crud
+
+    if existing:
+        create_bundle(BundleRequest(cells=[[0, 0]], length_bp=14))
+        state.undo()
+    session = state._session()
+    def signature():
+        return (None if session.design is None else session.design.model_dump(), session.revision,
+                [d.model_dump() for d in session.history], [d.model_dump() for d in session.redo])
+    before = signature()
+    native = crud._build_bundle
+    def fail(*args):
+        native(*args)
+        raise RuntimeError("refused completed private build")
+    monkeypatch.setattr(crud, "_build_bundle", fail)
+    with pytest.raises(RuntimeError, match="refused completed"):
+        create_bundle(BundleRequest(cells=[[0, 0]], length_bp=14))
+    assert signature() == before

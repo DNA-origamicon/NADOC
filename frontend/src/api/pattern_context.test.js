@@ -23,7 +23,7 @@ it('dispatches exact frozen source expectations and explicit organization metada
   await f.api.create('linear-pattern', body, context)
   expect(f.request).toHaveBeenCalledWith('POST', '/design/linear-pattern', {
     ...body, expected_design_id: 'part', expected_revision: 7,
-  }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true })
+  }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true, onError: expect.any(Function) })
   expect(f.syncDesign).toHaveBeenCalledTimes(1)
 })
 
@@ -76,7 +76,7 @@ it('edits the stable feature with original source expectations and preserves cop
   await f.api.edit(0, params, context, 'feature')
   expect(f.request).toHaveBeenCalledWith('POST', '/design/features/0/edit', {
     params, expected_design_id: 'part', expected_revision: 7, expected_feature_id: 'feature',
-  }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true })
+  }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true, onError: expect.any(Function) })
   await expect(f.api.edit(0, params, context, 'another')).rejects.toThrow(/feature|changed/i)
   expect(f.request).toHaveBeenCalledTimes(1)
 })

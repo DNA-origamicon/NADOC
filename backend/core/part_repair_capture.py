@@ -130,7 +130,7 @@ def capture_draft_inputs(design, *, source_revision, draft=None, proposed_action
         if entry.feature_type in OVERLAY_KINDS:
             # These entry types are themselves authored input definitions.
             return copier.clone(entry)
-        names = ("id", "feature_type", "op_kind", "op_subtype", "params")
+        names = ("id", "feature_type", "op_kind", "op_subtype", "params", "suppressed")
         values = {name: copier.clone(getattr(entry, name)) for name in names if name in type(entry).model_fields}
         return type(entry).model_construct(**values)
 
@@ -142,6 +142,7 @@ def capture_draft_inputs(design, *, source_revision, draft=None, proposed_action
             if remaining < len(entry.children):
                 raise CaptureLimit("Repair draft capture entry budget exceeded")
             log.append(RoutingClusterLogEntry.model_construct(id=copier.clone(entry.id),
+                suppressed=copier.clone(entry.suppressed),
                 children=[header(child) for child in entry.children]))
         else:
             log.append(header(entry))

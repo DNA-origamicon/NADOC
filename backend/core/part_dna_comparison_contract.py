@@ -167,7 +167,7 @@ class Inventory:
     indices: dict
 
 
-def inventory(design):
+def inventory(design, *, previous=None):
     """Validate exact references on already-owned, bounded worker inputs."""
     from backend.core.part_scope_references import COLLECTIONS, referenced_resources
     from backend.core.part_dna_display_scope import validate_owned_organization
@@ -214,6 +214,33 @@ def inventory(design):
         for target in (op.targets or []) if op.target_ranges is None else []:
             if target["kind"] == "domain":
                 domain_ref(target.get("strand_id", target.get("strandId")), target.get("domain_index", target.get("domainIndex")))
+    # Occupancy is topology-only. Exact model equality (including loop copies,
+    # ordered domains and overhang ownership) permits reuse within a private
+    # preview session. Scope and changing deformation references above, and all
+    # emitted coordinate/inventory checks in the projection, still run.
+    if previous is not None and all(indices[name] == previous.indices[name]
+                                    for name in ("helices", "strands", "overhangs")):
+        sites = previous.sites
+    else:
+        sites = _occupied_sites(design)
+    _limit(len(sites), MAX_SLOTS, "emitted nucleotide count")
+    for item in design.nucleotide_transforms:
+        key = item.helix_id, item.bp_index, item.direction.value, item.copy_k
+        if key not in sites:
+            _reject("A nucleotide pose target is not occupied", "invalid_comparison_reference")
+    for item in design.crossovers:
+        for half in (item.half_a, item.half_b):
+            if (half.helix_id, half.index, half.strand.value, 0) not in sites:
+                _reject("A crossover endpoint is not occupied", "invalid_comparison_reference")
+    for item in design.forced_ligations:
+        for end in ("three_prime", "five_prime"):
+            key = (getattr(item, end + "_helix_id"), getattr(item, end + "_bp"), getattr(item, end + "_direction").value, 0)
+            if key not in sites:
+                _reject("A forced-ligation endpoint is not occupied", "invalid_comparison_reference")
+    return Inventory(sites, indices)
+
+
+def _occupied_sites(design):
     deltas = {}
     for helix in design.helices:
         for change in helix.loop_skips:
@@ -238,17 +265,4 @@ def inventory(design):
         owner = overhang_owners.get(overhang.id)
         if owner is None or owner[0] != overhang.strand_id or owner[2].helix_id != overhang.helix_id:
             _reject("An overhang has no exact occupied owner", "invalid_comparison_reference")
-    for item in design.nucleotide_transforms:
-        key = item.helix_id, item.bp_index, item.direction.value, item.copy_k
-        if key not in sites:
-            _reject("A nucleotide pose target is not occupied", "invalid_comparison_reference")
-    for item in design.crossovers:
-        for half in (item.half_a, item.half_b):
-            if (half.helix_id, half.index, half.strand.value, 0) not in sites:
-                _reject("A crossover endpoint is not occupied", "invalid_comparison_reference")
-    for item in design.forced_ligations:
-        for end in ("three_prime", "five_prime"):
-            key = (getattr(item, end + "_helix_id"), getattr(item, end + "_bp"), getattr(item, end + "_direction").value, 0)
-            if key not in sites:
-                _reject("A forced-ligation endpoint is not occupied", "invalid_comparison_reference")
-    return Inventory(sites, indices)
+    return sites

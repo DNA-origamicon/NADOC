@@ -1454,6 +1454,10 @@ def _build_extrude_deformed_continuation(
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_deformed_continuation
 
+    if body.ref_helix_id is not None:
+        from backend.api.part_extrusion_edit_inputs import _source_reference
+        _source_reference(d, "helices", body.ref_helix_id, "helix", "ref_helix_id")
+
     # Prefer recomputing the deformed frame from the LIVE design at source_bp so the
     # op is replayable (see BundleDeformedContinuationRequest.source_bp). Falls back
     # to the baked frame for legacy requests that didn't send source_bp.
@@ -1540,25 +1544,24 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
 
 @router.post("/design/bundle", status_code=201)
 def create_bundle(body: BundleRequest) -> dict:
-    """Create a honeycomb bundle design from a list of (row, col) lattice cells.
-
-    This is the canonical fresh-start endpoint. To guarantee that F0 (slider
-    seek to ``-2``) is an empty workspace regardless of what was loaded
-    before, we first reset the active design to an empty ``Design`` and only
-    then run bundle creation through the snapshot wrapper. The resulting
-    snapshot's pre-state is therefore the canonical empty design.
-    """
+    """Create a fresh bundle in one undoable, failure-atomic feature transaction."""
     design_state.require_compatibility_write("legacy_bundle_create")
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    # Reset to a canonical empty workspace so the snapshot's pre-state is empty.
+    # The explicit recipe root is empty; never reset live state before the
+    # transaction. A refused build must preserve the source and both stacks.
     from backend.core.part_history_contract import create_empty_part
     body = body.model_copy(update={"history_seed": body.history_seed or _uuid.uuid4()})
     empty = create_empty_part(body.name, body.lattice_type)
-    design_state.load_design(empty)
+
+    def build(source):
+        result = _cluster_bundle_regions(_build_bundle(cells, body))
+        result.id = source.id
+        result.recipe_root = empty.recipe_root
+        return result
 
     trace = _TimingTrace()
     with trace.step("mutation"):
@@ -1566,11 +1569,12 @@ def create_bundle(body: BundleRequest) -> dict:
             op_kind="bundle-create",
             label=f"Create bundle: {body.name}",
             params=body.model_dump(mode="json"),
-            fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
+            fn=build,
+            initial_design=empty,
         )
     with trace.step("geometry_response"):
-        # New lineage (reset-to-empty above) — nothing in the client's cache
-        # matches this design's history.
+        # A fresh recipe replaces the cached log, even though the part keeps
+        # its identity and the previous source remains available through Undo.
         payload = _design_response_with_geometry(
             new_design, report, compact_deformed=True, full_feature_log=True,
         )
@@ -7226,6 +7230,10 @@ def _seek_feature_log(
     so that seeking past an auto-op or mid-cluster rolls back the topology too
     — not just deformations and cluster states.
     """
+    from backend.core.part_suppression import has_suppression
+    if has_suppression(design.feature_log):
+        from backend.api.part_history_suppression import seek_suppressed_history
+        return seek_suppressed_history(design, position, sub_position)
     if optimized is None:
         from backend.core.feature_evaluation import optimization_enabled
         optimized = optimization_enabled()

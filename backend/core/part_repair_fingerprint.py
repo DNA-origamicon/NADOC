@@ -125,7 +125,8 @@ def repair_base_fingerprint(design, *, max_entries=MAX_ENTRIES,
     def command(entry):
         identify(entry)
         kind, params = command_input(entry)
-        header = {"id": entry.id, "feature_type": entry.feature_type, "kind": kind, "params": params}
+        header = {"id": entry.id, "feature_type": entry.feature_type, "kind": kind, "params": params,
+                  "suppressed": entry.suppressed}
         budget.charge(header)
         for parameter, source in command_source_bindings(kind, params):
             binding = {"feature_id": entry.id, "parameter": parameter, "source": source.model_dump(mode="json")}
@@ -136,7 +137,7 @@ def repair_base_fingerprint(design, *, max_entries=MAX_ENTRIES,
     for entry in design.feature_log:
         if entry.feature_type == "routing-cluster":
             identify(entry)
-            header = {"id": entry.id, "feature_type": entry.feature_type}
+            header = {"id": entry.id, "feature_type": entry.feature_type, "suppressed": entry.suppressed}
             budget.charge(header)
             definitions.append({**header, "children": [command(child) for child in entry.children]})
         else:

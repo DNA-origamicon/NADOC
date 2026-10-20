@@ -2,7 +2,7 @@
 import { buildDeformationPreviewLayer } from './part_dna_comparison_layer.js'
 import { createDeformationPreviewCamera } from './deformation_preview_camera.js'
 
-export function createDeformationHistoryPreview({ scene, getLiveRoot, camera }) {
+export function createDeformationHistoryPreview({ scene, getLiveRoot, camera, allowEmptyCandidate = false }) {
   let before = null, candidate = null, live = null, wasVisible = false
   let viewport = null
   let mode = 'candidate', disposed = false
@@ -32,7 +32,7 @@ export function createDeformationHistoryPreview({ scene, getLiveRoot, camera }) 
       try {
         nextBefore = buildDeformationPreviewLayer(packet.before, scene)
         if (packet.candidate !== null) nextCandidate = buildDeformationPreviewLayer(packet.candidate, scene)
-        else if (packet.mode !== 'create' || packet.awaiting_parameters !== true) throw new Error('Missing initial deformation display')
+        else if (!allowEmptyCandidate && (packet.mode !== 'create' || packet.awaiting_parameters !== true)) throw new Error('Missing initial deformation display')
       } catch (error) { nextBefore?.dispose(); nextCandidate?.dispose(); throw error }
       clear()
       try {

@@ -79,8 +79,8 @@ def command_rows(design, limit):
                 count += 1
                 if count > limit:
                     raise ValueError("entry_limit")
-            from backend.core.part_overlay_commands import command_input
-            kind, params = command_input(child)
+            from backend.core.part_suppression import replay_input
+            kind, params = replay_input(child, parent_suppressed=entry.suppressed)
             if child is not entry:
                 from backend.core.part_group_organization import KINDS
                 if kind in KINDS:

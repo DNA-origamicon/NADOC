@@ -247,3 +247,20 @@ def test_inventory_proves_loop_copies_and_extended_sites():
     value = inventory(small("tails"))
     assert ("h0", -3, "FORWARD", 0) in value.sites
     assert ("h0", 15, "FORWARD", 0) in value.sites
+
+
+@pytest.mark.parametrize("kind", ["straight", "loops", "tails", "bend", "twist", "sweep", "cluster", "reference"])
+def test_preview_reuses_checked_coordinates_with_exact_standalone_wire_parity(kind, monkeypatch):
+    from backend.core import part_dna_comparison as projection
+    from backend.core.part_dna_comparison_codec import pack_records_compact
+
+    calls = []
+    def pack(records, *, coordinate_values=None):
+        assert coordinate_values is not None
+        actual = pack_records_compact(records, coordinate_values=coordinate_values)
+        assert actual == pack_records_compact(records)
+        calls.append(actual)
+        return actual
+    monkeypatch.setattr(projection, "pack_records_compact", pack)
+    result = projection.project_for_deformation_preview(small(kind))
+    assert calls == [result["nucleotides"]]

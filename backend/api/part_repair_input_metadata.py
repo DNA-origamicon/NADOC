@@ -141,7 +141,11 @@ def describe_inputs(kind, params, *, feature_id=None, child_id=None):
                            "input_type": "reference", "reference_selection": {
                                "resource_kind": slot.resource_kind, "max_candidates": 100}})
 
-        if kind == "deformation":
+        from backend.api.part_geometry_reference_repair import SOURCES, fields as geometry_fields
+        if kind in SOURCES:
+            for name, label in geometry_fields(kind, params):
+                reference([name], label)
+        elif kind == "deformation":
             for index in range(len(values["targets"])):
                 reference(["targets", index, "id"], f"Organizational group {index + 1}")
         elif kind == "overhang-bulk":

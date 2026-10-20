@@ -122,3 +122,19 @@ it('opens an owned creation prefix without any provisional candidate and dispose
   expect(scene.children).toHaveLength(3)
   preview.dispose(); expect(scene.children).toEqual([live]); expect(live.visible).toBe(true)
 })
+
+
+it('allows guide-only Sweep ownership while retaining one fixed prefix and restoring the camera', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+  const preview = createDeformationHistoryPreview({ scene, camera, allowEmptyCandidate: true })
+  owned.push(preview)
+  preview.open({ before: component(), candidate: null })
+  const prefix = scene.children.find(child => child.name === 'privateDeformationPreview')
+  expect(prefix.visible).toBe(true)
+  expect(scene.children.filter(child => child.name === 'privateDeformationPreview')).toEqual([prefix])
+  preview.replaceCandidate(null); preview.show('before')
+  expect(scene.children.filter(child => child.name === 'privateDeformationPreview')).toEqual([prefix])
+  preview.dispose()
+  expect(scene.children).toHaveLength(0)
+  expect(camera.layers.mask).toBe(1)
+})

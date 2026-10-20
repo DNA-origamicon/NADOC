@@ -71,6 +71,7 @@ from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_part_group_organization import router as part_group_organization_router
 from backend.api.routes_nucleotide_transforms import router as nucleotide_transforms_router
 from backend.api.routes_deformation import router as deformation_router
+from backend.api.routes_part_deformation_preview import router as deformation_preview_router
 from backend.api.routes_display_geometry import router as display_geometry_router
 from backend.api.routes_display_metadata import router as display_metadata_router
 from backend.api.routes_export_3dprint import router as export_3dprint_router
@@ -453,6 +454,7 @@ app.include_router(feature_log_router, prefix="/api")
 app.include_router(part_element_copy_router, prefix="/api")
 app.include_router(part_cadnano_import_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
+app.include_router(deformation_preview_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
 app.include_router(vr_tours_router, prefix="/api")

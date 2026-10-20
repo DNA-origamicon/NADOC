@@ -56,7 +56,7 @@ describe('private deformation preview transport', () => {
     const result = await api.refreshCommitted(receipt, { context })
     expect(result).toEqual({ ...source, nucleotides: [], helix_axes: [] })
     expect(request.mock.calls.map(([, path]) => path)).toEqual([
-      '/design/features/deformation-preview/status', '/design', '/design/geometry',
+      '/design/features/deformation-preview/status', '/design?include_geometry=true', '/design/geometry',
       '/design/revision', '/design/features/deformation-preview/status',
     ])
     expect(request.mock.calls[0][2]).toEqual({ ...origin, lease_id: receipt.lease_id })
@@ -81,6 +81,20 @@ describe('private deformation preview transport', () => {
     const request = vi.fn(), api = await make(request)
     await expect(api.refreshCommitted({ ...receipt, revision: 7 }, { context })).rejects.toMatchObject({ status: 409 })
     expect(request).not.toHaveBeenCalled()
+  })
+
+  it('retains a bounded routing-removal notice through receipt recovery and adoption', async () => {
+    const { previewPublicationReceipt } = await import('./deformation_preview_endpoints.js')
+    const published = { ...receipt, routing_removal_notice: 'Removed 1 fine-routing feature: nick. Undo restores it.' }
+    expect(previewPublicationReceipt(published, context)).toEqual(published)
+    expect(() => previewPublicationReceipt({ ...published, routing_removal_notice: {} }, context)).toThrow()
+    expect(() => previewPublicationReceipt({ ...published, routing_removal_notice: 'x'.repeat(4097) }, context)).toThrow()
+    expect(() => previewPublicationReceipt(receipt, context, published)).toThrow()
+    const responses = [published, { design: { id: 'part', active_loadout_id: null }, revision: 8 },
+      { nucleotides: [], helix_axes: [] },
+      { doc_id: context.docId, design_id: 'part', revision: 8, has_design: true }, published]
+    const api = await make(async () => responses.shift())
+    expect((await api.refreshCommitted(published, { context })).placement_warnings).toEqual([published.routing_removal_notice])
   })
 })
 
@@ -179,3 +193,30 @@ describe('declared transform preview transport', () => {
     expect(request.mock.calls[0][2]).toEqual({ ...origin, lease_id: expected.lease_id })
   })
 })
+
+it('uses a coherent combined display between both receipt checks without a second geometry read', async () => {
+  const source = { design: { id: 'part' }, design_id: 'part', revision: 8,
+    nucleotides: [], helix_axes: [], straight_positions_by_helix: {}, straight_helix_axes: [] }
+  const responses = [receipt, source, { doc_id: context.docId, design_id: 'part', revision: 8, has_design: true }, receipt]
+  const request = vi.fn(async () => responses.shift()), api = await make(request)
+  expect(await api.refreshCommitted(receipt, { context })).toEqual(source)
+  expect(request.mock.calls.map(([, path]) => path)).toEqual([
+    '/design/features/deformation-preview/status', '/design?include_geometry=true',
+    '/design/revision', '/design/features/deformation-preview/status'])
+})
+
+it.each(['axes', 'nucleotides', 'identity', 'revision', 'partial', 'receipt'])(
+  'rejects invalid combined %s without falling back or adopting', async fault => {
+    const source = { design: { id: 'part' }, design_id: 'part', revision: 8, nucleotides: [], helix_axes: [] }
+    const final = { ...receipt }
+    if (fault === 'axes') delete source.helix_axes
+    if (fault === 'nucleotides') source.nucleotides = null
+    if (fault === 'identity') source.design_id = 'other'
+    if (fault === 'revision') source.revision++
+    if (fault === 'partial') source.partial_geometry = true
+    if (fault === 'receipt') final.lease_id = 'foreign'
+    const responses = [receipt, source, { doc_id: context.docId, design_id: 'part', revision: 8, has_design: true }, final]
+    const request = vi.fn(async () => responses.shift()), api = await make(request)
+    await expect(api.refreshCommitted(receipt, { context })).rejects.toMatchObject({ status: expect.any(Number) })
+    expect(request.mock.calls.some(([, path]) => path === '/design/geometry')).toBe(false)
+  })

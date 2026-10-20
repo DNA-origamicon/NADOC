@@ -33,8 +33,34 @@ def client(document, monkeypatch):
         yield http, {"X-NADOC-Doc": document}
 
 
-def test_sweep_route_is_disabled_by_default():
-    assert routes().SWEEP_PREVIEW_ENABLED is False
+def test_sweep_route_is_enabled_by_default():
+    assert routes().SWEEP_PREVIEW_ENABLED is True
+
+
+@pytest.mark.parametrize("operation", ["prepare", "evaluate"])
+@pytest.mark.parametrize("encoding_fails", [False, True])
+def test_preview_gc_pause_covers_encoding_and_restores_after_failure(client, monkeypatch, operation, encoding_fails):
+    import gc
+    from backend.api import routes_part_deformation_preview as adapter
+
+    was_enabled = gc.isenabled()
+    current = policy.require_compatibility(doc_context.get_current_doc(), "sweep_preview")
+    def compute(*args, **kwargs):
+        assert not gc.isenabled()
+        return {"bounded": "preview"}
+    def encode(value, **kwargs):
+        assert not gc.isenabled()
+        if encoding_fails:
+            raise RuntimeError("encoding refused")
+        return value
+    monkeypatch.setattr(host, operation, compute)
+    monkeypatch.setattr(adapter, "ORJSONResponse", encode)
+    if encoding_fails:
+        with pytest.raises(RuntimeError, match="encoding refused"):
+            adapter._respond(operation, {}, current.generation, family="sweep")
+    else:
+        assert adapter._respond(operation, {}, current.generation, family="sweep") == {"bounded": "preview"}
+    assert gc.isenabled() == was_enabled
 
 
 def test_http_prepare_evaluate_apply_status_and_undo_are_native_and_source_bound(client):

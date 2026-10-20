@@ -22,6 +22,7 @@ describe('right sidebar tabs', () => {
         <div id="right-tab-content-overhangs"></div>
         <div class="panel-section" id="move-rotate-panel"></div>
         <div class="panel-section" id="properties-section"></div>
+        <div class="panel-section" id="blunt-panel-actions" style="display:none"></div>
         <div class="panel-section" id="extrude-panel"></div>
         <div class="panel-section" id="deform-panel"></div>
         <div class="panel-section" id="strand-hist-section"></div>
@@ -76,6 +77,18 @@ describe('right sidebar tabs', () => {
     expect(tabs.getActiveTab()).toBe('properties')
     expect(tabs.isCollapsed()).toBe(false)
     tabs.open('properties')
+    expect(tabs.isCollapsed()).toBe(false)
+  })
+
+  it('reveals domain-end actions in Properties after a ring pick', async () => {
+    const tabs = initRightSidebarTabs({ document, getAvailableWidth: () => 1600, storage: null })
+    tabs.open('visualization')
+    document.getElementById('right-tab-toggle').click()
+    const panel = document.getElementById('blunt-panel-actions')
+    expect(panel.parentElement.id).toBe('right-tab-content-properties')
+    panel.style.display = 'block'
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(tabs.getActiveTab()).toBe('properties')
     expect(tabs.isCollapsed()).toBe(false)
   })
 

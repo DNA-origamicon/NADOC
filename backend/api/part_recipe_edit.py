@@ -70,7 +70,7 @@ def without_commands(log, removed):
 
 
 def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_failures=False,
-               prefix=None, executor=None):
+               prefix=None, executor=None, entry_binder=None, use_cache=True):
     """Execute input commands only; replace every recovery snapshot and child diff."""
 
     executor = executor or execute
@@ -79,14 +79,16 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
     budget = prefix.budget if prefix is not None else RecoveryBudget()
     # Incremental rebuild (R1): continue the replay chain from the prefix, so
     # unchanged and geometry-independent commands reuse cached results.
-    if getattr(executor, "chain", None) is None:
+    if use_cache and getattr(executor, "chain", None) is None:
         chain = (ReplayChain(position=prefix.position) if prefix is not None and prefix.position
                  else ReplayChain.for_design(source) if prefix is None else None)
         if chain is not None:
             executor = chain.wrap(executor)
 
-    def run(entry, current):
-        kind, arguments = command_input(entry)
+    from backend.core.part_suppression import replay_input
+
+    def run(entry, current, *, parent_suppressed=False):
+        kind, arguments = replay_input(entry, parent_suppressed=parent_suppressed)
         try:
             return executor(kind, current, arguments)
         except (ValueError, HTTPException) as exc:
@@ -109,8 +111,10 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
     rebuilt_log = list(prefix.log) if prefix is not None else []
     for entry in log[len(rebuilt_log) :]:
         checkpoint()
+        if entry_binder is not None:
+            entry = entry_binder(entry, current)
         if entry.feature_type in OVERLAY_KINDS:
-            kind, arguments = command_input(entry)
+            kind, arguments = replay_input(entry)
             current = run(entry, current).copy_with(id=source.id)
             if kind == "deformation":
                 entry = entry.model_copy(
@@ -126,7 +130,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
             children = []
             for child in entry.children:
                 checkpoint()
-                updated = run(child, current)
+                updated = run(child, current, parent_suppressed=entry.suppressed)
                 a, r, m, size = encode_child_diff(current, updated)
                 budget.charge(a, r, m)
                 children.append(

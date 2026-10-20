@@ -3724,6 +3724,16 @@ export const captureFeatureEditContext = state => _featureInputs.capture(state)
 export const isFeatureEditContextCurrent = (context, state) => _featureInputs.isCurrent(context, state)
 export const editNativeExtrusionFeature = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
 
+export async function getFeatureDependencies() {
+  const context = _featureInputs.capture()
+  const result = await _request('GET', '/design/features/dependencies', undefined,
+    { docId: context.docId, suppressBusy: true })
+  if (!_featureInputs.isCurrent(context) || result?.design_id !== context.designId
+      || result?.revision !== context.revision)
+    throw new Error('The part changed or its dependencies are unavailable. Reopen the dependency view.')
+  return result
+}
+
 const _routingInputs = createRoutingFeatureAPI({ store, request: _request, syncDesign: _syncFromDesignResponse,
   getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests })
 export const captureRoutingEditContext = state => _routingInputs.capture(state)

@@ -25,12 +25,30 @@ function fixture() {
     session: () => view.open.mock.lastCall[1] }
 }
 afterEach(() => { for (const owner of owned.splice(0)) owner.dispose() })
+it('names the earliest failing routing child and keeps the source unchanged', async () => {
+  const f = fixture()
+  f.source.feature_log.push({ id: 'routing', feature_type: 'routing-cluster', children: [
+    { id: 'nick', op_subtype: 'nick-batch', label: 'Nick on second Sweep cell' },
+  ] })
+  await f.owner.open(f.source.feature_log[0])
+  f.previewAPI.apply.mockRejectedValue(Object.assign(new Error('Missing occupied target'), {
+    status: 409, detail: { feature_id: 'nick' },
+  }))
+  expect(await f.session().onApply()).toBe(false)
+  expect(f.view.setStatus.mock.lastCall[0].error.message).toContain(
+    'F2 routing-cluster / Nick on second Sweep cell cannot regenerate after this edit: Missing occupied target')
+  expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+  expect(f.owner.active()).toBe(true)
+})
 it('opens saved Sweep on fixed prefix controls and private picker, without canonical writes', async () => {
   const f = fixture(); expect(await f.owner.open(f.source.feature_log[0], 0)).toBe(true)
   expect(f.previewAPI.prepare.mock.lastCall[0].feature_id).toBe('feature')
   expect(f.view.open.mock.lastCall[0]).toEqual(sweepPacket().control_context.inputs)
   expect(f.session().design.helices.map(h => h.id)).toEqual(['h'])
   expect(f.slicePlane.usePrivateContext.mock.lastCall[0].design).toBe(f.session().design)
+  expect(f.preview.open).toHaveBeenCalledOnce()
+  expect(f.preview.replaceCandidate).not.toHaveBeenCalled()
+  expect(f.view.updatePreview).toHaveBeenCalledExactlyOnceWith(sweepPacket().sweep_preview)
   expect(f.api.syncDesignResponse).not.toHaveBeenCalled(); expect(f.store.getState().currentDesign).toBe(f.source)
   expect(await f.session().onCancel()).toBe(true); expect(f.release).toHaveBeenCalledOnce(); expect(f.preview.dispose).toHaveBeenCalledOnce()
 })

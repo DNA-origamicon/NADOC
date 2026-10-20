@@ -1,9 +1,9 @@
 """Bounded, owned feature-stage Sweep evaluation from native command inputs.
 
 No live document, recovery decoding or publication authority enters this module.
-The prefix is rebuilt once; each evaluation executes only the selected native
-Sweep against an independent prefix copy. Apply must separately prove/rebuild
-the full recipe. Native spline, attachment and loop/skip algorithms are unchanged.
+The prefix is rebuilt once; interactive evaluations plan native guides only.
+Apply validates the complete selected command and separately proves/rebuilds the
+full recipe. Native spline, attachment and loop/skip algorithms are unchanged.
 """
 
 from copy import deepcopy
@@ -113,6 +113,42 @@ class EvaluatedSweep:
     stage: str = "feature"
     source_equivalence_checked: bool = False
     downstream_evaluated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SweepGuides:
+    """Draft guide output, deliberately without a built or validated candidate."""
+    design_id: str
+    deformation_id: str
+    entry: SnapshotLogEntry
+    params: dict
+    sweep: dict
+    stage: str = "feature"
+    source_equivalence_checked: bool = False
+    downstream_evaluated: bool = False
+
+
+def evaluate_guides(prepared, patch):
+    from backend.api.part_deformation_preview import _growth, _path_work
+
+    if type(prepared) is not PreparedSweep:
+        _reject("Sweep evaluation requires an owned prepared prefix")
+    check = _checkpoint()
+    params = normalize(prepared._entry.params, patch)
+    prefix = prepared.copy_prefix()
+    _source(prefix, params)
+    try:
+        _growth(prefix, 0, len(params["cells"]))
+        _path_work(params["points_nm"])
+        metadata, _ = sweep_preview(prefix, SweepRequest.model_validate(params), include_geometry=True)
+        _growth(prefix, 2 * metadata["total_new_bp"], len(params["cells"]))
+    except CommandContractError:
+        raise
+    except (ValueError, TypeError, KeyError) as error:
+        _reject(str(error))
+    check()
+    entry = prepared._entry.model_copy(deep=True, update={"params": deepcopy(params)})
+    return SweepGuides(prepared.design_id, prepared.deformation_id, entry, params, metadata)
 
 
 def _source(prefix, params):

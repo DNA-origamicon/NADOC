@@ -40,19 +40,23 @@ def _invalid(detail="Invalid compact native DNA display transport"):
     raise CommandContractError(detail, code="invalid_comparison_geometry")
 
 
-def pack_records_compact(records):
+def pack_records_compact(records, *, coordinate_values=None):
     """Compact form of ``pack_records`` for records already shape/finite-checked."""
     import base64
     import numpy as np
 
-    values = []
-    extend = values.extend
-    for record in records:
-        for field, _ in VECTOR_FIELDS:
-            extend(record[field])
-        site = record["helical_site"]
-        extend(site["axis_point"]), extend(site["radial_hat"])
-        values.append(site["azimuth_rad"]), values.append(site["groove_offset_rad"]), values.append(site["phase_roll_rad"])
+    # Projection already gathers these exact fields for finite-value checking.
+    # Reuse that owned list; other callers retain the standalone packing path.
+    values = coordinate_values
+    if values is None:
+        values = []
+        extend = values.extend
+        for record in records:
+            for field, _ in VECTOR_FIELDS:
+                extend(record[field])
+            site = record["helical_site"]
+            extend(site["axis_point"]), extend(site["radial_hat"])
+            values.append(site["azimuth_rad"]), values.append(site["groove_offset_rad"]), values.append(site["phase_roll_rad"])
     if len(values) != STRIDE * len(records):
         _invalid("Native DNA coordinates do not match the compact transport layout")
     block = np.asarray(values, dtype="<f8")

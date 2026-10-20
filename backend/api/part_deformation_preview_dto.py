@@ -235,7 +235,19 @@ def _envelope(value):
     return dict(value)
 
 
-def prepare_display(prefix, original, *, envelope=None):
+def _remember_rows(result, cache, prefix):
+    # Only the owning session retains this small topology-only portion. Never
+    # retain coordinates, a live design, or publication authority here.
+    if cache is not None and result.get("lease_id"):
+        from copy import deepcopy
+        from backend.core.part_dna_comparison_contract import inventory
+        cache.clear()
+        cache.update(lease_id=result["lease_id"], rows=deepcopy(result["before"]["nucleotides"]["rows"]))
+        cache["inventory"] = _native(inventory, prefix.model_copy(deep=True))
+    return result
+
+
+def prepare_display(prefix, original, *, envelope=None, display_cache=None):
     """Before/original display plus controls from the fixed historical prefix."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
@@ -245,10 +257,10 @@ def prepare_display(prefix, original, *, envelope=None):
               "before": _native(project_for_deformation_preview, prefix),
               "candidate": _native(project_for_deformation_preview, original.design)}
     result = {**result, **envelope}
-    return _bounded(result, trusted=_validated_panes(result))
+    return _remember_rows(_bounded(result, trusted=_validated_panes(result)), display_cache, prefix)
 
 
-def prepare_creation_display(prefix, prepared, *, envelope=None):
+def prepare_creation_display(prefix, prepared, *, envelope=None, display_cache=None):
     """Owned latest-stage controls before the user has authored two planes."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
@@ -269,10 +281,10 @@ def prepare_creation_display(prefix, prepared, *, envelope=None):
               "control_context": controls, "before": _native(project_for_deformation_preview, prefix),
               "candidate": None}
     result = {**result, **envelope}
-    return _bounded(result, trusted=_validated_panes(result))
+    return _remember_rows(_bounded(result, trusted=_validated_panes(result)), display_cache, prefix)
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, creation=False):
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, creation=False, display_cache=None):
     """One local candidate; feedback remains available with visual preview off."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
@@ -280,9 +292,19 @@ def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None,
         _reject("Preview geometry choice must be a boolean", "invalid_preview_definition")
     envelope = _envelope(envelope)
     op = _inputs(prefix, evaluated)
+    cached_inventory = (display_cache.get("inventory") if display_cache
+                        and envelope.get("lease_id") == display_cache.get("lease_id") else None)
     result = {**_base(_feasibility(prefix, op), op),
-              "candidate": _native(project_for_deformation_preview, evaluated.design) if include_geometry else None}
+              "candidate": _native(project_for_deformation_preview, evaluated.design,
+                                   inventory_cache=cached_inventory) if include_geometry else None}
     if creation:
         result.update(mode="create", awaiting_parameters=False)
     result = {**result, **envelope}
+    if (include_geometry and display_cache and envelope.get("lease_id") == display_cache.get("lease_id")):
+        packed = result["candidate"]["nucleotides"]
+        # Compare every scalar, in order: any changed ownership/flag receives a
+        # full packet. Coordinates and their native guards always run above.
+        if packed["rows"] == display_cache["rows"]:
+            packed.pop("rows")
+            packed["rows_ref"] = envelope["lease_id"]
     return _bounded(result, trusted=_validated_panes(result))

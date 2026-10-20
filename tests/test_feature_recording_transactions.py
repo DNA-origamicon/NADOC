@@ -49,6 +49,26 @@ def signature(s):
     )
 
 
+@pytest.mark.parametrize("kind", ["bundle-create", "extrude-segment", "extrude-continuation",
+    "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude"])
+@pytest.mark.parametrize("cursor,sub_cursor", [(-2, None), (0, None), (-1, 0)])
+def test_extrusion_creation_refuses_rollback_before_building(session, kind, cursor, sub_cursor):
+    from fastapi import HTTPException
+
+    session.design.feature_log_cursor = cursor
+    session.design.feature_log_sub_cursor = sub_cursor
+    before = signature(session)
+
+    def forbidden(_design):
+        pytest.fail("Historical extrusion must refuse before running its builder")
+
+    with pytest.raises(HTTPException) as caught:
+        state.mutate_with_feature_log(kind, "Extrude", {}, forbidden)
+    assert caught.value.status_code == 409
+    assert caught.value.detail["code"] == "historical_cursor"
+    assert signature(session) == before
+
+
 @pytest.mark.parametrize("kind", ["snapshot", "minor", "minor-append"])
 @pytest.mark.parametrize("stage", ["pre-encode", "callback", "reconcile", "retry",
                                    "post-encode", "validate", "revision", "entry-marker"])

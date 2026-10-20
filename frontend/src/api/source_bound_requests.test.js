@@ -19,7 +19,7 @@ function fixture() {
 it('sends exact original source and stable feature identity once and adopts complete geometry', async () => {
   const f = fixture(), context = f.api.capture(), params = { length_bp: -7, history_seed: 'unchanged' }
   await f.api.edit(0, params, context, 'feature')
-  expect(f.request).toHaveBeenCalledWith('POST', '/design/features/0/edit', { params, expected_design_id: 'part', expected_revision: 4, expected_feature_id: 'feature' }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true })
+  expect(f.request).toHaveBeenCalledWith('POST', '/design/features/0/edit', { params, expected_design_id: 'part', expected_revision: 4, expected_feature_id: 'feature' }, { docId: 'doc', protectedRetry: false, skipSimulationPrepare: true, onError: expect.any(Function) })
   expect(f.syncDesign).toHaveBeenCalledTimes(1)
 })
 it.each(['reset', 'revision', 'document', 'source'])('does not publish a held response after %s', async kind => {
@@ -43,5 +43,24 @@ it('requires original feature and a known source revision before dispatch', asyn
 it('does not describe an empty response as a confirmed server rejection', async () => {
   const f = fixture(); f.request.mockResolvedValue(null)
   await expect(f.api.edit(0, {}, f.api.capture(), 'feature')).rejects.toThrow('No confirmed extrusion result; refresh before retrying.')
+  expect(f.syncDesign).not.toHaveBeenCalled()
+})
+
+it('names the failing downstream child and retains its structured failure without adoption', async () => {
+  const f = fixture(), context = f.api.capture()
+  context.source.feature_log.push({ id: 'routing', feature_type: 'routing-cluster', children: [
+    { id: 'nick', label: 'Output nick' },
+  ] })
+  const detail = { code: 'missing_reference', assessment: { issues: [
+    { feature_id: 'nick', detail: 'Target is no longer occupied', references: [{ identity: 'target' }] },
+  ] } }
+  f.request.mockImplementation(async (_method, _path, _body, options) => {
+    options.onError(409, detail)
+    return null
+  })
+  await expect(f.api.edit(0, {}, context, 'feature')).rejects.toMatchObject({
+    message: 'F2 routing-cluster / Output nick cannot regenerate after this edit: Target is no longer occupied',
+    status: 409, detail,
+  })
   expect(f.syncDesign).not.toHaveBeenCalled()
 })

@@ -184,7 +184,7 @@ def _prepare_revision(candidate, *, checkpoint, scope_tag):
         _reject("Revision preparation needs a private exact Design model")
     _model_schema(candidate)
     _scalar_metadata(candidate)
-    preservation_digest(candidate)
+    preservation_digest(candidate, allow_view_volumes=scope_tag == _GEOMETRY_SCOPE)
     if scope_tag == _SCOPE:
         admit_batch_source(candidate)
     elif scope_tag == _GEOMETRY_SCOPE:
@@ -218,7 +218,7 @@ def _prepare_revision(candidate, *, checkpoint, scope_tag):
                                                    if entry.feature_type == "routing-cluster"),
         recovery_bytes=retained_recovery_bytes(decoded.feature_log, max_rows=MAX_PUBLIC_HISTORY_ROWS),
         annotations_enabled=decoded.annotations_enabled, preservation_version=PRESERVATION_VERSION,
-        preserved_document_sha256=preservation_digest(decoded),
+        preserved_document_sha256=preservation_digest(decoded, allow_view_volumes=scope_tag == _GEOMETRY_SCOPE),
         scope_tag=scope_tag,
     )
     checkpoint()

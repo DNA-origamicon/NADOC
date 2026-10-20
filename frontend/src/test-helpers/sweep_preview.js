@@ -14,11 +14,11 @@ export const sweepMetadata = () => ({ source_detached: false, origin_nm: [0, 0, 
   length_nm: .34, length_bp: 2, total_new_bp: 2,
   feasibility: { status: 'ok', warning_segments: [], ranges_nm: [], max_delta_per_cell: 0,
     limit_per_cell: 2, cell_bp: 21, message: '', scope: 'Bending demand only; not a stability or torsional feasibility prediction.' } })
-export function sweepPacket({ prepare = true, geometry = true, envelope = false } = {}) {
+export function sweepPacket({ prepare = true, envelope = false } = {}) {
   const component = () => ({ ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 2 })
   const before = component(); before.display_topology.helices[0].grid_pos = [0, 0]
   const value = { projection_version: 1, stage: 'feature', source_equivalence_checked: false,
-    downstream_evaluated: false, physical_validity: false, candidate: geometry ? component() : null,
+    downstream_evaluated: false, physical_validity: false, candidate: null,
     sweep_preview: sweepMetadata() }
   if (prepare) Object.assign(value, { before, control_context: { inputs: sweepInputs(), lattice_type: 'HONEYCOMB', lattice_frames: [],
     helices: before.display_topology.helices.map(({ id, grid_pos, lattice_frame_id, bp_start, length_bp, axis_start, axis_end }) =>

@@ -251,6 +251,12 @@ def get_evaluation_plan(position: int = -1, sub_position: int | None = None) -> 
     return evaluation_plan(design_state.get_or_404(), position, sub_position)
 
 
+@router.get("/design/features/dependencies")
+def get_feature_dependencies() -> dict:
+    from backend.api.part_history_dependencies import current_dependencies
+    return current_dependencies()
+
+
 @router.post("/design/features/seek", status_code=200)
 def seek_features(body: SeekFeaturesBody):
     """Replay the feature log up to the given position, updating derived geometry fields.

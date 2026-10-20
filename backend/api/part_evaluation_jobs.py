@@ -25,7 +25,7 @@ from backend.core.part_verification_capture import CaptureLimit
 TIME_BUDGET = 180.0
 MAX_RESULTS = 2
 RESULT_TTL = 900.0
-PUBLISHABLE_OPERATIONS = frozenset({"append", "edit", "delete", "repair", "batch"})
+PUBLISHABLE_OPERATIONS = frozenset({"append", "edit", "delete", "reorder", "suppress", "repair", "batch"})
 _lock = Lock()
 _jobs = OrderedDict()
 

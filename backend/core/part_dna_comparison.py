@@ -82,6 +82,7 @@ def _records(records, expected):
     # Reuse the native authority to validate bead/base/slab registration. Do not
     # replace coordinates or derive a second representation on validation failure.
     authoritative_slab_poses(records)
+    return values
 
 
 def _axes(axes, expected, *, scoped_segments=False):
@@ -167,18 +168,18 @@ def _topology(design):
     return value
 
 
-def _project(design, *, scoped_segments=False, compact=False):
+def _project(design, *, scoped_segments=False, compact=False, inventory_cache=None):
     """Common native projection; callers select one closed wire schema."""
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     from backend.core.native_full_placement import NativePlacementError
 
-    expected = inventory(design)
+    expected = inventory(design, previous=inventory_cache)
     try:
         records = _geometry_for_design(design)
         axes = deformed_helix_axes(design)
         axes = _apply_ovhg_rotations_to_axes(design, axes, records)
-        _records(records, expected)
+        coordinate_values = _records(records, expected)
         _axes(axes, expected, scoped_segments=scoped_segments)
     except NativePlacementError as error:
         _reject(str(error), "invalid_comparison_geometry")
@@ -200,7 +201,7 @@ def _project(design, *, scoped_segments=False, compact=False):
         bounds = {"minimum": [points[low[i]][i] for i in range(3)],
                   "maximum": [points[high[i]][i] for i in range(3)]}
     return {"component_version": COMPONENT_VERSION, "representation": "native-full-v1", "units": "nm",
-            "nucleotides": pack_records_compact(records) if compact else pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
+            "nucleotides": pack_records_compact(records, coordinate_values=coordinate_values) if compact else pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
 
 
 def project(design):
@@ -208,11 +209,11 @@ def project(design):
     return _project(design, scoped_segments=True)
 
 
-def project_for_deformation_preview(design):
+def project_for_deformation_preview(design, *, inventory_cache=None):
     """Private preview schema preserving native per-domain axis samples.
 
     Preview v3 (compact f64 coordinate block) and comparison v3 (JSON rows) share the complete native inventory. The same
     prospective work and emitted-site/axis limits still apply.
     """
-    return {**_project(design, scoped_segments=True, compact=True),
+    return {**_project(design, scoped_segments=True, compact=True, inventory_cache=inventory_cache),
             "component_kind": "deformation-preview-dna", "component_version": 3}

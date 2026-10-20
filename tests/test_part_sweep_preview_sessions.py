@@ -28,8 +28,8 @@ SWEEP_ID = "bbf3fdbe-92a7-476e-8d77-4578091ed5df"
 FEATURE_ID = "selected-sweep"
 
 
-def recipe(*, organized=False, downstream=False, length=10):
-    source = create_empty_part("Owned Sweep preview", "HONEYCOMB")
+def recipe(*, organized=False, downstream=False, length=10, name="Owned Sweep preview"):
+    source = create_empty_part(name, "HONEYCOMB")
     params = SweepRequest(sweep_id=SWEEP_ID, cells=[(0, 0), (0, 1)],
         points_nm=[(0, 0, 0), (0, 0, length)], ligate_adjacent=False).model_dump(mode="json")
     source = _append(source, m.SnapshotLogEntry(id=FEATURE_ID, op_kind="sweep",
@@ -42,12 +42,17 @@ def recipe(*, organized=False, downstream=False, length=10):
         target = source.helices[1].id
         params = {"_proof_version": 1, "helix_id": target,
                   "bp_index": 10, "direction": "FORWARD"}
+        kind = "nick"
+        if downstream == "batch":
+            kind = "nick-batch"
+            params = {"_proof_version": 1, "nicks": [
+                {"helix_id": target, "bp_index": bp, "direction": "FORWARD"} for bp in (1, 10)]}
         child = m.MinorMutationLogEntry(id="later-nick", label="Nick on second Sweep cell",
-            op_subtype="nick", params=params)
+            op_subtype=kind, params=params)
         row = m.RoutingClusterLogEntry(id="later-routing", children=[child],
             pre_state_gz_b64="poisoned-routing-before", post_state_gz_b64="poisoned-routing-after",
             evicted=True)
-        source = execute("nick", source, params).copy_with(feature_log=[*source.feature_log, row])
+        source = execute(kind, source, params).copy_with(feature_log=[*source.feature_log, row])
     for entry in source.feature_log:
         if entry.feature_type == "snapshot":
             entry.design_snapshot_gz_b64 = "poisoned-before"
@@ -167,12 +172,27 @@ def test_removed_sweep_cell_removes_the_later_nick_on_its_helix(document):
     opened = host.prepare(opening(), family="sweep")
     receipt = host.apply(update(opened, params={"cells": [[0, 0]]}), family="sweep")
     assert receipt["status"] == "applied"
+    assert receipt["routing_removal_notice"] == (
+        "Removed 1 fine-routing feature(s) whose targets are no longer occupied: "
+        "Nick on second Sweep cell. Undo restores them.")
+    assert host.status(cancellation(opened), family="sweep")["routing_removal_notice"] == receipt["routing_removal_notice"]
     published = state.get_or_404()
     assert all(c.id != "later-nick" for e in published.feature_log
                if e.feature_type == "routing-cluster" for c in e.children)
     assert all(h.id != nick_helix for h in published.helices)
     state.undo()
     assert state.get_or_404().model_dump(mode="json") == before["json"]
+
+
+def test_partially_occupied_downstream_nick_batch_refuses_atomically(document):
+    state.load_design(recipe(downstream="batch"))
+    before = checkpoint()
+    opened = host.prepare(opening(), family="sweep")
+    with pytest.raises(HTTPException) as caught:
+        host.apply(update(opened, params={"points_nm": [[0, 0, 0], [0, 0, 1]]}), family="sweep")
+    assert caught.value.status_code == 409
+    assert caught.value.detail["feature_id"] == "later-nick"
+    unchanged(before)
 
 
 def test_full_source_mismatch_cannot_be_promoted_by_feature_stage_preview(document):

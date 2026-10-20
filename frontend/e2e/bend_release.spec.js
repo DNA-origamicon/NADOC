@@ -749,24 +749,21 @@ for (const kind of ['bend', 'twist']) test(`${kind} upstream deletion dependents
   }, `${kind}-nick`)
 })
 
-test('legacy saved history (no recipe root) edits through the legacy editor', async ({ page, request }) => {
+test('unsupported history refuses without entering the mutating editor', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const before = await f.checkpoint()
     expect(before.design.recipe_root).toBeNull()
+    f.writes.length = 0
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
     const refused = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
     await page.locator('[title="Edit this feature"]').last().click()
     const refusal = await refused
     expect(refusal.status()).toBe(422)
     expect((await refusal.json()).detail.code).toBe('missing_recipe_root')
-    // The same gesture continues in the legacy editor: popup and legacy mode text.
-    await expect(f.popup).toBeVisible()
-    await expect(page.locator('#mode-indicator')).toContainText('adjust params')
-    await expect(page.locator('.toast', { hasText: 'unavailable' })).toHaveCount(0)
-    await page.locator('#def-cancel-btn').click()
+    await expect(page.locator('.toast', { hasText: 'History edit unavailable' })).toBeVisible()
     await expect(f.popup).not.toBeVisible()
-    await expect.poll(async () => (await f.checkpoint()).design.deformations).toEqual(before.design.deformations)
-    expect((await f.checkpoint()).design.feature_log.length).toBe(before.design.feature_log.length)
+    expect(await f.checkpoint()).toEqual(before)
+    expect(f.writes.filter(write => !write.path.startsWith(previewPath))).toEqual([])
     return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)'] }
   }, 'bend-legacy')
 })
@@ -785,9 +782,11 @@ test('history edit that breaks a downstream fixed-endpoint bend names it and pub
     await expect(f.popup).toBeVisible()
     await expect(f.popup).toContainText(`F${before.design.feature_log.length} Bend cannot regenerate after this edit`)
     await expect(f.popup).toContainText('fixed-length bend')
+    await expect(page.locator(`[data-fl-row="${before.design.feature_log.length}"] [data-history-status="error"]`)).toHaveText('Edit failed')
     expect(await f.checkpoint()).toEqual(before)
     await page.locator('#def-cancel-btn').click()
     await expect(f.popup).not.toBeVisible()
+    await expect(page.locator('[data-history-status]')).toHaveCount(0)
     expect(await f.checkpoint()).toEqual(before)
     expect((await f.browser()).design).toEqual(stored.design)
     return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }

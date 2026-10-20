@@ -48,7 +48,7 @@ def admit_batch_source(design, commands=()):
     return _admit_source(design, commands, authoring_fields=_AUTHORING_FIELDS, row_check=_native_row)
 
 
-def _admit_source(design, commands, *, authoring_fields, row_check):
+def _admit_source(design, commands, *, authoring_fields, row_check, presentation_fields=()):
     """Caller owns private input or its source lock; lengths precede traversal.
 
     Command parameters and current authoring are admitted by ordinary capture
@@ -67,7 +67,7 @@ def _admit_source(design, commands, *, authoring_fields, row_check):
     baseline = Design()
     for name, role in FIELD_ROLES.items():
         if ((role == "authoring" and name not in authoring_fields)
-                or role == "physical" or (role == "presentation" and name != "annotations_enabled")):
+                or role == "physical" or (role == "presentation" and name != "annotations_enabled" and name not in presentation_fields)):
             if getattr(design, name) != getattr(baseline, name):
                 _reject(f"Batch publication initially requires default {name}")
     retained_recovery_bytes(design.feature_log, max_rows=MAX_PUBLIC_HISTORY_ROWS)

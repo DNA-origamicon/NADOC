@@ -19,7 +19,7 @@ export function isNativeExtrusionFeature(entry) {
 }
 
 /** Saved native inputs, never a lookup or geometry edit on the displayed design. */
-export function editExtrusionFeature(entry, { onSave, isCurrent = () => true } = {}) {
+export function editExtrusionFeature(entry, { onSave, isCurrent = () => true, subscribeContext } = {}) {
   if (!isNativeExtrusionFeature(entry)) return Promise.reject(new Error('This extrusion has no supported native input contract.'))
   return new Promise(resolve => {
     const kind = entry.op_kind, values = structuredClone(entry.params)
@@ -28,12 +28,14 @@ export function editExtrusionFeature(entry, { onSave, isCurrent = () => true } =
     let frameMode = values.source_legacy_plane ? 'legacy' : values.source_frame_id ? 'source' : 'independent'
     let deformedMode = values.source_bp == null ? 'saved' : 'derived'
     let saving = false, settled = false, retired = false
+    let unsubscribe = null
     const body = el('div'), error = el('p', { className: 'tool-help', attrs: { role: 'alert' } })
     error.hidden = true
     const fail = message => { error.textContent = message; error.hidden = false }
     const finish = value => {
       if (settled) return
-      settled = true; window.removeEventListener('nadoc:document-reset', reset); resolve(value)
+      settled = true; unsubscribe?.(); unsubscribe = null
+      window.removeEventListener('nadoc:document-reset', reset); resolve(value)
     }
     const reset = () => { retired = true; modal.close() }
     const valueOf = (key, fallback) => values[key] ?? fallback
@@ -201,5 +203,6 @@ export function editExtrusionFeature(entry, { onSave, isCurrent = () => true } =
     })
     modal.root.setAttribute('aria-label', `Edit ${TITLES[kind]}`)
     modal.open(); window.addEventListener('nadoc:document-reset', reset)
+    unsubscribe = subscribeContext?.(() => { if (!isCurrent()) reset() })
   })
 }

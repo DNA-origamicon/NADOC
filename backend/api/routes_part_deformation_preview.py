@@ -6,6 +6,7 @@ not cancellation or rollback; the caller-known nonce and status endpoint resolve
 that lifecycle. The strict route table deliberately does not admit this router.
 """
 
+from contextlib import nullcontext
 from threading import Lock
 
 from fastapi import APIRouter, HTTPException, Request
@@ -73,7 +74,13 @@ def _respond(operation, value, generation, family="deformation", *, loopback=Fal
     # update and saves nothing on loopback. A declared encoding makes the GZip
     # middleware pass the body through; remote clients keep compression.
     headers = {"Content-Encoding": "identity"} if loopback else None
-    return ORJSONResponse(getattr(host, operation)(value, **options), headers=headers)
+    from backend.core.gc_pause import paused_gc
+
+    # Keep the existing preview pause through result admission and encoding.
+    # The temporary display graph is released before GC resumes; otherwise the
+    # first update can collect that entire graph between evaluation and encoding.
+    with paused_gc() if operation in {"prepare", "evaluate"} else nullcontext():
+        return ORJSONResponse(getattr(host, operation)(value, **options), headers=headers)
 
 
 async def _dispatch(request, operation, *, family="deformation"):

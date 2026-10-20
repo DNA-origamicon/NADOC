@@ -1728,12 +1728,17 @@ def make_bundle_deformed_continuation(
 
         if cont_helix is not None:
             continuation_map[helix_id] = cont_helix.id
+            # Match straight continuation's terminus policy: internal nicked or
+            # gapped fragments do not own the new end's nucleotide slots.
+            contact_bp = cont_helix.bp_start + (cont_helix.length_bp - 1 if is_end_at_offset else 0)
             seen_strand_ids: set = set()
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
                     continue
                 for domain in strand.domains:
-                    if domain.helix_id == cont_helix.id:
+                    if domain.helix_id == cont_helix.id and min(
+                        domain.start_bp, domain.end_bp
+                    ) <= contact_bp <= max(domain.start_bp, domain.end_bp):
                         d = domain.direction
                         if d == Direction.FORWARD:
                             new_dom = Domain(

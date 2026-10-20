@@ -64,8 +64,17 @@ def path_table(points, initial_tangent=None, point_frames=None):
     arc = np.r_[0, np.cumsum(np.linalg.norm(np.diff(positions, axis=0), axis=1))]
     rotations = np.empty((len(u), 3, 3))
     rotations[0] = np.eye(3)
+    previous_pair = None
+    step_rotation = None
     for i in range(1, len(u)):
-        rotations[i] = rotation_between(tangents[i-1], tangents[i]) @ rotations[i-1]
+        # Straight spans repeat the exact same inputs thousands of times. Keep
+        # only the last result, keyed by all float bits (including signed zero).
+        # Retain every matrix product and the existing numerical implementation.
+        pair = tangents[i-1:i+1].tobytes()
+        if pair != previous_pair:
+            step_rotation = rotation_between(tangents[i-1], tangents[i])
+            previous_pair = pair
+        rotations[i] = step_rotation @ rotations[i-1]
     return spline, u, arc, tangents, Slerp(arc, Rotation.from_matrix(rotations))
 
 

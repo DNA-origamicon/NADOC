@@ -1,8 +1,8 @@
-"""Closed, constant-size document state retained by strict batch publication.
+"""Closed, bounded document state retained by strict publication.
 
 The full sealed bytes remain authoritative. This projection permits avoiding a
-source decode only while every non-scalar preserved field has its reviewed
-empty shape. Expanding batch admission cannot silently expand this contract.
+source decode using reviewed empty shapes or bounded geometry-only view volumes.
+Expanding batch admission cannot silently expand this contract.
 """
 
 from backend.core.models import Design, VisibilityState
@@ -32,8 +32,8 @@ def _reject(detail):
     raise CommandContractError(detail, code="unsupported_revision_preservation")
 
 
-def preservation_digest(design):
-    """Check fixed shapes before hashing a tiny positive JSON projection.
+def preservation_digest(design, *, allow_view_volumes=False):
+    """Check fixed shapes before hashing a bounded positive JSON projection.
 
     No serializer, recursive equality, list subclass method or nested authoring
     traversal runs here. Values outside the closed envelope are refused rather
@@ -49,7 +49,13 @@ def preservation_digest(design):
         _reject("Strict preservation requires a bounded nonempty document identity")
     if type(design.annotations_enabled) is not bool:
         _reject("Strict preservation requires an exact boolean annotation flag")
+    volumes = []
+    if allow_view_volumes:
+        from backend.api.part_view_volume_preservation import projection
+        volumes = projection(design.view_volumes)
     for name in _EMPTY_LISTS:
+        if name == 'view_volumes' and allow_view_volumes:
+            continue
         value = getattr(design, name)
         if type(value) is not list or len(value) != 0:
             _reject(f"Strict preservation initially requires empty {name}")
@@ -69,6 +75,7 @@ def preservation_digest(design):
     return digest({
         "id": design.id, "annotations_enabled": design.annotations_enabled,
         **dict.fromkeys(_ABSENT), **{name: [] for name in _EMPTY_LISTS},
+        "view_volumes": volumes,
         # The new empty identity mask is omitted by VisibilityState's serializer.
         # Preserve the existing exact three-field bytes and preservation digest;
         # its presence/type/emptiness was still checked above, never ignored.

@@ -66,6 +66,10 @@ def reference_slot(kind, params, path):
     """An explicit command-input catalog; no field-name or error-text inference."""
     if "_generated_scope" in params:
         _unsupported("Generated local scopes need a separate selection adapter")
+    from backend.api.part_geometry_reference_repair import reference
+    geometry = reference(kind, params, path)
+    if geometry is not None:
+        return ReferenceSlot(*geometry)
     values = {key: value for key, value in params.items() if key != "_generator"}
     if kind == "overhang-bulk":
         from backend.api.part_connection_repair_selection import reference_slot as connection_slot
@@ -197,6 +201,9 @@ def _candidates(design, slot, kind, params, request, checkpoint):
         return serial_counts[asset.id].get(serial, 0) == 1
 
     def eligible(record):
+        if slot.family == 'geometry_source':
+            from backend.api.part_geometry_reference_repair import eligible as geometry_eligible
+            return geometry_eligible(kind, params, record, design)
         if slot.resource_kind == "nanoparticle":
             if record.coating is not None or record.biotin_dna or record.id in owners:
                 return False
@@ -306,7 +313,8 @@ def prepare_selection(source, request, *, source_revision, executor, dependency_
             return updated
 
         phase = "root"
-        prefix = regenerate(source, log, checkpoint, executor=run)
+        # The tracking executor must observe every prefix row, even on retry.
+        prefix = regenerate(source, log, checkpoint, executor=run, use_cache=False)
         if len(completed) != len(prefix_rows):
             raise RuntimeError("Selection did not execute its complete prefix")
         phase = "selection"

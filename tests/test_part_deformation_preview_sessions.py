@@ -81,6 +81,21 @@ def cancellation(value):
     ) if key in value}
 
 
+def test_session_row_reuse_is_opt_in_and_released_on_cancel(document):
+    host, doc = document
+    opened = host.prepare(opening())
+    full = host.evaluate(update(opened))
+    delta = host.evaluate({**update(opened, sequence=2), "reuse_rows": True})
+    packed = delta["candidate"]["nucleotides"]
+    assert packed.pop("rows_ref") == opened["lease_id"]
+    packed["rows"] = opened["before"]["nucleotides"]["rows"]
+    assert delta["candidate"] == full["candidate"]
+    entry = host._entries[doc]
+    assert entry.display_cache
+    host.cancel(cancellation(opened))
+    assert not entry.display_cache
+
+
 def checkpoint():
     source, revision = state.get_design_with_revision()
     with state._lock:

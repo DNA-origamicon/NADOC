@@ -17,12 +17,9 @@ export function initDeformationToolLauncher({
   let type = null, phase = 'selection', unsubscribe = null, resetting = false
   let finishClusterPick = null
   let selectionEpoch = 0, startError = null
-  // Set when the isolated editor refuses this part as unsupported (for example
-  // legacy saved history); the rest of this tool session uses the legacy editor.
-  let legacyFallback = false
-  const owned = () => ownedEditor && !legacyFallback
+  const owned = () => !!ownedEditor
   function clearLocal() {
-    selectionEpoch++; resetting = false; type = null; legacyFallback = false
+    selectionEpoch++; resetting = false; type = null
     unsubscribe?.(); unsubscribe = null
     finishClusterPick?.(); finishClusterPick = null
     document.removeEventListener('keydown', escape, true)
@@ -38,7 +35,7 @@ export function initDeformationToolLauncher({
         return true
       })
     }
-    const legacyTool = !owned()  // read before clearLocal resets the fallback
+    const legacyTool = !owned()
     clearLocal()
     if (!localOnly && legacyTool) exit()
     return true
@@ -86,10 +83,7 @@ export function initDeformationToolLauncher({
         if (owned()) {
           const opened = await ownedEditor.openCreation({ type, targets: current.targets,
             clusterIds: [...new Set(current.targets.filter(ref => ref.kind === 'cluster').map(ref => ref.id))],
-            placementHint: { kind: 'selection' }, onUnsupported: () => {
-              if (hasOrganization(store.getState().currentDesign)) throw new Error(ORGANIZATION_UNAVAILABLE)
-              legacyFallback = true; setScope(current.targets); start(type); return true
-            } })
+            placementHint: { kind: 'selection' } })
           if (epoch !== selectionEpoch || !type) return
           if (!opened) throw new Error('The isolated deformation preview is unavailable. Review the source and selection.')
         } else { setScope(current.targets); start(type) }

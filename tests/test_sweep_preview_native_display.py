@@ -29,7 +29,9 @@ for (const [index, packet] of packets.entries()) {
   assert.equal(packet.downstream_evaluated, false);
   assert.equal(packet.physical_validity, false);
   assert.equal(packet.sweep_preview.source_detached, index === 0 ? false : detached);
-  assert.equal(packet.candidate === null, index === 2);
+  assert.equal(packet.candidate, null);
+  assert.ok(packet.sweep_preview.path_nm.length >= 2);
+  assert.equal(packet.sweep_preview.point_bases.length, packet.sweep_preview.points_nm.length);
   assert.equal(typeof packet.sweep_preview.source_frame, 'object');
   assert.deepEqual(Object.keys(packet.sweep_preview.source_frame).sort(),
     ['axis_dir', 'frame_right', 'frame_up', 'grid_origin']);
@@ -43,6 +45,9 @@ assert.equal(JSON.stringify(packets), original, 'validator changed the native pa
 const malformed = structuredClone(packets[1]);
 malformed.sweep_preview.source_frame = 0;
 assert.throws(() => validateSweepPreviewDisplay(malformed, { prepare: false, requireEnvelope: true }));
+const fullCandidate = structuredClone(packets[0]);
+fullCandidate.candidate = fullCandidate.before;
+assert.throws(() => validateSweepPreviewDisplay(fullCandidate, { prepare: true, requireEnvelope: true }));
 process.stdout.write('native-sweep-wire-contract');
 """
 

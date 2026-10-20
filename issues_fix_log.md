@@ -992,3 +992,14 @@ owners, clear pair flags and optionally delete the chosen saved version in one
 undo. No admitted failure retries through legacy writes. Existing Apply retains
 its broader endpoint-conflict semantics. Public correction awaits MV-54 and
 coordinated gate rollout; the unused local conflict-teardown helper is removed.
+
+### ISSUE-146 — Part recipe repair launcher restored
+
+[x] Moved the existing launcher out of the configuration-only toolbar. Two real
+Sweep/Extrude source-reference repair workflows pass through undo/redo and reopen;
+no new repair panel or transaction owner.
+
+### ISSUE-147 — Repeated reference repair preserves replay accounting
+
+[x] Selection and repair tracking callbacks now run for every planned row even
+when a prefix was previously cached. Repeated-proposal regression passes.

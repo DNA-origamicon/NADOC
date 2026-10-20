@@ -1,3 +1,6 @@
+import { attributeFailure } from '../features/feature_history_failure.js'
+import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
+export { attributeFailure } from '../features/feature_history_failure.js'
 /** One private, source-bound owner shared by creation and history editing. */
 import { createDeformationHistoryController } from '../features/deformation_history_controller.js'
 import { validateDeformationPreviewDisplay } from '../features/deformation_preview_display.js'
@@ -5,37 +8,6 @@ import { createDeformationPreviewEndpoints } from '../api/deformation_preview_en
 import { createDeformationHistoryPreview } from '../scene/deformation_history_preview.js'
 import { DEFORMATION_PREVIEW_LAYER } from '../scene/deformation_preview_camera.js'
 import { getDocId } from '../shared/doc_id.js'
-
-/**
- * Preparation refusals meaning "this part is outside the isolated editor's
- * supported scope" (legacy saved history, unsupported companion data, size
- * limits). Callers may continue the same gesture in the legacy editor instead.
- * User-correctable refusals such as a historical cursor are not listed.
- */
-export const UNSUPPORTED_PART_CODES = Object.freeze(new Set([
-  'missing_recipe_root', 'missing_proof_contract', 'unsupported_preview_scope',
-  'preview_limit', 'recipe_not_reproducible',
-  // Stale legacy data the isolated display refuses (for example a forced
-  // ligation whose endpoint is no longer a strand terminus).
-  'invalid_preview_reference',
-]))
-
-function featureLabel(entry, index) {
-  const kind = entry.feature_type === 'deformation'
-    ? (entry.op_snapshot?.type ? entry.op_snapshot.type[0].toUpperCase() + entry.op_snapshot.type.slice(1) : 'Deformation')
-    : (entry.label || entry.op_kind || entry.feature_type)
-  return `F${index + 1} ${kind}`
-}
-
-/** Name the earliest downstream feature that cannot regenerate (contract C4). */
-export function attributeFailure(error, design, editedFeatureId = null) {
-  const id = error?.detail?.feature_id
-  if (!id || id === editedFeatureId || !Array.isArray(design?.feature_log)) return error
-  const index = design.feature_log.findIndex(entry => entry.id === id || entry.children?.some(child => child.id === id))
-  if (index < 0) return error
-  const attributed = new Error(`${featureLabel(design.feature_log[index], index)} cannot regenerate after this edit: ${error.message}`)
-  return Object.assign(attributed, { status: error.status, code: error.code, detail: error.detail })
-}
 
 export function createDeformationHistoryEditor({ store, api, scene, camera, designRenderer,
   editor, popup, showToast, setMode = () => {}, getDocumentId = getDocId,
@@ -45,6 +17,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
   let opening = false, openingBound = false, ready = false, tearingDown = false, disposed = false, visual = true, generation = 0
   let preview = null, lastProjection = null, localError = null, creationSession = null, lastToolState = null
   let editedFeatureId = null
+  const feedback = createFeatureHistoryFeedback(store, events)
   function getContext() {
     const state = store.getState(), design = state.currentDesign
     if (!design || state.assemblyActive) return null
@@ -60,6 +33,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
     applyPublished: value => api.syncDesignResponse(value) })
 
   function teardown() {
+    feedback.clear()
     if (!ready && !preview) return
     ready = false; tearingDown = true; creationSession = null; lastToolState = null
     try {
@@ -88,6 +62,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
         localError = null
       } catch (error) { localError = error }
     }
+    feedback.update(state.busy ? null : state.error)
     popup.setHistoryPopupStatus({ busy: state.busy, expired: state.expired,
       awaitingParameters: state.awaitingParameters,
       error: localError ?? attributeFailure(state.error, store.getState().currentDesign, editedFeatureId), feasibility: state.projection?.feasibility ?? null,
@@ -150,7 +125,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
     }
     return true
   }
-  async function openPrepared(prepare, configure, label, onUnsupported = null) {
+  async function openPrepared(prepare, configure, label) {
     if (disposed || opening || controller.getState().open) return false
     const token = ++generation
     opening = true; openingBound = false; localError = null; visual = true
@@ -166,16 +141,11 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
       if (token !== generation) return false
       teardown(); await controller.cancel()
       if (disposed) return false
-      if (onUnsupported && UNSUPPORTED_PART_CODES.has(error?.code)) {
-        // The part is outside isolated scope: keep the gesture in the legacy editor.
-        opening = false; openingBound = false
-        return (await onUnsupported(error)) ?? true
-      }
       showToast(`${label} unavailable: ${error.message}`, 6000)
       return false
     } finally { if (token === generation) { opening = false; openingBound = false } }
   }
-  function open(entry, index, { onUnsupported = null } = {}) {
+  function open(entry, index) {
     editedFeatureId = entry?.id ?? null
     return openPrepared(() => controller.open(entry?.id), (packet, { design, helixAxes }) => {
       const operation = packet.control_context.selected_operation
@@ -184,9 +154,9 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
       popup.openPopup(operation.type, operation.plane_a_bp, operation.plane_b_bp, operation.params,
         operation.cluster_ids, true, session(design, packet.control_context.capabilities, { operation }))
       setMode(`EDIT ${operation.type.toUpperCase()} F${index + 1} — feature preview · Apply to rebuild · Esc to cancel`)
-    }, 'History edit', onUnsupported)
+    }, 'History edit')
   }
-  function openCreation({ type, targets, clusterIds = [], placementHint = null, onUnsupported = null } = {}) {
+  function openCreation({ type, targets, clusterIds = [], placementHint = null } = {}) {
     editedFeatureId = null
     return openPrepared(() => controller.openCreation({ type, targets, clusterIds }), (packet, { design, helixAxes }) => {
       const creation = { ...packet.control_context.creation, id: packet.deformation_id }
@@ -196,7 +166,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
         onCancel: cancel, onStateChange: watchToolState }, placementHint)
       watchToolState()
       setMode(`NEW ${creation.type.toUpperCase()} — isolated preview · Apply to add · Esc to cancel`)
-    }, 'Deformation creation', onUnsupported)
+    }, 'Deformation creation')
   }
   return { open, openCreation, watchToolState, cancel,
     active: () => opening || controller.getState().open,
@@ -204,7 +174,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
     dispose() {
       if (disposed) return
       disposed = true; generation++; opening = false
-      unsubscribe(); controller.dispose(); teardown()
+      unsubscribe(); controller.dispose(); teardown(); feedback.dispose()
     },
   }
 }

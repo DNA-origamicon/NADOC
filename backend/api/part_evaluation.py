@@ -4,7 +4,7 @@ from dataclasses import asdict
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from backend.api.part_recipe_repair import RepairRequest
 from backend.api.part_repair_selection import SelectionRequest
@@ -18,7 +18,7 @@ from backend.core.part_operation_input import validate_operation_input
 class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["verify", "append", "edit", "delete", "repair", "selection", "batch"]
+    operation: Literal["verify", "append", "edit", "delete", "reorder", "suppress", "repair", "selection", "batch"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
                   "bundle-create", "extrude-segment", "extrude-continuation",
@@ -27,6 +27,8 @@ class EvaluationRequest(BaseModel):
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
+    destination: StrictInt | None = Field(default=None, ge=0)
+    suppressed: StrictBool | None = None
     cascade: bool = False
     expected_revision: StrictInt | None = Field(default=None, ge=0)
     repair: RepairRequest | None = None
@@ -36,6 +38,23 @@ class EvaluationRequest(BaseModel):
     @model_validator(mode="after")
     def complete_operation(self):
         validate_operation_input(self.params)
+        if self.operation == "suppress":
+            if (self.index is None or self.suppressed is None or self.expected_revision is None
+                    or self.destination is not None or self.params is not None or self.kind is not None
+                    or self.sub_index is not None or self.cascade or self.repair is not None
+                    or self.selection is not None or self.batch is not None):
+                raise ValueError("Suppression needs source index, state and expected revision only")
+            return self
+        if self.suppressed is not None:
+            raise ValueError("Only suppression accepts a suppressed state")
+        if self.operation == "reorder":
+            if (self.index is None or self.destination is None or self.expected_revision is None
+                    or self.params is not None or self.kind is not None or self.sub_index is not None
+                    or self.cascade or self.repair is not None or self.selection is not None or self.batch is not None):
+                raise ValueError("Reorder needs source index, destination and expected revision only")
+            return self
+        if self.destination is not None:
+            raise ValueError("Only reorder accepts a destination")
         if self.operation == "batch":
             if (self.batch is None or self.repair is not None or self.selection is not None
                     or self.kind is not None or self.params is not None or self.index is not None
@@ -229,6 +248,16 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None, inp
                 return result
             candidate, validation = result["candidate"], result["validation"]
             metadata["repair"] = {**result["repair"], "authoring_changes": _authoring_changes(source, candidate)}
+        elif request.operation == "suppress":
+            from backend.api.part_history_suppression import prepare_suppression
+
+            candidate, validation = prepare_suppression(source, request.index, request.suppressed,
+                executor=executor, dependency_resolver=dependency_resolver)
+        elif request.operation == "reorder":
+            from backend.api.part_history_reorder import prepare_reorder
+
+            candidate, validation = prepare_reorder(source, request.index, request.destination,
+                executor=executor, dependency_resolver=dependency_resolver)
         elif request.operation == "append":
             from backend.api.part_evaluation_append import append_features
 

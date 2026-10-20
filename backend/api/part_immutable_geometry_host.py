@@ -1,5 +1,6 @@
 """Private sealed-source geometry transaction; no HTTP or mutable conversion."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Event
 from time import monotonic
@@ -57,7 +58,7 @@ def _current(context, session, deadline, cancelled):
         _refuse('Geometry operation cancelled', 'cancelled')
     if monotonic() >= deadline:
         _refuse('Geometry operation deadline exceeded', 'time_limit', 408)
-    if (doc_context.get_current_doc() != context.doc_id
+    if (session is None or doc_context.get_current_doc() != context.doc_id
             or state._sessions.get(context.doc_id) is not session
             or not permits.context_matches(context, context.doc_id, session)):
         _refuse('The source, session or revision changed during extrusion editing')
@@ -77,19 +78,85 @@ def append(kind, params, *, expected_design_id, expected_revision, cancelled=Non
         expected_source=expected_source, expected_session_identity=expected_session_identity)
 
 
-def _change(action, index, params, *, expected_kind, expected_feature_id, expected_design_id,
-            expected_revision, cancelled, expected_source, expected_session_identity):
-    """Regenerate off-lock, then atomically replace one immutable revision."""
+@dataclass(frozen=True, slots=True)
+class _StagedGeometry:
+    """Private in-process evidence, never a serialized publication capability.
+
+    Only the sealed candidate is retained strongly. Session/source bindings are
+    weak; cancellation and the original deadline remain effective after staging.
+    No permit is issued until the existing immediate publication path consumes it.
+    """
+    prepared: object
+    admission: object
+    context: object
+    session: object
+    request_hash: str
+    authoring_hash: str
+    recipe_hash: str
+    deadline: float
+    cancelled: Event
+    design_id: str
+    feature_id: str
+
+
+def _change(action, index, params, **kwargs):
+    staged = _stage(action, index, params, **kwargs)
+    try:
+        with state._lock:
+            session = staged.session()
+            permit = _issue_staged(staged, session)
+            revision = publish_replacement(session, staged.prepared, publication_permit=permit)
+        return {'design_id': staged.design_id, 'revision': revision, 'feature_id': staged.feature_id}
+    except (CaptureLimit, ProofBudgetExceeded) as error:
+        _refuse(str(error), 'geometry_capture_limit', 413)
+    except CommandContractError as error:
+        raise HTTPException(422, detail=error.as_issue()) from error
+    except (ValueError, KeyError, TypeError) as error:
+        _refuse(str(error)[:2048], 'invalid_geometry_input', 422)
+
+
+def _issue_staged(staged, session, *, expires=None):
+    """State-lock owned; issue only the original sealed candidate's authority."""
+    if type(staged) is not _StagedGeometry or staged.session() is not session:
+        _refuse('Staging belongs to another session')
+    _current(staged.context, session, staged.deadline, staged.cancelled)
+    return publication.issue(staged.admission, staged.prepared, request_sha256=staged.request_hash,
+        authoring_sha256=staged.authoring_hash, recipe_sha256=staged.recipe_hash,
+        expires=staged.deadline if expires is None else min(staged.deadline, expires), cancelled=staged.cancelled)
+
+
+def _stage(action, index, params, *, expected_kind, expected_feature_id, expected_design_id,
+           expected_revision, cancelled=None, expected_source=None, expected_session_identity=None,
+           preview_patch=False, foreground_check=None, expires=None):
+    """Evaluate and seal privately, with no publication or canonical mutation.
+
+    Private preview seam; no public staged-commit endpoint. A bound preview may
+    reserve one turn behind background reads; its checks run before any capture.
+    The returned evidence expires on the original operation/lease deadline.
+    """
     if (type(expected_kind) is not str or expected_kind not in KINDS
             or type(expected_feature_id) is not str or not 1 <= len(expected_feature_id) <= 512
             or (cancelled is not None and not isinstance(cancelled, Event))):
         _refuse('An exact geometry target and private cancellation event are required', 'invalid_geometry_input', 422)
-    if not _slot.acquire(blocking=False):
-        _refuse('A part history operation is already running', 'geometry_busy', 429)
-    slot_owned = True
     deadline = monotonic() + TIME_BUDGET
     cancelled = cancelled if cancelled is not None else Event()
+    if foreground_check is not None:
+        if preview_patch is not True or not callable(foreground_check) or expires is None:
+            _refuse('Foreground admission requires a bound preview lease', 'invalid_geometry_input', 422)
+        deadline = min(deadline, expires)
+    def check_admission():
+        _preparation_checkpoint(deadline, cancelled)
+        if foreground_check is not None:
+            foreground_check()
+    admitted = (_slot.acquire(blocking=False) if foreground_check is None else
+                _slot.acquire_foreground(deadline=deadline, check=check_admission))
+    if not admitted:
+        if foreground_check is not None:
+            check_admission()
+        _refuse('A part history operation is already running', 'geometry_busy', 429)
+    slot_owned = True
     try:
+        check_admission()
         request = EvaluationRequest(operation=action, index=index, params=params,
                                     kind=expected_kind if action == 'append' else None,
                                     expected_revision=expected_revision)
@@ -100,6 +167,10 @@ def _change(action, index, params, *, expected_kind, expected_feature_id, expect
             'source_revision': expected_revision, 'source_design_id': expected_design_id,
             'expected_feature_id': expected_feature_id, 'expected_kind': expected_kind,
             'extrusion_recording_version': 1}}
+        if preview_patch:
+            if preview_patch is not True or action != 'edit' or expected_kind != 'deformation':
+                _refuse('Preview validation requires a deformation edit', 'invalid_geometry_input', 422)
+            operation['header']['preview_patch'] = True
         validate_operation_input(operation)
         request_hash = digest(operation)
         with state._lock:
@@ -125,17 +196,14 @@ def _change(action, index, params, *, expected_kind, expected_feature_id, expect
             raise HTTPException(status, detail={'code': code, 'assessment': result})
         candidate, authoring_hash, recipe_hash = decode_candidate(result['candidate'])
         candidate = candidate.model_copy(update={'annotations_enabled': source_metadata.annotations_enabled})
-        if preservation_digest(candidate) != source_metadata.preserved_document_sha256:
+        if preservation_digest(candidate, allow_view_volumes=True) != source_metadata.preserved_document_sha256:
             _refuse('Geometry candidate changed preserved document state', 'revision_preservation_changed')
         prepared = prepare_geometry_revision(candidate,
             checkpoint=lambda: _preparation_checkpoint(deadline, cancelled))
         with state._lock:
             _current(context, session, deadline, cancelled)
-            permit = publication.issue(admission, prepared, request_sha256=request_hash,
-                authoring_sha256=authoring_hash, recipe_sha256=recipe_hash,
-                expires=deadline, cancelled=cancelled)
-            revision = publish_replacement(session, prepared, publication_permit=permit)
-        return {'design_id': source_metadata.design_id, 'revision': revision, 'feature_id': expected_feature_id}
+        return _StagedGeometry(prepared, admission, context, ref(session), request_hash,
+            authoring_hash, recipe_hash, deadline, cancelled, source_metadata.design_id, expected_feature_id)
     except CandidateDecodeError as error:
         _refuse(str(error), error.code)
     except (CaptureLimit, ProofBudgetExceeded) as error:
@@ -192,3 +260,38 @@ def history(action, *, expected_design_id, expected_revision, expected_source=No
             doc_context.set_request_feature_log_entry_id(entry_marker)
             raise
         return {'design_id': metadata.design_id, 'revision': session.revision}
+
+
+def _project_staged(staged):
+    """Project privately within staging's original deadline and authority binding."""
+    if type(staged) is not _StagedGeometry:
+        _refuse('Projection requires private staged evidence', 'invalid_geometry_input', 422)
+    if not _slot.acquire(blocking=False):
+        _refuse('A part history operation is already running', 'geometry_busy', 429)
+    slot_owned = True
+    try:
+        with state._lock:
+            session = staged.session()
+            _current(staged.context, session, staged.deadline, staged.cancelled)
+            ticket = worker.reserve_input(staged.prepared)
+            job = EvaluationJob(staged.context.doc_id, staged.context.source,
+                staged.context.source_revision, cancelled=staged.cancelled,
+                session_identity=staged.context.session_identity, admission=staged.admission,
+                request_sha256=staged.request_hash)
+        operation = {'projection': 'staged_deformation_v1', 'feature_id': staged.feature_id,
+                     'design_id': staged.design_id}
+        slot_owned = False
+        result = supervise(job, ticket, lambda captured: worker.GeometryProjectionWorker(captured, operation),
+                           max(0, staged.deadline - monotonic()))
+        if result.get('status') != 'ready':
+            issues = result.get('issues', [])
+            code = issues[0].get('code', 'geometry_projection_refused') if issues else 'geometry_projection_refused'
+            status = 408 if code == 'time_limit' else 413 if code in {
+                'preview_limit', 'geometry_worker_capture_limit', 'worker_input_limit', 'result_limit'} else 409
+            raise HTTPException(status, detail={'code': code, 'assessment': result})
+        with state._lock:
+            _current(staged.context, session, staged.deadline, staged.cancelled)
+        return result['candidate']
+    finally:
+        if slot_owned:
+            _slot.release()

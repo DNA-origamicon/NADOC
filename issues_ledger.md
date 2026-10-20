@@ -3123,3 +3123,19 @@ longer dependency branches and finite/indirect restoration pass; a native worker
 case commits once and reloads. Ordinary historical recipes are not rewritten on
 load. Desktop qualification and ISSUE-143's independent unequal native output
 failure remain, so this is private migration evidence, not a full public closure.
+
+## ISSUE-146 — Part recipe repair launcher hidden in configuration-only toolbar (2026-10-19, FIXED)
+
+The part history repair launcher was mounted inside the assembly configuration toolbar,
+whose parent is hidden in part mode. Source repair browser checks timed out before
+opening the panel. Mount the existing launcher in its own sibling host; its existing
+part-context guard controls visibility. Sweep and Extrude saved-proposal workflows now
+pass selection, evaluation, Apply, undo/redo, reopen and independent replay.
+
+## ISSUE-147 — Replay cache skips repair progress accounting (2026-10-19, FIXED)
+
+Repeating a source-selection or repair proposal with a cached prefix skipped the
+tracking executor and failed with “Repair replay diverged from planned command order”.
+Disable only the outer result cache for these tracking callbacks; normal feature
+rebuild caching remains enabled. The regression forces cache eligibility and repeats
+both selection and repair, checking all prefix/recipe rows were accounted for.

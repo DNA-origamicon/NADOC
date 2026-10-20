@@ -17,6 +17,7 @@ function checkInventory(native, geometry, topology, connections) {
     if (entries.length !== geometry.length || new Set(entries.map(e => e.nuc)).size !== expected.size
         || entries.some(entry => !expected.has(entry.nuc))) fail('native renderer omitted occupied DNA')
   }
+  if (!topology.crossovers.length && !topology.forced_ligations.length) return
   const shown = new Set([...native.coneEntries, ...connections].map(connection => pair(connection.fromNuc, connection.toNuc)))
   for (const crossover of topology.crossovers) {
     const endpoint = half => ({ helix_id: half.helix_id, bp_index: half.index, direction: half.strand })

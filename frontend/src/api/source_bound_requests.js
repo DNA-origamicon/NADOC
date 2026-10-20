@@ -1,3 +1,5 @@
+import { attributeFailure } from '../features/feature_history_failure.js'
+
 /** One source-bound publication path for native tools with complete geometry. */
 export function createSourceBoundRequests({ store, request, syncDesign, getDocId, currentRevision,
   documentRequests, label = 'feature', requireRevision = true }) {
@@ -14,11 +16,21 @@ export function createSourceBoundRequests({ store, request, syncDesign, getDocId
     if ((requireRevision || context.source.group_organization)
         && (!Number.isSafeInteger(context.revision) || context.revision < 0))
       throw new Error(`Refresh the current part before creating or editing this ${label}.`)
+    let rejection = null
     const response = await request('POST', path, { ...body,
       expected_design_id: context.designId, expected_revision: context.revision,
-    }, { docId: context.docId, protectedRetry: false, skipSimulationPrepare: true })
+    }, { docId: context.docId, protectedRetry: false, skipSimulationPrepare: true,
+      onError: (status, detail) => { rejection = { status, detail } },
+    })
     if (!isCurrent(context)) throw stale()
-    if (!response) throw new Error(store.getState().lastError?.message || `No confirmed ${label} result; refresh before retrying.`)
+    if (!response) {
+      const issue = rejection?.detail?.assessment?.issues?.[0]
+      const message = rejection?.detail?.detail ?? issue?.detail
+      const error = Object.assign(new Error(typeof message === 'string' ? message
+        : store.getState().lastError?.message || `No confirmed ${label} result; refresh before retrying.`),
+      rejection ?? {})
+      throw attributeFailure(error, context.source, body.expected_feature_id)
+    }
     if (response.design?.id !== context.designId || !Number.isSafeInteger(response.revision)
         || (context.revision != null && response.revision <= context.revision)) throw stale()
     // A lean response would make synchronization fetch unbound later geometry.

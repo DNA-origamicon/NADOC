@@ -303,6 +303,9 @@ def _work(design, check):
 
 
 def _before_command(kind, params, design):
+    from backend.core.part_suppression import KIND
+    if kind == KIND:
+        return
     if "_generated_scope" in params:
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
     if kind not in PREFIX_KINDS:

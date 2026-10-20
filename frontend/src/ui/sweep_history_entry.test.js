@@ -6,11 +6,11 @@ afterEach(() => {
   document.body.innerHTML = ''; vi.unstubAllGlobals()
 })
 
-function fixture({ enabled = true, cursor = -1, subCursor = null, version = 1 } = {}) {
+function fixture({ enabled = true, cursor = -1, subCursor = null, version = 1, evicted = true } = {}) {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   vi.stubGlobal('requestAnimationFrame', () => 1)
   document.body.innerHTML = '<div id="left-panel"><div class="tab-content"><h2 id="feature-log-panel-heading"><span>Feature Log</span></h2><span id="feature-log-panel-arrow"></span><div id="feature-log-panel-body"></div></div></div>'
-  const entry = { id: 'original-sweep-feature', feature_type: 'snapshot', op_kind: 'sweep', label: 'Sweep', evicted: true,
+  const entry = { id: 'original-sweep-feature', feature_type: 'snapshot', op_kind: 'sweep', label: 'Sweep', evicted,
     params: { _proof_version: version, sweep_id: '05f1ca4f-9ffa-4d6d-bdc2-2f59da59862f',
       cells: [[0, 0]], points_nm: [[0, 0, 0], [0, 0, 5]], plane: 'XY' } }
   const state = { currentDesign: { id: 'part', feature_log_cursor: cursor, feature_log_sub_cursor: subCursor,
@@ -41,8 +41,8 @@ it.each([{ cursor: -2 }, { cursor: 0 }, { subCursor: 0 }])('requires the current
   edit.click(); expect(onEditSweep).not.toHaveBeenCalled()
 })
 
-it('keeps the legacy evicted-row restriction while rollout is disabled', () => {
-  expect(fixture({ enabled: false }).edit).toBeUndefined()
+it.each([true, false])('does not offer obsolete editing while rollout is disabled (evicted=%s)', evicted => {
+  expect(fixture({ enabled: false, evicted }).edit).toBeUndefined()
 })
 
 it('does not promote an unknown Sweep proof contract to recovery-independent editing', () => {

@@ -240,19 +240,18 @@ it.each(['blunt-bend-btn', 'blunt-twist-btn', 'blunt-bend-btn-ctx', 'blunt-twist
     if (id.endsWith('-ctx')) menus.showCtx(10, 20, info); else menus.showPanel(info)
     click(id); await flush()
     expect(openDeformationCreation).toHaveBeenCalledWith({ type: id.includes('twist') ? 'twist' : 'bend',
-      targets: null, clusterIds: ['placement'], placementHint: { kind: 'end', ...info },
-      onUnsupported: expect.any(Function) })
+      targets: null, clusterIds: ['placement'], placementHint: { kind: 'end', ...info } })
     expect(startToolAtBp).not.toHaveBeenCalled()
   })
 
-it('continues an unsupported part (e.g. legacy saved history) with the legacy end tool', async () => {
+it('does not continue a refused owned preparation in the mutating end tool', async () => {
   const deps = makeDeps({ currentDesign: { id: 'part' } })
-  const openDeformationCreation = vi.fn(async ({ onUnsupported }) => onUnsupported())
+  const openDeformationCreation = vi.fn(async () => false)
   const menus = initBluntEndMenus({ ...deps, openDeformationCreation })
   const info = { helixId: 'h', bp: 42, openSide: 1 }
   menus.showPanel(info)
   click('blunt-twist-btn'); await flush()
-  expect(startToolAtBp).toHaveBeenCalledWith('twist', 'h', 42, 1)
+  expect(startToolAtBp).not.toHaveBeenCalled()
 })
 
 
@@ -282,7 +281,7 @@ it.each(['blunt-bend-btn', 'blunt-bend-btn-ctx'])(
     if (id.endsWith('-ctx')) menus.showCtx(10, 20, info); else menus.showPanel(info)
     click(id); await flush()
     expect(openDeformationCreation).toHaveBeenCalledWith({ type: 'bend', targets,
-      clusterIds: [], placementHint: { kind: 'end', ...info }, onUnsupported: expect.any(Function) })
+      clusterIds: [], placementHint: { kind: 'end', ...info } })
   })
 
 it('refuses stale explicit selection rather than broadening to whole-part scope', async () => {

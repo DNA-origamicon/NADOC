@@ -143,6 +143,15 @@ def test_full_archive_retains_legacy_history_and_every_declared_document_field()
     assert owned.feature_log[0].design_snapshot_gz_b64 == "opaque recovery, not a proof input"
 
 
+def test_suppressed_feature_definition_is_retained_in_owned_archive():
+    original = source()
+    original.feature_log[0].suppressed = True
+    owned = core().capture_archive(original)
+    assert owned.model_dump(mode="json") == original.model_dump(mode="json")
+    original.feature_log[0].suppressed = False
+    assert owned.feature_log[0].suppressed is True
+
+
 def test_nested_authoring_history_and_presentation_aliases_are_independent():
     original = source()
     expected = original.model_dump(mode="json")

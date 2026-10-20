@@ -77,3 +77,59 @@ def test_loopback_preview_responses_skip_gzip_and_remote_ones_keep_it():
     assert _loopback(SimpleNamespace(client=SimpleNamespace(host="::1")))
     assert not _loopback(SimpleNamespace(client=SimpleNamespace(host="192.168.1.20")))
     assert not _loopback(SimpleNamespace(client=None))
+
+
+@pytest.mark.parametrize("kind", ["bend", "twist"])
+def test_session_delta_restores_exact_full_projection_and_checks_coordinates(kind, monkeypatch):
+    from backend.api import part_deformation_preview as native
+    from backend.api import part_deformation_preview_dto as dto
+    from backend.core.part_verification_capture import capture
+    from tests.test_part_deformation_preview import native_source
+
+    prepared = native.prepare_from_capture(capture(native_source(kind), preserve_entry_types=True), "edited-feature")
+    prefix = prepared.copy_prefix()
+    original = native.evaluate(prepared, {})
+    cache = {}
+    opened = dto.prepare_display(prefix, original, envelope={"lease_id": "lease"}, display_cache=cache)
+    patch = {"params": ({"curvature_deg_per_bp": .6, "direction_deg": 15} if kind == "bend" else {"total_degrees": 40})}
+    patch["params"]["kind"] = kind
+    evaluated = native.evaluate(prepared, patch)
+    full = dto.evaluate_display(prefix, evaluated, envelope={"lease_id": "lease"})
+    delta = dto.evaluate_display(prefix, evaluated, envelope={"lease_id": "lease"}, display_cache=cache)
+    packed = delta["candidate"]["nucleotides"]
+    assert packed.pop("rows_ref") == "lease"
+    packed["rows"] = opened["before"]["nucleotides"]["rows"]
+    assert delta == full
+    assert dto.evaluate_display(prefix, evaluated, envelope={"lease_id": "other"}, display_cache=cache)["candidate"] == full["candidate"]
+    cache["rows"][0][0] = "changed-owner"
+    assert dto.evaluate_display(prefix, evaluated, envelope={"lease_id": "lease"}, display_cache=cache) == full
+
+    from backend.core import design_geometry
+    real_geometry = design_geometry._geometry_for_design
+
+    def corrupt(design):
+        records = real_geometry(design)
+        records[0]["slab_position"][0] += 1
+        return records
+
+    monkeypatch.setattr(design_geometry, "_geometry_for_design", corrupt)
+    with pytest.raises(CommandContractError, match="slab|registration"):
+        dto.evaluate_display(prefix, evaluated, envelope={"lease_id": "lease"}, display_cache=cache)
+
+
+def test_cached_occupancy_reuses_only_equal_topology_and_checks_new_references():
+    from backend.core.part_dna_comparison_contract import inventory
+    from tests.test_part_dna_comparison import small
+
+    original = small("bend")
+    cached = inventory(original)
+    changed = original.model_copy(deep=True)
+    changed.deformations[0].params.curvature_deg_per_bp = 3
+    assert inventory(changed, previous=cached).sites is cached.sites
+    changed.strands[0].domains[0].end_bp -= 1
+    assert inventory(changed, previous=cached).sites == inventory(changed).sites
+    assert inventory(changed, previous=cached).sites is not cached.sites
+    changed = original.model_copy(deep=True)
+    changed.deformations[0].affected_helix_ids = ["missing"]
+    with pytest.raises(CommandContractError, match="unresolved"):
+        inventory(changed, previous=cached)

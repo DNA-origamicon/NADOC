@@ -21,6 +21,54 @@ from backend.core.models import Design
 client = TestClient(app)
 
 
+def test_deformed_continuation_cannot_fall_back_to_a_frame_after_its_source_is_deleted():
+    from backend.api.crud import BundleDeformedContinuationRequest, _build_extrude_deformed_continuation
+    from backend.core.part_command_errors import ReferenceResolutionError
+
+    source = Design()
+    body = BundleDeformedContinuationRequest(cells=[[0, 0]], length_bp=5,
+        grid_origin=[0, 0, 0], axis_dir=[0, 0, 1], frame_right=[1, 0, 0], frame_up=[0, 1, 0],
+        ref_helix_id="deleted-source", source_bp=14)
+    with pytest.raises(ReferenceResolutionError) as caught:
+        _build_extrude_deformed_continuation(source, body)
+    assert caught.value.code == "missing_reference"
+    assert caught.value.references == ({"kind": "helix", "identity": "deleted-source", "parameter_path": ["ref_helix_id"]},)
+
+
+@pytest.mark.parametrize("at_end", [False, True])
+def test_nicked_continuation_extends_only_fragments_at_the_selected_terminus(at_end):
+    from backend.core.deformation import deformed_frame_at_bp, deformed_helix_axes
+    from backend.core.lattice import make_bundle_deformed_continuation
+    from backend.core.occupancy import occupancy_conflicts
+    from tests.deformation_history_app import fixture
+    from tests.test_group_lineage_resize_pipeline import minor
+
+    source = fixture("extrude-blocked")
+    helix = source.helices[0]
+    source = minor(source, "nick-batch", {"nicks": [
+        {"helix_id": helix.id, "bp_index": bp, "direction": "REVERSE"} for bp in (3, 10)]})
+    original = source.model_dump()
+    terminus = helix.bp_start + (helix.length_bp - 1 if at_end else 0)
+    touching = {strand.id for strand in source.strands if any(
+        d.helix_id == helix.id and min(d.start_bp, d.end_bp) <= terminus <= max(d.start_bp, d.end_bp)
+        for d in strand.domains)}
+    assert len(touching) == 2
+    frame = deformed_frame_at_bp(source, terminus + int(at_end), helix.id)
+    endpoints = {axis["helix_id"]: axis for axis in deformed_helix_axes(source)}
+    result = make_bundle_deformed_continuation(source, [helix.grid_pos], 5 if at_end else -5,
+        frame, endpoints, "XY", ref_helix_id=helix.id)
+    assert occupancy_conflicts(result) == ([], 0)
+    assert source.model_dump() == original
+    after = {strand.id: strand for strand in result.strands}
+    assert set(after) == {strand.id for strand in source.strands}
+    for strand in source.strands:
+        if strand.id not in touching:
+            assert after[strand.id].model_dump() == strand.model_dump()
+        else:
+            assert len(after[strand.id].domains) == len(strand.domains) + 1
+    assert sum(abs(d.end_bp - d.start_bp) + 1 for strand in result.strands for d in strand.domains) == 2 * (helix.length_bp + 5)
+
+
 @pytest.fixture(autouse=True)
 def reset_state():
     yield

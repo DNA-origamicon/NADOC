@@ -33,7 +33,8 @@ class SmallInput(BaseModel):
 
 @pytest.mark.parametrize("case,nodes,size", [
     ("empty", 3, 4), ("mapping", 9, 16), ("alias", 9, 12),
-    ("cycle", 6, 8), ("minor", 12, 104), ("group", 15, 116),
+    # Suppression adds its key and boolean (two nodes, forty string bytes) per header.
+    ("cycle", 6, 8), ("minor", 14, 144), ("group", 19, 196),
 ])
 def test_inherited_accounting_has_fixed_node_byte_boundaries(case, nodes, size):
     source = SmallInput()

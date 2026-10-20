@@ -18,6 +18,24 @@ const rows = {
 function entry(kind, patch = {}) { return { id: 'feature', feature_type: 'snapshot', op_kind: kind, label: kind, params: structuredClone(rows[kind]), ...patch } }
 afterEach(() => { window.dispatchEvent(new Event('nadoc:document-reset')); document.body.innerHTML = '' })
 
+it('retires a pending Save on source replacement and ignores its late result', async () => {
+  let current = true, changed, release
+  const unsubscribe = vi.fn()
+  const pending = editExtrusionFeature(entry('extrude-frame'), {
+    isCurrent: () => current,
+    subscribeContext: callback => { changed = callback; return unsubscribe },
+    onSave: () => new Promise(resolve => { release = resolve }),
+  })
+  button('Save').click(); await flush()
+  expect(button('Cancel').disabled).toBe(true)
+  current = false; changed()
+  expect(await pending).toBeNull()
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(unsubscribe).toHaveBeenCalledTimes(1)
+  release({ design: { id: 'old' } }); await flush()
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+})
+
 it.each(Object.keys(rows))('recognizes native %s independently of evicted recovery', kind => {
   const value = entry(kind, { evicted: true })
   expect(isNativeExtrusionFeature(value)).toBe(true)

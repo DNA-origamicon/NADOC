@@ -107,13 +107,13 @@ describe('deformation history editor integration', () => {
   })
 
   it.each(['missing_recipe_root', 'missing_proof_contract', 'preview_limit'])(
-    'continues an unsupported part (%s) through the caller fallback without an error toast', async code => {
+    'refuses unsupported parts (%s) without calling an obsolete fallback', async code => {
       const f = setup()
       f.previewAPI.prepare.mockRejectedValue(Object.assign(new Error('Unsupported part'), { status: 422, code }))
       const onUnsupported = vi.fn(() => true)
-      expect(await f.owner.open(f.design.feature_log[0], 0, { onUnsupported })).toBe(true)
-      expect(onUnsupported).toHaveBeenCalledOnce()
-      expect(f.showToast).not.toHaveBeenCalled(); expect(f.editor.startToolForHistory).not.toHaveBeenCalled()
+      expect(await f.owner.open(f.design.feature_log[0], 0, { onUnsupported })).toBe(false)
+      expect(onUnsupported).not.toHaveBeenCalled()
+      expect(f.showToast).toHaveBeenCalledWith(expect.stringContaining('Unsupported part'), 6000); expect(f.editor.startToolForHistory).not.toHaveBeenCalled()
       expect(f.owner.active()).toBe(false); expect(f.owner.watchToolState()).toBe(false)
     })
 

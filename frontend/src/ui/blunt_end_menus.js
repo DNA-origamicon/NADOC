@@ -26,9 +26,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
         ? [...new Set(targets.filter(ref => ref.kind === 'cluster').map(ref => ref.id))]
         : getDeformDefaultClusterIds()
       Promise.resolve(openDeformationCreation({ type, targets, clusterIds,
-        placementHint: { kind: 'end', helixId: info.helixId, bp: info.bp, openSide: info.openSide },
-        // Parts outside isolated scope (e.g. legacy saved history) keep the legacy tool.
-        onUnsupported: () => { startLegacy(type, info); return true } }))
+        placementHint: { kind: 'end', helixId: info.helixId, bp: info.bp, openSide: info.openSide } }))
         .catch(error => showToast(error.message, { severity: 'error' }))
       return
     }

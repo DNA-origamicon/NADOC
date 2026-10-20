@@ -1,11 +1,13 @@
 /** Closed, same-object validation of the native Sweep feature-stage display. */
 import { fail, finite, integer, text, shape, vector, list, unique } from './part_comparison_validation.js'
-import { validateDeformationPreviewComponent } from './part_dna_comparison_model.js'
+import { DNA_DISPLAY_LIMITS, validateDeformationPreviewComponent } from './part_dna_comparison_model.js'
 
 const ENVELOPE = ['preview_id', 'expected_design_id', 'expected_revision', 'feature_id', 'lease_id', 'doc_id', 'deformation_id', 'request_sequence', 'remaining_seconds']
 const HELIX = ['id', 'label', 'grid_pos', 'lattice_frame_id', 'bp_start', 'length_bp', 'axis_start', 'axis_end']
 const INPUTS = ['sweep_id', '_proof_version', 'cells', 'points_nm', 'orientations_deg', 'plane', 'strand_filter', 'ligate_adjacent', 'source_helix_id', 'source_end', 'detach_source']
 const PLANE = ['XY', 'XZ', 'YZ']
+// Match the native Sweep base-pair-cell guard and shared ordinary-part display bounds.
+const MAX_SWEEP_BP = 200_000
 function points(values, maximum, dimensions = 3) { list(values, maximum); for (const point of values) vector(point, dimensions) }
 function basis(value) { list(value, 3); if (value.length !== 3) fail('incomplete Sweep frame'); for (const row of value) vector(row, 3) }
 function xyz(value) { shape(value, ['x', 'y', 'z']); vector([value.x, value.y, value.z], 3) }
@@ -19,7 +21,7 @@ function inputs(value, helices) {
   text(value.sweep_id)
   if (value._proof_version !== 1 || !PLANE.includes(value.plane) || !['both', 'scaffold', 'staples'].includes(value.strand_filter)
       || !['start', 'end'].includes(value.source_end) || typeof value.ligate_adjacent !== 'boolean' || typeof value.detach_source !== 'boolean') fail('unsupported Sweep inputs')
-  points(value.cells, 16, 2)
+  points(value.cells, DNA_DISPLAY_LIMITS.helices, 2)
   if (!value.cells.length || value.cells.some(cell => cell.some(v => !Number.isSafeInteger(v) || Math.abs(v) > 10000))
       || new Set(value.cells.map(cell => cell.join(','))).size !== value.cells.length) fail('invalid Sweep cells')
   points(value.points_nm, 256)
@@ -38,15 +40,15 @@ function metadata(value) {
     'orientation_basis', 'point_bases', 'helix_paths_nm', 'cross_section_nm', 'direction', 'length_nm', 'length_bp', 'total_new_bp'])
   if (typeof value.source_detached !== 'boolean' || ![1, -1].includes(value.direction)
       || !finite(value.length_nm) || value.length_nm <= 0 || !integer(value.length_bp) || value.length_bp < 1
-      || value.length_bp > 1024 || !integer(value.total_new_bp) || value.total_new_bp > 1024) fail('invalid native Sweep extent')
+      || value.length_bp > MAX_SWEEP_BP || !integer(value.total_new_bp) || value.total_new_bp > MAX_SWEEP_BP) fail('invalid native Sweep extent')
   vector(value.origin_nm, 3); points(value.points_nm, 256); points(value.path_nm, 2048)
   if (value.points_nm.length < 2 || value.path_nm.length < 2) fail('incomplete native Sweep path')
   basis(value.point_rotation); basis(value.orientation_basis)
   list(value.point_bases, value.points_nm.length)
   if (value.point_bases.length !== value.points_nm.length) fail('incomplete native Sweep point frames')
   value.point_bases.forEach(basis)
-  list(value.helix_paths_nm, 16); value.helix_paths_nm.forEach(path => points(path, 2048))
-  points(value.cross_section_nm, 16, 2)
+  list(value.helix_paths_nm, DNA_DISPLAY_LIMITS.helices); value.helix_paths_nm.forEach(path => points(path, 2048))
+  points(value.cross_section_nm, DNA_DISPLAY_LIMITS.helices, 2)
   shape(value.source_frame, ['grid_origin', 'frame_right', 'frame_up', 'axis_dir'])
   Object.values(value.source_frame).forEach(point => vector(point, 3))
   const f = value.feasibility
@@ -62,10 +64,10 @@ function controls(value, before, native, envelope) {
   shape(value, ['inputs', 'lattice_type', 'helices', 'lattice_frames'])
   if (!['SQUARE', 'HONEYCOMB'].includes(value.lattice_type)) fail('unsupported Sweep lattice')
   const topology = before.display_topology
-  list(value.helices, 16); unique(value.helices)
+  list(value.helices, DNA_DISPLAY_LIMITS.helices); unique(value.helices)
   if (value.helices.length !== topology.helices.length) fail('incomplete fixed-prefix Sweep helices')
   const helices = new Set(value.helices.map(h => h.id)), owners = new Set(topology.cluster_transforms.map(c => c.id))
-  list(value.lattice_frames, 16); unique(value.lattice_frames)
+  list(value.lattice_frames, DNA_DISPLAY_LIMITS.operations); unique(value.lattice_frames)
   const frames = new Set(value.lattice_frames.map(f => f.id))
   for (const frame of value.lattice_frames) {
     shape(frame, ['id', 'plane', 'placement_cluster_id']); text(frame.id, 128); text(frame.placement_cluster_id, 128)
@@ -99,8 +101,7 @@ export function validateSweepPreviewDisplay(value, { prepare, requireEnvelope = 
   }
   metadata(value.sweep_preview)
   if (prepare) validateDeformationPreviewComponent(value.before)
-  if (value.candidate !== null) validateDeformationPreviewComponent(value.candidate)
-  else if (prepare) fail('missing initial Sweep candidate')
+  if (value.candidate !== null) fail('Sweep preview must use path guides, not a nucleotide candidate')
   if (prepare) controls(value.control_context, value.before, value.sweep_preview, envelope ? value : null)
   return value
 }

@@ -2,7 +2,7 @@ import { initSidebarStack } from './sidebar_stack.js'
 
 const TAB_SECTIONS = {
   assembly: ['assembly-panel'],
-  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'primitives-panel', 'overhang-orient-panel', 'move-rotate-panel', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'primitives-panel', 'overhang-orient-panel', 'blunt-panel-actions', 'move-rotate-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'view-volumes-section', 'coloring-options-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'assembly-overhang-panel', 'assembly-oconn-panel', 'strand-anim-panel'],
@@ -108,7 +108,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
 
   // These contextual tools previously lived outside the tab panes. Keep them
   // in Properties and reveal that column when a tool explicitly becomes visible.
-  const contextual = ['primitives-panel', 'overhang-orient-panel'].map(id => document.getElementById(id)).filter(Boolean)
+  const contextual = ['primitives-panel', 'overhang-orient-panel', 'blunt-panel-actions'].map(id => document.getElementById(id)).filter(Boolean)
   const visible = new Map(contextual.map(node => [node, node.style.display !== 'none']))
   const toolObserver = new MutationObserver(() => {
     for (const node of contextual) {

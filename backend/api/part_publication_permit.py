@@ -81,7 +81,7 @@ def admit_evaluation(doc_id, session, *, operation, request_sha256):
     effective = policy.require_evaluation(doc_id, operation)
     if operation == "repair" and getattr(session.design, "group_organization", None) is not None:
         return admit_organized_recipe(doc_id, session, operation=operation, request_sha256=request_sha256)
-    if operation not in {"verify", "selection", "append", "edit", "delete", "repair", "batch"}:
+    if operation not in {"verify", "selection", "append", "edit", "delete", "reorder", "suppress", "repair", "batch"}:
         _refusal("Unknown evaluation operation", code="invalid_operation_admission")
     if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
         raise ValueError("Admission requires the canonical bounded request digest")

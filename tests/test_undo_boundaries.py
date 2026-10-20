@@ -70,14 +70,18 @@ def test_interchange_import_starts_new_history(monkeypatch, format_name):
     assert state.undo_depth() == state.redo_depth() == 0
 
 
-def test_new_bundle_undo_stops_at_empty_workspace():
+def test_new_bundle_is_an_edit_of_the_current_part_with_one_undo():
     seed_old_design()
+    before = state.get_or_404().model_dump()
+    history_depth = state.undo_depth()
     response = client.post('/api/design/bundle', json={'cells': [[0, 0]], 'length_bp': 21})
     assert response.status_code == 201, response.text
+    assert state.get_or_404().id == before['id']
+    assert state.undo_depth() == history_depth + 1
+    assert state.redo_depth() == 0
     state.undo()
-    assert not state.get_or_404().helices
-    assert state.get_or_404().id != 'previous-file'
-    assert state.undo_depth() == 0
+    assert state.get_or_404().model_dump() == before
+    assert state.undo_depth() == history_depth
 
 
 @pytest.mark.parametrize('operation', ['new', 'import', 'load'])

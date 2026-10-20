@@ -75,6 +75,19 @@ afterEach(() => {
   vi.useRealTimers(); document.body.innerHTML = ''; vi.restoreAllMocks()
 })
 
+it('coalesces typing but evaluates a committed coordinate immediately and only once', async () => {
+  const { entry, onChange } = setup()
+  await panel.edit(entry, 0); await flush()
+  change(field('Point Z (nm)'), 12, 'input')
+  change(field('Point Z (nm)'), 17, 'input')
+  expect(onChange).not.toHaveBeenCalled()
+  change(field('Point Z (nm)'), 17)
+  expect(onChange).toHaveBeenCalledTimes(1)
+  expect(onChange.mock.calls[0][0].points_nm[1][2]).toBe(17)
+  await vi.advanceTimersByTimeAsync(130)
+  expect(onChange).toHaveBeenCalledTimes(1)
+})
+
 it('opens evicted native inputs privately and keeps Apply disabled until evaluated display is ready', async () => {
   const { entry, owner, api, store, live, ready } = setup({ initialReady: false })
   await panel.edit(entry, 0); await flush()
@@ -230,12 +243,12 @@ it('closes only its local view after a newer picker takes ownership', async () =
   expect(slicePlane.setExtrudeUiOpen).not.toHaveBeenCalled()
 })
 
-it('leaves the existing legacy editor path intact when history rollout is disabled', async () => {
+it('refuses history edits when rollout is disabled without legacy preview or mutation', async () => {
   const { entry, factory, api } = setup({ enabled: false })
   await panel.edit(entry, 0)
   await vi.advanceTimersByTimeAsync(130)
   expect(factory).not.toHaveBeenCalled()
-  expect(api.previewSweep).toHaveBeenCalledWith(expect.objectContaining({ sweep_id: entry.params.sweep_id }), 0)
-  el('apply').click(); await flush()
-  expect(api.editFeature).toHaveBeenCalledWith(0, expect.objectContaining({ sweep_id: entry.params.sweep_id }))
+  expect(panel.isActive()).toBe(false)
+  expect(api.previewSweep).not.toHaveBeenCalled()
+  expect(api.editFeature).not.toHaveBeenCalled()
 })

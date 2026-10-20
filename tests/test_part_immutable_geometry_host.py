@@ -323,3 +323,59 @@ def test_liveness_is_rechecked_after_undo_retention_preparation(document, immedi
         edit(operation, cancelled=cancelled)
     assert saved(session) == before
     available()
+
+
+@pytest.mark.parametrize('kind', ['bend', 'twist'])
+def test_real_native_stage_is_private_and_retains_only_sealed_candidate(document, monkeypatch, kind):
+    from dataclasses import fields
+    from backend.core.models import Design
+    from tests.test_part_deformation_preview import native_source
+
+    _, session = document
+    source = native_source(kind)
+    entry = source.feature_log[-1]
+    session.design = revisions.prepare_geometry_revision(source)
+    session.revision = 7
+    session.redo.append(session.design)
+    before = saved(session)
+    monkeypatch.setattr(authority, 'issue', lambda *a, **k: pytest.fail('Staging issued a permit'))
+    staged = host._stage('edit', len(source.feature_log) - 1, {'plane_b_bp': 30},
+        expected_kind='deformation', expected_feature_id=entry.id,
+        expected_design_id=source.id, expected_revision=7)
+    assert saved(session) == before
+    assert staged.session() is session and staged.context.source() is before[0]
+    assert staged.context.source_revision == 7
+    assert staged.context.request_sha256 == staged.request_hash
+    assert not any(isinstance(getattr(staged, field.name), Design) for field in fields(staged))
+    assert type(staged.prepared) is revisions.StrictPartRevision
+    candidate = revisions.materialize_revision(staged.prepared)
+    assert candidate.deformations[-1].plane_b_bp == 30
+    assert candidate.feature_log[-1].id == entry.id
+    _verified(candidate)
+    available()
+
+
+@pytest.mark.parametrize('change', ['revision', 'source', 'session', 'policy', 'gate', 'cancel', 'deadline'])
+def test_staging_publication_gap_rechecks_original_authority(document, immediate, monkeypatch, change):
+    doc, session = document
+    source, operation = install(document)
+    original = host._stage
+
+    def stage(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if change == 'revision': session.revision += 1
+        elif change == 'source': session.design = revisions.prepare_geometry_revision(revisions.materialize_revision(source))
+        elif change == 'session': state.drop_doc(doc)
+        elif change == 'policy': policy._install_configuration(policy.current_configuration())
+        elif change == 'gate': monkeypatch.setattr(authority, 'ENABLED', False)
+        elif change == 'cancel': result.cancelled.set()
+        else: monkeypatch.setattr(host, 'monotonic', lambda: float('inf'))
+        return result
+
+    monkeypatch.setattr(host, '_stage', stage)
+    monkeypatch.setattr(authority, 'issue', lambda *a, **k: pytest.fail('Stale staging issued permit'))
+    with pytest.raises(HTTPException):
+        edit(operation)
+    assert not session.history and not session.redo
+    assert session.design is source or change == 'source'
+    available()

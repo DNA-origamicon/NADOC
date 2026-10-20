@@ -29,7 +29,7 @@ def inputs(**kwargs):
 
 @pytest.mark.parametrize("attached,posed,organized", [(False, False, False),
     (True, False, False), (True, True, False), (True, True, True)])
-def test_complete_native_candidate_and_fixed_prefix_controls(attached, posed, organized):
+def test_guides_and_fixed_prefix_context_without_full_sweep_candidate(attached, posed, organized):
     prefix, evaluated = inputs(attached=attached, posed=posed, organized=organized)
     before = prefix.model_dump(mode="json"), evaluated.design.model_dump(mode="json")
     result = dto().prepare_display(prefix, evaluated)
@@ -39,7 +39,8 @@ def test_complete_native_candidate_and_fixed_prefix_controls(attached, posed, or
         assert result[field] is False
     assert result["sweep_preview"] == evaluated.sweep
     assert "feasibility" not in result
-    for name, design in (("before", prefix), ("candidate", evaluated.design)):
+    assert result["candidate"] is None
+    for name, design in (("before", prefix),):
         records = design_geometry._geometry_for_design(design)
         axes = deformation.deformed_helix_axes(design)
         axes = deformation._apply_ovhg_rotations_to_axes(design, axes, records)
@@ -59,16 +60,17 @@ def test_complete_native_candidate_and_fixed_prefix_controls(attached, posed, or
     controls["helices"].clear()
     controls["inputs"]["cells"].clear()
     result["sweep_preview"]["points_nm"].clear()
-    result["candidate"]["display_topology"]["strands"].clear()
+    result["before"]["display_topology"]["strands"].clear()
     assert (prefix.model_dump(mode="json"), evaluated.design.model_dump(mode="json")) == before
     assert dto().prepare_display(prefix, evaluated) == wire
 
 
-def test_geometry_off_keeps_native_path_controls_and_feedback_without_projection(monkeypatch):
+@pytest.mark.parametrize("include_geometry", [False, True])
+def test_all_updates_keep_guides_and_feedback_without_nucleotide_projection(monkeypatch, include_geometry):
     prefix, evaluated = inputs(attached=True)
     monkeypatch.setattr(design_geometry, "_geometry_for_design", lambda *_: pytest.fail("allocated nucleotides"))
     monkeypatch.setattr(deformation, "deformed_helix_axes", lambda *_: pytest.fail("allocated axes"))
-    result = dto().evaluate_display(prefix, evaluated, include_geometry=False)
+    result = dto().evaluate_display(prefix, evaluated, include_geometry=include_geometry)
     assert result["candidate"] is None
     assert "before" not in result and "control_context" not in result
     assert result["sweep_preview"] == evaluated.sweep
@@ -117,3 +119,38 @@ def test_combined_wire_budget_includes_native_path_metadata():
     evaluated.sweep.clear()
     evaluated.sweep.update(original)
     assert dto().evaluate_display(prefix, evaluated, include_geometry=False)["candidate"] is None
+
+
+def test_static_prefix_projection_still_rejects_nonfinite_coordinates(monkeypatch):
+    prefix, evaluated = inputs()
+    original = design_geometry._geometry_for_design
+    def malformed(design):
+        records = original(design)
+        records[0]["backbone_position"][0] = float("nan")
+        return records
+    monkeypatch.setattr(design_geometry, "_geometry_for_design", malformed)
+    with pytest.raises(CommandContractError) as caught:
+        dto().prepare_display(prefix, evaluated)
+    assert caught.value.code == "invalid_preview_geometry"
+
+
+def test_sweep_metadata_is_not_trusted_as_validated_native_coordinates():
+    prefix, evaluated = inputs()
+    evaluated.sweep["path_nm"][0][0] = float("nan")
+    with pytest.raises(CommandContractError) as caught:
+        dto().evaluate_display(prefix, evaluated)
+    assert caught.value.code == "invalid_preview_geometry"
+
+
+def test_open_projects_only_the_static_prefix_never_the_selected_sweep(monkeypatch):
+    from backend.core import part_dna_comparison
+    prefix, evaluated = inputs(attached=True)
+    original = part_dna_comparison.project_for_deformation_preview
+    seen = []
+    def project(design):
+        assert design is prefix
+        seen.append(design)
+        return original(design)
+    monkeypatch.setattr(part_dna_comparison, "project_for_deformation_preview", project)
+    result = dto().prepare_display(prefix, evaluated)
+    assert seen == [prefix] and result["candidate"] is None

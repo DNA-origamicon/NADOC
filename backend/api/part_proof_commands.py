@@ -117,6 +117,9 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    from backend.core.part_suppression import KIND, valid_definition
+    if kind == KIND:
+        return Dependencies(known=valid_definition(params, dependencies))
     from backend.core import part_frozen_topology as frozen
     if frozen.is_frozen(params):
         from backend.core.part_replay_cache import DEFORMATION_INDEPENDENT
@@ -389,6 +392,9 @@ def execute_long(kind, design, params):
 def _execute(kind, design, params, *, expensive):
     if not dependencies(kind, params).known:
         raise NotImplementedError("Command lacks a versioned proof contract")
+    from backend.core.part_suppression import KIND
+    if kind == KIND:
+        return design
     from backend.core.positional_refs import resolve as resolve_positions
     params = resolve_positions(kind, params, design)
     if design.group_organization is not None:

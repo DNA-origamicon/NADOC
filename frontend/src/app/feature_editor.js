@@ -4,12 +4,9 @@ import { createDeformationHistoryEditor } from './deformation_history_editor.js'
 import { createTransformHistoryEditor, isNativeTransformFeature, TRANSFORM_HISTORY_EDITOR_ENABLED } from './transform_history_editor.js'
 import {
   initDeformationEditor, previewDeformation, confirmDeformation,
-  waitForDeformationIdle, discardDeformationPreview,
   exitTool as deformExitTool, getPlanes as getDeformPlanes,
   repositionPlane as repositionDeformPlane,
   getState as getDeformState, getToolType as getDeformToolType,
-  startToolForEdit as startDeformToolForEdit,
-  markEditCommitted as markDeformEditCommitted,
   startToolForHistory, startToolForCreation, finishHistoryTool, updateHistoryScope,
   STATES as DEFORM_STATES,
 } from '../scene/deformation_editor.js'
@@ -19,9 +16,7 @@ import {
   setHistoryPopupStatus,
 } from '../ui/bend_twist_popup.js'
 
-// Enabled October 18, 2026 with the backend deformation-preview route. Parts the
-// isolated editor does not support (for example legacy saved history) fall back
-// to the legacy mutating-preview editor through onUnsupported.
+// Ordinary Bend/Twist creation and history use isolated previews exclusively.
 export const ISOLATED_DEFORMATION_HISTORY_ENABLED = true
 export const ISOLATED_DEFORMATION_CREATION_ENABLED = true
 
@@ -49,24 +44,8 @@ export function initFeatureEditor({
   initDeformationEditor(scene, camera, canvas, controls, designRenderer,
     () => {
       if (history?.active()) { history.onToolExit(); return }
-      // onExit: restore mode indicator + (for an unconfirmed edit) restore
-      // the original op that _onEditFeature peeled off the design.
-      //
-      // The deformation editor's preview-op DELETE already happened inside
-      // _exitTool → _clearPreviewSession. But the ORIGINAL op was peeled off
-      // separately by _onEditFeature, so design.deformations is missing it
-      // until we replay the log. A seek to priorCursor handles that — the
-      // backend re-runs the log and the original op pops back with its
-      // original params. Triggered when _editContext is still set on exit
-      // (Cancel / Escape paths). onConfirm clears _editContext BEFORE
-      // exiting, so the seek-restore is skipped on the confirm path
-      // (editFeature already updated the log and rebuilt design.deformations).
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-      const ctx = _editContext
       _editContext = null
-      if (ctx?.editingFeatureType === 'deformation' && ctx.origOpId) {
-        waitForDeformationIdle().then(() => seekFeaturesWithDelta(ctx.priorCursor ?? -1)).catch(() => {})
-      }
     },
     () => {
       // onPlaneDragEnd: sync popup inputs with dragged plane positions
@@ -78,49 +57,11 @@ export function initFeatureEditor({
   initBendTwistPopup({
     onPreview: (params) => previewDeformation(params),
     onConfirm: async (params) => {
-      const ctx = _editContext
-      if (ctx?.featureIndex != null && ctx.editingFeatureType === 'deformation') {
-        // Edit-confirm: the bent GHOST is currently held by a preview op
-        // (added by previewDeformation while the original op was peeled off
-        // in _onEditFeature). editFeature updates the log entry's snapshot
-        // and rebuilds design.deformations from the log — the backend
-        // explicitly drops any preview op as part of that rebuild
-        // (see backend _edit_deformation_feature). So a single editFeature
-        // call commits the new params and cleans the overlay in one shot.
-        const planes = getDeformPlanes()
-        const bpA = planes.a?.bp ?? 0
-        const bpB = planes.b?.bp ?? 0
-        const editBody = {
-          type:       getDeformToolType() ?? 'twist',
-          plane_a_bp: Math.min(bpA, bpB),
-          plane_b_bp: Math.max(bpA, bpB),
-          params,
-          cluster_ids: ctx.clusterIds ?? [],
-        }
-        markDeformEditCommitted()   // so the exit below does NOT revert the op
-        await discardDeformationPreview()
-        const resp = await api.editFeature(ctx.featureIndex, editBody)
-        if (resp == null) {
-          showToast(`Edit failed: ${store.getState().lastError?.message ?? 'unknown error'}`, 4000)
-        } else if (ctx.priorCursor != null && ctx.priorCursor !== -1) {
-          // editFeature leaves the cursor at latest; if the user was mid-scrub
-          // when they hit edit, return the slider to where they were.
-          await seekFeaturesWithDelta(ctx.priorCursor)
-        }
-        _editContext = null
-        deformExitTool()
-        _watchDeformState()
-        return
-      }
       _editContext = null   // clear before confirm; addDeformation takes over
       await confirmDeformation(params)
       _watchDeformState()
     },
     onCancel: () => {
-      // For an edit-cancel, leave _editContext set so onExit (called below
-      // via deformExitTool → _exitTool) sees it and restores the original
-      // op via seek. Escape goes through the same _exitTool path with the
-      // same restore. New-op cancels (no _editContext) just exit cleanly.
       deformExitTool()
       _watchDeformState()
     },
@@ -141,11 +82,7 @@ export function initFeatureEditor({
       const { a, b } = getDeformPlanes()
       const editParams = _editContext?.pendingParams ?? null
       const editClusterIds = _editContext ? (_editContext.clusterIds ?? []) : null
-      // Edit mode now uses the preview-op flow (the original op was peeled off
-      // in _onEditFeature). Let the initial preview fire so the popup's first
-      // previewDeformation call lands beginDeformPreview (SOLID = un-deformed)
-      // and adds the bent overlay (GHOST = deformed). The new-deformation
-      // path obviously also wants the initial preview.
+      // Owned history popups supply their own callbacks and preview state.
       const skipInitialPreview = false
       openDeformPopup(
         getDeformToolType() ?? 'twist',
@@ -182,9 +119,7 @@ export function initFeatureEditor({
       if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
         showToast('Finish the current tool before editing feature history', 4000); return
       }
-      return history.open(entry, featureIndex, {
-        onUnsupported: () => _legacyDeformationEdit(entry, featureIndex),
-      })
+      return history.open(entry, featureIndex)
     }
     // ── Overhang orientation edit — open orientation panel for this overhang ─
     if (entry.feature_type === 'overhang_rotation') {
@@ -230,60 +165,10 @@ export function initFeatureEditor({
       return
     }
 
-    return _legacyDeformationEdit(entry, featureIndex)
-  }
-
-  /** Legacy mutating-preview edit; used when the isolated editor does not support the part. */
-  async function _legacyDeformationEdit(entry, featureIndex) {
-    const op = entry.op_snapshot
-    if (!op) return
-
-    const design = store.getState().currentDesign
-    const priorCursor = design?.feature_log_cursor ?? -1
-
-    // Edit flow: peel the original op off the design (silent DELETE preview=true)
-    // so the live geometry becomes the pre-op (un-deformed) state. The popup's
-    // first previewDeformation then freezes THAT as the SOLID reference and
-    // re-adds the op as a preview overlay (the bent GHOST), restoring the
-    // "before/after" visual comparison that's most useful when tuning bends.
-    // The original log entry is untouched; Apply commits the new params via
-    // editFeature(featureIndex, …) and the design rebuilds from the log;
-    // Cancel deletes the preview overlay and seeks to priorCursor, replaying
-    // the log to restore the original op with its original params.
-    _editContext = {
-      priorCursor,
-      pendingParams:    op.params,
-      featureIndex,
-      editingFeatureType: entry.feature_type,
-      clusterIds:       op.cluster_ids ?? [],
-      // Original op id captured so cancel can no-op-restore it via the log
-      // replay; the deformation editor's preview-op flow takes ownership of
-      // the design from here.
-      origOpId: op.id,
+    if (entry.feature_type === 'deformation') {
+      showToast('Deformation history editing is unavailable. The part has not been changed.', 5000)
+      return false
     }
-
-    // Transient DELETE — exposes the un-deformed design under the bent overlay.
-    let peeled = false
-    try {
-      const resp = await api.deleteDeformation(op.id, /*preview=*/true)
-      peeled = resp != null
-    } catch {
-      // Non-fatal: if the delete fails the user falls back to the old in-place
-      // edit (bent solid, no ghost). Without `peeled` the seek-restore below
-      // is also skipped so the editor doesn't replay the log unnecessarily.
-    }
-    if (!peeled) _editContext.origOpId = null
-
-    // Open editor in NEW-OP (preview) flow — _editOpId stays null so the
-    // popup's first previewDeformation goes through addDeformation(preview=true),
-    // producing a fresh preview op that owns the bent GHOST layer.
-    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, /*opId=*/null, op.params, op)
-
-    document.getElementById('mode-indicator').textContent =
-      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust params · Apply to save · Esc to cancel`
-
-    // Open the popup now rather than waiting for a canvas pointerdown to fire it.
-    _watchDeformState()
   }
   return {
     creationEditor: isolatedCreationEnabled ? history : null,

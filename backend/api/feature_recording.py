@@ -86,9 +86,26 @@ def record_feature(session, op_kind, label, params, fn):
     # Local import keeps state the lock-owning composition root and preserves
     # its existing injected encode/reconcile/validation hooks.
     from backend.api import state
+    from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSION_KINDS
+
+    if op_kind in EXTRUSION_KINDS and (
+        session.design.feature_log_cursor != -1
+        or session.design.feature_log_sub_cursor is not None
+    ):
+        raise HTTPException(409, detail={
+            "code": "historical_cursor",
+            "detail": "Return to the latest feature before creating an extrusion",
+        })
 
     with _transaction(session, state) as before:
-        pre, pre_size = state.encode_design_snapshot(before)
+        prefix = before
+        if op_kind == "bundle-create" and (before.helices or before.feature_log):
+            # A fresh bundle starts an empty recipe. Its F0 cache is that prefix;
+            # the transaction's undo source remains the exact previous part.
+            from backend.core.part_history_contract import create_empty_part
+            prefix = create_empty_part(params.get("name", "Bundle"), params.get("lattice_type", "HONEYCOMB"))
+            prefix.id = before.id
+        pre, pre_size = state.encode_design_snapshot(prefix)
         _run(session, before, fn, state,
              retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join"},
              command=(op_kind, params))
@@ -96,7 +113,8 @@ def record_feature(session, op_kind, label, params, fn):
         if op_kind in PROOF_SNAPSHOT_KINDS:
             from backend.api.part_proof_commands import PROOF_VERSION
             params = {**params, "_proof_version": PROOF_VERSION}
-            if op_kind == "bundle-create":
+            if (op_kind == "bundle-create" and not before.feature_log and not before.helices
+                    and before.recipe_root is not None):
                 session.design.recipe_root = before.recipe_root
         post, post_size = state.encode_design_snapshot(session.design)
         entry = SnapshotLogEntry(

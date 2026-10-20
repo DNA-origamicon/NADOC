@@ -226,7 +226,17 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
             issues = result.get("issues", [])
             code = issues[0].get("code") if issues and type(issues[0]) is dict else "recipe_not_reproducible"
             status = 408 if code == "time_limit" else 413 if code in {"worker_input_limit", "result_limit"} else 409
-            raise HTTPException(status, detail={"code": code, "assessment": result})
+            detail = {"code": code, "assessment": result}
+            # Worker HTTP refusals wrap the replay issue. Keep its first failing
+            # feature addressable by the editor without parsing diagnostic JSON.
+            issue = issues[0] if issues and type(issues[0]) is dict else {}
+            failure = issue.get("detail") if type(issue.get("detail")) is dict else issue
+            if type(failure.get("feature_id")) is str:
+                detail["feature_id"] = failure["feature_id"]
+                reason = failure.get("detail", failure.get("message"))
+                if type(reason) is str:
+                    detail["detail"] = reason
+            raise HTTPException(status, detail=detail)
         with state._lock:
             _current(context, session, deadline, cancelled, family)
         if inputs_only:

@@ -36,7 +36,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     }
     resetPathDirection = false; schedulePreview()
   }, index => preview.select(index), index => preview.getOrientation(index))
-  let active = false, busy = false, editing = null, cells = [], source = null, sources = []
+  let active = false, busy = false, cells = [], source = null, sources = []
   let epoch = 0, timer = null, pin = {}, sweepId = null, updatingPicker = false, needsSourceFrame = false
   let detachedSource = false
   let previousPreview = true, resetPathDirection = false, step = 1, sourceFrame = null
@@ -77,6 +77,14 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     if (!cells.length) preview.clearGeometry()
     if (cells.length) timer = setTimeout(refreshPreview, 120)
   }
+  // A committed field value needs no typing/drag debounce. Flush only queued
+  // work; the input handler has already updated and invalidated the draft.
+  panel.addEventListener('change', () => {
+    if (owned && active && !busy && !locked && timer !== null) {
+      clearTimeout(timer)
+      refreshPreview()
+    }
+  })
   async function refreshPreview() {
     const version = epoch
     timer = null
@@ -90,11 +98,11 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
       catch (error) { if (owned === session && version === epoch) { status.textContent = error.message; apply.disabled = true } }
       return
     }
-    delete request.expected_revision // Legacy preview resolves the latest source without mutating it.
+    delete request.expected_revision // Creation preview resolves the latest source without mutating it.
     if (request.points_nm.some(p => p.some(v => !Number.isFinite(v)))) { preview.clearGeometry(); status.textContent = 'Enter a finite number for X, Y and Z.'; return }
     if (request.points_nm.length < 2) { preview.clearGeometry(); status.textContent = 'Add a second point to define the path.'; return }
     try {
-      const response = editing == null ? await api.previewSweep(request) : await api.previewSweep(request, editing)
+      const response = await api.previewSweep(request)
       if (!active || version !== epoch) return
       if (!response) throw new Error(store.getState().lastError?.message ?? 'Invalid sweep path')
       if (Number.isSafeInteger(response.revision)) pin.expected_revision = response.revision
@@ -177,11 +185,15 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
       return false
     }
     if (!state.currentDesign) { showToast?.('Create or open a part before sweeping.'); return false }
+    if ((state.currentDesign.feature_log_cursor ?? -1) !== -1
+        || state.currentDesign.feature_log_sub_cursor != null || state.featureSeekPending) {
+      showToast?.('Return to the latest history position before creating a Sweep.'); return false
+    }
     if (active) hide()
     extrudePanel.hide(); expandedSpacing?.forceOff?.()
     previousPreview = slicePlane.isPreviewEnabled?.() ?? true
     slicePlane.setPreviewEnabled(false); slicePlane.setExtrudeUiOpen(false)
-    active = true; detachedSource = false; editing = null; resetPathDirection = false; sweepId = crypto.randomUUID(); source = null; needsSourceFrame = false
+    active = true; detachedSource = false; resetPathDirection = false; sweepId = crypto.randomUUID(); source = null; needsSourceFrame = false
     sourceFrame = null; store.setState({ sweepActive: true })
     pin = { expected_design_id: state.currentDesign.id }
     populateSources()
@@ -193,24 +205,13 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     cells = []; popup.setTitle('Sweep'); popup.show(); setStep(1)
     return true
   }
-  function edit(entry, index) {
-    if (historyEnabled && isNativeSweepFeature(entry)) {
-      if (active && !owner.active()) closeLocal()
-      return owner.open(entry)
+  function edit(entry) {
+    if (!historyEnabled || !isNativeSweepFeature(entry)) {
+      showToast?.('Sweep history editing is unavailable for this feature. The part has not been changed.')
+      return false
     }
-    if (!activate()) return
-    editing = index
-    const p = entry.params
-    sweepId = p.sweep_id
-    planeSelect.value = p.plane; planeSelect.disabled = true; sourceSelect.disabled = true
-    source = sources.find(s => s.id === p.source_helix_id && s.end === p.source_end) ?? null
-    sourceSelect.value = source ? String(sources.indexOf(source)) : ''
-    needsSourceFrame = !!source
-    editor.setPoints(p.points_nm)
-    detachedSource = !!p.detach_source
-    editor.setOrientations(p.orientations_deg, !!p.source_helix_id && !detachedSource)
-    el('strands').value = p.strand_filter ?? 'both'; el('ligate').checked = p.ligate_adjacent ?? true
-    popup.setTitle('Edit Sweep'); cells = p.cells.map(c => [...c]); setStep(2)
+    if (active && !owner.active()) closeLocal()
+    return owner.open(entry)
   }
   function changeSource() {
     detachedSource = false; sourceFrame = null
@@ -258,12 +259,12 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
       const revision = api.currentRevisionWatermark?.()
       if (Number.isSafeInteger(revision) && revision !== request.expected_revision) {
         const fresh = { ...request }; delete fresh.expected_revision
-        const evaluated = editing == null ? await api.previewSweep(fresh) : await api.previewSweep(fresh, editing)
+        const evaluated = await api.previewSweep(fresh)
         if (!evaluated || !Number.isSafeInteger(evaluated.revision)) throw new Error('Refresh the sweep preview before confirming.')
         if (!active) return
         request.expected_revision = pin.expected_revision = evaluated.revision
       }
-      const result = editing == null ? await api.createSweep(request) : await api.editFeature(editing, request)
+      const result = await api.createSweep(request)
       if (!result) throw new Error(store.getState().lastError?.message ?? 'Sweep failed')
       hide()
     } catch (error) { status.textContent = error.message }
@@ -313,7 +314,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   if (historyEnabled) owner = createHistoryEditor({ store, api, scene, camera: getCamera, slicePlane, getDocumentId: getDocId, showToast,
     view: {
       open(inputs, session) {
-        owned = session; active = true; busy = locked = false; editing = null; epoch++; clearTimeout(timer); timer = null
+        owned = session; active = true; busy = locked = false; epoch++; clearTimeout(timer); timer = null
         extrudePanel.hide(); expandedSpacing?.forceOff?.()
         previousPreview = slicePlane.isPreviewEnabled?.() ?? true
         slicePlane.setPreviewEnabled(false); slicePlane.setExtrudeUiOpen(false)

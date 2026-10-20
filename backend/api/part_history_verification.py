@@ -1,18 +1,18 @@
 """On-demand part proof checks; never called by edit, render, or scrub paths."""
-from threading import BoundedSemaphore
 from time import monotonic
 
 from fastapi import HTTPException
 
 from backend.api import state
+from backend.api.part_work_admission import WorkAdmission
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_verification_capture import CaptureLimit
 from backend.api.part_proof_commands import execute, dependencies
 
 
-# Bound concurrent full-document copies. Contention fails immediately rather
-# than queuing expensive work or making the editor wait for an audit slot.
-_slot = BoundedSemaphore(1)
+# One owner for full-document work. Ordinary consumers still fail immediately;
+# sealed foreground reads may reserve one turn behind an admitted background read.
+_slot = WorkAdmission()
 
 
 def verify_current_part():

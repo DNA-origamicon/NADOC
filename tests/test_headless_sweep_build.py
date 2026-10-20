@@ -17,6 +17,31 @@ SWEEP_ID = "20000000-0000-4000-8000-000000000007"
 CELLS = [(0, 0), (0, 1)]
 
 
+@pytest.mark.parametrize("cursor,sub_cursor", [(-2, None), (0, None), (1, 0)])
+@pytest.mark.parametrize("operation", [preview_sweep, create_sweep])
+def test_historical_cursor_refuses_sweep_without_history_changes(cursor, sub_cursor, operation, monkeypatch):
+    from backend.api import routes_sweep
+    from tests.deformation_history_app import fixture
+
+    with hb.scratch_session():
+        source = fixture("extrude-blocked")
+        source.feature_log_cursor = cursor
+        source.feature_log_sub_cursor = sub_cursor
+        state.load_design(source)
+        before = source.model_dump_json()
+        revision, undo, redo = state.revision(), state.undo_depth(), state.redo_depth()
+        monkeypatch.setattr(routes_sweep, "build_sweep", lambda *_a, **_k: pytest.fail("Built at rollback"))
+        monkeypatch.setattr(routes_sweep, "sweep_preview", lambda *_a, **_k: pytest.fail("Previewed at rollback"))
+        body = SweepRequest(cells=[[8, 8]], points_nm=[[0, 0, 0], [0, 0, 10]],
+            expected_design_id=source.id, expected_revision=revision)
+        with pytest.raises(HTTPException) as refused:
+            operation(body)
+        assert refused.value.status_code == 409
+        assert "latest history position" in refused.value.detail
+        assert state.get_or_404().model_dump_json() == before
+        assert (state.revision(), state.undo_depth(), state.redo_depth()) == (revision, undo, redo)
+
+
 def assert_geometry_equal(actual, expected):
     assert canonical_topology(actual) == canonical_topology(expected)
     assert actual.deformations == expected.deformations

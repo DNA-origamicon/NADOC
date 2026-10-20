@@ -68,20 +68,24 @@ def evaluate_original(family, prepared):
 
 
 def evaluate(family, prepared, patch):
+    if family == "sweep":
+        return _native(family).evaluate_guides(prepared, patch)
     return _native(family).evaluate(prepared, patch)
 
 
-def prepare_display(family, prepared, evaluated, *, envelope):
+def prepare_display(family, prepared, evaluated, *, envelope, display_cache=None):
     display = _display(family)
+    options = {"display_cache": display_cache} if family == "deformation" else {}
     if _creation(family, prepared):
-        return display.prepare_creation_display(prepared.copy_prefix(), prepared, envelope=envelope)
-    options = {"source_entry": prepared._entry} if family == "transform" else {}
+        return display.prepare_creation_display(prepared.copy_prefix(), prepared, envelope=envelope, **options)
+    if family == "transform":
+        options["source_entry"] = prepared._entry
     return display.prepare_display(prepared.copy_prefix(), evaluated, envelope=envelope, **options)
 
 
-def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope):
+def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope, display_cache=None):
     display = _display(family)
-    options = {"creation": _creation(family, prepared)} if family == "deformation" else {}
+    options = {"creation": _creation(family, prepared), "display_cache": display_cache} if family == "deformation" else {}
     if family == "transform":
         options["source_entry"] = prepared._entry
     prefix = (prepared.display_prefix() if hasattr(prepared, "display_prefix")
@@ -97,5 +101,5 @@ def apply_params(family, prepared, patch):
     edits must retain the explicit patch: binding a reset target or editing an
     overlay uses the selected entry and the freshly proved prefix at Apply.
     """
-    evaluated = evaluate(family, prepared, patch)
+    evaluated = _native(family).evaluate(prepared, patch)
     return evaluated.params if family == "sweep" else deepcopy(patch)

@@ -11,6 +11,39 @@ from backend.core.sweep_path import path_table, sample_path
 from backend.core.deformation import deformed_nucleotide_arrays, deformed_helix_axes, _frame_at_bp, _precompute_arm_frames
 
 
+@pytest.mark.parametrize('points,initial', [
+    (((0., 0., 0.), (0., 0., 173.)), None),
+    (((0., 0., 0.), (0., 0., -173.)), None),
+    (((0., 0., 0.), (0., 0., 10.), (10., 4., 20.), (20., -3., 25.)), None),
+    (((0., 0., 0.), (4., 2., 10.), (10., 4., 20.)), (0., 0., 1.)),
+])
+def test_reused_transport_steps_are_bit_exact_to_uncached_native_transport(monkeypatch, points, initial):
+    from scipy.spatial.transform import Rotation, Slerp
+    from backend.core import sweep_path
+
+    native = sweep_path.rotation_between
+    calls = 0
+    def counted(a, b):
+        nonlocal calls
+        calls += 1
+        return native(a, b)
+    sweep_path.path_table.cache_clear()
+    monkeypatch.setattr(sweep_path, 'rotation_between', counted)
+    try:
+        _, _, arc, tangents, actual = sweep_path.path_table(points, initial)
+        baseline = np.empty((len(arc), 3, 3))
+        baseline[0] = np.eye(3)
+        for i in range(1, len(arc)):
+            baseline[i] = native(tangents[i-1], tangents[i]) @ baseline[i-1]
+        expected = Slerp(arc, Rotation.from_matrix(baseline))
+        samples = np.linspace(0, arc[-1], 257)
+        np.testing.assert_array_equal(actual(samples).as_matrix(), expected(samples).as_matrix())
+        if len(points) == 2:
+            assert calls < len(arc) // 10
+    finally:
+        sweep_path.path_table.cache_clear()
+
+
 def test_spline_interpolates_points_and_transports_without_roll():
     points = ((0., 0., 0.), (0., 0., 10.), (10., 4., 20.), (20., -3., 25.))
     spline, u, arc, tangents, _ = path_table(points)

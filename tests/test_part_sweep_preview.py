@@ -73,6 +73,25 @@ def test_native_fixture_reproduces_independently_with_poisoned_evicted_recovery(
     assert proof["status"] == "verified", proof
 
 
+@pytest.mark.parametrize("attached,posed", [(False, False), (True, False), (True, True)])
+def test_interactive_host_uses_exact_guides_without_building_candidate(monkeypatch, attached, posed):
+    from backend.api import part_preview_family_work as family
+    from backend.core import sweep
+
+    source, owner = prepared(attached=attached, posed=posed)
+    before = source.model_dump(mode="json"), owner.copy_prefix().model_dump(mode="json")
+    patch = {"points_nm": [[0, 0, 0], [0, 0, 5]]}
+    expected = service().evaluate(owner, patch).sweep
+    monkeypatch.setattr(sweep, "build_sweep", lambda *_a, **_k: pytest.fail("built draft topology"))
+    monkeypatch.setattr(service(), "validate_design", lambda *_: pytest.fail("validated draft candidate"))
+    result = family.evaluate("sweep", owner, patch)
+    assert result.sweep == expected
+    assert not hasattr(result, "design") and not hasattr(result, "validation")
+    packet = family.evaluate_display("sweep", owner, result, include_geometry=True, envelope=None)
+    assert packet["candidate"] is None and packet["sweep_preview"] == expected
+    assert before == (source.model_dump(mode="json"), owner.copy_prefix().model_dump(mode="json"))
+
+
 @pytest.mark.parametrize("attached,end,posed,organized", [
     (False, "end", False, False), (False, "end", False, True),
     (True, "end", False, False), (True, "start", False, False),

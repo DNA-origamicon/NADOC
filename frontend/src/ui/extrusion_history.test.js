@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { initFeatureLogPanel } from './feature_log_panel.js'
 
 afterEach(() => { window.dispatchEvent(new Event('nadoc:document-reset')); document.body.innerHTML = ''; vi.unstubAllGlobals() })
-function fixture({ kind = 'extrude-segment', native = true, cursor = -1, subCursor = null } = {}) {
+function fixture({ kind = 'extrude-segment', native = true, evicted = true, cursor = -1, subCursor = null } = {}) {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }); vi.stubGlobal('requestAnimationFrame', () => 1)
   document.body.innerHTML = '<div id="left-panel"><div class="tab-content"><h2 id="feature-log-panel-heading"><span>Feature Log</span></h2><span id="feature-log-panel-arrow"></span><div id="feature-log-panel-body"></div></div></div>'
   const params = { cells: [[0, 0]], length_bp: 21, plane: 'XY', offset_nm: 0, strand_filter: 'both', ligate_adjacent: true,
@@ -10,7 +10,7 @@ function fixture({ kind = 'extrude-segment', native = true, cursor = -1, subCurs
     ...(kind === 'circle-segment' ? { cell_lengths: [21] } : {}),
     ...(kind === 'extrude-frame' ? { name: 'Frame', translation_nm: [0, 0, 0], rotation_xyzw: [0, 0, 0, 1], source_frame_id: null, source_legacy_plane: false } : {}),
   }
-  const entry = { id: 'stable-feature', feature_type: 'snapshot', op_kind: kind, label: 'Extrusion', evicted: true, params }
+  const entry = { id: 'stable-feature', feature_type: 'snapshot', op_kind: kind, label: 'Extrusion', evicted, params }
   const state = { currentDesign: { id: 'part', feature_log_cursor: cursor, feature_log_sub_cursor: subCursor,
     feature_log: [entry, { id: 'later', feature_type: 'snapshot', op_kind: 'manual', label: 'Later', params: {} }],
     loadouts: [{ id: 'main', name: 'Main' }], active_loadout_id: 'main', cluster_transforms: [], deformations: [], overhangs: [] },
@@ -18,7 +18,7 @@ function fixture({ kind = 'extrude-segment', native = true, cursor = -1, subCurs
   const context = { designId: 'part', revision: 10 }
   const api = { captureFeatureEditContext: vi.fn(() => context), isFeatureEditContextCurrent: vi.fn(() => true),
     editNativeExtrusionFeature: vi.fn(async () => null), editFeature: vi.fn() }
-  initFeatureLogPanel({ getState: () => state, subscribeSlice: () => () => {} }, { api })
+  initFeatureLogPanel({ getState: () => state, subscribe: () => () => {}, subscribeSlice: () => () => {} }, { api })
   const edit = () => [...document.querySelectorAll('#fl-list [data-fl-row="1"] button')].find(node => node.textContent === '✎')
   return { api, context, edit }
 }
@@ -36,6 +36,6 @@ it.each([{ cursor: -2 }, { cursor: 0 }, { cursor: -1, subCursor: 0 }])('requires
   const f = fixture(options); expect(f.edit()).toBeDefined(); expect(f.edit().disabled).toBe(true)
   expect(f.api.captureFeatureEditContext).not.toHaveBeenCalled()
 })
-it('preserves legacy evicted-row restriction', () => {
-  expect(fixture({ native: false }).edit()).toBeUndefined()
+it.each([false, true])('does not offer a legacy extrusion editor (evicted=%s)', evicted => {
+  expect(fixture({ native: false, evicted }).edit()).toBeUndefined()
 })

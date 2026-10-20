@@ -1,4 +1,4 @@
-"""Disabled Sweep history editor; shares bounded transport and owned leases."""
+"""Sweep history editor; shares bounded transport and owned leases."""
 
 from fastapi import APIRouter, Request
 
@@ -6,7 +6,7 @@ from backend.api.routes_part_deformation_preview import _dispatch
 
 
 router = APIRouter()
-SWEEP_PREVIEW_ENABLED = False
+SWEEP_PREVIEW_ENABLED = True
 _PATH = "/design/features/sweep-preview"
 
 

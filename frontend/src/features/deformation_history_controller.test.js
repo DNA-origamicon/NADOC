@@ -53,6 +53,25 @@ afterEach(async () => {
 })
 
 describe('isolated deformation history controller', () => {
+  it('resolves topology deltas only against the current validated preparation', async () => {
+    const rows = [['native-owner']]
+    const f = await fixture({
+      prepare: vi.fn(async body => packet(body, { before: { nucleotides: { rows } } })),
+      evaluate: vi.fn(async body => packet(body, { candidate: { nucleotides: {
+        encoding: 'f64-block-v1', count: 1, rows_ref: LEASE, f64: 'coordinates',
+      } } })),
+    })
+    await f.controller.open('feature')
+    const result = await f.controller.update(patch(.5))
+    expect(result.candidate.nucleotides).toEqual({ encoding: 'f64-block-v1', count: 1, rows, f64: 'coordinates' })
+    expect(f.validateDisplay).toHaveBeenLastCalledWith(result, { prepare: false })
+    f.api.evaluate.mockImplementationOnce(async body => packet(body, { candidate: { nucleotides: {
+      encoding: 'f64-block-v1', count: 1, rows_ref: PREVIEW, f64: 'coordinates',
+    } } }))
+    expect(await f.controller.update(patch(.6))).toBeNull()
+    expect(f.controller.getState().error.message).toMatch(/another session/)
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
   it('binds a stable feature and known-before-request nonce without canonical writes', async () => {
     const f = await fixture()
     await f.controller.open('feature')

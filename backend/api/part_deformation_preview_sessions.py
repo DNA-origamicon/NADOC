@@ -108,6 +108,7 @@ class Cancel(Origin):
 
 class Evaluation(Change):
     include_geometry: StrictBool = True
+    reuse_rows: StrictBool = False
 
 
 class Status(Cancel):
@@ -138,6 +139,7 @@ class _Entry:
     computation: object = None
     payload: dict | None = None
     failure: dict | None = None
+    display_cache: dict = field(default_factory=dict)
 
 
 def _conflict(detail, code="preview_conflict"):
@@ -186,6 +188,7 @@ def _remove(entry, *, remember=True):
     if remember:
         _remember_cancel(entry)
     entry.prepared = entry.payload = entry.failure = None
+    entry.display_cache = {}
     entry.cancelled.set()
     if entry.computation is not None:
         entry.computation.cancelled.set()
@@ -423,7 +426,7 @@ def _prepare(request, *, family="deformation"):
             del captured
             evaluated = family_work.evaluate_original(family, prepared)
             payload = family_work.prepare_display(family, prepared, evaluated,
-                envelope=_envelope(entry, 0, prepared=prepared))
+                envelope=_envelope(entry, 0, prepared=prepared), display_cache=entry.display_cache)
             return _finish(entry, 0, payload, prepared=prepared)
     except BaseException:
         if entry is not None:
@@ -451,7 +454,8 @@ def evaluate(value, *, family="deformation"):
                 evaluated = family_work.evaluate(family, prepared, request.params)
                 payload = family_work.evaluate_display(family, prepared, evaluated,
                     include_geometry=request.include_geometry,
-                    envelope=_envelope(entry, request.request_sequence))
+                    envelope=_envelope(entry, request.request_sequence),
+                    display_cache=entry.display_cache if request.reuse_rows else None)
             return _finish(entry, request.request_sequence, payload)
     finally:
         _work_slot.release()
@@ -586,7 +590,16 @@ def apply(value, *, family="deformation"):
                     _conflict("The original native feature identity is no longer unique")
                 candidate, _report = prepare_change(captured, captured, indices[0], check, params=params)
             check()
-            return _publish(entry, request, candidate, deadline, admission, request_sha256)
+            removed = getattr(_report, "auto_removed_features", [])
+            notice = None
+            if removed:
+                labels = ", ".join(str(row["label"])[:256] for row in removed[:8])
+                if len(removed) > 8:
+                    labels += f", and {len(removed) - 8} more"
+                notice = (f"Removed {len(removed)} fine-routing feature(s) whose targets are no longer occupied: "
+                          f"{labels}. Undo restores them.")
+            return _publish(entry, request, candidate, deadline, admission, request_sha256,
+                            routing_removal_notice=notice)
 
     finally:
         with _lock:
@@ -598,7 +611,8 @@ def apply(value, *, family="deformation"):
             _work_slot.release()
 
 
-def _publish(entry, request, candidate, deadline, admission, request_sha256, *, renew_receipt=False, immutable_staged=None):
+def _publish(entry, request, candidate, deadline, admission, request_sha256, *, renew_receipt=False,
+             immutable_staged=None, routing_removal_notice=None):
     """The sole preview publication transaction, shared by all admitted compute lanes."""
     committing = False
     try:
@@ -641,10 +655,13 @@ def _publish(entry, request, candidate, deadline, admission, request_sha256, *, 
                        "lease_id": entry.lease_id, "design_id": immutable.source_id(candidate) if entry.sealed else candidate.id,
                        "revision": revision, **entry.identity,
                        "doc_id": entry.doc, "request_sequence": request.request_sequence}
+            if routing_removal_notice:
+                receipt["routing_removal_notice"] = routing_removal_notice
             with _lock:
                 entry.source = ref(candidate)
                 entry.publication = receipt
                 entry.prepared = None
+                entry.display_cache = {}
                 entry.phase = "applied"
                 if renew_receipt:
                     entry.payload = entry.failure = None

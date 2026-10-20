@@ -188,6 +188,17 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
             source, request, dependency_resolver, numerical_provider or _current_numerical_pins)
         rows = list(command_rows(source.copy_with(feature_log=log), 2000))
 
+        changed = {action.feature_id for action in request.actions
+                   if isinstance(action, SetInput) and action.child_id is None}
+
+        def bind(entry, current):
+            from backend.api.part_geometry_reference_repair import bind_entry
+            try:
+                return bind_entry(entry, current, changed)
+            except CommandContractError as error:
+                raise _ReplayStopped(error.status, {**error.as_issue(),
+                    'feature_id': entry.id, 'kind': getattr(entry, 'op_kind', entry.feature_type)}) from error
+
         def run(kind, current, params):
             nonlocal phase
             phase = "replay"
@@ -212,7 +223,9 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
             return updated
 
         phase = "root"
-        candidate = regenerate(source, log, checkpoint, executor=run)
+        # This executor accounts for every row and attributes failures. An outer
+        # result cache must not skip those callbacks on a repeated proposal.
+        candidate = regenerate(source, log, checkpoint, executor=run, entry_binder=bind, use_cache=False)
         if len(completed) != len(rows):
             raise RuntimeError("Repair did not execute every planned command")
         phase = "validation"

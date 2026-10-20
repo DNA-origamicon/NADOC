@@ -571,6 +571,14 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    "test_real_worker_sweep_creation_and_upstream_extrusion_edit",  # spawned native workers, 5.09 s
+    "test_real_file_recover_edit_append_undo_redo_and_reload",  # four native workers + file cycle (5–6 s)
+    "test_real_sealed_refresh_sequence",  # four real native workers + HTTP receipt/read sequence (5.14 s)
+
+    # S02 timing report: real spawned geometry/edit/recovery cycles exceeded 5 s.
+    "test_real_worker_bend_and_upstream_edit",  # 5.57 s
+    "test_real_recover_edit_persist_close_recover_cycle",  # 5.11 s
+    "test_real_worker_placement_and_upstream_edit",  # 5.06 s
     # Four spawned native numerical workers per family; deliberate recipe
     # compatibility integration, not a fast manifest/schema unit test.
     "test_spawned_numerical_schema_transition_preserves_exact_authored_outputs",
@@ -983,6 +991,14 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    # Real geometry/proof workers plus HTTP lifecycle / background-drain publication (5.08–5.09 s).
+    "test_native_http_lifecycle_receipt_and_exact_undo[twist]",
+    "test_native_http_lifecycle_receipt_and_exact_undo[bend]",
+    "test_apply_waits_for_background_and_publishes_once[view-volumes-twist]",
+    # Native background-drain and geometry publication workers: 5.22–5.35 s in FAST.
+    "test_apply_waits_for_background_and_publishes_once[readiness-twist]",
+    "test_apply_waits_for_background_and_publishes_once[readiness-bend]",
+    "test_apply_waits_for_background_and_publishes_once[dimensions-bend]",
     "test_surface_keeps_desktop_strand_ownership_and_motion[surface-detail-chimerax]",
     "test_the_mrdna_seed_is_the_geometric_layers_site[fixture2]",
     # Builds full representations plus a second detailed molecular surface and
@@ -1050,6 +1066,9 @@ def _slow_area_for(module: str) -> str:
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
         "test_native_join_proof", "test_native_connectivity_proof", "test_part_repair_evaluation", "test_part_immutable_creation",
         "test_native_schema_compatibility", "test_part_immutable_geometry_append",
+        "test_part_strict_deformation_preview_http", "test_part_immutable_preview_apply",
+        "test_part_immutable_deformation", "test_part_immutable_geometry_recovery",
+        "test_part_immutable_transform", "test_part_immutable_sweep", "test_part_immutable_display_reads", "test_part_view_volume_recovery",
     }:
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb

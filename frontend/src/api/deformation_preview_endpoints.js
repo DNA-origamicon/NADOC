@@ -48,6 +48,11 @@ export function previewPublicationReceipt(value, context, expected = null, { fam
       || value.doc_id !== (context?.docId ?? '__default__')
       || !Number.isSafeInteger(value.request_sequence) || value.request_sequence < 1
       || (expected && keys.some(key => value[key] !== expected[key]))) throw changed()
+  if (Object.hasOwn(value, 'routing_removal_notice')) {
+    if (typeof value.routing_removal_notice !== 'string' || value.routing_removal_notice.length > 4096) throw changed()
+    keys.push('routing_removal_notice')
+  }
+  if (expected && value.routing_removal_notice !== expected.routing_removal_notice) throw changed()
   return { status: 'applied', ...Object.fromEntries(keys.map(key => [key, value[key]])) }
 }
 
@@ -106,10 +111,14 @@ export function createDeformationPreviewEndpoints({ request, family = 'deformati
       // Each read remains private until both session-bound checks and the
       // controller's final local document/epoch check have passed.
       check(await json('POST', `${PATH}/status`, body, options))
-      const design = await json('GET', '/design', undefined, options)
+      const design = await json('GET', '/design?include_geometry=true', undefined, options)
       if (design.design?.id !== expected.design_id || design.revision !== expected.revision
           || (design.design.active_loadout_id ?? null) !== (context.loadoutId ?? null)) throw changed()
-      const geometry = await json('GET', '/design/geometry', undefined, options)
+      // Sealed reads can supply one bounded, source-coherent display packet.
+      // Legacy hosts ignore the opt-in query and retain their separate read.
+      const combined = Object.hasOwn(design, 'nucleotides') || Object.hasOwn(design, 'helix_axes')
+      const geometry = combined ? design : await json('GET', '/design/geometry', undefined, options)
+      if (combined && geometry.design_id !== expected.design_id) throw changed()
       if (!Array.isArray(geometry.nucleotides) || !Array.isArray(geometry.helix_axes) || geometry.partial_geometry) {
         throw new DeformationPreviewRequestError(422, 'The published geometry response is incomplete')
       }
@@ -118,6 +127,9 @@ export function createDeformationPreviewEndpoints({ request, family = 'deformati
           || revision.doc_id !== expected.doc_id || revision.has_design !== true) throw changed()
       check(await json('POST', `${PATH}/status`, body, options))
       return { ...design, nucleotides: geometry.nucleotides, helix_axes: geometry.helix_axes,
+        ...(expected.routing_removal_notice ? { placement_warnings: [
+          ...(design.placement_warnings ?? []), expected.routing_removal_notice,
+        ] } : {}),
         ...(geometry.straight_positions_by_helix ? { straight_positions_by_helix: geometry.straight_positions_by_helix,
           straight_helix_axes: geometry.straight_helix_axes } : {}) }
     },

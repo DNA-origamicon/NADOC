@@ -7,7 +7,7 @@ that its materialized authoring can be regenerated. Hosts must prove that later.
 from backend.api.part_batch_publication_scope import _admit_source
 from backend.api.part_geometry_inputs import KINDS
 from uuid import UUID
-from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, SnapshotLogEntry, DeformationLogEntry
+from backend.core.models import Design, ClusterCreateLogEntry, ClusterOpLogEntry, SnapshotLogEntry, DeformationLogEntry
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_overlay_commands import proof_version_supported
 
@@ -48,7 +48,12 @@ def _row(entry):
 
 def admit_source(design):
     try:
-        _admit_source(design, (), authoring_fields=_FIELDS, row_check=_row)
+        if type(design) is not Design:
+            raise CommandContractError("Geometry storage requires an exact Design model")
+        from backend.api.part_view_volume_preservation import projection
+        projection(design.view_volumes)
+        _admit_source(design, (), authoring_fields=_FIELDS, row_check=_row,
+                      presentation_fields={"view_volumes"})
     except CommandContractError as error:
         raise CommandContractError(str(error).replace("Batch publication", "Geometry storage"),
                                    code="unsupported_geometry_storage_scope") from error

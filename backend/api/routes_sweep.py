@@ -9,6 +9,8 @@ router = APIRouter()
 def _guard(design, body):
     if body.expected_design_id is not None and design.id != body.expected_design_id:
         raise HTTPException(409, detail='Active design changed')
+    if design.feature_log_cursor != -1 or design.feature_log_sub_cursor is not None:
+        raise HTTPException(409, detail='Return to the latest history position before creating or editing a Sweep.')
 
 
 @router.post('/design/sweep/preview')

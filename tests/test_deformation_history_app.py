@@ -9,7 +9,7 @@ from tests.extrude_matrix_fixture import FAMILIES
 
 
 @pytest.mark.parametrize("kind,count", [("bend", 1), ("twist", 1), ("bend-nick", 1), ("twist-nick", 1), ("bend-chain", 4), ("bend-sweep", 2), ("twist-sweep", 2), ("sweep-extrude", 5), ("sweep-independent", 4), ("sweep-start", 5), ("sweep-detached", 5), ("extrude-chain", 2),
-                                        ("bend-limit", 16), ("bend-over-limit", 17),
+                                        ("bend-limit", 16), ("bend-over-limit", 17), ("extrude-nick-batch", 1), ("sweep-large", 18), ("sweep-nick", 2), ("sweep-nick-batch", 2),
                                         *[(kind, 8 if kind == "overhang-extrude" else 3) for kind in FAMILIES]])
 def test_fixture_has_native_helices_and_independent_proof(kind, count):
     from backend.api.part_proof_commands import dependencies, execute
@@ -41,7 +41,7 @@ def test_test_app_restores_gate_and_preserves_production_app():
     production_routes = tuple(main.app.routes)
     production_lifespan = main.app.router.lifespan_context
     assert routes.DEFORMATION_PREVIEW_ENABLED is True  # production default
-    assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
+    assert sweep_routes.SWEEP_PREVIEW_ENABLED is True
     headers = {"X-NADOC-Doc": "__e2e__history-bend"}
     with TestClient(create_app()) as client:
         assert routes.DEFORMATION_PREVIEW_ENABLED is True
@@ -67,7 +67,7 @@ def test_test_app_restores_gate_and_preserves_production_app():
         assert client.post("/api/__e2e__/history/seed/bend",
                            headers={"X-NADOC-Doc": "ordinary"}).status_code == 403
     assert routes.DEFORMATION_PREVIEW_ENABLED is True
-    assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
+    assert sweep_routes.SWEEP_PREVIEW_ENABLED is True
     assert headers["X-NADOC-Doc"] not in state._sessions
     assert tuple(main.app.routes) == production_routes
     assert main.app.router.lifespan_context is production_lifespan
@@ -82,7 +82,7 @@ def test_test_app_restores_gate_after_failure():
             raise RuntimeError("fixture failure")
     assert routes.DEFORMATION_PREVIEW_ENABLED is True
 
-    assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
+    assert sweep_routes.SWEEP_PREVIEW_ENABLED is True
 
 
 @pytest.mark.parametrize('fail', [False, True])
@@ -133,3 +133,12 @@ def test_downstream_nick_fixture_cold_replay_identity(kind):
     assert authoring(source) == authoring(expected)
     assert _geometry_for_design(source) == _geometry_for_design(expected)
     assert source.feature_log[0].post_state_gz_b64 == "poisoned-after"
+
+
+def test_test_app_refuses_a_disabled_sweep_production_gate(monkeypatch):
+    from backend.api import routes_part_sweep_preview as routes
+    monkeypatch.setattr(routes, "SWEEP_PREVIEW_ENABLED", False)
+    with pytest.raises(AssertionError, match="Sweep production preview must be enabled"):
+        with TestClient(create_app()):
+            pytest.fail("Fixture silently enabled Sweep")
+    assert routes.SWEEP_PREVIEW_ENABLED is False

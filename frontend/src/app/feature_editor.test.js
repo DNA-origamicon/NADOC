@@ -35,21 +35,20 @@ it('qualified history dispatch uses the stable private editor and never peels or
   const owner = initFeatureEditor({ isolatedHistoryEnabled: true, showToast: vi.fn() })
   const entry = { id: 'feature', feature_type: 'deformation', op_snapshot: { id: 'bend', type: 'bend' } }
   await owner.onEditFeature(entry, 3)
-  expect(f.history.open).toHaveBeenCalledWith(entry, 3, { onUnsupported: expect.any(Function) })
+  expect(f.history.open).toHaveBeenCalledWith(entry, 3)
   expect(f.deleteDeformation).not.toHaveBeenCalled(); expect(f.seekFeatures).not.toHaveBeenCalled(); expect(f.start).not.toHaveBeenCalled()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })
 
-it('continues an unsupported part (e.g. legacy saved history) in the legacy editor', async () => {
-  document.body.innerHTML = '<div id="mode-indicator"></div>'
-  f.deleteDeformation.mockResolvedValue({})
-  f.history.open.mockImplementation((_entry, _index, { onUnsupported }) => onUnsupported())
-  const owner = initFeatureEditor({ isolatedHistoryEnabled: true, showToast: vi.fn() })
-  const op = { id: 'bend', type: 'bend', plane_a_bp: 2, plane_b_bp: 9, params: { kind: 'bend' }, cluster_ids: [] }
-  await owner.onEditFeature({ id: 'feature', feature_type: 'deformation', op_snapshot: op }, 3)
-  expect(f.deleteDeformation).toHaveBeenCalledWith('bend', true)
-  expect(f.start).toHaveBeenCalledWith('bend', 2, 9, null, op.params, op)
-  expect(owner.getEditContext()).toMatchObject({ featureIndex: 3, editingFeatureType: 'deformation', origOpId: 'bend' })
+it('disabled history editing cannot enter the obsolete mutating editor', async () => {
+  const showToast = vi.fn()
+  const owner = initFeatureEditor({ isolatedHistoryEnabled: false, showToast })
+  await owner.onEditFeature({ id: 'feature', feature_type: 'deformation', op_snapshot: { id: 'bend', type: 'bend' } }, 3)
+  expect(showToast).toHaveBeenCalledWith(expect.stringContaining('has not been changed'), 5000)
+  expect(f.deleteDeformation).not.toHaveBeenCalled()
+  expect(f.seekFeatures).not.toHaveBeenCalled()
+  expect(f.start).not.toHaveBeenCalled()
+  expect(owner.getEditContext()).toBeNull()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })
 

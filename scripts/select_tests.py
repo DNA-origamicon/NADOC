@@ -156,7 +156,12 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     # Durable initial creation's integration oracle runs real registered batch,
     # restart recovery and cold-proof workers; its lightweight faults stay fast.
     ("part_immutable_creation", ("headless",)),
+    ("part_immutable_preview", ("headless",)),
+    ("part_strict_deformation_preview", ("headless",)),
     ("part_immutable_geometry", ("headless",)),
+    ("part_immutable_display_reads", ("headless",)),
+    ("part_view_volume_preservation", ("headless",)),
+    ("part_immutable_preservation", ("headless",)),
     ("part_geometry_inputs", ("headless",)),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the
     # atomistic heavy group, so a change here must re-run that group.

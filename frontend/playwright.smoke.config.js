@@ -17,6 +17,9 @@ import { fileURLToPath } from 'node:url'
 const FRONTEND_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
 
+const scratch = process.env.NADOC_SMOKE_E2E_ROOT
+if (scratch && !path.isAbsolute(scratch)) throw new Error('Smoke scratch must be absolute')
+
 const BACKEND_PORT = process.env.NADOC_SMOKE_BACKEND_PORT || '8001'
 const FRONTEND_PORT = process.env.NADOC_SMOKE_FRONTEND_PORT || '5174'
 
@@ -32,7 +35,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
 
-  reporter: [['list'], ['./e2e/artifact-cleanup-reporter.js']],
+  outputDir: scratch ? path.join(scratch, 'playwright') : 'test-results',
+  reporter: scratch ? [['list']] : [['list'], ['./e2e/artifact-cleanup-reporter.js']],
 
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,
@@ -56,7 +60,7 @@ export default defineConfig({
     {
       // Throwaway Vite — proxies /api → the throwaway backend via VITE_API_PORT.
       // --strictPort so it fails loudly instead of drifting to another port.
-      command: `npx vite --port ${FRONTEND_PORT} --host 127.0.0.1 --strictPort`,
+      command: `npx vite ${scratch ? '--configLoader runner --config e2e/smoke_vite.js ' : ''}--port ${FRONTEND_PORT} --host 127.0.0.1 --strictPort`,
       cwd: FRONTEND_DIR,
       env: { NADOC_SHARE_AUTOSTART: '0', VITE_API_PORT: BACKEND_PORT },
       url: `http://127.0.0.1:${FRONTEND_PORT}`,

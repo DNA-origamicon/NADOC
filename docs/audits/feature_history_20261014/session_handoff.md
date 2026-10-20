@@ -1,104 +1,98 @@
-# Dependency overhaul session handoff
+# Feature-history stopping-point handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Updated: October 19, 2026 (S63, Claude session). **Sessions since last gate flip or milestone close: 2**
-(last reset: routing step editor gate ON, October 18; S61 and S63 flipped nothing).
-**Tools done: 0/4.** Bend/Twist gates are ON; C8 (large-part preview) and C9 (legacy fallback
-scope) remain. CAD ledger: **20/34 complete, 14 remaining (7 core, 7 parked)**.
+Updated October19,2026. User requested finishing the current batch, a local commit, then stopping.
+**Tools done: 2/4 (Extrude, Sweep). CAD ledger: 20/34 complete, 14 remaining (7 core, 7 parked).**
+**Sessions since last gate flip or milestone close: 1.** No milestone credit for this commit.
+Persistent goal is paused; do not mark the overall overhaul complete. No push requested.
 
-## Current state by tool
+## Scope and next work
 
-| Tool | Gate | Contract status |
-|---|---|---|
-| Bend/Twist | ON (`DEFORMATION_PREVIEW_ENABLED`, `ISOLATED_DEFORMATION_{HISTORY,CREATION}_ENABLED`) | C1–C7 pass. C8: see below. C9: legacy editor remains the fallback for parts the isolated editor refuses (nanoparticles, proteins, photoproducts, imports, relax/autorefine kinds) — remove per §10 once covered. |
-| Extrude | ungated (owned extrusion route) | Seven families qualified on tiny fixtures (S51/S52). C8 unmeasured on real parts; failures/races open. Still on the immutable geometry host. |
-| Sweep | OFF (`SWEEP_HISTORY_EDITOR_ENABLED`, `SWEEP_PREVIEW_ENABLED`) | S50/S53 qualified with test-only gates. S54 (downstream nick success/refusal) unstarted. Immutable host (R3). |
-| Move/Rotate history | OFF | Not a contract tool. |
-| Fine-routing step editor | ON (`ROUTING_HISTORY_EDITOR_ENABLED`) | Edits v1 and positional v2 children. Not a contract tool. |
+Stop after the current commit. On an explicit continuation, retain the existing plan and review
+progress every30minutes using `.development-artifacts/feature-history-focus/review.json`.
+Bend/Twist gates are ON, but their large-part preview p95 remains1208.8ms (median1113ms).
+User explicitly deferred that performance gap while completing Sweep/Extrude and history editing.
+No legacy-file compatibility, numerical-manifest regeneration, geometry-golden updates or new host.
+Preserve Fine Routing parameter-edit semantics: remove a child only when every target is
+unoccupied; partial applicability and other failures refuse atomically and identify the child.
+Move/suppression never delete routing children automatically. Molecular constants remain locked.
+If a major unresolved decision would take over2hours, defer it for the user's return as requested.
+Next bounded task after resumption: qualify the remaining Bend/Twist C8 gap against the existing
+500ms preview/3s small Apply/10s large Apply/200ms Cancel budgets (2× allowance).
+Do not reopen completed Sweep performance or grow legacy/sealed-path qualification matrices.
 
-**Bend/Twist C8 (S61 + S63, 18hb × 504 bp scaffolded, autostapled, routed whole-bundle bend):**
-- Browser preview update, GPU raster excluded (this desktop renders WebGL on the CPU via
-  SwiftShader): median **1.17 s**, p95 **1.23 s** (session start 1.75 / 1.98 s; budget 0.5 s, 2× = 1.0 s).
-  Split: server + headers ~0.73 s (in-process evaluate ~0.67 s), body 0.06 s, client ~0.41 s.
-- Shipped: compact v3 preview transport (f64 block), arm-frame memoization (engine pins moved via
-  reviewed transition `preview-axis-frame-cache-v1`, user-approved), loopback no-gzip, GC pause,
-  hidden-tube skip, single validation/decode. Apply 0.2–0.6 s; Open 4.5 s server / ~6 s browser.
-- Remaining server cost is spread thin (geometry 0.14, record validation incl. guard slab recompute
-  0.14, axes 0.09, prefix deep copy 0.05, 4 whole-model admissions 0.06 s). Evidence:
-  [Bend/Twist plan S61/S63](bend_twist_release_acceptance.md); spec `e2e/bend_preview_latency.spec.js`.
+## Completed user-facing behavior
 
-## Delivered since the S58 handoff (details in commits and the Bend/Twist plan)
+- Bend/Twist: isolated creation/history editing, downstream error attribution and dependency view.
+  Desktop mutating-preview fallback and destructive history peeling removed; other consumers of
+  legacy creation helpers are not claimed removed. C8 remains open, so tools are not counted done.
+- Sweep: production gates ON; ordinary-part C1–C9 complete. Interactive preview displays axes,
+  nodes and cross-sections over static prefix context. Backend now calls guide planning without
+  building or validating full candidate DNA on every update. Apply retains complete native rebuild.
+  Latest measured p95: small36ms/large88ms, excluding GPU raster; Apply163/2530ms, Cancel47/35ms.
+  Attached/independent/detached source lifecycles, later topology changes, routing removal/refusal,
+  rollback refusal, exact Cancel, undo/redo/save/reopen and independent cold replay passed in app.
+- Extrude: all seven native family lifecycles and five creation workflows covered; ordinary-part
+  C1–C9 complete. Legacy length-only editor removed. Existing modal form remains the editor;
+  live preview is separate follow-on scope. Nicked posed continuation uses the existing straight
+  continuation terminus eligibility rule. Bundle creation is failure-atomic with one Undo.
+- History dependencies: revision-bound parent/child viewer uses existing native resource contracts.
+  Error/blocked badges describe a refused draft; canonical geometry stays unchanged on failure.
+- Whole-row Move: existing evaluation jobs/commit/undo; native replay resolves references at the
+  proposed stage. Shared resources alone are not ordering barriers; valid moves may change geometry.
+  Initial bundle stays first. Missing producers refuse with feature/child attribution. Source proof,
+  final cold replay and per-stage structure checks run; Fine Routing IDs/child order are preserved.
+- Suppress/Unsuppress: saved definitions and IDs remain in place as fingerprinted no-op steps.
+  Capture, replay, rollback, repair drafts and persistence retain suppression. Unsuppress regenerates
+  the saved operation and suffix. Missing producers refuse atomically without cascading deletion.
+- Source repair: existing saved-proposal panel supports Sweep source helix; continuation/frame source
+  frame; deformed continuation reference helix; overhang extrusion anchor helix. Choices come from
+  the actual feature prefix. Existing native binding refreshes derived continuation receipts; full
+  replay validates geometry and downstream features. Repair preserves explicit suppression state.
+  Tracking repair callbacks cannot be skipped by the outer replay cache on repeated proposals.
+- ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
+  a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
 
-- **R1 replay cache** (`core/part_replay_cache.py`): hash-chained results; Bend/Twist edits reuse
-  deformation-independent routing topology. Apply on 18hb×504: 3.5 s → 0.16–0.25 s.
-- **R2 converter** (`core/part_legacy_conversion.py`): delivered, now unmaintained (contract §10).
-- **Occupancy invariant** (`core/occupancy.py`): one base per (helix, bp, direction); every mutable
-  publication path refuses violations (409 `nucleotide_double_occupancy`). Sealed/immutable
-  publication is not decoded in the parent — its worker must check before re-enabling (R3).
-- **Fine-routing auto-removal** (`core/fine_routing_targets.py`): an upstream edit that leaves a
-  routing child with every target unoccupied removes it (reported; one undo restores). Anything
-  else still refuses and names the feature.
-- **Positional references** (`core/positional_refs.py`, proof v2): resize, domain shift, forced
-  ligation and crossover edits record positions and resolve to the current occupant.
-- **Routing step editor ON**; **region autostaple** (`region` on `/design/full-autostaple`, selection
-  popup "Autostaple scope"; untouched staples kept exactly; 42/42 regions reproduce the whole run).
-- **S61 preview latency** (above), plus a fix for a spurious "Dimensions could not be saved" toast.
+## Verification
 
-## Single next bounded task
+Evidence logs: `.development-artifacts/feature-history-focus/` (not committed disposable output).
+- Sweep guide backend43/session16 and app3 passed; scratch ydmfjcfe independently absent.
+- Move backend26/UI5 and app4 passed; scratch uizkyodf independently absent.
+- Suppression backend20/repair-capture11/UI7 and app6 passed (four tools, Move, refusal);
+  scratch6ehu2rrw independently absent. Earlier full frontend9367 pass/1skip and smoke23 passed.
+- Final source repair12, existing selection62/repair58, archive capture45, extension routes23 passed.
+  The earlier extension capture-budget setup error did not recur in the complete file.
+- Source repair browser2 passed: selection/evaluation/Apply/undo/redo/save/reopen/cold proof.
+  Scratch `/tmp/__e2e__history-w_0rosal` independently absent. Failed diagnostic runs cleaned too.
+- Final full frontend:779 files,9367passed/1skipped (337.61s). Final smoke:23passed (2.3min);
+  scratch `/tmp/__e2e__smoke-zkgbb4ne` independently absent.
+- Final backend FAST:19078passed/83failed/19skipped (348.88s;379s aggregate), zero per-test
+  timing violations. Failure-set comparison: all64 baseline failures plus19 schema expectations.
+- `just lint` passed; main.js LOC delta0. No formulas/constants, manifests or goldens changed.
 
-**ID:** S64 — Bend/Twist C8: per-session reuse in preview evaluate (server half).
-**Objective:** within one open preview session, compute topology-only work once (record inventory,
-prefix admission, scalar record rows) and reuse it for every slider evaluate; send only the f64
-block plus a reference to the prepare-time rows. Keep every coordinate guard (finite, slab
-registration) per evaluate. **Acceptance:** `bend-large` p95 measured and recorded; decoded
-records equal full projection on fixtures; history browser suite passes. **Exclusions:** dropping
-guards, geometry/constants changes, new endpoints or lifecycle layers. **Stop:** if p95 cannot
-reach 1.0 s, report the gap and the progressive (axes-first) option to the user.
+Final backend log: `stop-backend-final.log`. The64 baseline failures comprise11 sealed-path
+HTTP/registration,2 junction-balance tolerance, and51 historical numerical-manifest compatibility
+expectations. Suppression metadata adds19 obsolete schema-compatibility expectations. Old pins
+remain fail-closed; user explicitly declined legacy compatibility, so no manifests were regenerated.
+The previous124failures/1error reduced to83failures/no errors after archive-schema and exact capture
+accounting fixes; focused archive routes28/capture45/accounting31 pass. No new current repair/runtime
+failure remains. Broad suite is not green. Aggregate timing remains above90s; per-test violators=[];
+slowest4.62s is a real native-worker test. No arbitrary reclassification or guard changes.
+Selector output:
+```
+decision: FAST  (fast suite only)
+  DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+```
+No test session requested; focused development checks are authorized. Keep guards and serialization.
 
-## User decisions pending
+## Commit and shared-worktree boundaries
 
-1. **C9 legacy-editor removal list** (approve items individually; until covered, parts with these
-   use the legacy editor). Display (`part_deformation_preview_dto._admit`, `check_scope`, frontend
-   DNA validator) and/or replay (`_before_command`) refuse:
-   a. strand extensions (`extensions`; extension-upsert/delete replay is admitted)
-   b. overhang linkers (`overhang_connections`, `__lnk__` helices, linker strands; linker-add/patch/delete)
-   c. overhang bindings and duplexes (`overhang_bindings`, `duplexes`, binds_overhang domains; duplex-*)
-   d. connection versions (`connection_versions`; overhang-bulk pending actions)
-   e. staple groups (`staple_groups`; display metadata only)
-   f. cluster joints and Join constraints (`cluster_joints`, `cluster_join_constraints`; cluster-join)
-   g. flexible segments (`flexible_segment_marks`, `flexible_connections`; flexible-relax)
-   h. nanoparticles (+ conjugations, connection versions, `__np__` helices; nanoparticle-*)
-   i. proteins and streptavidin (`protein_assets`, `protein_attachments`, `__strep_dna__`; protein-*)
-   j. photoproducts/CPD (`photoproduct_junctions`; photoproduct-*) — experimental
-   k. numerical relax/refine rows (duplex-relax, flexible-relax, nanoparticle-connection-relax,
-      autorefine-skips, cando-autorefine-marks, scaffold-budget-fit, encode-sweep-curvature)
-   l. other unreplayed kinds: legacy auto-scaffold, route-for-polymerization, create-near/far-ends,
-      cluster-paste, element-paste, cluster-pose, curve-path, aptamer/protein import, generate-design
-   m. old files without a recipe root (§10 says not required; removing the fallback drops editing
-      their bends/twists)
-   Removal targets once approved scope is covered: `_legacyDeformationEdit` (app/feature_editor.js),
-   `onUnsupported` in ui/deformation_tool_launcher.js and ui/blunt_end_menus.js, and the legacy
-   mutating deformation preview/PATCH routes.
-2. **Sealed-path failures (11 of 13):** uncommitted Codex work makes strict mode admit sealed preview
-   and display routes (`part_strict_http.py` hunks; untracked `part_strict_deformation_preview_http.py`,
-   `part_immutable_display_reads.py`, `part_strict_service_reads.py`, `part_strict_activity_reads.py`,
-   7 untracked test files). Contract parks the sealed path. Options: park behind an off switch,
-   delete, or finish it (R3).
-3. **Junction-balance tolerance (2 of 13):** measured O5′ placement (mandatory since `29046524`) gives
-   DX arc deltas 1.016e-3 nm (square) / 1.368e-3 nm (honeycomb) vs the pre-measured 1.0e-3 tolerance
-   (sibling test already uses 1.1e-3). Geometry oracle — approve new tolerances or review placement.
-4. **Progressive preview** (if S64 misses): draw deformed axes first (~0.1 s server), nucleotides after.
-
-## Known gaps outside this handoff's task
-
-- VR: `MV-VR-AUTOSTAPLE-SCOPE` in `manual_validation_debt.md` (needs the VR machine).
-- Fast suite ~370 s vs 90 s backstop; slow-test triage deferred.
-- R3 (Sweep/Extrude onto the preview-session host) and R4 (dependency view, error/blocked states,
-  suppress/reorder) not started; the dependency model is mostly a linear topology barrier.
-
-## Session discipline and Git
-
-One task per session; ≤ 15 appended plan evidence lines; no new reports; handoff ≤ 150 lines.
-Commits: explicit overhaul-only paths and hunks. Exclude untracked Codex harness/sealed files
-(`part_strict_service_reads.py`, its test, `frontend/playwright.deformation-history.config.js` is
-untracked but carries this overhaul's spec list) and other sessions' hunks (e.g. in `client.js`).
+Commit explicit feature-history paths and selected hunks only. Include the preview adapter and
+its existing host dependencies that earlier commits already import but left untracked. This is
+capturing existing overhaul work, not implementing another sealed-path successor.
+Leave unrelated VR, simulation/activity/readiness, scientific-selection policy, memory hygiene and
+other project edits untouched. Mixed files: stage only dependency API in `frontend/src/api/client.js`,
+history timing classifications in `tests/conftest.py`, and ISSUE-146/147 ledger/fix-log additions.
+Earlier sealed activity/display tests and related modules remain outside this commit; their changes
+are coupled to the separate activity/readiness backlog. No stash/reset/restore, no push or amend.

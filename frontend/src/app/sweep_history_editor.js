@@ -5,8 +5,10 @@ import { validateSweepPreviewDisplay } from '../features/sweep_preview_display.j
 import { createDeformationHistoryPreview } from '../scene/deformation_history_preview.js'
 import { DEFORMATION_PREVIEW_LAYER } from '../scene/deformation_preview_camera.js'
 import { getDocId } from '../shared/doc_id.js'
+import { attributeFailure } from '../features/feature_history_failure.js'
+import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
 
-export const SWEEP_HISTORY_EDITOR_ENABLED = false
+export const SWEEP_HISTORY_EDITOR_ENABLED = true
 export const isNativeSweepFeature = entry => entry?.feature_type === 'snapshot' && entry.op_kind === 'sweep'
   && entry.params?._proof_version === 1 && typeof entry.params.sweep_id === 'string' && !!entry.params.sweep_id
   && !Object.hasOwn(entry.params, '_generator') && !Object.hasOwn(entry.params, '_generated_scope')
@@ -14,10 +16,12 @@ export const isNativeSweepFeature = entry => entry?.feature_type === 'snapshot' 
 export function createSweepHistoryEditor({ store, api, scene, camera, view, slicePlane,
   getDocumentId = getDocId, showToast = () => {}, events = globalThis.window,
   previewAPI = createDeformationPreviewEndpoints({ request: api._request, family: 'sweep' }),
-  createPreview = () => createDeformationHistoryPreview({ scene, camera: typeof camera === 'function' ? camera() : camera }),
+  createPreview = () => createDeformationHistoryPreview({ scene, camera: typeof camera === 'function' ? camera() : camera, allowEmptyCandidate: true }),
   validateDisplay = validateSweepPreviewDisplay }) {
   let opening = false, boundOpening = false, ready = false, disposed = false, generation = 0
   let preview = null, release = null, lastProjection = null, localError = null
+  let editedFeatureId = null
+  const feedback = createFeatureHistoryFeedback(store, events)
   function context() {
     const state = store.getState(), design = state.currentDesign
     if (!design || state.assemblyActive) return null
@@ -26,11 +30,12 @@ export function createSweepHistoryEditor({ store, api, scene, camera, view, slic
       cursor: design.feature_log_cursor ?? -1, subCursor: design.feature_log_sub_cursor ?? null,
       editable: !loadout?.protected && !state.featureSeekPending && !state.cadnanoActive && !state.unfoldActive }
   }
-  const controller = createDeformationHistoryController({ api: previewAPI, getContext: context, events,
+  const controller = createDeformationHistoryController({ api: previewAPI, family: 'sweep', getContext: context, events,
     subscribeContext: callback => store.subscribe(callback),
     validateDisplay: (packet, options) => validateDisplay(packet, { ...options, requireEnvelope: true }),
     applyPublished: packet => api.syncDesignResponse(packet) })
   function teardown() {
+    feedback.clear()
     if (!ready && !preview && !release) return
     const ownedRelease = release, ownedPreview = preview
     ready = false; release = preview = lastProjection = null
@@ -53,7 +58,9 @@ export function createSweepHistoryEditor({ store, api, scene, camera, view, slic
         localError = null
       } catch (failure) { localError = failure; preview.show('before') }
     }
-    view.setStatus({ busy: state.busy, expired: state.expired, error: localError ?? state.error,
+    feedback.update(state.busy ? null : state.error)
+    view.setStatus({ busy: state.busy, expired: state.expired,
+      error: localError ?? attributeFailure(state.error, store.getState().currentDesign, editedFeatureId),
       publicationUnknown: state.publicationUnknown, refreshNeeded: state.refreshNeeded,
       feasibility: state.projection?.sweep_preview?.feasibility })
   }
@@ -79,6 +86,7 @@ export function createSweepHistoryEditor({ store, api, scene, camera, view, slic
   async function open(entry) {
     if (disposed || opening || controller.getState().open) return false
     const token = ++generation
+    editedFeatureId = entry?.id ?? null
     opening = true; boundOpening = false; localError = null
     try {
       const packet = await controller.open(entry?.id)
@@ -89,13 +97,17 @@ export function createSweepHistoryEditor({ store, api, scene, camera, view, slic
       const helixAxes = Object.fromEntries(packet.before.helix_axes.map(axis => [axis.helix_id,
         { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments, ovhgAxes: axis.ovhg_axes ?? null }]))
       preview = createPreview(); preview.open(packet)
+      lastProjection = packet
       const pickerLease = slicePlane.usePrivateContext({ design, helixAxes, displayLayer: DEFORMATION_PREVIEW_LAYER })
       release = pickerLease
       ready = true
       view.open(c.inputs, { design, helixAxes, displayLayer: DEFORMATION_PREVIEW_LAYER,
         isPickerCurrent: () => pickerLease.isCurrent?.() !== false,
         onChange: change, onApply: apply, onCancel: cancel })
-      lastProjection = null; render(controller.getState())
+      // The fixed prefix is context only. The existing Sweep guide renderer
+      // displays the edited axes, nodes and sections; no nucleotide candidate.
+      view.updatePreview(packet.sweep_preview)
+      render(controller.getState())
       return true
     } catch (failure) {
       if (token !== generation) return false
@@ -105,5 +117,5 @@ export function createSweepHistoryEditor({ store, api, scene, camera, view, slic
     } finally { if (token === generation) { opening = false; boundOpening = false } }
   }
   return { open, cancel, active: () => opening || controller.getState().open,
-    dispose() { if (!disposed) { disposed = true; generation++; opening = false; unsubscribe(); controller.dispose(); teardown() } } }
+    dispose() { if (!disposed) { disposed = true; generation++; opening = false; unsubscribe(); controller.dispose(); teardown(); feedback.dispose() } } }
 }

@@ -198,3 +198,21 @@ def test_real_spawned_edit_checks_header_and_refreshes_continuation_source(docum
     finally:
         for instance, _, _ in observed:
             instance.close()
+
+
+def test_partial_routing_failure_identifies_child_without_publication(document, worker):
+    from tests.deformation_history_app import fixture
+
+    source = fixture("extrude-nick-batch")
+    if document:
+        source = append(source, "group-organize", {"expected_placement_ids": [
+            placement.id for placement in source.cluster_transforms]}, "organize")
+    session, client = install(source)
+    before = saved(session)
+    response = client.post("/api/design/features/0/edit", json={
+        "params": {"length_bp": 5}, **guards(session, 0)})
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["feature_id"] == source.feature_log[1].children[0].id
+    assert isinstance(detail["detail"], str) and detail["detail"]
+    unchanged(session, before)
