@@ -1,6 +1,6 @@
 /** Closed native DNA display component; never a Design or construction input. */
 import { fail, finite, integer, text, shape, vector, list, unique } from './part_comparison_validation.js'
-import { decodeDnaComparisonRecords } from './part_dna_comparison_codec.js'
+import { visitDnaComparisonScalars } from './part_dna_comparison_codec.js'
 
 // Same allowances as backend/core/part_dna_comparison_contract.py (ordinary
 // origami parts, e.g. 18 helices x 504 bp ~ 18k nucleotides). The backend
@@ -231,28 +231,30 @@ function validateNativeComponent(value, scopedSamples) {
     if (ligation.extra_bases !== null && ligation.extra_bases !== '') fail('unsupported inserted ligation bases')
     for (const end of ['three_prime', 'five_prime']) if (!expected.has(siteKey({ helix_id: ligation[`${end}_helix_id`], bp_index: ligation[`${end}_bp`], direction: ligation[`${end}_direction`], copy_k: 0 }))) fail('unresolved ligation endpoint')
   }
-  validateRecords(decodeDnaComparisonRecords(value.nucleotides), expected)
+  validateRecords(value.nucleotides, expected, !Array.isArray(value.nucleotides))
   validateAxes(value.helix_axes, helices, strands, overhangs, domains, scopedSamples)
   bounds(value.bounds_nm, (Array.isArray(value.nucleotides) ? value.nucleotides.length : value.nucleotides.count) || value.helix_axes.length)
   return value
 }
 
-function validateRecords(records, expected) {
-  list(records, MAX_SITES)
+function validateRecords(records, expected, compact) {
   const seen = new Set()
-  for (const n of records) {
-    shape(n, ['helix_id', 'bp_index', 'direction', 'copy_k', 'backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'placement_source', 'helical_site', 'strand_id', 'strand_type', 'is_five_prime', 'is_three_prime', 'domain_index', 'overhang_id', 'is_reference', 'is_flexible_segment', 'is_unpaired', 'slab_position', 'slab_quaternion'])
+  visitDnaComparisonScalars(records, n => {
+    // Both decoders construct this closed record shape themselves; compact
+    // decoding also constructs every vector/site shape from checked doubles.
     const key = siteKey(n), owner = expected.get(key)
     if (!owner || seen.has(key) || n.strand_id !== owner.strand.id || n.strand_type !== owner.strand.strand_type || n.domain_index !== owner.index || n.overhang_id !== owner.domain.overhang_id || n.is_reference !== owner.strand.is_reference || n.is_flexible_segment !== false) fail('incomplete or ambiguous DNA record inventory')
     seen.add(key)
     for (const field of ['is_five_prime', 'is_three_prime', 'is_reference', 'is_unpaired']) boolean(n[field])
-    for (const field of ['backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position']) vector(n[field], 3)
-    vector(n.slab_quaternion, 4)
     if (n.placement_source !== 'native-full-o5-v1') fail('unsupported DNA placement authority')
-    shape(n.helical_site, ['axis_point', 'radial_hat', 'azimuth_rad', 'groove_offset_rad', 'phase_roll_rad'])
-    vector(n.helical_site.axis_point, 3); vector(n.helical_site.radial_hat, 3)
-    if (!['azimuth_rad', 'groove_offset_rad', 'phase_roll_rad'].every(field => finite(n.helical_site[field]))) fail('nonfinite native DNA site')
-  }
+    if (!compact) {
+      for (const field of ['backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position']) vector(n[field], 3)
+      vector(n.slab_quaternion, 4)
+      shape(n.helical_site, ['axis_point', 'radial_hat', 'azimuth_rad', 'groove_offset_rad', 'phase_roll_rad'])
+      vector(n.helical_site.axis_point, 3); vector(n.helical_site.radial_hat, 3)
+      if (!['azimuth_rad', 'groove_offset_rad', 'phase_roll_rad'].every(field => finite(n.helical_site[field]))) fail('nonfinite native DNA site')
+    }
+  })
   if (seen.size !== expected.size) fail('omitted occupied DNA records')
 }
 

@@ -34,12 +34,13 @@ function bytesFromBase64(text) {
   return bytes
 }
 
-// The validator decodes each compact block once; the layer builder then takes
-// those freshly allocated records instead of decoding again (they are not
-// retained by the validator). Any other caller gets its own decode.
+// Hand a validated numeric block (or an explicit decode) to the layer once.
+// Scalar validation avoids allocating molecular arrays for every preview update.
 const decodedCompact = new WeakMap()
+const checkedBlocks = new WeakMap()
 
-function decodeCompact(value) {
+function readCompact(value) {
+  if (value === null || typeof value !== 'object') fail('invalid compact native DNA transport')
   const keys = Object.keys(value)
   if (keys.length !== 4 || !['encoding', 'count', 'rows', 'f64'].every(key => Object.hasOwn(value, key))
       || value.encoding !== COMPACT_ENCODING) fail('invalid compact native DNA transport')
@@ -55,6 +56,39 @@ function decodeCompact(value) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     floats = new Float64Array(count * STRIDE)
     for (let i = 0; i < floats.length; i++) floats[i] = view.getFloat64(i * 8, true)
+  }
+  // Validate the complete numeric block before constructing the fixed record
+  // shapes. The model validator can then check ownership/scalars without
+  // rediscovering the decoder's own vector lengths and object keys.
+  for (let i = 0; i < floats.length; i++)
+    if (!Number.isFinite(floats[i])) fail('nonfinite display coordinates')
+  for (const row of rows)
+    if (!Array.isArray(row) || row.length !== SCALAR_COLUMNS.length) fail('invalid compact native DNA transport')
+  return { count, rows, floats }
+}
+
+function decodeCompact(value, reuse = null, checked = null) {
+  const { count, rows, floats } = checked ?? readCompact(value)
+  // Only an exact scalar inventory permits writing into a caller-owned spare.
+  // Mismatches use fresh records and leave every supplied buffer untouched.
+  let matching = reuse?.length === count
+  if (matching) outer: for (let i = 0; i < count; i++) {
+    for (let j = 0; j < SCALAR_COLUMNS.length; j++) {
+      if (reuse[i][SCALAR_COLUMNS[j]] !== rows[i][j]) { matching = false; break outer }
+    }
+  }
+  if (matching) {
+    for (let i = 0; i < count; i++) {
+      const record = reuse[i]
+      let offset = i * STRIDE
+      for (const [field, length] of VECTOR_FIELDS)
+        for (let j = 0; j < length; j++) record[field][j] = floats[offset++]
+      for (const [field, length] of SITE_FIELDS) {
+        if (length) for (let j = 0; j < length; j++) record.helical_site[field][j] = floats[offset++]
+        else record.helical_site[field] = floats[offset++]
+      }
+    }
+    return reuse
   }
   // Unrolled for speed (18k records x 8 arrays); layout = VECTOR_FIELDS then
   // SITE_FIELDS, 28 doubles per record. Field order of each record follows
@@ -82,9 +116,26 @@ function decodeCompact(value) {
   return records
 }
 
+/** Validate compact ownership without allocating molecular arrays. The visitor
+ * receives one ephemeral scalar record; it must not retain that record. */
+export function visitDnaComparisonScalars(value, visit) {
+  if (Array.isArray(value)) {
+    for (const record of decodeDnaComparisonRecords(value)) visit(record)
+    return
+  }
+  const block = readCompact(value), record = {}
+  for (const row of block.rows) {
+    for (let i = 0; i < SCALAR_COLUMNS.length; i++) record[SCALAR_COLUMNS[i]] = row[i]
+    visit(record)
+  }
+  decodedCompact.delete(value)
+  checkedBlocks.set(value, block)
+}
+
 export function decodeDnaComparisonRecords(rows) {
   if (rows !== null && typeof rows === 'object' && !Array.isArray(rows)) {
     const records = decodeCompact(rows)
+    checkedBlocks.delete(rows)
     decodedCompact.set(rows, records)
     return records
   }
@@ -105,11 +156,11 @@ const copyValue = value => Array.isArray(value) ? value.slice()
  * structuredClone(decodeDnaComparisonRecords(rows)) for validated rows, whose
  * values are scalars, number arrays and the flat helical_site object), ~5x faster.
  */
-export function decodeDnaComparisonRecordsCopy(rows) {
+export function decodeDnaComparisonRecordsCopy(rows, reuse = null) {
   if (rows !== null && typeof rows === 'object' && !Array.isArray(rows)) {
-    const taken = decodedCompact.get(rows)
-    decodedCompact.delete(rows)
-    return taken ?? decodeCompact(rows)  // compact decoding allocates fresh arrays
+    const taken = decodedCompact.get(rows), checked = checkedBlocks.get(rows)
+    decodedCompact.delete(rows); checkedBlocks.delete(rows)
+    return reuse ? decodeCompact(rows, reuse, checked) : taken ?? decodeCompact(rows, null, checked)
   }
   list(rows, MAX_RECORDS)
   return rows.map(row => {

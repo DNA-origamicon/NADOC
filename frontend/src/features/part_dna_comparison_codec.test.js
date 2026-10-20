@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { decodeDnaComparisonRecords, decodeDnaComparisonRecordsCopy } from './part_dna_comparison_codec.js'
+import { decodeDnaComparisonRecords, decodeDnaComparisonRecordsCopy, visitDnaComparisonScalars } from './part_dna_comparison_codec.js'
 import { dnaComponent } from '../test-helpers/part_dna_comparison.js'
 
 it('copying decode equals structuredClone of the decoded rows and shares nothing', () => {
@@ -64,4 +64,60 @@ it('preview v3 requires the compact block and v2 the rows', () => {
   expect(validateDeformationPreviewComponent(v3)).toBe(v3)
   expect(() => validateDeformationPreviewComponent({ ...v3, nucleotides: v2.nucleotides })).toThrow(/version/)
   expect(() => validateDeformationPreviewComponent({ ...v2, nucleotides: v3.nucleotides })).toThrow(/version/)
+})
+
+it('rejects every nonfinite compact coordinate and site angle before constructing records', () => {
+  const good = compact(dnaComponent().nucleotides)
+  for (let index = 0; index < 28; index++) for (const invalid of [NaN, Infinity, -Infinity]) {
+    const bytes = Uint8Array.from(atob(good.f64), c => c.charCodeAt(0))
+    new DataView(bytes.buffer).setFloat64(index * 8, invalid, true)
+    const bad = { ...good, f64: btoa(String.fromCharCode(...bytes)) }
+    const component = { ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 3, nucleotides: bad }
+    expect(() => validateDeformationPreviewComponent(component)).toThrow(/nonfinite/)
+    expect(() => decodeDnaComparisonRecordsCopy(bad)).toThrow(/nonfinite/)
+  }
+})
+
+it('reuses exact inventories without allocating coordinate arrays and preserves native values', () => {
+  const rows = dnaComponent().nucleotides
+  const spare = decodeDnaComparisonRecordsCopy(compact(rows))
+  const positions = spare.map(r => r.backbone_position)
+  const sites = spare.map(r => r.helical_site.axis_point)
+  const changed = structuredClone(rows)
+  for (const row of changed) {
+    row[4][0] += 12.25
+    row[9].axis_point[2] -= 3.5
+    row[9].phase_roll_rad += 0.75
+  }
+  const packet = compact(changed)
+  visitDnaComparisonScalars(packet, () => {})
+  expect(decodeDnaComparisonRecordsCopy(packet, spare)).toBe(spare)
+  expect(spare).toEqual(decodeDnaComparisonRecords(changed))
+  spare.forEach((r, i) => {
+    expect(r.backbone_position).toBe(positions[i])
+    expect(r.helical_site.axis_point).toBe(sites[i])
+  })
+})
+
+it('leaves the spare untouched on inventory mismatch or nonfinite coordinates', () => {
+  const packet = compact(dnaComponent().nucleotides)
+  const spare = decodeDnaComparisonRecordsCopy(packet)
+  const original = structuredClone(spare)
+  const changed = structuredClone(packet)
+  changed.rows[0][SCALAR_COLUMNS.indexOf('is_reference')] = !spare[0].is_reference
+  expect(decodeDnaComparisonRecordsCopy(changed, spare)).not.toBe(spare)
+  expect(spare).toEqual(original)
+  const bytes = Uint8Array.from(atob(packet.f64), c => c.charCodeAt(0))
+  new DataView(bytes.buffer).setFloat64(bytes.length - 8, NaN, true)
+  expect(() => decodeDnaComparisonRecordsCopy({ ...packet, f64: btoa(String.fromCharCode(...bytes)) }, spare)).toThrow(/nonfinite/)
+  expect(spare).toEqual(original)
+})
+
+it('scalar validation supersedes an earlier decoded packet', () => {
+  const packet = compact(dnaComponent().nucleotides)
+  const old = decodeDnaComparisonRecords(packet)
+  packet.rows[0][SCALAR_COLUMNS.indexOf('is_reference')] = !old[0].is_reference
+  visitDnaComparisonScalars(packet, () => {})
+  expect(decodeDnaComparisonRecordsCopy(packet)[0].is_reference).toBe(!old[0].is_reference)
+  expect(() => visitDnaComparisonScalars(null, () => {})).toThrow(/compact native DNA transport/)
 })

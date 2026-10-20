@@ -1,9 +1,11 @@
 /** Isolated static adapter for the existing native Full renderer. */
 import * as THREE from 'three'
 import { validateDnaComparisonComponent, validatedDeformationPreviewComponent } from '../features/part_dna_comparison_model.js'
-import { decodeDnaComparisonRecordsCopy } from '../features/part_dna_comparison_codec.js'
+import { decodeDnaComparisonRecordsCopy, SCALAR_COLUMNS } from '../features/part_dna_comparison_codec.js'
 import { fail } from '../features/part_comparison_validation.js'
 import { buildHelixObjects } from './helix_renderer.js'
+import { ordinaryBackboneContinuations } from './backbone_continuations.js'
+import { selfClosingPolymerSeam } from './polymer_seams.js'
 import { _resetStapleColorPins } from './helix_renderer/palette.js'
 import { buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 
@@ -79,24 +81,65 @@ function buildLayer(component, scene, paletteToken, name, arcType) {
         ovhgAxes: axis.ovhg_axes ?? null }]))
     // Static Full-LOD layer: its renderer is never exposed, so hidden
     // cylinder-LOD tubes (~0.26 s on an 18-helix part) are not built.
+    // Preview axis guides keep every native control sample and the same curve,
+    // with one tube subdivision per sample instead of four. Molecular meshes
+    // and all transported native frames retain their ordinary Full detail.
     const native = buildHelixObjects(geometry, { ...topology, id: paletteToken }, root, {}, [], axes, 'full',
-      { curvedCylinders: false })
+      { curvedCylinders: false, axisTubeSubdivisions: arcType === 'deformationPreview' ? 1 : 4 })
     if (arcType === 'deformationPreview') native.setAxisShaftMode('deformed')
     const connections = native.getCrossHelixConnections()
     checkInventory(native, geometry, topology, connections)
     root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
     const lines = buildNativeConnectionLines(connections, arcType)
-    if (lines) {
-      root.add(lines.line)
-      for (const arc of connections) {
-        const control = new THREE.Vector3((arc.from.x + arc.to.x) * .5,
-          (arc.from.y + arc.to.y) * .5, (arc.from.z + arc.to.z) * .5)
-        // Exact existing normal 3D (unfold t=0) sampling and line material.
-        writeNativeConnectionArc(lines.positions, arc.vertIdx, arc.from, control, arc.to)
+    if (lines) root.add(lines.line)
+    function drawConnections() {
+      if (lines) {
+        for (const arc of connections) {
+          const control = new THREE.Vector3((arc.from.x + arc.to.x) * .5,
+            (arc.from.y + arc.to.y) * .5, (arc.from.z + arc.to.z) * .5)
+          // Exact existing normal 3D (unfold t=0) sampling and line material.
+          writeNativeConnectionArc(lines.positions, arc.vertIdx, arc.from, control, arc.to)
+        }
+        lines.geo.attributes.position.needsUpdate = true
       }
-      lines.geo.attributes.position.needsUpdate = true
+    }
+    drawConnections()
+    // Native continuity/seam classifications are the only deformation-derived
+    // topology used by this renderer. A change to either requires a rebuild.
+    const signature = topology => JSON.stringify([
+      { ...topology, deformations: [] }, [...ordinaryBackboneContinuations(topology)].sort(),
+      topology.forced_ligations.map(seam => selfClosingPolymerSeam(topology, seam)),
+    ])
+    const initialSignature = arcType === 'deformationPreview' ? signature(topology) : null
+    function sameInventory(records) {
+      if (records.length !== geometry.length) return false
+      for (let i = 0; i < records.length; i++)
+        for (const key of SCALAR_COLUMNS) if (records[i][key] !== geometry[i][key]) return false
+      return true
     }
     scene.add(root)
-    return { root, dispose }
+    return { root, dispose,
+      update(component) {
+        if (disposed || arcType !== 'deformationPreview') return false
+        validatedDeformationPreviewComponent(component)
+        if (signature(component.display_topology) !== initialSignature) return false
+        const nextGeometry = decodeDnaComparisonRecordsCopy(component.nucleotides, geometry)
+        if (!sameInventory(nextGeometry)) return false
+        const nextAxes = Object.fromEntries(structuredClone(component.helix_axes).map(axis => [axis.helix_id,
+          { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments,
+            ovhgAxes: axis.ovhg_axes ?? null }]))
+        native.updateStaticFullGeometry(nextGeometry, nextAxes)
+        root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
+        // The renderer retains the exact checked entry/connection inventory.
+        // Only poses changed: preserve its native adjacency, colours and line
+        // buffers, and resample the same arcs from their updated native owners.
+        for (const connection of connections) {
+          connection.from.fromArray(connection.fromNuc.backbone_position)
+          connection.to.fromArray(connection.toNuc.backbone_position)
+        }
+        drawConnections()
+        return true
+      },
+    }
   } catch (error) { dispose(); throw error }
 }

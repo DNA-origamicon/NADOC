@@ -1,43 +1,40 @@
 # Feature-history stopping-point handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Updated October20,2026 after the bounded Bend/Twist C8 qualification task.
-**Tools done: 2/4 (Extrude, Sweep). CAD ledger: 20/34 complete, 14 remaining (7 core, 7 parked).**
+Updated October20,2026: user resumed sustained six-tool milestone work.
+**Tools done: 2/6 (Extrude, Sweep). CAD ledger: 20/34 complete, 14 remaining (7 core, 7 parked).**
 **Sessions since last gate flip or milestone close: 2.** Delta0 completed/0 scope; no gate flip.
 The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
-Next bounded task: reduce the measured large-part native Full display construction cost within
-the existing Bend/Twist preview lifecycle, then rerun the same C8 cases against1000ms preview,
-6000/20000ms small/large Apply and400ms Cancel ceilings (the existing2× allowance).
-Server display568–586ms and client layer369–392ms dominate; JSON encoding is only4–5ms.
-Do not expand matrices or add a host. Preserve native coordinate/inventory checks, molecular
-constants, manifests and goldens. If optimization needs a scientific change, present the concrete
-review required by CLAUDE.md. Existing rendering patches refuse changed axes; do not reuse them
-for Bend/Twist while leaving stale axes. Review focus every30minutes using the existing review.json.
-At the next session end N becomes3 unless a production gate flips; obey the subsequent stop-loss.
-Old files remain excluded. Fine Routing removes a child only when every target is unoccupied;
-partial applicability and other failures refuse atomically. Move/suppression never auto-delete children.
+Next task: qualify geometric Move/Rotate history editing in the isolated running app,
+using its existing native preview host and panel. The test-only transform gate is opt-in;
+production gates remain OFF. Finish ordinary owner translation/rotation, downstream replay,
+Cancel, undo/redo and save/reopen before extending to linked/named movement semantics.
+User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
+supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
+Do not repeat unchanged C8 benchmarks. Retain scientific authorization, constants,
+manifests/goldens and native placement/inventory checks. History-row Move is reorder,
+not geometric Move. Old files remain excluded.
 
 ## Current qualification evidence
 
-- The strict harness now measures both tools at6×84 and18×504, with one successful sequenced
-  evaluation per sample, valid layers, adopted Apply, exact Cancel and no canonical Cancel reads/writes.
-- Four-case browser run:2passed/2failed (2.5min), failures only large preview p95.
-  Small Bend/Twist: preview118/112ms, Apply950/425ms, Cancel72/67ms.
-  Large Bend/Twist: preview1315/1136ms, Apply4664/4417ms, Cancel162/157ms. GPU raster excluded.
-- Native recipes and file sizes are recorded in the existing Bend/Twist plan; no existing user files changed.
-- Final reporting-only soft assertions keep all budget/console checks reachable on timing failures;
-  syntax checked, browser repeat cancelled while queued behind another session's full suite.
-- Focused Ruff and JS syntax checks pass. No production change, broad-suite rerun or completion credit.
-- Browser root `/tmp/__e2e__history-w9btjio7` and profiler root `/tmp/__e2e__bend-profile-_66eaqqe`
-  independently absent. Earlier own baseline root1w_e5dal was also verified absent. Queued interrupted
-  checks never started a browser or allocated scratch. Other sessions' artifacts were left alone.
-- Logs: `bend-twist-c8-resume.log`, `bend-c8-server-profile.log`, `bend-c8-resume-baseline.log` in
-  `.development-artifacts/feature-history-focus/`. The final log records the cancelled queued repeat.
-- Snap `just` failed after the environment restart; direct `scripts/validation_guard.sh` preserved
-  serialization/worker caps. No user systemd was available, so its memory scope was unavailable.
+- Detached candidate/spare layers reuse exact native inventories and coordinate arrays;
+  fresh native axes are rebuilt, with preview-only guide tessellation reduced. Native
+  bead/slab/connector placements remain unchanged; canonical rendering defaults unchanged.
+- Focused65 pass, including fresh-build parity with rotated poses, periodic visibility,
+  malformed compact floats, exact reuse and untouched spare on inventory mismatch.
+- Final fixed12-sample C8 run:3pass/1fail. Small Bend/Twist preview107/111ms,
+  Apply939/429ms, Cancel72/70ms. Large Bend/Twist preview994/1149ms,
+  Apply4436/4333ms, Cancel211/161ms. Only large Twist p95 exceeds1000ms.
+  Thresholds unchanged; GPU raster excluded (SwiftShader). Both tools remain unqualified
+  as a gate pair. Logs: static-preview-reuse.log and static-preview-reuse-c8.log under
+  .development-artifacts/feature-history-focus/; root /tmp/__e2e__history-llcbiwr6 absent.
+- Final full frontend regression:779files/9377pass/1skip (342.94s), including compact
+  buffer reuse. Log: static-preview-final-frontend.log. Move/Rotate harness work ongoing.
+- Direct scripts/validation_guard.sh preserves serialization/worker caps because Snap
+  just fails here. User systemd unavailable; memory scope unavailable.
 
 ## Completed user-facing behavior
 

@@ -506,7 +506,7 @@ export function orderStrandNucleotides(nucs) {
  * for their whole lifetime and never expose LOD switching (private preview
  * layers); the default view builds them so a later LOD switch can show them.
  */
-export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true } = {}) {
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true, axisTubeSubdivisions = 4 } = {}) {
   // Validate before adding any scene objects. An incomplete response must not
   // leave a half-updated scientific representation on screen.
   for (const nuc of geometry ?? []) {
@@ -708,217 +708,221 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     return out
   }
 
-  for (const helix of design.helices) {
-    // Skip linker virtual helices (`__lnk__<conn>`). Their bridge half is
-    // rendered by overhang_link_arcs as a synthesized duplex / bead-string,
-    // not as a regular helix axis stick — drawing one here produces stray
-    // black lines floating between the two clusters at the linker midpoint.
-    if (helix.id?.startsWith('__lnk__')) continue
-    const isNativeFold = Boolean(helix.native_residues?.length) && !nativeCorePaired(helix, design)
-    const axDef     = helixAxes?.[helix.id]
-    const tubeSamp  = axDef?.samples
-    const isCurved  = tubeSamp != null && tubeSamp.length > 2
+  function buildAxes(helixAxes, axisScene = root, arrows = axisArrows) {
+    for (const helix of design.helices) {
+      // Skip linker virtual helices (`__lnk__<conn>`). Their bridge half is
+      // rendered by overhang_link_arcs as a synthesized duplex / bead-string,
+      // not as a regular helix axis stick — drawing one here produces stray
+      // black lines floating between the two clusters at the linker midpoint.
+      if (helix.id?.startsWith('__lnk__')) continue
+      const isNativeFold = Boolean(helix.native_residues?.length) && !nativeCorePaired(helix, design)
+      const axDef     = helixAxes?.[helix.id]
+      const tubeSamp  = axDef?.samples
+      const isCurved  = tubeSamp != null && tubeSamp.length > 2
 
-    // Fallback: if no per-helix axes were supplied, use the topology axes
-    // stored on the Helix model. These are the "straight" axes — equal to
-    // straightHelixAxes since the backend strips cluster_transforms when
-    // computing straight geometry. So at t=0 (deformed view off) this is
-    // correct; at t=1 (deformed view on) the lerp will move arrows to the
-    // deformed positions on the next reapplyLerp.
-    //
-    // This branch should not fire in normal flow: every API response that
-    // updates currentGeometry also updates currentHelixAxes. If we see the
-    // warning, currentHelixAxes was null or missing a specific helix at
-    // render time — a state-sync regression worth investigating.
-    if (helixAxes != null && axDef == null) {
-      console.warn(`[helix_renderer] no axis entry for helix ${helix.id}; ` +
-                   `falling back to topology axes (helix.axis_start/end). ` +
-                   `currentHelixAxes is missing this helix.`)
-    }
-    const aStart = axDef
-      ? new THREE.Vector3(...axDef.start)
-      : new THREE.Vector3(helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
-    const aEnd   = axDef
-      ? new THREE.Vector3(...axDef.end)
-      : new THREE.Vector3(helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z)
-
-    let shaft         = null   // TubeGeometry mesh (curved helices only)
-    let straightShaft = null   // unit cylinder placeholder, only for curved helices' deform lerp
-    const segments    = []     // per-domain world-space cylinder meshes (straight helices)
-
-    // Helices with multiple axis segments (bp-range gaps between strand domains
-    // on the same helix — e.g. compliant joints) need per-segment axis lines
-    // so the gap regions stay empty. The single TubeGeometry shaft built from
-    // a continuous CatmullRomCurve3 ignores domain boundaries; it would draw
-    // a line straight through the gap. For these helices we build the same
-    // per-segment cylinder array used by non-curved helices below and skip
-    // the single shaft entirely.
-    const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
-    // Native oligos have a backbone, not a duplex axis. Full uses the same
-    // strand-colored direction cones as every ordinary strand. Keep the
-    // axis metadata for cylinder LOD, but never overlay an axis tube.
-    if (isCurved && !useSegments && !isNativeFold) {
-      const pts   = tubeSamp.map(s => new THREE.Vector3(...s))
-      const curve = new THREE.CatmullRomCurve3(pts)
-      const segs  = Math.max(tubeSamp.length * 4, 16)
-      const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
-      shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
-      shaft.name = 'axisLine'
-      // Shaft + straightShaft opacities are the curved/straight cross-fade
-      // driven by deform_view's lerp. _traverseSetOpacity (deform tool dim/
-      // restore + ghost preview) must NOT clobber them, otherwise the
-      // cross-fade snaps until the next reapplyLerp call.
-      shaft.material.userData.skipOpacityRestore = true
-      root.add(shaft)
-
-      straightShaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
-        new THREE.MeshPhongMaterial({ color: C.axis }),
-      )
-      straightShaft.name = 'axisLine'
-      // Hidden by default — the curved shaft starts visible (deformVisuActive
-      // is true by default). deform_view.setAxisShaftMode() flips these two
-      // meshes as a mutually-exclusive pair on every toggle.
-      straightShaft.visible = false
-      straightShaft.userData.skipBounds = true
-      straightShaft.material.userData.skipOpacityRestore = true
-      root.add(straightShaft)
-    }
-    if (useSegments && !isNativeFold) {
-      // Straight helix: one world-space cylinder per scaffold domain (no merging).
-      // Backend supplies pre-transformed per-segment endpoints when present
-      // (axDef.segments); otherwise compute from the helix's straight axis. The
-      // backend path covers cluster transforms and partial-coverage clusters
-      // correctly; the local fallback only applies to designs without a backend
-      // axes payload.
+      // Fallback: if no per-helix axes were supplied, use the topology axes
+      // stored on the Helix model. These are the "straight" axes — equal to
+      // straightHelixAxes since the backend strips cluster_transforms when
+      // computing straight geometry. So at t=0 (deformed view off) this is
+      // correct; at t=1 (deformed view on) the lerp will move arrows to the
+      // deformed positions on the next reapplyLerp.
       //
-      // Curved + multi-segment: also build a TubeGeometry per segment that
-      // follows the bent helix center-line within the segment's bp range
-      // (sub-sampled from tubeSamp). Visible at the deformed steady state
-      // (mode='deformed'); the straight cylinder takes over during the lerp
-      // and when un-deformed (mode='straight'). Mirrors the single-shaft
-      // cross-fade so multi-domain bent helices don't show straight chords.
-      const aVec = aEnd.clone().sub(aStart)
-      const aLen = aVec.length()
-      const aDir = aLen > 0.001 ? aVec.clone().normalize() : _AY.clone()
+      // This branch should not fire in normal flow: every API response that
+      // updates currentGeometry also updates currentHelixAxes. If we see the
+      // warning, currentHelixAxes was null or missing a specific helix at
+      // render time — a state-sync regression worth investigating.
+      if (helixAxes != null && axDef == null) {
+        console.warn(`[helix_renderer] no axis entry for helix ${helix.id}; ` +
+                     `falling back to topology axes (helix.axis_start/end). ` +
+                     `currentHelixAxes is missing this helix.`)
+      }
+      const aStart = axDef
+        ? new THREE.Vector3(...axDef.start)
+        : new THREE.Vector3(helix.axis_start.x, helix.axis_start.y, helix.axis_start.z)
+      const aEnd   = axDef
+        ? new THREE.Vector3(...axDef.end)
+        : new THREE.Vector3(helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z)
 
-      const backendSegs = axDef?.segments
-      const domSegs = backendSegs?.length ? null : _axisDomainSegments(helix)
-      const segCount = backendSegs?.length ?? domSegs.length
-      for (let i = 0; i < segCount; i++) {
-        const bs = backendSegs?.[i]
-        const ds = bs ?? domSegs[i]
-        const ovhgEntry = ds.ovhgId && axDef?.ovhgAxes ? axDef.ovhgAxes[ds.ovhgId] : null
-        let ws, we
-        if (bs && bs.start && bs.end) {
-          ws = new THREE.Vector3(...bs.start)
-          we = new THREE.Vector3(...bs.end)
-        } else if (ovhgEntry) {
-          ws = new THREE.Vector3(...ovhgEntry.start)
-          we = new THREE.Vector3(...ovhgEntry.end)
-        } else {
-          const tStart = (ds.bp_lo - helix.bp_start) * BDNA_RISE_PER_BP
-          const tEnd   = (ds.bp_hi - helix.bp_start + 1) * BDNA_RISE_PER_BP
-          ws = aStart.clone().addScaledVector(aDir, tStart)
-          we = aStart.clone().addScaledVector(aDir, tEnd)
-        }
-        const wsDir = we.clone().sub(ws)
-        const wsLen = wsDir.length()
-        const adjLen = Math.max(0.01, wsLen)
-        const wsUnit = wsLen > 0.001 ? wsDir.clone().normalize() : aDir.clone()
-        const mesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
+      let shaft         = null   // TubeGeometry mesh (curved helices only)
+      let straightShaft = null   // unit cylinder placeholder, only for curved helices' deform lerp
+      const segments    = []     // per-domain world-space cylinder meshes (straight helices)
+
+      // Helices with multiple axis segments (bp-range gaps between strand domains
+      // on the same helix — e.g. compliant joints) need per-segment axis lines
+      // so the gap regions stay empty. The single TubeGeometry shaft built from
+      // a continuous CatmullRomCurve3 ignores domain boundaries; it would draw
+      // a line straight through the gap. For these helices we build the same
+      // per-segment cylinder array used by non-curved helices below and skip
+      // the single shaft entirely.
+      const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
+      // Native oligos have a backbone, not a duplex axis. Full uses the same
+      // strand-colored direction cones as every ordinary strand. Keep the
+      // axis metadata for cylinder LOD, but never overlay an axis tube.
+      if (isCurved && !useSegments && !isNativeFold) {
+        const pts   = tubeSamp.map(s => new THREE.Vector3(...s))
+        const curve = new THREE.CatmullRomCurve3(pts)
+        const segs  = Math.max(tubeSamp.length * axisTubeSubdivisions, 4 * axisTubeSubdivisions)
+        const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
+        shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+        shaft.name = 'axisLine'
+        // Shaft + straightShaft opacities are the curved/straight cross-fade
+        // driven by deform_view's lerp. _traverseSetOpacity (deform tool dim/
+        // restore + ghost preview) must NOT clobber them, otherwise the
+        // cross-fade snaps until the next reapplyLerp call.
+        shaft.material.userData.skipOpacityRestore = true
+        axisScene.add(shaft)
+
+        straightShaft = new THREE.Mesh(
+          new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
           new THREE.MeshPhongMaterial({ color: C.axis }),
         )
-        mesh.name = 'axisLine'
-        mesh.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
-        mesh.quaternion.setFromUnitVectors(_AY, wsUnit)
-        root.add(mesh)
+        straightShaft.name = 'axisLine'
+        // Hidden by default — the curved shaft starts visible (deformVisuActive
+        // is true by default). deform_view.setAxisShaftMode() flips these two
+        // meshes as a mutually-exclusive pair on every toggle.
+        straightShaft.visible = false
+        straightShaft.userData.skipBounds = true
+        straightShaft.material.userData.skipOpacityRestore = true
+        axisScene.add(straightShaft)
+      }
+      if (useSegments && !isNativeFold) {
+        // Straight helix: one world-space cylinder per scaffold domain (no merging).
+        // Backend supplies pre-transformed per-segment endpoints when present
+        // (axDef.segments); otherwise compute from the helix's straight axis. The
+        // backend path covers cluster transforms and partial-coverage clusters
+        // correctly; the local fallback only applies to designs without a backend
+        // axes payload.
+        //
+        // Curved + multi-segment: also build a TubeGeometry per segment that
+        // follows the bent helix center-line within the segment's bp range
+        // (sub-sampled from tubeSamp). Visible at the deformed steady state
+        // (mode='deformed'); the straight cylinder takes over during the lerp
+        // and when un-deformed (mode='straight'). Mirrors the single-shaft
+        // cross-fade so multi-domain bent helices don't show straight chords.
+        const aVec = aEnd.clone().sub(aStart)
+        const aLen = aVec.length()
+        const aDir = aLen > 0.001 ? aVec.clone().normalize() : _AY.clone()
 
-        // Curved tube companion for bent helices. tubeSamp is the helix-wide
-        // post-cluster-transformed center-line; we pluck the interior samples
-        // whose local bp index falls strictly inside (bp_lo, bp_hi] and anchor
-        // the curve at the segment's own ws/we (which may carry a per-segment
-        // cluster transform). For helices with diverging per-segment transforms
-        // the interior samples may not match the endpoint frame exactly — the
-        // tube still looks far closer to the truth than a straight chord.
-        let tubeMesh = null
-        const segmentSamples = bs?.samples ?? tubeSamp
-        if (segmentSamples && segmentSamples.length > 2) {
-          const localLo = ds.bp_lo - helix.bp_start
-          const localHi = ds.bp_hi - helix.bp_start
-          const pts = [ws.clone()]
-          const lastSampleIdx = segmentSamples.length - 1
-          for (let si = 0; si < segmentSamples.length; si++) {
-            // Mirror backend _sample_bp_list_for_axis: samples are at local bp
-            // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
-            const localBp = (si === lastSampleIdx)
-              ? helix.length_bp - 1
-              : si * (isNativeFold ? 1 : AXIS_SAMPLE_STEP)
-            if (localBp > localLo && localBp <= localHi) {
-              pts.push(new THREE.Vector3(...segmentSamples[si]))
+        const backendSegs = axDef?.segments
+        const domSegs = backendSegs?.length ? null : _axisDomainSegments(helix)
+        const segCount = backendSegs?.length ?? domSegs.length
+        for (let i = 0; i < segCount; i++) {
+          const bs = backendSegs?.[i]
+          const ds = bs ?? domSegs[i]
+          const ovhgEntry = ds.ovhgId && axDef?.ovhgAxes ? axDef.ovhgAxes[ds.ovhgId] : null
+          let ws, we
+          if (bs && bs.start && bs.end) {
+            ws = new THREE.Vector3(...bs.start)
+            we = new THREE.Vector3(...bs.end)
+          } else if (ovhgEntry) {
+            ws = new THREE.Vector3(...ovhgEntry.start)
+            we = new THREE.Vector3(...ovhgEntry.end)
+          } else {
+            const tStart = (ds.bp_lo - helix.bp_start) * BDNA_RISE_PER_BP
+            const tEnd   = (ds.bp_hi - helix.bp_start + 1) * BDNA_RISE_PER_BP
+            ws = aStart.clone().addScaledVector(aDir, tStart)
+            we = aStart.clone().addScaledVector(aDir, tEnd)
+          }
+          const wsDir = we.clone().sub(ws)
+          const wsLen = wsDir.length()
+          const adjLen = Math.max(0.01, wsLen)
+          const wsUnit = wsLen > 0.001 ? wsDir.clone().normalize() : aDir.clone()
+          const mesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
+            new THREE.MeshPhongMaterial({ color: C.axis }),
+          )
+          mesh.name = 'axisLine'
+          mesh.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
+          mesh.quaternion.setFromUnitVectors(_AY, wsUnit)
+          axisScene.add(mesh)
+
+          // Curved tube companion for bent helices. tubeSamp is the helix-wide
+          // post-cluster-transformed center-line; we pluck the interior samples
+          // whose local bp index falls strictly inside (bp_lo, bp_hi] and anchor
+          // the curve at the segment's own ws/we (which may carry a per-segment
+          // cluster transform). For helices with diverging per-segment transforms
+          // the interior samples may not match the endpoint frame exactly — the
+          // tube still looks far closer to the truth than a straight chord.
+          let tubeMesh = null
+          const segmentSamples = bs?.samples ?? tubeSamp
+          if (segmentSamples && segmentSamples.length > 2) {
+            const localLo = ds.bp_lo - helix.bp_start
+            const localHi = ds.bp_hi - helix.bp_start
+            const pts = [ws.clone()]
+            const lastSampleIdx = segmentSamples.length - 1
+            for (let si = 0; si < segmentSamples.length; si++) {
+              // Mirror backend _sample_bp_list_for_axis: samples are at local bp
+              // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
+              const localBp = (si === lastSampleIdx)
+                ? helix.length_bp - 1
+                : si * (isNativeFold ? 1 : AXIS_SAMPLE_STEP)
+              if (localBp > localLo && localBp <= localHi) {
+                pts.push(new THREE.Vector3(...segmentSamples[si]))
+              }
+            }
+            pts.push(we.clone())
+            // Skip tube construction when the segment spans no interior samples
+            // (pts is just [ws, we] → would render as a straight line, no win
+            // over the cylinder companion we already built).
+            if (pts.length >= 3) {
+              const curve = new THREE.CatmullRomCurve3(pts)
+              const tubeSegs = Math.max(pts.length * axisTubeSubdivisions, 4 * axisTubeSubdivisions)
+              const tubeGeo = new THREE.TubeGeometry(curve, tubeSegs, AXIS_SHAFT_R, 6, false)
+              tubeMesh = new THREE.Mesh(tubeGeo, new THREE.MeshPhongMaterial({ color: C.axis }))
+              tubeMesh.name = 'axisLine'
+              tubeMesh.material.userData.skipOpacityRestore = true
+              tubeMesh.visible = false  // setAxisShaftMode swaps it in at deformed steady state
+              axisScene.add(tubeMesh)
             }
           }
-          pts.push(we.clone())
-          // Skip tube construction when the segment spans no interior samples
-          // (pts is just [ws, we] → would render as a straight line, no win
-          // over the cylinder companion we already built).
-          if (pts.length >= 3) {
-            const curve = new THREE.CatmullRomCurve3(pts)
-            const tubeSegs = Math.max(pts.length * 4, 16)
-            const tubeGeo = new THREE.TubeGeometry(curve, tubeSegs, AXIS_SHAFT_R, 6, false)
-            tubeMesh = new THREE.Mesh(tubeGeo, new THREE.MeshPhongMaterial({ color: C.axis }))
-            tubeMesh.name = 'axisLine'
-            tubeMesh.material.userData.skipOpacityRestore = true
-            tubeMesh.visible = false  // setAxisShaftMode swaps it in at deformed steady state
-            root.add(tubeMesh)
-          }
+
+          // Normalise key names since backend uses snake_case while our local
+          // helper emits camelCase.
+          segments.push({
+            mesh,
+            tubeMesh,
+            strandId:    bs ? bs.strand_id    : ds.strandId,
+            domainIndex: bs ? bs.domain_index : ds.domainIndex,
+            domainIds:    bs?.domain_ids ?? [{
+              strand_id: bs ? bs.strand_id : ds.strandId,
+              domain_index: bs ? bs.domain_index : ds.domainIndex,
+            }],
+            ovhgId:      bs ? bs.ovhg_id      : ds.ovhgId,
+            bp_lo:       ds.bp_lo,
+            bp_hi:       ds.bp_hi,
+            adjLen,
+            wsStart:     ws.clone(),
+            wsEnd:       we.clone(),
+          })
         }
-
-        // Normalise key names since backend uses snake_case while our local
-        // helper emits camelCase.
-        segments.push({
-          mesh,
-          tubeMesh,
-          strandId:    bs ? bs.strand_id    : ds.strandId,
-          domainIndex: bs ? bs.domain_index : ds.domainIndex,
-          domainIds:    bs?.domain_ids ?? [{
-            strand_id: bs ? bs.strand_id : ds.strandId,
-            domain_index: bs ? bs.domain_index : ds.domainIndex,
-          }],
-          ovhgId:      bs ? bs.ovhg_id      : ds.ovhgId,
-          bp_lo:       ds.bp_lo,
-          bp_hi:       ds.bp_hi,
-          adjLen,
-          wsStart:     ws.clone(),
-          wsEnd:       we.clone(),
-        })
       }
-    }
 
-    axisArrows.push({
-      helixId: helix.id,
-      bp_lo:   helix.bp_start,
-      bp_hi:   helix.bp_start + helix.length_bp - 1,
-      isCurved,
-      isNative: isNativeFold,
-      // True when this helix renders its axis via per-segment cylinders
-      // rather than a single shaft. Set for every non-curved helix and for
-      // curved helices with bp-range gaps between segments (so the gap
-      // stays empty). When true: shaft + straightShaft are null and
-      // segments[] is populated; downstream code paths (visibility, lerp,
-      // revert) dispatch on this flag.
-      useSegments,
-      shaft,                              // tube mesh for single-segment curved helices, null otherwise
-      straightShaft,                      // straight-cylinder placeholder for single-segment curved deform lerp
-      segments,                           // per-domain world-space meshes (non-curved + multi-segment curved)
-      aStart: aStart.clone(),
-      aEnd:   aEnd.clone(),
-      samples: isCurved ? tubeSamp : null,
-      bpStart: helix.bp_start,
-      bpLen:   helix.length_bp,
-    })
+      arrows.push({
+        helixId: helix.id,
+        bp_lo:   helix.bp_start,
+        bp_hi:   helix.bp_start + helix.length_bp - 1,
+        isCurved,
+        isNative: isNativeFold,
+        // True when this helix renders its axis via per-segment cylinders
+        // rather than a single shaft. Set for every non-curved helix and for
+        // curved helices with bp-range gaps between segments (so the gap
+        // stays empty). When true: shaft + straightShaft are null and
+        // segments[] is populated; downstream code paths (visibility, lerp,
+        // revert) dispatch on this flag.
+        useSegments,
+        shaft,                              // tube mesh for single-segment curved helices, null otherwise
+        straightShaft,                      // straight-cylinder placeholder for single-segment curved deform lerp
+        segments,                           // per-domain world-space meshes (non-curved + multi-segment curved)
+        aStart: aStart.clone(),
+        aEnd:   aEnd.clone(),
+        samples: isCurved ? tubeSamp : null,
+        bpStart: helix.bp_start,
+        bpLen:   helix.length_bp,
+      })
+    }
+    return arrows
   }
+  buildAxes(helixAxes)
 
   // Per-segment lerp helper for multi-segment curved helices (e.g. compliant
   // joints). For each segment we have:
@@ -3191,6 +3195,64 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   return {
     root,
+    // Private static Full owners may reuse their nucleotide buffers when the
+    // complete topology and scalar inventory are unchanged. Curved axes must
+    // be rebuilt from the new native samples, never patched as rigid chords.
+    updateStaticFullGeometry(nextGeometry, nextAxes) {
+      if (curvedCylinders || lod !== 'full' || nextGeometry.length !== geometry.length)
+        throw new Error('Static Full update requires an unchanged private inventory')
+      for (const nuc of nextGeometry) validateNativePlacement(nuc)
+      const axisScene = new THREE.Group()
+      let nextArrows
+      try { nextArrows = buildAxes(nextAxes, axisScene, []) }
+      catch (error) {
+        axisScene.traverse(node => { node.geometry?.dispose(); node.material?.dispose() })
+        throw error
+      }
+      for (let i = 0; i < geometry.length; i++) {
+        const target = geometry[i], source = nextGeometry[i]
+        target.backbone_position = source.backbone_position
+        target.base_position = source.base_position
+        target.base_normal = source.base_normal
+        target.axis_tangent = source.axis_tangent
+        target.slab_position = source.slab_position
+        target.slab_quaternion = source.slab_quaternion
+        target.helical_site = source.helical_site
+      }
+      // Every entry is present in this complete, same-order inventory. Avoid
+      // constructing editing indexes and rediscovering the same cones through
+      // each endpoint; consume the native frames directly once per instance.
+      for (const entry of backboneEntries) {
+        entry.pos.fromArray(entry.nuc.backbone_position)
+        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+      }
+      for (const slab of slabEntries) {
+        _slabCenterD.fromArray(slab.nuc.slab_position)
+        _slabQuatS.fromArray(slab.nuc.slab_quaternion)
+        _tMatrix.compose(_slabCenterD, _slabQuatS,
+          _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        slab.instMesh.setMatrixAt(slab.id, _tMatrix)
+      }
+      for (const cone of coneEntries) _recomposeCone(cone)
+      for (const mesh of [iSpheres, iCubes, iSlabs, iCones]) mesh.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
+      for (const arrow of axisArrows) {
+        for (const mesh of [arrow.shaft, arrow.straightShaft,
+          ...arrow.segments.flatMap(segment => [segment.mesh, segment.tubeMesh])]) {
+          if (!mesh) continue
+          mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose()
+        }
+      }
+      for (const mesh of [...axisScene.children]) root.add(mesh)
+      axisArrows.splice(0, axisArrows.length, ...nextArrows)
+      _applyShaftModeVisibility('deformed')
+      polymerizationPreview?.refresh()
+      // Matrix bounds belong to the old placement; let Three recompute them.
+      root.traverse(node => {
+        if (node.isInstancedMesh) { node.boundingBox = null; node.boundingSphere = null }
+      })
+    },
     setPolymerizationDesign(nextDesign) { polymerizationPreview?.setDesign(nextDesign) },
     backboneEntries,
     coneEntries,

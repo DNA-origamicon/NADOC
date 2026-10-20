@@ -35,7 +35,7 @@ test(`${kind}-${large ? 'large' : 'small'} preview Apply and Cancel latency`, as
     await expect(f.popup).toBeVisible({ timeout: 60_000 })
     await expect.poll(async () => (await f.display()).roots, { timeout: 30_000 }).toBe(2)
     const open = Date.now() - openStart
-    const samples = []
+    const samples = [], candidateRoots = new Set()
     const evaluations = []
     const recordEvaluation = response => {
       if (new URL(response.url()).pathname === `${previewPath}/evaluate`)
@@ -60,6 +60,8 @@ test(`${kind}-${large ? 'large' : 'small'} preview Apply and Cancel latency`, as
       }, { value: angle, selector }))
       await expect(page.locator('#def-apply-btn')).toBeEnabled()
       expect((await f.display()).roots).toBe(2)
+      candidateRoots.add(await page.evaluate(() => window.__nadocTest.scene.children
+        .find(n => n.name === 'privateDeformationPreview' && n.visible)?.uuid))
     }
     page.off('response', recordEvaluation)
     expect(evaluations).toHaveLength(samples.length)
@@ -117,7 +119,7 @@ test(`${kind}-${large ? 'large' : 'small'} preview Apply and Cancel latency`, as
     }
     const sorted = [...samples].sort((a, b) => a - b)
     const p95 = sorted[Math.ceil(0.95 * sorted.length) - 1], median = sorted[Math.floor(sorted.length / 2)]
-    console.log(`C8 ${seed} renderer=${renderer} open_ms=${open} update_ms=${samples.map(Math.round).join(',')} median=${Math.round(median)} p95=${Math.round(p95)}`)
+    console.log(`C8 ${seed} renderer=${renderer} open_ms=${open} candidate_buffers=${candidateRoots.size} update_ms=${samples.map(Math.round).join(',')} median=${Math.round(median)} p95=${Math.round(p95)}`)
     const beforeApply = await f.checkpoint()
     const applyStart = Date.now()
     await page.locator('#def-apply-btn').click()

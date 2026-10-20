@@ -929,3 +929,12 @@ Opt-in evaluation reuses prepare-time scalar rows and equal topology inventory; 
 - Focused Ruff and both JS syntax checks passed. No production behavior changed; broad suites were not rerun for this harness-only task. No molecular sources, manifests, goldens or gates changed.
 - Own browser scratch `/tmp/__e2e__history-w9btjio7` and profiler scratch `_66eaqqe` independently absent; interrupted/cancelled queued checks created no roots. Compact logs/scripts remain under `.development-artifacts/feature-history-focus/`.
 - C8 remains open; current counts and the single next task are in the [handoff](session_handoff.md).
+
+## Native preview buffer reuse — October20,2026
+- Reuse one detached candidate buffer with exact topology/scalar inventory checks; retain native bead/slab/connector poses and rebuild fresh axes. Preview guide tessellation only; canonical defaults unchanged.
+- Compact scalar validation and finite-block checking avoid per-update record/coordinate-array allocation. Failed candidate updates preserve the last valid visible scene.
+- Focused65pass: rotated native-pose/curve fresh-build parity, inserted copies, periodic visibility, malformed values and buffer ownership.
+- Fixed12-sample four-case C8:3pass/1fail. Small Bend/Twist preview107/111ms, Apply939/429ms, Cancel72/70ms; large preview994/1149ms, Apply4436/4333ms, Cancel211/161ms.
+- Same1000ms/6000–20000ms/400ms limits; GPU raster excluded. Large Twist remains a blocker; no qualification credit or unchanged rerun.
+- Evidence: static-preview-reuse.log and static-preview-reuse-c8.log in .development-artifacts/feature-history-focus/. Browser root /tmp/__e2e__history-llcbiwr6 independently absent.
+- Final full frontend779files/9377pass/1skip (342.94s), log static-preview-final-frontend.log. Next: geometric Move/Rotate app acceptance under the user’s sustained six-tool scope.
