@@ -9,6 +9,14 @@ from backend.core.md_job import MdJob, MdStatus, new_job
 from backend.core import md_executor
 
 
+@pytest.fixture
+def tmp_path(tmp_path_factory):
+    # AF_UNIX paths allow only 107 bytes. Pytest's full test-name directory
+    # exceeded that at pytest-10 under the Archive/xdist root, before listening.
+    # Keep the normal pytest isolation/cleanup with a short module-local name.
+    return tmp_path_factory.mktemp("aw")
+
+
 def make_job(workspace):
     job = new_job(design_name='worker', protocol='test', name_stem='worker', package_subdir='namd')
     job.execution_target = 'alpine'
