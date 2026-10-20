@@ -35,7 +35,7 @@ export async function withHeldResponse(page, pathname, action, { loseReply = fal
   }
 }
 
-export async function withHistoryFixture({ page, request }, kind, run, seed = kind) {
+export async function withHistoryFixture({ page, request }, kind, run, seed = kind, { pauseRendering = false } = {}) {
   const root = process.env.NADOC_HISTORY_E2E_ROOT
   if (!root) throw new Error('Use the isolated history launcher')
   const doc = `__e2e__history-${kind}`, headers = { 'X-NADOC-Doc': doc }
@@ -81,7 +81,16 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
   try {
     const seeded = await request.post(`http://127.0.0.1:8004/api/__e2e__/history/seed/${seed}`, { headers })
     expect(seeded.ok()).toBe(true)
-    await page.goto(`/?doc=${doc}&readiness=simulation`)
+    await page.goto(`/?doc=${doc}&readiness=simulation`, { waitUntil: pauseRendering ? 'domcontentloaded' : 'load' })
+    if (pauseRendering) {
+      // Latency checks exclude GPU raster. Pause before waiting for the initial
+      // design/save: software WebGL can otherwise monopolize fixture startup.
+      await page.waitForFunction(() => {
+        if (!window.__nadocTest) return false
+        window.__nadocTest.pauseViewerRenderingForTest()
+        return true
+      })
+    }
     await page.waitForFunction(() => window.__nadocTest?.store.getState().currentGeometry?.length > 0)
     await page.waitForFunction(() => !new URL(location.href).searchParams.has('readiness'))
     const file = path.join(root, 'workspace', `${doc}-release.nadoc`)

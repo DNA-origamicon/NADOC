@@ -883,7 +883,7 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - C8 (in-process host, scaffolded+stapled honeycomb, before→after vs legacy PATCH+geometry refetch): 6hb×126 prepare 0.34 s, evaluate 0.10 s, apply 0.05 s (legacy ~0.1 s); 18hb×252 2.1–2.3 s / 0.67–0.84 s / 1.1 s (legacy ~0.95 s); 18hb×504 5.8 s / 1.55 s / 3.5 s (legacy ~1.9 s). Budget miss: 18hb×252 <2×; 18hb×504 ~3× → perf task S59. Browser render/transfer not separately timed.
 - Tests: focused frontend 194 passed; `just test-frontend` 773 files, 9306 passed, 1 skipped (344 s); history browser suite **38 passed (10.0 m)** incl. 17-helix open, legacy-fallback and C4 cases, cleanup verified; new `tests/test_deformation_preview_real_scale.py` 3 passed; bounding-mechanism tests pinned to test scale via `tests/preview_test_limits.py`.
 - `just test-smart`: FAST, 15 failed / 18955 passed / 19 skipped, DEFERRED full suite, FAST SUITE TOO SLOW (371 s). 4 failures were this change and are fixed (rerun pass); 13 pre-existing and untouched by it: 10 strict registration (Codex's untracked sealed strict-preview admission returns 415), `test_part_immutable_evaluation` strict GET 409, 2 `test_junction_balance` tolerance (clean modules).
-- Open: C8 large-part preview (S59); C9 — legacy path kept as fallback for unverified files (user decision on permanence/migration). Not verified on the user's live dev server; verified in the isolated real-frontend harness.
+- Open: C8 large-part preview (S59). October 19 update: desktop fallback for unverified parts has been removed; unsupported history refuses without canonical mutation. Other legacy creation consumers are not claimed removed. C4 now adds transient failure/blocked history rows through the shared editor; a downstream fixed-endpoint Bend failure and Cancel pass in the isolated browser. Full frontend9354 passed,1 skipped. Not verified on the user's live dev server; verified in the isolated real-frontend harness.
 
 ## S60 — R1 incremental rebuild (October 18, 2026)
 - `part_replay_cache.ReplayChain`: full-key hits and, for `DEFORMATION_INDEPENDENT` kinds after a geometry-only edit, topology hits (cached output + current deformations). Wired into preview prefix replay, Apply source proof and `regenerate`.
@@ -912,3 +912,20 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Client: unrolled compact decoder (103 → ~15 ms); layer takes the validator's decoded records once.
 - Browser `bend-large` (GPU raster excluded): median 1.46 → 1.17 s, p95 1.67 → 1.23 s; server+headers ~0.73 s, client after body ~0.41 s. In-process server evaluate ~0.67 s, spread over geometry 0.14, record validation 0.14 (incl. guard slab recompute), axes 0.09, prefix deep copy 0.05, four whole-model admissions 0.06, packing 0.035.
 - Checks: `just test-frontend` 776 files / 9335 passed; `test-smart` FAST 13 failed (known) / 19022 passed; preview/comparison backend 127 passed.
+
+## S64 — Session-local rows and occupancy, October 19
+
+Opt-in evaluation reuses prepare-time scalar rows and equal topology inventory; finite/slab/axes guards remain per update. Backend focused146 passed. Browser median1113 ms, p95 1208.8 ms, ~6.3 MB response; the explicit1000 ms assertion still fails. User chose Sweep/Extrude and history/dependency completion first, retaining this gap. No gate or completion credit.
+
+## C8 qualification — October 20, 2026
+
+- `bend_preview_latency.spec.js` now covers Bend/Twist on native 6×84 and 18×504 recipes, records file sizes, and enforces preview1000ms / Apply6000–20000ms / Cancel400ms without a loose default.
+- Each of12 samples requires one successful unique evaluation and a complete candidate; Apply adoption, exact Cancel, no canonical Cancel reads/writes and fixture cleanup are checked. Software rendering pauses before fixture setup; GPU raster remains excluded.
+- Focused browser command: `NADOC_HISTORY_E2E_GREP='(bend|twist)-(small|large) preview Apply and Cancel latency' NADOC_C8_SPLIT=1 scripts/validation_guard.sh uv run --no-sync python scripts/run_deformation_history_e2e.py`.
+- Result:2passed/2failed, only large preview ceilings failed. Small Bend/Twist p95=118/112ms, Apply950/425ms, Cancel72/67ms. Large p95=1315/1136ms, Apply4664/4417ms, Cancel162/157ms.
+- Saved fixture sizes: Bend small61783/large750241bytes; Twist small61791/large750209bytes. Generated native recipes, not a new existing-workspace or hardware-GPU qualification.
+- Server profile (three unprofiled samples): evaluate57–60ms, display568–586ms, JSON4–5ms. Native geometry, record validation and helix axes dominate; browser diagnostic server701/673ms, after-body layer369/392ms.
+- Final assertion aggregation uses soft failures so all budgets and fixture console checks run even on a latency miss. That reporting-only edit passed syntax checks; its queued browser repeat was cancelled behind another full suite.
+- Focused Ruff and both JS syntax checks passed. No production behavior changed; broad suites were not rerun for this harness-only task. No molecular sources, manifests, goldens or gates changed.
+- Own browser scratch `/tmp/__e2e__history-w9btjio7` and profiler scratch `_66eaqqe` independently absent; interrupted/cancelled queued checks created no roots. Compact logs/scripts remain under `.development-artifacts/feature-history-focus/`.
+- C8 remains open; current counts and the single next task are in the [handoff](session_handoff.md).

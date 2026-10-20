@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+FIXTURES = {"bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 
 
 def fixture(kind):
@@ -86,19 +86,25 @@ def fixture(kind):
     if kind in FAMILIES:
         from tests.extrude_matrix_fixture import fixture as matrix_fixture
         return matrix_fixture(kind)
-    if kind == "bend-large":
-        # C8 representative large part: 18-helix x 504 bp honeycomb, scaffolded,
-        # autostapled, with one routed whole-bundle bend (S61 latency evidence).
+    if kind in {"bend-small", "twist-small", "bend-large", "twist-large"}:
+        # C8 native recipes: 6 x 84 and 18 x 504 bp honeycomb, scaffolded
+        # and autostapled. The large Bend recipe is unchanged from S61.
         from backend.api import headless_build as hb, state as design_state
         from backend.core.models import LatticeType
 
         with hb.scratch_session():
             design_state.load_design(create_empty_part("__e2e__history-bend", "HONEYCOMB"))
-            hb.create_bundle([(r, c) for r in range(6) for c in range(3)], 504, lattice=LatticeType.HONEYCOMB)
+            large = kind.endswith("-large")
+            cells = [(r, c) for r in range(6 if large else 3) for c in range(3 if large else 2)]
+            hb.create_bundle(cells, 504 if large else 84, lattice=LatticeType.HONEYCOMB)
             hb.auto_scaffold(seamless=True)
             hb.full_autostaple()
-            hb.add_bend(100, 200, curvature_deg_per_bp=0.3,
-                        affected_helix_ids=[h.id for h in design_state.get_or_404().helices])
+            planes = (100, 200) if large else (20, 60)
+            helices = [h.id for h in design_state.get_or_404().helices]
+            if kind.startswith("bend"):
+                hb.add_bend(*planes, curvature_deg_per_bp=0.3, affected_helix_ids=helices)
+            else:
+                hb.add_twist(*planes, total_degrees=30, affected_helix_ids=helices)
             return design_state.get_or_404()
     if kind == "routing":
         # Autostapled 6HB with one positional (v2) staple-end resize: routing step

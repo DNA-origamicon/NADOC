@@ -1,25 +1,43 @@
 # Feature-history stopping-point handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Updated October19,2026. User requested finishing the current batch, a local commit, then stopping.
+Updated October20,2026 after the bounded Bend/Twist C8 qualification task.
 **Tools done: 2/4 (Extrude, Sweep). CAD ledger: 20/34 complete, 14 remaining (7 core, 7 parked).**
-**Sessions since last gate flip or milestone close: 1.** No milestone credit for this commit.
-Persistent goal is paused; do not mark the overall overhaul complete. No push requested.
+**Sessions since last gate flip or milestone close: 2.** Delta0 completed/0 scope; no gate flip.
+The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
-Stop after the current commit. On an explicit continuation, retain the existing plan and review
-progress every30minutes using `.development-artifacts/feature-history-focus/review.json`.
-Bend/Twist gates are ON, but their large-part preview p95 remains1208.8ms (median1113ms).
-User explicitly deferred that performance gap while completing Sweep/Extrude and history editing.
-No legacy-file compatibility, numerical-manifest regeneration, geometry-golden updates or new host.
-Preserve Fine Routing parameter-edit semantics: remove a child only when every target is
-unoccupied; partial applicability and other failures refuse atomically and identify the child.
-Move/suppression never delete routing children automatically. Molecular constants remain locked.
-If a major unresolved decision would take over2hours, defer it for the user's return as requested.
-Next bounded task after resumption: qualify the remaining Bend/Twist C8 gap against the existing
-500ms preview/3s small Apply/10s large Apply/200ms Cancel budgets (2× allowance).
-Do not reopen completed Sweep performance or grow legacy/sealed-path qualification matrices.
+Next bounded task: reduce the measured large-part native Full display construction cost within
+the existing Bend/Twist preview lifecycle, then rerun the same C8 cases against1000ms preview,
+6000/20000ms small/large Apply and400ms Cancel ceilings (the existing2× allowance).
+Server display568–586ms and client layer369–392ms dominate; JSON encoding is only4–5ms.
+Do not expand matrices or add a host. Preserve native coordinate/inventory checks, molecular
+constants, manifests and goldens. If optimization needs a scientific change, present the concrete
+review required by CLAUDE.md. Existing rendering patches refuse changed axes; do not reuse them
+for Bend/Twist while leaving stale axes. Review focus every30minutes using the existing review.json.
+At the next session end N becomes3 unless a production gate flips; obey the subsequent stop-loss.
+Old files remain excluded. Fine Routing removes a child only when every target is unoccupied;
+partial applicability and other failures refuse atomically. Move/suppression never auto-delete children.
+
+## Current qualification evidence
+
+- The strict harness now measures both tools at6×84 and18×504, with one successful sequenced
+  evaluation per sample, valid layers, adopted Apply, exact Cancel and no canonical Cancel reads/writes.
+- Four-case browser run:2passed/2failed (2.5min), failures only large preview p95.
+  Small Bend/Twist: preview118/112ms, Apply950/425ms, Cancel72/67ms.
+  Large Bend/Twist: preview1315/1136ms, Apply4664/4417ms, Cancel162/157ms. GPU raster excluded.
+- Native recipes and file sizes are recorded in the existing Bend/Twist plan; no existing user files changed.
+- Final reporting-only soft assertions keep all budget/console checks reachable on timing failures;
+  syntax checked, browser repeat cancelled while queued behind another session's full suite.
+- Focused Ruff and JS syntax checks pass. No production change, broad-suite rerun or completion credit.
+- Browser root `/tmp/__e2e__history-w9btjio7` and profiler root `/tmp/__e2e__bend-profile-_66eaqqe`
+  independently absent. Earlier own baseline root1w_e5dal was also verified absent. Queued interrupted
+  checks never started a browser or allocated scratch. Other sessions' artifacts were left alone.
+- Logs: `bend-twist-c8-resume.log`, `bend-c8-server-profile.log`, `bend-c8-resume-baseline.log` in
+  `.development-artifacts/feature-history-focus/`. The final log records the cancelled queued repeat.
+- Snap `just` failed after the environment restart; direct `scripts/validation_guard.sh` preserved
+  serialization/worker caps. No user systemd was available, so its memory scope was unavailable.
 
 ## Completed user-facing behavior
 
@@ -53,7 +71,7 @@ Do not reopen completed Sweep performance or grow legacy/sealed-path qualificati
 - ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
   a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
 
-## Verification
+## Previous commit verification (not rerun in this task)
 
 Evidence logs: `.development-artifacts/feature-history-focus/` (not committed disposable output).
 - Sweep guide backend43/session16 and app3 passed; scratch ydmfjcfe independently absent.
@@ -88,11 +106,8 @@ No test session requested; focused development checks are authorized. Keep guard
 
 ## Commit and shared-worktree boundaries
 
-Commit explicit feature-history paths and selected hunks only. Include the preview adapter and
-its existing host dependencies that earlier commits already import but left untracked. This is
-capturing existing overhaul work, not implementing another sealed-path successor.
-Leave unrelated VR, simulation/activity/readiness, scientific-selection policy, memory hygiene and
-other project edits untouched. Mixed files: stage only dependency API in `frontend/src/api/client.js`,
-history timing classifications in `tests/conftest.py`, and ISSUE-146/147 ledger/fix-log additions.
-Earlier sealed activity/display tests and related modules remain outside this commit; their changes
-are coupled to the separate activity/readiness backlog. No stash/reset/restore, no push or amend.
+This task owns the latency spec, its opt-in fixture startup helper, three additional native latency
+fixtures, this handoff and the appended C8 plan evidence. The plan also has earlier uncommitted
+feature-history evidence; it is eligible under the operating contract's same-subsystem rule.
+Leave unrelated VR, simulation/activity/readiness, scientific-selection, memory hygiene and other
+project edits untouched. No stash/reset/restore, push, amend or broad staging.
