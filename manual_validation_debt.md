@@ -996,3 +996,15 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 2026-10-16 VR clipboard, updated after minimum-domain scope clarification: the registered tour validates clusters, overlapping base/bond/extension selections, and proteins/nanoparticles in rendered stereo and document history across all four motion profiles (12 cases). All canonical part-editor selection kinds are resolved; small picks copy the minimum owning domain(s), while explicit strand/cluster picks retain their scope. Native rigid-element export and post-paste visibility are now covered. Physical controller comfort and through-lens preview legibility remain manual coverage. Final evidence: `.development-artifacts/vr-clipboard-all-20261016/app-visible/`. Diagnostic capture settling is outside timed human-motion intervals; the earlier 289 ms variable-fast input-delivery failure remains retained in `.development-artifacts/vr-clipboard-20261016/app-isolated/`.
+
+### MV-48 — PENDING: VR numeric popup dismissal (ISSUE-98, 2026-10-20)
+
+After the current viewer session ends, start the rebuilt viewer. Load CPD p1 Alpine
+trajectory with defaults; select the frame field. Aim from above and below the
+panel, enter digits, Cancel: popup closes and displayed frame remains unchanged.
+Reopen, enter a loaded source frame, Apply: popup closes and requested frame appears.
+Check invalid input keeps Apply disabled but Cancel usable; repeat a generic numeric
+option. Run Debug → VR Tours & Tests → Simulation jobs with trajectory-loop
+validation across all four motion profiles. Production ray unit regression passes;
+live stereo pixels and physical headset behavior remain unchecked because viewer
+PID 1671029 was kept running. No SteamVR/session restart was performed.

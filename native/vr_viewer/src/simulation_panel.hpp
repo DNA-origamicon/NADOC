@@ -76,7 +76,7 @@ class SimulationPanel {
    for(const auto& c:ui.controls(trajectory,true))add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,available&&(c.enabled||(c.id==305&&trajectory.playing))&&trajectory.available>0,c.selected);
    if(trajectoryUi.popup){
     const auto background=out.size();
-    for(const auto& c:trajectoryUi.controls(trajectory,true))add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,c.enabled,c.selected);
+    for(const auto& c:trajectoryUi.controls(trajectory,true)){add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,c.enabled,c.selected);out.back().surfaceDepth=.070F;}
     // Sidebar hit testing uses the first overlapping control. The raised popup
     // must own its pixels, including where disabled transport rows sit below it.
     std::rotate(out.begin(),out.begin()+background,out.end());
@@ -91,9 +91,12 @@ class SimulationPanel {
     add("c:reset","RESET",.398F,-.19F,.186F,.043F,available);}
   }
   if(!numberId.empty()){
+   const auto background=out.size();
    const std::array<std::string,12> keys{"7","8","9","4","5","6","1","2","3","-","0","."};
    for(size_t i=0;i<12;++i)add("local:key:"+keys[i],keys[i],-.04F+(i%3)*.21F,-.11F-(i/3)*.06F,.195F,.052F);
    add("local:erase","ERASE",-.04F,-.36F,.18F,.045F);add("local:cancel","CANCEL",.15F,-.36F,.19F,.045F);add("local:apply","APPLY",.35F,-.36F,.23F,.045F,numberValid());
+   for(size_t i=background;i<out.size();++i)out[i].surfaceDepth=.070F;
+   std::rotate(out.begin(),out.begin()+background,out.end());
   }
   if(mapper.prompt.active())add("local:cancel","CANCEL",-.04F,-.42F,.22F,.045F);
   return out;

@@ -796,3 +796,21 @@ bytes, stage rendering and honest legacy absence alongside the existing seed,
 protocol and lineage contract. Initial present-file test failed as expected; both
 copy cases plus 42 related physics/freshness cases now pass. Complete physical
 input receipts and immutable preparation remain separate work.
+
+2026-10-20 — ISSUE-98 VR numpad hit planes: an oblique ray aimed at the
+rendered 0.070 panel-local button face failed the production hit assertion before
+the fix, then passed with explicit surface depth. Generic numeric controls also
+now precede their disabled background rows. No ray thresholds or target sizes
+changed. Existing simulation tour checks Cancel without seeking and Apply popup
+closure. The user's active viewer is preserved; live four-profile and through-lens
+verification are deferred to MV-48. Frontend main.js delta for this fix: 0.
+
+ISSUE-98 validation: rebuilt deployed viewer; native simulation-panel,
+simulation-trajectory and sidebar-unit CTests all pass (3/3). Placement audit,
+task Python Ruff and whitespace checks pass. Additional menu-spacing target
+cannot compile: its existing fixture still assigns removed `jobScroll` and
+`viewScroll` fields (line 146); no production workaround was added. The first
+CTest invocation through the variadic just wrapper lost shell regex quoting;
+using the same validation guard directly ran the unchanged selection successfully.
+Tour catalog focused validation: 50 passed. No backend/frontend runtime behavior
+changed in this popup fix; frontend main.js task delta remains zero.

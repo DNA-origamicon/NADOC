@@ -39,8 +39,25 @@ int main(){
   ray.position=menu.placement.worldPoint({center.x,center.y,.3F});
   const auto hit=menu.hit(ray);assert(hit && hit->id==key.id && hit->enabled);
  }
+ // Aim at the rendered popup face, from both upward and downward ray angles.
+ auto clickFace=[&](const std::string& id,float slope){
+  const auto key=find(id);const auto center=(key.bounds.minimum+key.bounds.maximum)*.5F;
+  const auto target=menu.placement.worldPoint({center.x,center.y,.070F});
+  nadoc_vr::HandPose ray;ray.valid=true;
+  ray.position=menu.placement.worldPoint({center.x,center.y+slope*.3F,.370F});
+  ray.orientation=glm::rotation(glm::vec3(0,0,-1),glm::normalize(target-ray.position));
+  const auto hit=menu.hit(ray);assert(hit && hit->id==id && hit->enabled);
+  return panel.activate(menu.activate(*hit));
+ };
+ for(float slope:{-1.F,0.F,1.F}){
+  const int before=panel.sequence;
+  clickFace("sim:local:t:345",slope);
+  clickFace("sim:local:t:353",slope);
+  assert(!panel.modal() && panel.sequence==before && panel.trajectory.index==0);
+  panel.activate("simulation:local:t:306");
+ }
  panel.trajectoryUi.digit(5);for(int i=0;i<3;++i)panel.trajectoryUi.digit(0);panel.trajectoryUi.digit(1);
- assert(panel.activate("simulation:local:t:352"));assert(panel.requestedValue==50000);
+ assert(clickFace("sim:local:t:352",1.F));assert(panel.requestedValue==50000);
  state.ack=panel.sequence;state.trajectory.phase=1;state.trajectory.buffering=true;state.trajectory.index=50000;state.trajectory.playing=true;panel.adopt(state);
  assert(panel.trajectory.hasFrame());assert(find("sim:local:t:306").label=="FRAME 50001 / 100000");
  assert(!find("sim:local:t:311").enabled);assert(find("sim:local:t:305").enabled); // Pause remains available while buffering.
@@ -65,6 +82,21 @@ int main(){
  // Hidden controls and loading never acquire the wheel.
  panel.focused=false;clicks[1]=held[1]=true;input();assert(!panel.wheelHand);
  panel.focused=true;state.trajectory.phase=1;panel.adopt(state);clicks[1]=true;input();assert(!panel.wheelHand);
+ // Generic numeric overlays share the same raised-face routing and must own
+ // pixels covered by their disabled background option rows.
+ state.trajectory.phase=2;state.ack=panel.sequence;state.hasTrajectory=false;
+ state.views.push_back({"n:frame","Frame","",true,false,"number","",10,1,100});
+ panel.adopt(state);
+ for(float slope:{-1.F,0.F,1.F}){
+  panel.activate("simulation:n:frame");
+  const int before=panel.sequence;
+  clickFace("sim:local:key:5",slope);
+  clickFace("sim:local:cancel",slope);
+  assert(!panel.modal() && panel.sequence==before);
+ }
+ panel.activate("simulation:n:frame");clickFace("sim:local:key:5",1.F);
+ assert(clickFace("sim:local:apply",-1.F));
+ assert(!panel.modal() && panel.requested=="n:frame" && panel.requestedValue==5);
  for(auto rep:{Representation::full,Representation::vdw,Representation::ballstick,Representation::stick,Representation::oxdna,Representation::mrdnaCoarse,Representation::mrdnaFine})assert(simulationRepresentationAllowed(rep));
  for(auto rep:{Representation::cylinders,Representation::beads,Representation::hull,Representation::surface,Representation::surfaceDetail})assert(!simulationRepresentationAllowed(rep));
  return 0;

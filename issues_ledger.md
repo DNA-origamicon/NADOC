@@ -2159,3 +2159,11 @@ evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.developm
 - Keep this as generated-asset coverage/placement debt. No collision threshold,
   molecular placement, optimizer, test expectation or numerical pin was changed.
   Diagnose the actual collision before any proposed scientific correction.
+
+## ISSUE-98 — VR numeric popup buttons miss angled rays (2026-10-20)
+
+- [x] Reproduce against production `SidebarMenu::hit`: aim at the drawn popup face from above/below, then Cancel and Apply.
+- [x] Match hit/control-observation depth to the rendered 0.070 panel-local face; prioritize generic numeric popup controls over disabled background rows.
+- [ ] Physical headset verification after the user's current viewer session ends (MV-48).
+
+Root cause: raised numeric controls used the base panel ray plane. Earlier tests aimed perpendicular rays or invoked Apply directly, masking parallax. Regression covers trajectory and generic numeric edits, unchanged frame/request on Cancel, and requested seek/value on Apply. Existing simulation tour now exercises Cancel before Apply.

@@ -23,6 +23,7 @@ struct SidebarControl {
     bool enabled = true, active = false, vertical = false;
     std::string icon{};
     std::optional<MenuPanelBounds> drawingBounds{}, viewport{};
+    std::optional<float> surfaceDepth{}; // Explicit rendered face for modal controls.
 };
 #include "sidebar_sets.hpp"
 class SidebarMenu {
@@ -105,7 +106,7 @@ class SidebarMenu {
         return customTab && tab().key=="sweep" && std::any_of(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id=="sweep:free-draw";});
     }
     bool raisedAction(const SidebarControl& c) const {
-        return c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id==tab().key+":apply"));
+        return c.surfaceDepth.has_value() || c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id==tab().key+":apply"));
     }
     float footerY() const {
         return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:(tab().key=="move" || tab().key=="join")?-.54F:tab().key=="bend"?-.54F:-.51F;
@@ -512,6 +513,7 @@ class SidebarMenu {
         return out;
     }
     float controlDepth(const SidebarControl& c) const {
+        if(c.surfaceDepth)return *c.surfaceDepth;
         if(const auto wheel=extrudeWheelIndex(c.id))return extrudeWheelFront(*wheel).z;
         return c.id.starts_with("sim:j:")?.018F:raisedAction(c) ? (pressed==c.id?.026F:.035F) : 0.F;
     }

@@ -150,10 +150,18 @@ def run(socket, output, identifier):
             # Use the production exact-frame popup, keeping range and interval.
             state = live.state['simulation_menu']
             frame = state['first'] + max(0, (state['last']-state['first'])//state['interval']-1)*state['interval']
+            original = state['frame']
+            click(live, 0, 'sim:local:t:306', preset, trials)
+            assert live.state['simulation_menu']['popup'] == 1
+            click(live, 0, 'sim:local:t:345', preset, trials)
+            click(live, 0, 'sim:local:t:353', preset, trials)
+            assert live.state['simulation_menu']['popup'] == 0
+            assert live.state['simulation_menu']['frame'] == original, 'Cancel sought a frame'
             click(live, 0, 'sim:local:t:306', preset, trials)
             for digit in str(frame):
                 click(live, 0, f'sim:local:t:{340+int(digit)}', preset, trials)
             click(live, 0, 'sim:local:t:352', preset, trials)
+            assert live.state['simulation_menu']['popup'] == 0, 'Apply left the numpad open'
             (out/'seek.json').write_text(json.dumps({'source': frame}))
             return
         target = 'sim:' + identifier
