@@ -125,24 +125,46 @@ def test_compiled_named_overlap_matches_one_whole_motion_and_owns_its_references
         compile_ordered_probe(prefix, entry, [selected], named_targets=[{"kind": "part_group", "id": "partial"}])
 
 
-@pytest.mark.parametrize("kind", ["bend", "twist"])
+@pytest.mark.parametrize("kind", ["bend", "twist", "sweep"])
 @pytest.mark.parametrize("direction", list(Direction))
 def test_prior_native_deformation_frames_remain_in_chronological_rigid_candidate(kind, direction):
     from backend.core.models import DeformationLogEntry, DeformationOp
     from tests.test_part_deformation_preview import _append
 
-    source = _source()
-    op = DeformationOp(id="prior-shape", type=kind, plane_a_bp=0, plane_b_bp=7,
-                       affected_helix_ids=[source.helices[0].id],
-                       params={"kind": kind, **({"curvature_deg_per_bp": 2, "direction_deg": 25}
-                                               if kind == "bend" else {"total_degrees": 30})})
-    source = _append(source, DeformationLogEntry(
-        id="prior-shape-feature", deformation_id=op.id, op_snapshot=op, proof_version=1))
+    if kind == "sweep":
+        from backend.core.part_history_contract import create_empty_part
+        from backend.core.sweep import SweepRequest
+        from tests.test_part_transform_preview import snapshot
+        source = snapshot(create_empty_part("Prior curved Sweep", "HONEYCOMB"), "sweep",
+                          SweepRequest(sweep_id="bbf3fdbe-92a7-476e-8d77-4578091ed5df",
+                                       cells=[(0, 0), (0, 1)], points_nm=[(0, 0, 0), (0, 0, 5), (2, 0, 10)],
+                                       ligate_adjacent=False).model_dump(mode="json"), "prior-sweep")
+    else:
+        source = _source()
+        op = DeformationOp(id="prior-shape", type=kind, plane_a_bp=0, plane_b_bp=7,
+                           affected_helix_ids=[source.helices[0].id],
+                           params={"kind": kind, **({"curvature_deg_per_bp": 2, "direction_deg": 25}
+                                                   if kind == "bend" else {"total_degrees": 30})})
+        source = _append(source, DeformationLogEntry(
+            id="prior-shape-feature", deformation_id=op.id, op_snapshot=op, proof_version=1))
     _, target = _target(source, direction)
     prefix = _nucleotide(source, target, N, "prior-residue")
     later = _nucleotide(prefix, target, D, "later-delta", compose=True)
+    if kind == "sweep":
+        from backend.core.part_group_model import GroupOrganization, PartGroup
+        from tools.member_motion_ordering_program import existing_material_union
+        grouped = prefix.copy_with(group_organization=GroupOrganization(groups=[
+            PartGroup(id="sweep-members", helix_ids=[target["helix_id"]])]))
+        keys = existing_material_union(grouped, [{"kind": "part_group", "id": "sweep-members"}])
+        assert len([key for key in keys if key[3] == 1]) == 4
+        assert set(keys) == {_key(row) for row in _geometry_for_design(prefix)
+                             if row["helix_id"] == target["helix_id"]}
+        assert any(change.delta == -1 for h in prefix.helices for change in h.loop_skips)
     locked = prefix.model_dump_json()
     program = compile_ordered_probe(prefix, later.feature_log[-1], [target["helix_id"]])
+    control_records, control_atoms, _ = program.evaluate(motion_enabled=False)
+    assert control_records == _geometry_for_design(later)
+    assert control_atoms == build_atomistic_model(later, fast_bridges=True)
     records, atoms, _ = program.evaluate()
     for before, after in zip(_geometry_for_design(prefix), records, strict=True):
         if before["helix_id"] != target["helix_id"]:

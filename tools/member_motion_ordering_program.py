@@ -34,8 +34,8 @@ def existing_material_union(prefix, targets):
     from backend.core.part_group_selection import resolve_deformation_targets
 
     require_group_geometry_budget(prefix, max_work=1024)
-    if prefix.extensions or prefix.crossovers or prefix.overhangs or any(h.loop_skips for h in prefix.helices):
-        raise ValueError("Companion/copy ancestry is outside this ordinary-material inventory")
+    if prefix.extensions or prefix.crossovers or prefix.overhangs:
+        raise ValueError("Companion ancestry is outside this ordinary-material inventory")
     ranges = resolve_deformation_targets(prefix, targets)
     records = _geometry_for_design(prefix)
     keys = [_key(row) for row in records]
@@ -127,7 +127,7 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
                   "overhang_connections", "flexible_connections", "flexible_segment_marks",
                   "photoproduct_junctions", "cluster_joints",
                   "cluster_join_constraints", "duplexes")
-    if any(getattr(prefix, name) for name in companions) or any(h.loop_skips for h in prefix.helices):
+    if any(getattr(prefix, name) for name in companions):
         raise ValueError("Companion, constraint and birth policy is outside this ordering probe")
     selected = tuple(sorted(set(selected_helix_ids)))
     if not selected or not set(selected) <= {h.id for h in prefix.helices}:

@@ -8,7 +8,9 @@ The overall overhaul remains open. Commit locally under the operating contract; 
 
 ## Scope and next work
 
-Next task: advance one unproved named-motion matrix row while the demonstrated tail policy awaits user input.
+Pending decision: user review of the demonstrated terminal-tail A/B hypotheses; no response yet.
+Next production boundary: settle partial/shared frames, later-material construction and companion/constraint
+ownership through demonstrated authorization before a named-motion command or consumer is promoted.
 Fixed C8 passes. Ordering, chronology and terminal-tail comparisons remain isolated diagnostics.
 Ordinary owner, joint/linked controls, menu/keyboard creation
 and causal downstream refusal pass app acceptance. Production transform gates remain OFF.
@@ -44,7 +46,8 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   A moves only Full tails (2residues,3.336–6.965nm); B only atoms (3.499–6.712nm). Other representation exact.
   Native4/UI12/browser3pass; screenshots visually inspected after camera-margin fix; scratch3zpyi3os absent.
   Scientific A/B question pending; no placement promotion. Final frontend781files/9427pass/1skip.
-  Named ordinary-material union/overlap and Bend/Twist-prefix program11pass; partial-frame motion still refused.
+  Named native-material union/overlap and Bend/Twist/Sweep-prefix program13pass; exact no-M controls6pass.
+  Pre-existing Sweep loop copies are captured once by native copy identity; later birth/partial frames remain unresolved.
   Prefix lineage integration10pass: Sweep both ends/detach, nick/merge both directions, empty/dissolved references.
   This proves current-prefix selection only, not earlier-motion or later-material frame semantics.
 - Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
@@ -129,7 +132,8 @@ No test session requested; focused development checks are authorized. Keep guard
 ## Commit and shared-worktree boundaries
 
 Performance committed as1336fb3a; ordering/chronological evidence as301041fa; tail/union batch835e64ed.
-Current batch owns the native-lineage inventory integration test and these plan/handoff updates.
+Native lineage integration committed as5a554447. Latest bounded evidence admits pre-existing Sweep copies
+in the offline program and tests native prefix/control parity; no production or frontend behavior changes.
 No production motion compiler or molecular placement is promoted.
 Preserve unrelated VR, activity/readiness, scientific-selection and memory-hygiene edits.
 No stash/reset/restore, push, amend or broad staging.
