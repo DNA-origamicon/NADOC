@@ -1,7 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
-import { validateTransformPreviewDisplay, validateTransformPreviewComponent } from './transform_preview_display.js'
-import { transformComponent, transformPacket } from '../test-helpers/transform_preview.js'
+import { describe, expect, it, vi } from 'vitest'
+import { validateTransformPreviewDisplay, validateTransformPreviewComponent, consumeValidatedTransformPreviewComponent } from './transform_preview_display.js'
+import { compactTransformComponent, transformComponent, transformPacket } from '../test-helpers/transform_preview.js'
+
+// Exercise boundary mechanisms with the original tiny capacities.
+vi.mock('./transform_preview_limits.js', () => ({ TRANSFORM_DISPLAY_LIMITS: {
+  helices: 16, strands: 128, domains: 256, records: 1024, selectors: 512,
+  owners: 32, nativeWork: 4096, axisPoints: 2048, nodes: 200_000, bytes: 2_000_000,
+} }))
 
 const nativePose = { translation: [0, 0, 0], rotation: [0, 0, 0, 1], pivot: [0, 0, 0] }
 const compound = () => ({ _proof_version: 1, primary_cluster_id: 'placement', selected_cluster_ids: ['placement'],
@@ -31,6 +37,51 @@ const linker = length_value => ({ id: 'link', name: null, overhang_a_id: 'a', ov
   bridge_sequence: null, target_joint_id: null, unbound_angle_deg: null, bound_angle_deg: null })
 
 describe('closed native transform display', () => {
+  it('reuses only immutable JSON accounting and still validates new coordinates', () => {
+    const c = compactTransformComponent()
+    c.nucleotides.rows = Object.freeze(c.nucleotides.rows.map(row => Object.freeze([...row])))
+    validateTransformPreviewComponent(c)
+    c.nucleotides.f64 = ''
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/compact native DNA transport/)
+  })
+  it('charges cached frozen occurrences and their depth, including repeated aliases', () => {
+    const probe = Object.freeze(['x'.repeat(10_000)]), c = transformComponent()
+    c.probe = probe
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/fields/)
+    c.probe = Array(201).fill(probe)
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/allowance/)
+    c.probe = probe
+    for (let i = 0; i < 64; i++) c.probe = [c.probe]
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/allowance/)
+  })
+  it('never caches a frozen container with mutable descendants', () => {
+    const child = { value: 1 }, c = transformComponent()
+    c.probe = Object.freeze([child])
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/fields/)
+    child.value = Infinity
+    expect(() => validateTransformPreviewComponent(c)).toThrow(/nonfinite/)
+  })
+  it('does not retain a stale validation after a component has been adopted', () => {
+    const packet = transformPacket({ prepare: false })
+    packet.candidate = compactTransformComponent(packet.candidate)
+    validateTransformPreviewDisplay(packet, { prepare: false })
+    consumeValidatedTransformPreviewComponent(packet.candidate)
+    packet.candidate.nucleotides.f64 = ''
+    expect(() => consumeValidatedTransformPreviewComponent(packet.candidate)).toThrow(/compact native DNA transport/)
+  })
+  it('validates compact native poses without changing transport', () => {
+    const component = compactTransformComponent(), original = structuredClone(component)
+    expect(validateTransformPreviewComponent(component)).toBe(component)
+    expect(component).toEqual(original)
+  })
+  it('refuses malformed compact coordinates and ownership', () => {
+    const bad = compactTransformComponent()
+    bad.nucleotides.rows[0][5] = 'missing-strand'
+    expect(() => validateTransformPreviewComponent(bad)).toThrow(/record\/source mismatch/)
+    const truncated = compactTransformComponent()
+    truncated.nucleotides.f64 = truncated.nucleotides.f64.slice(4)
+    expect(() => validateTransformPreviewComponent(truncated)).toThrow(/compact native DNA transport/)
+  })
   it.each([true, false])('validates complete Prepare/Evaluate controls without copying (prepare=%s)', prepare => {
     const packet = transformPacket({ prepare, envelope: true }), original = JSON.stringify(packet)
     expect(validateTransformPreviewDisplay(packet, { prepare, requireEnvelope: true })).toBe(packet)

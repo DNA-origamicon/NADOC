@@ -1,4 +1,23 @@
 import { dnaComponent, dnaRecord } from './part_dna_comparison.js'
+import { SCALAR_COLUMNS } from '../features/part_dna_comparison_codec.js'
+
+export function compactTransformComponent(component = transformComponent()) {
+  const result = structuredClone(component), values = []
+  for (const record of result.nucleotides) {
+    for (const name of ['backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position', 'slab_quaternion'])
+      values.push(...record[name])
+    const site = record.helical_site
+    values.push(...site.axis_point, ...site.radial_hat, site.azimuth_rad, site.groove_offset_rad, site.phase_roll_rad)
+  }
+  const buffer = new ArrayBuffer(values.length * 8), view = new DataView(buffer)
+  values.forEach((value, i) => view.setFloat64(i * 8, value, true))
+  let binary = ''
+  for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte)
+  result.component_version = 2
+  result.nucleotides = { encoding: 'f64-block-v1', count: component.nucleotides.length,
+    rows: component.nucleotides.map(record => SCALAR_COLUMNS.map(key => record[key])), f64: btoa(binary) }
+  return result
+}
 
 /** Tiny transport fixture, based on the existing accepted native Full records. */
 export function transformComponent() {

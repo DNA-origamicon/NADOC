@@ -369,6 +369,43 @@ async function transformFixture(kind = 'cluster_op', overrides = {}, options = {
 }
 
 describe('declared transform editor lifecycle', () => {
+  it('preserves malformed row descriptors for validation without invoking getters', async () => {
+    const getter = vi.fn(() => 'owner'), row = []
+    Object.defineProperty(row, '0', { enumerable: true, get: getter })
+    Object.defineProperty(row, 'hidden', { value: 'unreviewed' })
+    const validateDisplay = vi.fn(packet => {
+      expect(Object.getOwnPropertyDescriptor(packet.before.nucleotides.rows[0], '0').get).toBe(getter)
+      expect(Object.hasOwn(packet.before.nucleotides.rows[0], 'hidden')).toBe(true)
+      throw new Error('packet accessor')
+    })
+    const f = await transformFixture('cluster_op', {
+      prepare: vi.fn(async body => transformPacket(body, 'cluster_op', { before: { nucleotides: { rows: [row] } } })),
+    }, { validateDisplay })
+    expect(await f.controller.open('feature')).toBeNull()
+    expect(validateDisplay).toHaveBeenCalledOnce()
+    expect(getter).not.toHaveBeenCalled()
+    expect(f.controller.getState().error.message).toMatch(/accessor/)
+  })
+  it('hydrates compact transform rows only from this validated lease', async () => {
+    const rows = [['native-owner']]
+    const candidate = reference => ({ nucleotides: {
+      encoding: 'f64-block-v1', count: 1, rows_ref: reference, f64: 'coordinates',
+    } })
+    const f = await transformFixture('cluster_op', {
+      prepare: vi.fn(async body => transformPacket(body, 'cluster_op', { before: { nucleotides: { rows } } })),
+      evaluate: vi.fn(async body => transformPacket(body, 'cluster_op', { candidate: candidate(LEASE) })),
+    })
+    await f.controller.open('feature')
+    expect(() => { rows[0][0] = 'mutated-response' }).toThrow(TypeError)
+    const result = await f.controller.update({ translation: [1, 2, 3] })
+    expect(f.api.evaluate.mock.calls[0][0].reuse_rows).toBe(true)
+    expect(result.candidate.nucleotides.rows).toEqual([['native-owner']])
+    expect(Object.isFrozen(result.candidate.nucleotides.rows[0])).toBe(true)
+    expect(f.validateDisplay).toHaveBeenLastCalledWith(result, { prepare: false })
+    f.api.evaluate.mockImplementationOnce(async body => transformPacket(body, 'cluster_op', { candidate: candidate(PREVIEW) }))
+    expect(await f.controller.update({ translation: [2, 2, 3] })).toBeNull()
+    expect(f.controller.getState().error.message).toMatch(/another session/)
+  })
   it.each(TRANSFORMS)('binds %s and adopts one exact scalar receipt without a deformation ID', async kind => {
     const f = await transformFixture(kind)
     expect(await f.controller.open('feature')).toBeTruthy()

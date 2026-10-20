@@ -186,7 +186,7 @@ describe('owned native deformation history display', () => {
     expect(matrices(scene.children[2])).toEqual(matrices(fresh.root))
   })
 
-  it('reduces only axis tessellation while retaining every ordinary native curve control point', () => {
+  it('uses sampled guides while retaining ordinary native molecular instances', () => {
     const value = component(), axis = value.helix_axes[0]
     value.display_topology.helices[0].length_bp = 64
     value.display_topology.strands[0].domains[0].end_bp = 63
@@ -198,14 +198,15 @@ describe('owned native deformation history display', () => {
     const { component_kind, ...comparison } = value
     comparison.component_version = 3
     const full = buildPartDnaComparisonLayer(comparison, new THREE.Scene()); owned.push(full)
-    const tubes = root => nodes(root).filter(n => n.geometry.type === 'TubeGeometry').map(n => n.geometry.parameters)
-    const actual = tubes(preview.root), expected = tubes(full.root)
-    expect(actual).toHaveLength(expected.length)
-    for (let i = 0; i < actual.length; i++) {
-      expect(actual[i].path.points).toEqual(expected[i].path.points)
-      expect(actual[i].tubularSegments).toBeLessThan(expected[i].tubularSegments)
-      expect(actual[i].radius).toBe(expected[i].radius)
-    }
+    const guide = preview.root.getObjectByName('axisLine')
+    expect(guide.isLineSegments).toBe(true)
+    const expected = []
+    for (let i = 1; i < axis.samples.length; i++) expected.push(...axis.samples[i - 1], ...axis.samples[i])
+    expect([...guide.geometry.attributes.position.array]).toEqual([...new Float32Array(expected)])
+    expect(nodes(full.root).some(n => n.geometry.type === 'TubeGeometry')).toBe(true)
+    const matrices = root => nodes(root).filter(n => n.isInstancedMesh && n.visible)
+      .map(n => [n.name, [...n.instanceMatrix.array]])
+    expect(matrices(preview.root)).toEqual(matrices(full.root))
   })
 
   it('keeps setup-only periodic continuations hidden after buffer updates and scene traversal', () => {
@@ -221,7 +222,7 @@ describe('owned native deformation history display', () => {
     }
   })
 
-  it('passes scoped samples to the unchanged native renderer instead of straightening them', () => {
+  it('retains scoped interior samples in private guides', () => {
     const value = component(), axis = value.helix_axes[0]
     // Transport/render fixture: native axis sampling uses bp 0, 7, then the last bp.
     value.display_topology.helices[0].length_bp = 9
@@ -231,12 +232,9 @@ describe('owned native deformation history display', () => {
     axis.segments[0].samples = [[0, 0, 0], [.5, .2, 2.38], [0, 0, 2.72]]
     const scene = new THREE.Scene(), layer = buildDeformationPreviewLayer(value, scene); owned.push(layer)
     const axes = nodes(layer.root).filter(node => node.name === 'axisLine')
-    expect(axes).toHaveLength(2)
-    const curve = axes.find(node => node.geometry.type === 'TubeGeometry')
-    expect(curve.visible).toBe(true)
-    curve.geometry.computeBoundingBox()
-    expect(curve.geometry.boundingBox.max.x).toBeGreaterThan(.4)
-    expect(axes.find(node => node !== curve).visible).toBe(false)
+    expect(axes).toHaveLength(1)
+    expect(axes[0].isLineSegments).toBe(true)
+    expect(axes[0].geometry.boundingBox.max.x).toBeGreaterThan(.4)
   })
 })
 

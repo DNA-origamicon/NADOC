@@ -6,6 +6,13 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+**Current milestone — October20,2026:** Bend/Twist C8 now passes; FH-20 is complete.
+Together with Extrude/Sweep, four of six primary tools are done (CAD21/34).
+Earlier C8-open and four-tool-only claims below are superseded. Move/Rotate gates remain
+OFF pending large-preview latency and named-member motion; molecular authorization remains.
+The user authorized sustained milestones and a fresh reviewer every30minutes; the earlier
+session stop-loss does not apply. Current evidence and next work: [handoff](../docs/audits/feature_history_20261014/session_handoff.md).
+
 ## Current delivery status (2026-10-17)
 
 **Mandatory progress reporting (user request, October 16):** after every major

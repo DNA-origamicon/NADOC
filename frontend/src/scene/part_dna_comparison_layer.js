@@ -1,3 +1,4 @@
+import { buildDeformationAxisGuides } from './deformation_axis_guides.js'
 /** Isolated static adapter for the existing native Full renderer. */
 import * as THREE from 'three'
 import { validateDnaComparisonComponent, validatedDeformationPreviewComponent } from '../features/part_dna_comparison_model.js'
@@ -81,12 +82,12 @@ function buildLayer(component, scene, paletteToken, name, arcType) {
         ovhgAxes: axis.ovhg_axes ?? null }]))
     // Static Full-LOD layer: its renderer is never exposed, so hidden
     // cylinder-LOD tubes (~0.26 s on an 18-helix part) are not built.
-    // Preview axis guides keep every native control sample and the same curve,
-    // with one tube subdivision per sample instead of four. Molecular meshes
-    // and all transported native frames retain their ordinary Full detail.
+    // Private preview guides use native samples as polylines. Molecular
+    // meshes retain ordinary Full detail; canonical axes retain their defaults.
     const native = buildHelixObjects(geometry, { ...topology, id: paletteToken }, root, {}, [], axes, 'full',
-      { curvedCylinders: false, axisTubeSubdivisions: arcType === 'deformationPreview' ? 1 : 4 })
-    if (arcType === 'deformationPreview') native.setAxisShaftMode('deformed')
+      { curvedCylinders: false, axisMeshes: arcType !== 'deformationPreview' })
+    const guides = arcType === 'deformationPreview' ? buildDeformationAxisGuides(topology, axes) : null
+    if (guides) root.add(guides.line)
     const connections = native.getCrossHelixConnections()
     checkInventory(native, geometry, topology, connections)
     root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
@@ -129,6 +130,7 @@ function buildLayer(component, scene, paletteToken, name, arcType) {
           { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments,
             ovhgAxes: axis.ovhg_axes ?? null }]))
         native.updateStaticFullGeometry(nextGeometry, nextAxes)
+        guides.update(nextAxes)
         root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
         // The renderer retains the exact checked entry/connection inventory.
         // Only poses changed: preserve its native adjacency, colours and line

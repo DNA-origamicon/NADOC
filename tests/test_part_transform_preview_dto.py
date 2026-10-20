@@ -51,13 +51,33 @@ def native(design):
 
 
 def assert_component(component, source):
+    from backend.core.part_dna_comparison_codec import unpack_records
     records, axes = native(source)
     wire = json.loads(json.dumps(component, allow_nan=False))
-    assert wire["nucleotides"] == records
+    assert (unpack_records(wire["nucleotides"]) if wire["component_version"] == 2 else wire["nucleotides"]) == records
     assert wire["helix_axes"] == axes
     assert wire["component_kind"] == "transform-preview-dna"
-    assert wire["component_version"] == 1
+    assert wire["component_version"] in {1, 2}
     assert wire["representation"] == "native-full-v1" and wire["units"] == "nm"
+
+
+def test_compact_delta_is_exact_and_bound_to_validated_lease_rows():
+    prefix, evaluated = moved(small())
+    cache = {}
+    preparation = dto().prepare_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache)
+    full = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"})
+    delta = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache)
+    assert delta["candidate"]["nucleotides"].pop("rows_ref") == "owned"
+    delta["candidate"]["nucleotides"]["rows"] = cache["rows"]
+    assert delta == full
+    preparation["before"]["nucleotides"]["rows"][0][0] = "mutated-response"
+    assert cache["rows"] == full["candidate"]["nucleotides"]["rows"]
+    wrong_lease = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "other"}, display_cache=cache)
+    assert "rows" in wrong_lease["candidate"]["nucleotides"]
+    cache["rows"][0][0] = "different-ownership"
+    assert dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache) == full
+    assert dto().evaluate_display(prefix, evaluated, include_geometry=False,
+        envelope={"lease_id": "owned"}, display_cache=cache)["candidate"] is None
 
 
 @pytest.mark.parametrize("kind,extra", [("cluster_op", False), ("nucleotide-transform", False),

@@ -122,7 +122,9 @@ def _run(host, entry, operation, captured, request, params, admission, request_s
                 # after the final origin check. The cached packet owns no model.
                 envelope = host._envelope(entry, 0, prepared=prepared)
                 envelope["remaining_seconds"] = host.TTL_SECONDS
-                payload = host.family_work.prepare_display(entry.family, prepared, evaluated, envelope=envelope)
+                display_cache = {}
+                payload = host.family_work.prepare_display(entry.family, prepared, evaluated,
+                    envelope=envelope, display_cache=display_cache)
                 from backend.api.part_transform_preview_dto import _bounded
                 _bounded({**envelope, "status": "ready", "computation": fields(operation), "result": payload})
                 with host.state._lock:
@@ -130,6 +132,7 @@ def _run(host, entry, operation, captured, request, params, admission, request_s
                     with host._lock:
                         host._catalog_current(entry, operation.sequence)
                         entry.prepared, entry.payload, entry.phase = prepared, payload, "ready"
+                        entry.display_cache = display_cache
                         operation.finished = monotonic()
                         host._renew(entry, host.TTL_SECONDS)
             else:

@@ -29,6 +29,10 @@ class PreparedTransform:
     def copy_prefix(self):
         return self._prefix.model_copy(deep=True)
 
+    def display_prefix(self):
+        """Read-only display input; native evaluation still owns a deep copy."""
+        return self._prefix
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluatedTransform:

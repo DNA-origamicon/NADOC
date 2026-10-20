@@ -931,10 +931,10 @@ Opt-in evaluation reuses prepare-time scalar rows and equal topology inventory; 
 - C8 remains open; current counts and the single next task are in the [handoff](session_handoff.md).
 
 ## Native preview buffer reuse — October20,2026
-- Reuse one detached candidate buffer with exact topology/scalar inventory checks; retain native bead/slab/connector poses and rebuild fresh axes. Preview guide tessellation only; canonical defaults unchanged.
-- Compact scalar validation and finite-block checking avoid per-update record/coordinate-array allocation. Failed candidate updates preserve the last valid visible scene.
-- Focused65pass: rotated native-pose/curve fresh-build parity, inserted copies, periodic visibility, malformed values and buffer ownership.
-- Fixed12-sample four-case C8:3pass/1fail. Small Bend/Twist preview107/111ms, Apply939/429ms, Cancel72/70ms; large preview994/1149ms, Apply4436/4333ms, Cancel211/161ms.
-- Same1000ms/6000–20000ms/400ms limits; GPU raster excluded. Large Twist remains a blocker; no qualification credit or unchanged rerun.
-- Evidence: static-preview-reuse.log and static-preview-reuse-c8.log in .development-artifacts/feature-history-focus/. Browser root /tmp/__e2e__history-llcbiwr6 independently absent.
-- Final full frontend779files/9377pass/1skip (342.94s), log static-preview-final-frontend.log. Next: geometric Move/Rotate app acceptance under the user’s sustained six-tool scope.
+- Reuse one detached candidate buffer with exact topology/scalar inventory checks; retain native bead/slab/connector poses. Private guides use sampled polylines with shared native bp clipping and no domain-gap joins; canonical axes keep their defaults.
+- Compact scalar validation and finite-block checking avoid per-update record/coordinate-array allocation. Failed candidate updates preserve the last valid visible scene; resized guide buffers release their former GPU owner.
+- Focused preview23pass and native wire/render14pass verify molecular matrix parity and exact guide samples; resized-buffer ownership also passes in the full frontend run.
+- Fixed12-sample four-case C8 now4pass. Small Bend/Twist preview101/108ms, Apply936/422ms, Cancel59/80ms; large preview866/942ms, Apply4377/5196ms, Cancel151/193ms.
+- Same1000ms/6000–20000ms/400ms limits; GPU raster excluded. C8 passes; paired Bend/Twist tools and FH-20 are complete.
+- Evidence: axis-lines-focused.log, axis-lines-native.log and axis-lines-c8.log in .development-artifacts/feature-history-focus/. Browser root /tmp/__e2e__history-tfn8qjbl independently absent.
+- Final frontend780files/9395pass/1skip; backend FAST19099pass/83known failures/19skip, exact baseline failure set and no new errors; FULL deferred, aggregate timing debt retained. No native molecular placement, scientific constants, manifests or goldens changed.

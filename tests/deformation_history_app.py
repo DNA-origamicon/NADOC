@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from tests.extrude_matrix_fixture import FAMILIES
 
 FIXTURES = {"bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+TRANSFORM_FIXTURES = {"transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
 def fixture(kind):
@@ -24,13 +25,16 @@ def fixture(kind):
     from backend.core.part_history_contract import create_empty_part
     from tests.test_part_deformation_preview import _append
 
+    if kind == "transform-failure":
+        from tests.test_part_transform_downstream_failure import causal_transform_recipe
+        return causal_transform_recipe("__e2e__transform-failure")
     if kind in {"transform-joint", "transform-linked"}:
         from tests.test_part_transform_constraint_history import constraint_recipe
         return constraint_recipe("joint" if kind == "transform-joint" else "duplex", name=f"__e2e__{kind}")[0]
     if kind == "transform-owner":
         from tests.test_part_transform_preview import source_recipe
         return source_recipe(name="__e2e__transform-owner")
-    if kind not in FIXTURES:
+    if kind not in FIXTURES | TRANSFORM_FIXTURES:
         raise ValueError("Unknown fixture")
     if kind in {'repair-sweep-source', 'repair-extrude-source'}:
         from tests.test_part_geometry_reference_repair import fixture as repair_fixture
@@ -92,7 +96,7 @@ def fixture(kind):
     if kind in FAMILIES:
         from tests.extrude_matrix_fixture import fixture as matrix_fixture
         return matrix_fixture(kind)
-    if kind in {"bend-small", "twist-small", "bend-large", "twist-large"}:
+    if kind in {"bend-small", "twist-small", "bend-large", "twist-large", "transform-small", "transform-large"}:
         # C8 native recipes: 6 x 84 and 18 x 504 bp honeycomb, scaffolded
         # and autostapled. The large Bend recipe is unchanged from S61.
         from backend.api import headless_build as hb, state as design_state
@@ -109,8 +113,14 @@ def fixture(kind):
             helices = [h.id for h in design_state.get_or_404().helices]
             if kind.startswith("bend"):
                 hb.add_bend(*planes, curvature_deg_per_bp=0.3, affected_helix_ids=helices)
-            else:
+            elif kind.startswith("twist"):
                 hb.add_twist(*planes, total_degrees=30, affected_helix_ids=helices)
+            else:
+                from backend.core.models import ClusterOpLogEntry
+                source = design_state.get_or_404()
+                return _append(source, ClusterOpLogEntry(id="selected-transform",
+                    cluster_id=source.cluster_transforms[0].id, translation=[1, 2, 3],
+                    rotation=[0, 0, 0, 1], pivot=[0, 0, 0], proof_version=1, source="manual-test"))
             return design_state.get_or_404()
     if kind == "routing":
         # Autostapled 6HB with one positional (v2) staple-end resize: routing step
@@ -289,7 +299,7 @@ def create_app():
     @app.post("/api/__e2e__/history/seed/{kind}")
     def seed(kind: str):
         require_doc()
-        if kind not in FIXTURES and not (transforms and kind in {"transform-owner", "transform-joint", "transform-linked"}):
+        if kind not in FIXTURES and not (transforms and kind in TRANSFORM_FIXTURES):
             raise HTTPException(422, "Unknown fixture")
         if sealed:
             if kind not in {"bend", "twist"}:

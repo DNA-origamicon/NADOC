@@ -75,7 +75,7 @@ def evaluate(family, prepared, patch):
 
 def prepare_display(family, prepared, evaluated, *, envelope, display_cache=None):
     display = _display(family)
-    options = {"display_cache": display_cache} if family == "deformation" else {}
+    options = {"display_cache": display_cache} if family in {"deformation", "transform"} else {}
     if _creation(family, prepared):
         return display.prepare_creation_display(prepared.copy_prefix(), prepared, envelope=envelope, **options)
     if family == "transform":
@@ -88,6 +88,7 @@ def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope,
     options = {"creation": _creation(family, prepared), "display_cache": display_cache} if family == "deformation" else {}
     if family == "transform":
         options["source_entry"] = prepared._entry
+        options["display_cache"] = display_cache
     prefix = (prepared.display_prefix() if hasattr(prepared, "display_prefix")
               else prepared.copy_prefix())
     return display.evaluate_display(prefix, evaluated,

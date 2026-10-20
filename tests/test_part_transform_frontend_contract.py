@@ -17,8 +17,10 @@ from tests.test_part_pending_connection_versions import native_prefix as native_
 
 
 SCRIPT = """
+import assert from 'node:assert/strict';
 import { validateTransformPreviewDisplay } from './frontend/src/features/transform_preview_display.js';
 import { buildTransformPreviewLayer } from './frontend/src/scene/transform_history_preview.js';
+import { decodeDnaComparisonRecords } from './frontend/src/features/part_dna_comparison_codec.js';
 import { Scene } from './frontend/node_modules/three/build/three.module.js';
 let raw = ''; for await (const chunk of process.stdin) raw += chunk;
 const value = JSON.parse(raw);
@@ -31,8 +33,11 @@ try {
   for (const component of [value.before, value.candidate].filter(Boolean)) {
     const layer = buildTransformPreviewLayer(component, scene);
     try {
-      if (!scene.children.includes(layer.root) || layer.geometry.records.length !== component.nucleotides.length)
+      if (!scene.children.includes(layer.root))
         throw new Error('Native component was not completely adopted');
+      const expected = component.component_version === 2
+        ? decodeDnaComparisonRecords(component.nucleotides) : component.nucleotides;
+      assert.deepEqual(layer.geometry.records, expected);
     } finally { layer.dispose(); }
   }
 } finally { console.log = log; }

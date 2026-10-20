@@ -173,11 +173,21 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
       }
       envelope(b, response, 0, { opening: true })
       displayMode(b, response, true)
+      const scalarRows = (family === 'deformation' || family === 'transform') && response.before?.nucleotides?.rows
+      if (Array.isArray(scalarRows) && scalarRows.length <= 2_000_000) {
+        // Freeze the received rows without normalizing their shape or invoking
+        // indexed accessors. Strict validation must still see malformed fields.
+        for (let i = 0; i < scalarRows.length; i++) {
+          const row = Object.getOwnPropertyDescriptor(scalarRows, String(i))?.value
+          if (Array.isArray(row) && row.length <= 21) Object.freeze(row)
+        }
+        Object.freeze(scalarRows)
+      }
       validateDisplay(response, { prepare: true })
       evaluatedRole(response, {})
       b.lease = response.lease_id; b.identity = previewFamilyIdentity(response, family)
-      if (family === 'deformation' && Array.isArray(response.before?.nucleotides?.rows)) {
-        b.displayRows = Object.freeze(response.before.nucleotides.rows.map(row => Object.freeze([...row])))
+      if ((family === 'deformation' || family === 'transform') && Array.isArray(response.before?.nucleotides?.rows)) {
+        b.displayRows = response.before.nucleotides.rows
       }
       leaseDeadline(b, response, started, tracking.timing)
       state = { ...state, computation: null, ...(family === 'transform' ? { commandKind: b.identity.command_kind } : { deformationId: b.identity.deformation_id }),
@@ -219,14 +229,14 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
     try {
       const response = await api.evaluate({ ...body(b), request_sequence: nextSequence(b),
         params: entry.draft, include_geometry: entry.includeGeometry,
-        ...(family === 'deformation' && b.displayRows ? { reuse_rows: true } : {}) }, options(b, abort))
+        ...((family === 'deformation' || family === 'transform') && b.displayRows ? { reuse_rows: true } : {}) }, options(b, abort))
       if (!current(b) || state.expired || entry.version !== draftVersion) return null
       envelope(b, response, b.sequence)
       displayMode(b, response, false)
       // Resolve only after document, lease and request-sequence checks. A delta
       // can refer solely to the validated preparation of this exact editor.
       const packed = response.candidate?.nucleotides
-      if (family === 'deformation' && packed && Object.hasOwn(packed, 'rows_ref')) {
+      if ((family === 'deformation' || family === 'transform') && packed && Object.hasOwn(packed, 'rows_ref')) {
         if (packed.rows_ref !== b.lease || !Array.isArray(b.displayRows)
             || Object.hasOwn(packed, 'rows') || packed.count !== b.displayRows.length) {
           throw error('The preview topology belongs to another session', 422)

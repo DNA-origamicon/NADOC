@@ -1,3 +1,4 @@
+import { segmentAxisSamples } from './native_axis_samples.js'
 import { animationNativePosition } from './animation_native_position.js'
 import { revealSweepTube } from './sweep_animation_reveal.js'
 import { positionUpdateLookup } from '../viewer/geometry_codec.js'
@@ -58,11 +59,6 @@ import { ordinaryBackboneContinuations, isOrdinaryBackboneContinuation } from '.
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BDNA_RISE_PER_BP = 0.334  // nm/bp — must match backend/core/constants.py
-// Must match `_AXIS_SAMPLE_STEP` in backend/core/deformation.py. tubeSamp from
-// deformed_helix_axes() is one entry every AXIS_SAMPLE_STEP bp along the
-// helix's local bp axis, with length_bp-1 appended last.
-const AXIS_SAMPLE_STEP = 7
-
 // Re-export palette helpers consumed by external modules (main.js, etc.).
 export { buildNucLetterMap, buildStapleColorMap }
 
@@ -506,7 +502,7 @@ export function orderStrandNucleotides(nucs) {
  * for their whole lifetime and never expose LOD switching (private preview
  * layers); the default view builds them so a later LOD switch can show them.
  */
-export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true, axisTubeSubdivisions = 4 } = {}) {
+export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full', { curvedCylinders = true, axisTubeSubdivisions = 4, axisMeshes = true } = {}) {
   // Validate before adding any scene objects. An incomplete response must not
   // leave a half-updated scientific representation on screen.
   for (const nuc of geometry ?? []) {
@@ -709,6 +705,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   function buildAxes(helixAxes, axisScene = root, arrows = axisArrows) {
+    if (!axisMeshes) return arrows
     for (const helix of design.helices) {
       // Skip linker virtual helices (`__lnk__<conn>`). Their bridge half is
       // rendered by overhang_link_arcs as a synthesized duplex / bead-string,
@@ -846,21 +843,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           let tubeMesh = null
           const segmentSamples = bs?.samples ?? tubeSamp
           if (segmentSamples && segmentSamples.length > 2) {
-            const localLo = ds.bp_lo - helix.bp_start
-            const localHi = ds.bp_hi - helix.bp_start
-            const pts = [ws.clone()]
-            const lastSampleIdx = segmentSamples.length - 1
-            for (let si = 0; si < segmentSamples.length; si++) {
-              // Mirror backend _sample_bp_list_for_axis: samples are at local bp
-              // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
-              const localBp = (si === lastSampleIdx)
-                ? helix.length_bp - 1
-                : si * (isNativeFold ? 1 : AXIS_SAMPLE_STEP)
-              if (localBp > localLo && localBp <= localHi) {
-                pts.push(new THREE.Vector3(...segmentSamples[si]))
-              }
-            }
-            pts.push(we.clone())
+            const pts = segmentAxisSamples(helix, ds, segmentSamples,
+              ws.toArray(), we.toArray(), isNativeFold ? 1 : 7).map(p => new THREE.Vector3(...p))
             // Skip tube construction when the segment spans no interior samples
             // (pts is just [ws, we] → would render as a straight line, no win
             // over the cylinder companion we already built).

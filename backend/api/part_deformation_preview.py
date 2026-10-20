@@ -80,6 +80,12 @@ def _reject(detail, code="unsupported_preview_scope"):
     raise CommandContractError(detail, code=code)
 
 
+class _CommandExecutionFailure(CommandContractError):
+    """A native command rejected its inputs; replay must retain its row ID."""
+
+    status = "failed"
+
+
 def _checkpoint():
     deadline = monotonic() + SECONDS
 
@@ -420,7 +426,11 @@ def _run(kind, design, params, check, executor=None):
         updated = (executor or execute)(kind, design, params)
     except CommandContractError:
         raise
-    except (ValueError, TypeError, KeyError, NotImplementedError) as error:
+    except CaptureLimit as error:
+        _reject(str(error), "preview_limit")
+    except (ValueError, TypeError, KeyError) as error:
+        raise _CommandExecutionFailure(str(error), code="preview_command_failed") from error
+    except NotImplementedError as error:
         _reject(str(error), "preview_command_failed")
     check()
     _admit(updated, check)

@@ -19,18 +19,21 @@ from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_verification_capture import CaptureLimit, admit
 
 
-MAX_HELICES = 16
-MAX_STRANDS = 128
-MAX_DOMAINS = 256
-MAX_RECORDS = 1024
-MAX_SELECTORS = 512
+# Ordinary 18-helix x 504-bp acceptance part: ~18k records, 1.2k domains,
+# ~19k prospective native work. Keep finite headroom; companion work is charged
+# cumulatively by the same inventory/control contracts.
+MAX_HELICES = 64
+MAX_STRANDS = 4096
+MAX_DOMAINS = 8192
+MAX_RECORDS = 65_536
+MAX_SELECTORS = 8192
 MAX_OWNERS = 32
-MAX_NATIVE_WORK = 4096
-MAX_CONTROL_WORK = 32_768
-MAX_AXIS_POINTS = 2048
+MAX_NATIVE_WORK = 131_072
+MAX_CONTROL_WORK = 1_048_576
+MAX_AXIS_POINTS = 65_536
 SECONDS = 2.0
-MAX_OUTPUT_NODES = 200_000
-MAX_OUTPUT_BYTES = 2_000_000
+MAX_OUTPUT_NODES = 4_000_000
+MAX_OUTPUT_BYTES = 128_000_000
 DISPLAY_FIELDS = frozenset({
     "lattice_frames", "helices", "strands", "deformations", "cluster_transforms",
     "group_organization", "nucleotide_transforms", "cluster_joints", "cluster_join_constraints",
@@ -60,11 +63,30 @@ def checkpoint():
 
 def bounded(result, *, max_nodes=MAX_OUTPUT_NODES, max_bytes=MAX_OUTPUT_BYTES):
     try:
-        GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes, seconds=None, clock=monotonic).charge(result)
-        size = 0
-        for chunk in json.JSONEncoder(allow_nan=False, separators=(",", ":")).iterencode(result):
-            size += len(chunk.encode("utf-8"))
-            limit(size, max_bytes, "combined response bytes")
+        seen, aliases = set(), []
+        def shared(value):
+            if isinstance(value, (dict, list, tuple)):
+                identity = id(value)
+                if identity in seen:
+                    aliases.append(value)
+                else:
+                    seen.add(identity)
+        budget = GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes, seconds=None, clock=monotonic)
+        budget.charge(result, validate=shared)
+        if aliases:
+            from backend.api.part_model_serialization import admit_model_serialization
+            # GraphBudget charges each container's children once. Preflight
+            # every additional occurrence before the C encoder expands it.
+            # Reuse the existing cycle/depth/expansion guard; its structural
+            # bytes are separate from the exact encoded-byte ceiling below.
+            admit_model_serialization(aliases, max_nodes=budget.remaining[0],
+                max_bytes=max_bytes + 16 * max_nodes, label="Transform display serialization")
+        # Keep graph admission before encoding, including its node/string
+        # allocation bounds. dumps uses the C encoder; iterencode's Python
+        # per-scalar loop dominated real-part previews. The wire-size policy
+        # and rejection of nonfinite floats remain identical.
+        size = len(json.dumps(result, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        limit(size, max_bytes, "combined response bytes")
     except CaptureLimit as error:
         reject(str(error), "preview_limit")
     except (TypeError, ValueError) as error:

@@ -29,11 +29,18 @@ def point(value, length=3):
 
 
 def _records(records, expected):
+    import numpy as np
     from backend.core.native_full_placement import SOURCE
     from backend.core.native_slab_placement import SLABLESS_SOURCES, authoritative_slab_poses
 
     limit(len(records), MAX_RECORDS, "emitted records")
     seen = set()
+    coordinates = []
+    def point(value, length=3):
+        if type(value) is not list or len(value) != length:
+            reject("Malformed native transform display coordinates", "invalid_preview_geometry")
+        coordinates.extend(value)
+
     for value in records:
         if type(value) is not dict or not _REQUIRED <= value.keys() <= _RECORD_FIELDS:
             reject("Unreviewed native transform record fields")
@@ -56,12 +63,15 @@ def _records(records, expected):
             if type(site) is not dict or set(site) != {"axis_point", "radial_hat", "azimuth_rad", "groove_offset_rad", "phase_roll_rad"}:
                 reject("Unreviewed native transform helical site")
             point(site["axis_point"]), point(site["radial_hat"])
-            if any(type(site[name]) not in (int, float) or not isfinite(site[name])
-                   for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad")):
-                reject("Invalid native helical site", "invalid_preview_geometry")
+            coordinates.extend(site[name] for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"))
             point(value.get("slab_position")), point(value.get("slab_quaternion"), 4)
     if seen != expected.sites.keys() | expected.extensions.keys():
         reject("Native transform display omitted occupied records", "invalid_preview_geometry")
+    # Same exact numeric-type/finiteness checks, batched before the unchanged
+    # native bead/base/slab authority. Avoid a Python generator per vector.
+    if (not set(map(type, coordinates)) <= {int, float}
+            or not np.isfinite(np.fromiter(coordinates, dtype=np.float64, count=len(coordinates))).all()):
+        reject("Malformed native transform display coordinates", "invalid_preview_geometry")
     authoritative_slab_poses(records)
 
 
@@ -136,7 +146,7 @@ def topology(design):
     return result
 
 
-def project_admitted(design, expected, check):
+def project_admitted(design, expected, check, *, compact=False):
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     from backend.core.native_full_placement import NativePlacementError
@@ -170,8 +180,16 @@ def project_admitted(design, expected, check):
     bounds = {"minimum": [min(p[i] for p in points) for i in range(3)],
               "maximum": [max(p[i] for p in points) for i in range(3)]} if points else None
     check()
-    return {"component_kind": "transform-preview-dna", "component_version": 1, "representation": "native-full-v1",
-            "units": "nm", "nucleotides": records, "helix_axes": axes, "display_topology": display,
+    from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records_compact
+    # Reuse the existing lossless f64 transport only for its exact native
+    # record schema. Companions with extra fields or slabless/flexible records
+    # keep the complete object transport; never drop fields to make them fit.
+    compact_fields = frozenset(RECORD_COLUMNS)
+    packed = compact and all(n.keys() == compact_fields and n["is_flexible_segment"] is False
+                            and n["slab_position"] is not None and n["slab_quaternion"] is not None
+                            for n in records)
+    return {"component_kind": "transform-preview-dna", "component_version": 2 if packed else 1, "representation": "native-full-v1",
+            "units": "nm", "nucleotides": pack_records_compact(records) if packed else records, "helix_axes": axes, "display_topology": display,
             "required_renderers": companions, "bounds_nm": bounds}
 
 

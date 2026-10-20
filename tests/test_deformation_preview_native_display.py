@@ -46,15 +46,20 @@ for (const component of [packet.before, packet.candidate]) {
     assert.deepEqual(matrix(displayed, entry.id), matrix(entry.instMesh, entry.id));
     summary.push(matrix(displayed, entry.id));
   }
-  const axesIn = root => {
-    const axes = [];
-    root.traverse(node => { if (node.name === 'axisLine') axes.push({
-      type: node.geometry.type, visible: node.visible, position: node.position.toArray(),
-      quaternion: node.quaternion.toArray(), positions: [...node.geometry.attributes.position.array],
-    }); });
-    return axes;
-  };
-  assert.deepEqual(axesIn(preview.root), axesIn(normalRoot));
+  const guide = preview.root.getObjectByName('axisLine');
+  assert.ok(guide.isLineSegments);
+  const positions = [...guide.geometry.attributes.position.array];
+  assert.ok(positions.every(Number.isFinite));
+  // Each visible native curved guide must retain its control samples in the
+  // private polyline. Float32 conversion is shared by both GPU buffers.
+  normalRoot.traverse(node => {
+    if (node.name !== 'axisLine' || !node.visible || node.geometry.type !== 'TubeGeometry') return;
+    for (const point of node.geometry.parameters.path.points) {
+      const p = [...new Float32Array(point.toArray())];
+      assert.ok(positions.some((_, i) => i % 3 === 0 && p.every((v, j) => positions[i + j] === v)),
+        'native axis sample missing from private guide');
+    }
+  });
   summaries.push(summary);
   preview.dispose(); preview.dispose(); assert.equal(scene.children.length, 0);
   const geometries = new Set(), materials = new Set();

@@ -1,7 +1,7 @@
 /** Private, complete native Full display. All mutable renderer inputs and
  * companions belong to this pane; no canonical renderer/store is installed. */
 import * as THREE from 'three'
-import { validateTransformPreviewComponent } from '../features/transform_preview_display.js'
+import { consumeValidatedTransformPreviewComponent } from '../features/transform_preview_display.js'
 import { buildHelixObjects } from './helix_renderer.js'
 import { _resetStapleColorPins, buildStapleColorMap } from './helix_renderer/palette.js'
 import { buildCrossoverConnections, simBeadIndex } from './crossover_connections.js'
@@ -12,6 +12,7 @@ import { initOverhangLinkArcs, linkerLengthToBases } from './overhang_link_arcs.
 import { buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 import { createDeformationPreviewCamera } from './deformation_preview_camera.js'
 import { baseKey, xbKey } from './base_ref.js'
+import { decodeDnaComparisonRecordsCopy } from '../features/part_dna_comparison_codec.js'
 
 const fail = message => { throw new Error(`Transform display incomplete: ${message}`) }
 const keyPair = (a, b) => JSON.stringify([a, b].sort())
@@ -19,6 +20,14 @@ const pair = (a, b) => keyPair(baseKey(a), baseKey(b))
 const endNuc = (c, p) => ({ helix_id: c[`${p}_helix_id`], bp_index: c[`${p}_bp`], direction: c[`${p}_direction`] })
 const halfNuc = h => ({ helix_id: h.helix_id, bp_index: h.index, direction: h.strand })
 const junctionPair = c => c.half_a ? pair(halfNuc(c.half_a), halfNuc(c.half_b)) : pair(endNuc(c, 'three_prime'), endNuc(c, 'five_prime'))
+const withoutPose = ({ translation, rotation, pivot, ...definition }) => definition
+const staticSignature = topology => JSON.stringify({ ...topology,
+  cluster_transforms: topology.cluster_transforms.map(withoutPose),
+  nucleotide_transforms: topology.nucleotide_transforms.map(withoutPose) })
+const reusable = component => component.component_version === 2 && !component.required_renderers.length
+  && !component.display_topology.overhang_connections.length
+  && !component.display_topology.photoproduct_junctions.length
+  && !component.display_topology.flexible_connections.length
 
 function disposeRoot(root) {
   const geometries = new Set(), materials = new Set(), instances = new Set()
@@ -36,7 +45,7 @@ function disposeRoot(root) {
 }
 
 export function buildTransformPreviewLayer(component, scene) {
-  validateTransformPreviewComponent(component)
+  consumeValidatedTransformPreviewComponent(component)
   const root = new THREE.Group(); root.name = 'privateTransformPreview'
   const paletteToken = Symbol('private transform palette'), companions = []
   let disposed = false
@@ -47,14 +56,16 @@ export function buildTransformPreviewLayer(component, scene) {
     disposeRoot(root); _resetStapleColorPins(paletteToken)
   }
   try {
-    const design = structuredClone(component.display_topology), records = structuredClone(component.nucleotides)
+    const design = structuredClone(component.display_topology)
+    const records = component.component_version === 2
+      ? decodeDnaComparisonRecordsCopy(component.nucleotides) : structuredClone(component.nucleotides)
     design.id = paletteToken
     const axes = Object.fromEntries(structuredClone(component.helix_axes).map(a => [a.helix_id,
       { start: a.start, end: a.end, samples: a.samples, segments: a.segments, ovhgAxes: a.ovhg_axes ?? null }]))
     const privateState = { currentDesign: design, currentGeometry: records, currentHelixAxes: axes,
       coloringMode: 'strand', showReferenceGeometry: true, simulationTabActive: false }
     const privateStore = { getState: () => privateState, subscribe: () => () => {} }
-    const native = buildHelixObjects(records, design, root, {}, [], axes, 'full')
+    const native = buildHelixObjects(records, design, root, {}, [], axes, 'full', { curvedCylinders: false })
     native.setAxisShaftMode('deformed')
     const fluoroEntries = native.getFluoroEntries()
     const rigid = records.filter(n => !n.is_flexible_segment && !n.is_modification)
@@ -158,41 +169,82 @@ export function buildTransformPreviewLayer(component, scene) {
     root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
     const geometry = { design, records, helixAxes: axes, backboneEntries: native.backboneEntries,
       slabEntries: native.slabEntries, fluoroEntries, native, extraBases: xovers }
+    const signature = reusable(component) ? staticSignature(component.display_topology) : null
     scene.add(root)
-    return { root, geometry, dispose }
+    return { root, geometry, dispose,
+      update(component) {
+        if (disposed || signature === null || !reusable(component)) return false
+        consumeValidatedTransformPreviewComponent(component)
+        if (staticSignature(component.display_topology) !== signature) return false
+        // The shared decoder writes only after every scalar and ordering key
+        // matches. A mismatch leaves this detached buffer untouched.
+        const next = decodeDnaComparisonRecordsCopy(component.nucleotides, records)
+        if (next !== records) return false
+        const nextDesign = structuredClone(component.display_topology)
+        const nextAxes = Object.fromEntries(structuredClone(component.helix_axes).map(a => [a.helix_id,
+          { start: a.start, end: a.end, samples: a.samples, segments: a.segments, ovhgAxes: a.ovhg_axes ?? null }]))
+        native.updateStaticFullGeometry(next, nextAxes)
+        Object.assign(design, nextDesign, { id: paletteToken })
+        geometry.helixAxes = nextAxes
+        for (const arc of connections) {
+          arc.from.fromArray(arc.fromNuc.backbone_position)
+          arc.to.fromArray(arc.toNuc.backbone_position)
+          if (lines) writeNativeConnectionArc(lines.positions, arc.vertIdx, arc.from,
+            arc.from.clone().add(arc.to).multiplyScalar(.5), arc.to)
+        }
+        if (lines) lines.geo.attributes.position.needsUpdate = true
+        root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
+        return true
+      },
+    }
   } catch (error) { dispose(); throw error }
 }
 
 export function createTransformHistoryPreview({ scene, camera }) {
   if (!scene || !camera) throw new Error('Transform preview requires an isolated camera viewport')
-  let before = null, candidate = null, viewport = null, disposed = false, mode = 'candidate'
+  let before = null, candidate = null, spare = null, viewport = null, disposed = false, mode = 'candidate'
   const active = () => { if (disposed) throw new Error('Transform preview is disposed') }
   function display() { if (before) before.root.visible = mode === 'before'; if (candidate) candidate.root.visible = mode === 'candidate' }
   function clear() {
-    before?.dispose(); candidate?.dispose(); before = null; candidate = null
+    before?.dispose(); candidate?.dispose(); spare?.dispose(); before = null; candidate = null; spare = null
     viewport?.dispose(); viewport = null
   }
   return {
     open(packet) {
       active()
-      let nextBefore, nextCandidate
+      let nextBefore, nextCandidate, nextSpare
       try {
         nextBefore = buildTransformPreviewLayer(packet.before, scene)
         if (!packet.candidate) fail('missing initial candidate')
         nextCandidate = buildTransformPreviewLayer(packet.candidate, scene)
-      } catch (error) { nextBefore?.dispose(); nextCandidate?.dispose(); throw error }
+        if (reusable(packet.candidate)) {
+          nextSpare = buildTransformPreviewLayer(packet.candidate, scene)
+          nextSpare.root.removeFromParent()
+        }
+      } catch (error) { nextBefore?.dispose(); nextCandidate?.dispose(); nextSpare?.dispose(); throw error }
       clear()
       try {
         viewport = createDeformationPreviewCamera({ scene, camera })
         viewport.include(nextBefore.root); viewport.include(nextCandidate.root)
-      } catch (error) { nextBefore.dispose(); nextCandidate.dispose(); viewport?.dispose(); viewport = null; throw error }
-      before = nextBefore; candidate = nextCandidate; mode = 'candidate'; display()
+      } catch (error) { nextBefore.dispose(); nextCandidate.dispose(); nextSpare?.dispose(); viewport?.dispose(); viewport = null; throw error }
+      before = nextBefore; candidate = nextCandidate; spare = nextSpare ?? null; mode = 'candidate'; display()
     },
     replaceCandidate(component) {
       active(); if (!before) throw new Error('Transform preview is not open')
-      const next = component === null ? null : buildTransformPreviewLayer(component, scene)
-      if (next) viewport.include(next.root)
-      candidate?.dispose(); candidate = next; display()
+      let next = null
+      try {
+        if (component !== null) {
+          if (spare?.update(component)) { next = spare; spare = null; scene.add(next.root) }
+          else { spare?.dispose(); spare = null; next = buildTransformPreviewLayer(component, scene) }
+          viewport.include(next.root)
+        }
+      } catch (error) { spare?.dispose(); spare = null; next?.dispose(); throw error }
+      if (component && reusable(component)) {
+        if (candidate) { candidate.root.removeFromParent(); spare = candidate }
+      } else {
+        candidate?.dispose(); spare?.dispose(); spare = null
+      }
+      candidate = next; display()
     },
     candidateGeometry() { return candidate?.geometry ?? null },
     show(value) {

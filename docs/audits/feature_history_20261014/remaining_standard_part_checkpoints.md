@@ -7,30 +7,13 @@
 > conflict with it, the contract wins. The current status sentence lives only in the
 > [handoff](session_handoff.md).
 
-**User priority — October 18, 2026:** Complete Bend, Twist, Sweep and Extrude
-before moving to other areas. Completion includes their applicable creation and
-history-edit controls, isolated preview/Cancel/Apply, dependency and downstream
-replay correctness, undo/redo/save/reload, and desktop/latency qualification under
-the existing fixed exits. FH-21/FH-22 implementation completion alone does not
-establish fully qualified Extrude/Sweep tools; their FH-27 acceptance remains.
-Select each bounded successor from the remaining work for these four tools.
-Shared infrastructure work must identify a demonstrated blocker to one of these
-tool requirements and stay narrowly bounded. Other areas remain deferred;
-simulation relevance remains saved-source freshness only. Preserve scientific
-authorization and rollout qualification; do not weaken assertions or fixed exits.
-S54 Sweep downstream-nick success/refusal desktop workflow is the sole next task, unstarted.
-
-S53 qualifies independent, attached-start and sticky-detached Sweep history editing with later Extrude. Native fixture4 and source-contract40 passed, harness22 passed, focused frontend23 passed; final three-case browser matrix passed with clean consoles. Prefix source inventory, ligation draft controls, fixed-origin orientation, saved source/detach identity, exact Cancel, full native geometry, Apply and persistence are covered. Test synchronization corrections required no production change. S54 Sweep downstream-nick success/refusal desktop workflow is the sole unstarted successor. No milestone advanced. See [S53 evidence](sweep_source_matrix_20261018.md). **21/38 complete, 17 remaining (8 core, 9 parked), delta +0/+0; U1–U60 (60 engineering checkpoints; FH-20 at 5 and FH-28 at 11, both growth flagged).**
-
-Closure map updated October 16, 2026. This is a finite delivery map, not a
-new claim that every registered kind or legacy receipt regenerates. Assemblies
-remain outside the agreed scope. Existing molecular builders and constants stay
-unchanged; each new adapter must preserve their complete admitted output.
-
-**Current session queue (October 18):** S53 qualifies independent, attached-start and sticky-detached Sweep history editing with later Extrude. Native fixture4 and source-contract40 passed, harness22 passed, focused frontend23 passed; final three-case browser matrix passed with clean consoles. Prefix source inventory, ligation draft controls, fixed-origin orientation, saved source/detach identity, exact Cancel, full native geometry, Apply and persistence are covered. Test synchronization corrections required no production change. S54 Sweep downstream-nick success/refusal desktop workflow is the sole unstarted successor. No milestone advanced.
-See the [handoff](session_handoff.md) for the sole successor and the
-[acceptance matrix](bend_twist_release_acceptance.md) for remaining exits.
-No completed-milestone credit; historical failed broad software validation remains.
+**Current delivery — October20,2026:** 4/6 primary tools complete: Bend, Twist, Extrude,
+and Sweep. FH-20 closes after the four-case fixed-budget C8 pass and final regression
+comparison. CAD ledger: **21/34 complete,13 remaining (6 core,7 parked); delta+1/+0**.
+The user added geometric Move/Rotate to the active scope; both retain named-member motion
+and complete qualification, with production gates OFF. See the [handoff](session_handoff.md)
+and [Bend/Twist evidence](bend_twist_release_acceptance.md#native-preview-buffer-reuse--october202026).
+The earlier baseline/checkpoint narrative below is historical; this current scope supersedes it.
 
 ## Progress baseline and mandatory update counts — October 16, 2026
 
@@ -77,6 +60,7 @@ once; its remaining rollout is parked, not removed from the total.
 | FH-16 | Done | Core transaction hardening and complete private bend/twist editor implementation: `35a96ef7`–`1ae1137f`, [lifecycle](validation_core_geometry_lifecycle.json), [editor](validation_deformation_history_editor.json). Isolated editor/HTTP rollout remains gated. |
 | FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery is FH-19; desktop checks remain open. |
 | FH-19 | Done · 2 checkpoints | Recover supported invalid saved recipes: original bytes/digest preserved, bounded read-only admission, explicit grouping repair, independently regenerated valid copy and exact download. Isolated HTTP/process lifecycle and File-menu controls are connected and automated-tested; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_delivery.json). Native empty-root recipes within the declared bounds only; desktop/latency acceptance remains FH-27/MV-49, as allocated before implementation. |
+| FH-20 | Done · October20,2026 | Bend/Twist C1–C9 qualified: paired production gates ON, obsolete desktop mutating fallback unreachable, fixed small/large C8 four-case pass; final frontend9395pass and backend failure set unchanged from83 known baseline failures. |
 | FH-21 | Done · 1 checkpoint | Complete ordinary native extrusion history editor: seven families, earlier edits through downstream features, stable identities, full input controls and validation; independent rebuild with evicted recovery, typed source diagnostics, atomic source-bound publication and undo/reload. [Contract](extrusion_history_editor_plan.md), [evidence](validation_extrusion_history_editor.json). Desktop/latency remains the existing FH-27/MV-50 exit; organization rollout remains disabled. |
 | FH-22 | Done · 1 checkpoint | Complete owned native Sweep history editor: full prefix-based controls, isolated feature-stage display, recovery-independent Apply/Cancel, full source proof and downstream rebuild, atomic undo/reload and typed missing references. [Contract](sweep_history_editor_plan.md), [evidence](validation_sweep_history_editor.json). Both rollout gates remain false; desktop/latency stays FH-27/MV-51. |
 | FH-24 | Done · 1 checkpoint | Complete native Fine Routing history editor: all 22 child kinds, input controls and ordered batch add/remove/reorder with stable output slots, independently rebuilt pre-child references and full downstream replay. Source-bound HTTP/isolated worker, exact child diagnostics, organized native lineage, one undo/reload and optimized history seeking are tested. [Contract](fine_routing_history_editor_plan.md), [evidence](validation_fine_routing_history_editor.json). Editor and organization gates stay off; desktop/latency acceptance remains the preallocated FH-27/MV-53 exit. |
@@ -90,7 +74,6 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | ID | Status | Fixed remaining exit |
 |---|---|---|
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
-| FH-20 | In progress · 5 checkpoints · task growth flagged | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-23 | In progress · 9 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Numerical Prepare/Apply now use the same private host with bounded asynchronous computation, cancellation and receipt recovery; native CPD free-motion and relaxed-duplex root/taut/joint gestures are qualified through the host, organized extension-only v2 upserts now use the bounded ordinary transaction and shared 2D/3D controls. U26 native counterexamples reject ordinary owner insertion and unconditional final-pass shortcuts; arbitrary new-group movement and its complete comparison/qualification remain open. Paired rollout gates stay false. |
 | FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Explicit organized material lineage, owned HTTP/history publication and prefix-derived endpoint/version repair are implemented privately; exact-definition legacy owner migration is implemented privately; complete controls/full profiles, ISSUE-126/143 corrections and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |

@@ -118,6 +118,18 @@ def test_prepare_ack_then_status_returns_owned_packet_with_fresh_ready_lease(lan
     unchanged(before)
 
 
+def test_numerical_prepare_supplies_lease_rows_for_exact_evaluation_delta(lane):
+    opened = ready(lane)
+    full = host.evaluate(update(opened, sequence=1), family=FAMILY)
+    delta = host.evaluate({**update(opened, sequence=2), "reuse_rows": True}, family=FAMILY)
+    packed = delta["candidate"]["nucleotides"]
+    assert packed.pop("rows_ref") == opened["lease_id"]
+    packed["rows"] = opened["before"]["nucleotides"]["rows"]
+    assert delta["candidate"] == full["candidate"]
+    host.cancel(cancellation(opened), family=FAMILY)
+    assert lane.doc not in host._entries
+
+
 def test_cancel_queued_prepare_signals_exact_operation_and_cannot_restore_it(lane):
     before = checkpoint()
     ack = host.prepare(opening(), family=FAMILY)

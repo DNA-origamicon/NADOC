@@ -3,6 +3,8 @@
 import { finite, integer, text, shape, vector, list } from './part_comparison_validation.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 import { linkerLengthToBases } from '../scene/overhang_link_arcs.js'
+import { decodeDnaComparisonRecords } from './part_dna_comparison_codec.js'
+import { TRANSFORM_DISPLAY_LIMITS as limits } from './transform_preview_limits.js'
 
 const fail = message => { throw new Error(`Transform preview unavailable: ${message}`) }
 const id = v => text(v, 512), str = v => text(v, 2_000_000, true)
@@ -13,7 +15,10 @@ const bool = v => { if (typeof v !== 'boolean') fail('invalid boolean') }
 const literal = (...values) => v => { if (!values.includes(v)) fail('unsupported enum value') }
 const nullable = check => v => { if (v !== null) check(v) }
 const array = (check, maximum = 512) => v => { list(v, maximum); for (const item of v) check(item) }
-const object = fields => v => { shape(v, Object.keys(fields)); for (const [key, check] of Object.entries(fields)) check(v[key]) }
+const object = fields => {
+  const keys = Object.keys(fields), entries = Object.entries(fields)
+  return v => { shape(v, keys); for (const [key, check] of entries) check(v[key]) }
+}
 const optional = (v, required, extra = {}) => {
   shape(v, [...Object.keys(required), ...Object.keys(extra).filter(k => !Object.hasOwn(required, k) && Object.hasOwn(v ?? {}, k))])
   for (const [key, check] of Object.entries(required)) check(v[key])
@@ -112,21 +117,37 @@ const domainKey = (sid, ordinal) => JSON.stringify([sid, ordinal])
 
 /** Bound occurrences, depth and encoded JSON bytes before any domain expansion.
  * Plain data only: no getters, prototypes, cycles or sparse-array coercion. */
+const immutableJsonBounds = new WeakMap()
 function boundedJson(value) {
   let nodes = 0, bytes = 0
   const active = new Set()
   function stringSize(value) {
+    // Large compact coordinate blocks are ASCII without JSON escapes. Check
+    // that property in the native regexp engine, then charge the exact bytes;
+    // arbitrary Unicode/escaped strings keep the complete character walk.
+    if (value.length >= 4096 && /^[\x20-\x21\x23-\x5b\x5d-\x7e]*$/.test(value)) {
+      if (value.length + 2 > limits.bytes) fail('packet byte allowance exceeded')
+      return value.length + 2
+    }
     let size = 2
     for (const char of value) {
       const code = char.codePointAt(0)
       size += code < 32 ? ([8, 9, 10, 12, 13].includes(code) ? 2 : 6)
         : code === 34 || code === 92 ? 2 : code < 128 ? 1 : code < 2048 ? 2 : code <= 65535 ? (code >= 0xd800 && code <= 0xdfff ? 6 : 3) : 4
-      if (size > 2_000_000) fail('packet byte allowance exceeded')
+      if (size > limits.bytes) fail('packet byte allowance exceeded')
     }
     return size
   }
   function visit(v, depth) {
-    if (++nodes > 200_000 || depth > 64 || bytes > 2_000_000) fail('packet allowance exceeded')
+    const cached = v && typeof v === 'object' && immutableJsonBounds.get(v)
+    if (cached) {
+      nodes += cached.nodes; bytes += cached.bytes
+      if (nodes > limits.nodes || bytes > limits.bytes || depth + cached.height > 64) fail('packet allowance exceeded')
+      return cached.height
+    }
+    const initialNodes = nodes, initialBytes = bytes
+    let height = 0, immutable = true
+    if (++nodes > limits.nodes || depth > 64 || bytes > limits.bytes) fail('packet allowance exceeded')
     if (v === null) bytes += 4
     else if (typeof v === 'boolean') bytes += v ? 4 : 5
     else if (typeof v === 'number') { num(v); bytes += String(v).length }
@@ -135,9 +156,9 @@ function boundedJson(value) {
       if (!v || typeof v !== 'object' || active.has(v)) fail('non-JSON or cyclic packet')
       const isArray = Array.isArray(v)
       if (!isArray && Object.getPrototypeOf(v) !== Object.prototype) fail('non-JSON prototype')
-      if (isArray && v.length > 200_000 - nodes) fail('packet node allowance exceeded')
+      if (isArray && v.length > limits.nodes - nodes) fail('packet node allowance exceeded')
       const keys = Object.keys(v)
-      if (keys.length > 200_000 - nodes) fail('packet node allowance exceeded')
+      if (keys.length > limits.nodes - nodes) fail('packet node allowance exceeded')
       const descriptors = Object.getOwnPropertyDescriptors(v)
       if (isArray && (keys.length !== v.length || keys.some((k, i) => k !== String(i)))) fail('sparse or extended array')
       if (Reflect.ownKeys(v).length !== keys.length + (isArray ? 1 : 0)) fail('hidden packet fields')
@@ -145,11 +166,16 @@ function boundedJson(value) {
       for (const k of keys) {
         if (!Object.hasOwn(descriptors[k], 'value')) fail('packet accessor')
         if (!isArray) bytes += stringSize(k) + 1
-        visit(descriptors[k].value, depth + 1)
+        const childHeight = visit(descriptors[k].value, depth + 1)
+        if (childHeight === null) immutable = false
+        else height = Math.max(height, childHeight + 1)
       }
       active.delete(v)
+      immutable &&= Object.isFrozen(v)
+      if (immutable) immutableJsonBounds.set(v, { nodes: nodes - initialNodes, bytes: bytes - initialBytes, height })
     }
-    if (bytes > 2_000_000) fail('packet byte allowance exceeded')
+    if (bytes > limits.bytes) fail('packet byte allowance exceeded')
+    return immutable ? height : null
   }
   visit(value, 0)
 }
@@ -173,7 +199,7 @@ function inventories(value, controls = false, liveControls = false) {
   for (const field of keys) {
     const check = controls && field === 'photoproduct_junctions' ? object(cpdFields)
       : liveControls && field === 'cluster_joints' ? object({ ...jointFields, axis_origin: vec(3), axis_direction: vec(3) }) : schemas[field]
-    array(check, field === 'helices' ? 16 : field === 'strands' ? 128 : field === 'cluster_transforms' ? 32 : 512)(value[field])
+    array(check, field === 'helices' ? limits.helices : field === 'strands' ? limits.strands : field === 'cluster_transforms' ? limits.owners : limits.selectors)(value[field])
     out[field] = index(value[field])
   }
   organization(value.group_organization)
@@ -181,10 +207,10 @@ function inventories(value, controls = false, liveControls = false) {
   let domains = 0, spans = 0
   for (const s of value.strands) {
     domains += s.domains.length
-    if (!s.domains.length || domains > 256) fail('domain allowance exceeded')
+    if (!s.domains.length || domains > limits.domains) fail('domain allowance exceeded')
     for (const d of s.domains) { requireRef(out.helices, d.helix_id); spans += Math.abs(d.end_bp - d.start_bp) + 1 }
   }
-  if (spans > 4096) fail('domain span allowance exceeded')
+  if (spans > limits.nativeWork) fail('domain span allowance exceeded')
   for (const h of value.helices) {
     if (!h.length_bp || h.length_bp > 4096) fail('helix span allowance exceeded')
     if (h.lattice_frame_id !== null) requireRef(out.lattice_frames, h.lattice_frame_id)
@@ -214,9 +240,21 @@ const recordRequired = { helix_id: id, bp_index: int, direction: dir, backbone_p
 const recordOptional = { copy_k: uint, helical_site: object({ axis_point: vec(3), radial_hat: vec(3), azimuth_rad: num, groove_offset_rad: num, phase_roll_rad: num }),
   is_reference: bool, is_flexible_segment: bool, is_unpaired: bool, slab_position: nullable(vec(3)), slab_quaternion: nullable(vec(4)),
   extension_id: id, nucleobase: nstr, is_modification: bool, modification: nstr }
+const requiredRecordChecks = Object.entries(recordRequired), optionalRecordChecks = Object.entries(recordOptional)
+const recordKeys = new Set([...Object.keys(recordRequired), ...Object.keys(recordOptional)])
+function checkRecord(n) {
+  if (!n || Object.getPrototypeOf(n) !== Object.prototype || Object.keys(n).some(k => !recordKeys.has(k))
+      || requiredRecordChecks.some(([k]) => !Object.hasOwn(n, k))) fail('incomplete or unsupported display fields')
+  for (const [k, check] of requiredRecordChecks) check(n[k])
+  for (const [k, check] of optionalRecordChecks) if (Object.hasOwn(n, k)) check(n[k])
+}
 function component(value) {
   shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'required_renderers', 'bounds_nm'])
-  if (value.component_kind !== 'transform-preview-dna' || value.component_version !== 1 || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported component version')
+  if (value.component_kind !== 'transform-preview-dna' || ![1, 2].includes(value.component_version) || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported component version')
+  if (value.component_version === 2) {
+    if (!value.nucleotides || Array.isArray(value.nucleotides) || value.nucleotides.count > limits.records) fail('invalid compact record inventory')
+    value = { ...value, nucleotides: decodeDnaComparisonRecords(value.nucleotides) }
+  }
   const t = value.display_topology; shape(t, [...Object.keys(schemas), 'group_organization'])
   const indices = inventories(t), expected = new Map(), extensions = new Map(), changes = new Map()
   renderWork(value.nucleotides, t)
@@ -235,19 +273,19 @@ function component(value) {
         if (conn.linker_type === 'ss') continue
       }
       const copies = Math.max(0, 1 + (changes.get(JSON.stringify([d.helix_id, bp])) ?? 0))
-      if (copies + expected.size > 1024) fail('record allowance exceeded')
+      if (copies + expected.size > limits.records) fail('record allowance exceeded')
       for (let copy = 0; copy < copies; copy++) expected.set(key(d.helix_id, bp, d.direction, copy), { s, d, ordinal })
     }
   })
   for (const e of t.extensions) {
     const s = indices.strands.get(e.strand_id), d = e.end === 'five_prime' ? s.domains[0] : s.domains.at(-1)
     const count = (e.sequence?.length ?? 0) + Number(!!e.modification)
-    if (count + expected.size + extensions.size > 1024) fail('extension allowance exceeded')
+    if (count + expected.size + extensions.size > limits.records) fail('extension allowance exceeded')
     for (let i = 0; i < count; i++) extensions.set(key(`__ext_${e.id}`, i, d.direction), e)
   }
-  list(value.nucleotides, 1024); const seen = new Set()
+  list(value.nucleotides, limits.records); const seen = new Set()
   for (const n of value.nucleotides) {
-    optional(n, recordRequired, recordOptional)
+    checkRecord(n)
     const k = key(n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0), ext = extensions.get(k), owner = expected.get(k)
     if (seen.has(k)) fail('duplicate occupied record'); seen.add(k)
     if (ext) {
@@ -309,10 +347,10 @@ function component(value) {
  * Charge the actual render families together before any Three allocation. The
  * conversion is the ordinary renderer's own helper, not a second physical rule. */
 function renderWork(records, topology) {
-  list(records, 1024)
+  list(records, limits.records)
   let work = records.filter(n => !n?.is_flexible_segment).length
   const charge = amount => {
-    if (!Number.isSafeInteger(amount) || amount < 0 || (work += amount) > 4096) fail('native render work allowance exceeded')
+    if (!Number.isSafeInteger(amount) || amount < 0 || (work += amount) > limits.nativeWork) fail('native render work allowance exceeded')
   }
   for (const c of topology.flexible_connections) charge(c.n_ss_bases)
   for (const c of [...topology.crossovers, ...topology.forced_ligations]) charge(c.extra_bases?.length ?? 0)
@@ -326,22 +364,22 @@ function renderWork(records, topology) {
   }
 }
 function axes(values, topology, indices) {
-  list(values, 16); const seen = new Set(), coverage = new Map(); let points = 0, domainVisits = 0
-  const point = p => { vec(3)(p); if (++points > 2048) fail('axis point allowance exceeded') }
+  list(values, limits.helices); const seen = new Set(), coverage = new Map(); let points = 0, domainVisits = 0
+  const point = p => { vec(3)(p); if (++points > limits.axisPoints) fail('axis point allowance exceeded') }
   for (const axis of values) {
-    optional(axis, { helix_id: id, start: point, end: point, samples: array(point, 2048), segments: array(json, 512) }, { ovhg_axes: map(json) })
+    optional(axis, { helix_id: id, start: point, end: point, samples: array(point, limits.axisPoints), segments: array(json, 512) }, { ovhg_axes: map(json) })
     if (!indices.helices.has(axis.helix_id) || axis.helix_id.startsWith('__lnk__') || seen.has(axis.helix_id)) fail('invalid axis identity')
     seen.add(axis.helix_id)
     for (const segment of axis.segments) {
       optional(segment, { strand_id: nid, domain_index: nullable(uint), ovhg_id: nid, bp_lo: int, bp_hi: int, start: point, end: point },
-        { domain_ids: array(ref), samples: array(point, 2048) })
+        { domain_ids: array(ref), samples: array(point, limits.axisPoints) })
       const refs = segment.domain_ids?.length ? segment.domain_ids : segment.strand_id === null ? [] : [{ strand_id: segment.strand_id, domain_index: segment.domain_index }]
       for (const r of refs) {
         const d = member(r, indices.strands)
         if (d.helix_id !== axis.helix_id || segment.bp_lo > segment.bp_hi || segment.bp_lo < Math.min(d.start_bp, d.end_bp)
             || segment.bp_hi > Math.max(d.start_bp, d.end_bp)) fail('axis/domain mismatch')
         domainVisits += segment.bp_hi - segment.bp_lo + 1
-        if (domainVisits > 4096) fail('axis domain work allowance exceeded')
+        if (domainVisits > limits.nativeWork) fail('axis domain work allowance exceeded')
         const k = domainKey(r.strand_id, r.domain_index); if (!coverage.has(k)) coverage.set(k, new Set())
         for (let bp = segment.bp_lo; bp <= segment.bp_hi; bp++) coverage.get(k).add(bp)
       }
@@ -460,7 +498,7 @@ function input(v, kind, indices, live) {
   for (const s of indices.strands.values()) for (const d of s.domains) {
     for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
       const copies = Math.max(0, 1 + (changes.get(JSON.stringify([d.helix_id, bp])) ?? 0))
-      if (available.size + copies > 4096) fail('target site allowance exceeded')
+      if (available.size + copies > limits.nativeWork) fail('target site allowance exceeded')
       for (let copy = 0; copy < copies; copy++) available.add(JSON.stringify(['base', d.helix_id, bp, d.direction, copy]))
     }
   }
@@ -506,9 +544,22 @@ function controls(v, topology, kind, live) {
   }
 }
 
-export function validateTransformPreviewComponent(value) { boundedJson(value); component(value); return value }
+export function validateTransformPreviewComponent(value) {
+  checkedComponents.delete(value)
+  boundedJson(value); component(value); return value
+}
+
+const checkedComponents = new WeakSet()
+/** Consume the controller's completed validation once during synchronous
+ * adoption. Standalone builders still validate their complete input. */
+export function consumeValidatedTransformPreviewComponent(value) {
+  return value && typeof value === 'object' && checkedComponents.delete(value)
+    ? value : validateTransformPreviewComponent(value)
+}
 
 export function validateTransformPreviewDisplay(value, { prepare, requireEnvelope = false } = {}) {
+  checkedComponents.delete(value?.before)
+  checkedComponents.delete(value?.candidate)
   if (typeof prepare !== 'boolean' || typeof requireEnvelope !== 'boolean') fail('explicit display stage required')
   boundedJson(value)
   const envelope = ENVELOPE.some(k => Object.hasOwn(value ?? {}, k))
@@ -536,5 +587,7 @@ export function validateTransformPreviewDisplay(value, { prepare, requireEnvelop
     } })(upgrade)
     else if (upgrade !== null) fail('unowned placement upgrade')
   }
+  if (prepare) checkedComponents.add(value.before)
+  if (value.candidate !== null) checkedComponents.add(value.candidate)
   return value
 }

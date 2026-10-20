@@ -2,11 +2,71 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { createTransformHistoryPreview, buildTransformPreviewLayer } from './transform_history_preview.js'
-import { transformComponent, transformPacket } from '../test-helpers/transform_preview.js'
+import { compactTransformComponent, transformComponent, transformPacket } from '../test-helpers/transform_preview.js'
 import { dnaRecord } from '../test-helpers/part_dna_comparison.js'
 import { store } from '../state/store.js'
 
 const owners = []
+it('compact transport gives the renderer the same detached native poses', () => {
+  const component = transformComponent(), packed = compactTransformComponent(component)
+  const layer = buildTransformPreviewLayer(packed, new THREE.Scene()); owners.push(layer)
+  expect(layer.geometry.records).toEqual(component.nucleotides)
+  layer.geometry.records[0].backbone_position[0] += 100
+  expect(packed).toEqual(compactTransformComponent(component))
+})
+it('reused native buffers match fresh rotated Full meshes and retain current gesture poses', () => {
+  const source = transformComponent(), next = structuredClone(source)
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), .7)
+  const shift = new THREE.Vector3(2, 3, 4)
+  const rotate = value => new THREE.Vector3(...value).applyQuaternion(q).toArray()
+  const point = value => new THREE.Vector3(...value).applyQuaternion(q).add(shift).toArray()
+  for (const n of next.nucleotides) {
+    for (const key of ['backbone_position', 'base_position', 'slab_position']) n[key] = point(n[key])
+    for (const key of ['base_normal', 'axis_tangent']) n[key] = rotate(n[key])
+    n.slab_quaternion = q.clone().multiply(new THREE.Quaternion(...n.slab_quaternion)).toArray()
+    n.helical_site.axis_point = point(n.helical_site.axis_point)
+    n.helical_site.radial_hat = rotate(n.helical_site.radial_hat)
+  }
+  for (const axis of next.helix_axes) {
+    axis.start = point(axis.start); axis.end = point(axis.end); axis.samples = axis.samples.map(point)
+    for (const segment of axis.segments) { segment.start = point(segment.start); segment.end = point(segment.end) }
+  }
+  Object.assign(next.display_topology.cluster_transforms[0], { translation: shift.toArray(), rotation: q.toArray() })
+  const reused = buildTransformPreviewLayer(compactTransformComponent(source), new THREE.Scene())
+  const fresh = buildTransformPreviewLayer(compactTransformComponent(next), new THREE.Scene())
+  owners.push(reused, fresh)
+  expect(reused.update(compactTransformComponent(next))).toBe(true)
+  expect(reused.geometry.records).toEqual(fresh.geometry.records)
+  expect(reused.geometry.design.cluster_transforms).toEqual(next.display_topology.cluster_transforms)
+  for (const field of ['backboneEntries', 'slabEntries']) {
+    for (let i = 0; i < fresh.geometry[field].length; i++) {
+      const a = reused.geometry[field][i], b = fresh.geometry[field][i]
+      const am = new THREE.Matrix4(), bm = new THREE.Matrix4()
+      a.instMesh.getMatrixAt(a.id, am); b.instMesh.getMatrixAt(b.id, bm)
+      expect(am.elements).toEqual(bm.elements)
+    }
+  }
+  expect(reused.geometry.helixAxes).toEqual(fresh.geometry.helixAxes)
+})
+
+it('keeps only two candidate buffers and preserves the visible one on a rejected update', () => {
+  const { preview, scene } = setup(), packet = transformPacket()
+  packet.before = compactTransformComponent(packet.before)
+  packet.candidate = compactTransformComponent(packet.candidate)
+  preview.open(packet)
+  const candidates = new Set()
+  for (let i = 0; i < 4; i++) {
+    preview.replaceCandidate(compactTransformComponent())
+    candidates.add(preview.candidateGeometry())
+    expect(scene.children.filter(n => n.name === 'privateTransformPreview')).toHaveLength(2)
+  }
+  expect(candidates.size).toBe(2)
+  const visible = preview.candidateGeometry(), bad = compactTransformComponent()
+  bad.nucleotides.f64 = ''
+  expect(() => preview.replaceCandidate(bad)).toThrow()
+  expect(preview.candidateGeometry()).toBe(visible)
+  expect(visible.records).toEqual(transformComponent().nucleotides)
+})
 afterEach(() => { for (const owner of owners.splice(0)) owner.dispose(); vi.restoreAllMocks() })
 function setup() {
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(), live = new THREE.Group(), light = new THREE.AmbientLight()

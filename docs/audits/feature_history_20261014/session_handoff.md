@@ -2,52 +2,52 @@
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 Updated October20,2026: user resumed sustained six-tool milestone work.
-**Tools done: 2/6 (Extrude, Sweep). CAD ledger: 20/34 complete, 14 remaining (7 core, 7 parked).**
-**Sessions since last gate flip or milestone close: 2.** Delta0 completed/0 scope; no gate flip.
+**Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
+**Sessions since last gate flip or milestone close: 0.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
 The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
-Next task: finish the isolated real-axis TubeGeometry cost experiment before choosing
-another Bend/Twist latency change. No unchanged C8 rerun. Move/Rotate ordinary owner,
-joint/linked controls and menu/keyboard creation now pass app acceptance; shared downstream
-failure feedback is wired, with injected-refusal UI checks. Production gates remain OFF.
-Named-group semantics, representative transform latency and causal C4 acceptance remain open.
+Next task: finish Move/Rotate's measured large-preview latency and required named-member
+motion. Fresh browser CPU profiling is running after the settled batch; use its dominant
+cost to choose the next change. Ordinary owner, joint/linked controls, menu/keyboard creation
+and causal downstream refusal pass app acceptance. Production transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
-Do not repeat unchanged C8 benchmarks. Retain scientific authorization, constants,
-manifests/goldens and native placement/inventory checks. History-row Move is reorder,
-not geometric Move. Old files remain excluded.
+Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
+placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
 
 ## Current qualification evidence
 
-- Detached candidate/spare layers reuse exact native inventories and coordinate arrays;
-  fresh native axes are rebuilt, with preview-only guide tessellation reduced. Native
-  bead/slab/connector placements remain unchanged; canonical rendering defaults unchanged.
-- Focused65 pass, including fresh-build parity with rotated poses, periodic visibility,
-  malformed compact floats, exact reuse and untouched spare on inventory mismatch.
-- Final fixed12-sample C8 run:3pass/1fail. Small Bend/Twist preview107/111ms,
-  Apply939/429ms, Cancel72/70ms. Large Bend/Twist preview994/1149ms,
-  Apply4436/4333ms, Cancel211/161ms. Only large Twist p95 exceeds1000ms.
-  Thresholds unchanged; GPU raster excluded (SwiftShader). Both tools remain unqualified
-  as a gate pair. Logs: static-preview-reuse.log and static-preview-reuse-c8.log under
-  .development-artifacts/feature-history-focus/; root /tmp/__e2e__history-llcbiwr6 absent.
-- Final full frontend regression:779files/9377pass/1skip (342.94s), including compact
-  buffer reuse. Log: static-preview-final-frontend.log. Committed a72d9195.
-- Direct scripts/validation_guard.sh preserves serialization/worker caps because Snap
-  just fails here. User systemd unavailable; memory scope unavailable.
-
-- Move/Rotate:5 native app workflows plus1 injected-refusal workflow pass; fixtures5,
-  launcher6, native replay9, focused35. Final frontend779files/9380pass/1skip (341.63s).
-  Logs under feature-history-focus: transform-{owner,constraints,linked,creation,failure}-app.log
-  and transform-final-frontend.log. All five browser roots independently absent.
-  No FH/tool completion credit; the injected refusal does not establish causal native C4.
+- Bend/Twist private guides use native sampled polylines and shared bp-range clipping,
+  preserving domain gaps and every molecular instance; canonical rendering defaults unchanged.
+  Detached spare reuse remains inventory-exact and failure-atomic; resized GPU buffers dispose.
+- Fixed12-sample C8:4pass. Small Bend/Twist preview101/108ms, Apply936/422ms, Cancel59/80ms;
+  large preview866/942ms, Apply4377/5196ms, Cancel151/193ms. Fixed limits unchanged;
+  GPU raster excluded (SwiftShader). C8 closes the last paired exit; FH-20 is complete.
+- Move/Rotate real6×84/18×504 transport uses lossless f64, exact lease-bound scalar deltas,
+  finite real-part capacities, immutable JSON accounting and detached native buffer reuse.
+  Latest C8:7pass/1fail overall; small Move/Rotate93/96ms, large1134/1275ms;
+  Apply425/2796ms, Cancel43/44ms. Large preview remains above1000ms.
+- Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
+  feature error and blocked descendant appear, refusal preserves canonical state and Cancel
+  clears feedback. Native4/browser2pass; capacity/unsupported refusals remain unverified.
+- Focused native scale2, DTO/host/bounds96, UI149, private-guide23 and native-render14pass.
+  Full frontend780files/9395pass/1skip (344.92s), including resized-buffer ownership.
+- Final backend FAST:19099pass/83fail/19skip (365.48s), no setup errors. Exact failure-set
+  comparison matches stop-backend-final.log; zero new failures. Broad suite is not green.
+  Aggregate381s exceeds90s; no individual violators, slowest4.53s. Timing skill applied;
+  no arbitrary reclassification, scientific manifest regeneration or guard changes.
+- Evidence: axis-lines-c8.log, transform-causal-app-final.log, geometry-final-frontend.log,
+  geometry-final-test-smart.log under .development-artifacts/feature-history-focus/.
+  Browser roots tfn8qjbl/wg9x_zte and cancelled diagnostics mhpbkfq8/rzpelai0 independently absent.
+  All changed Python files pass Ruff; main.js LOC delta0.
 
 ## Completed user-facing behavior
 
 - Bend/Twist: isolated creation/history editing, downstream error attribution and dependency view.
   Desktop mutating-preview fallback and destructive history peeling removed; other consumers of
-  legacy creation helpers are not claimed removed. C8 remains open, so tools are not counted done.
+  legacy creation helpers are not claimed removed. Final C8 passes; both tools are counted done.
 - Sweep: production gates ON; ordinary-part C1–C9 complete. Interactive preview displays axes,
   nodes and cross-sections over static prefix context. Backend now calls guide planning without
   building or validating full candidate DNA on every update. Apply retains complete native rebuild.
@@ -75,7 +75,7 @@ not geometric Move. Old files remain excluded.
 - ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
   a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
 
-## Previous commit verification (not rerun in this task)
+## Earlier verification and retained baseline debt
 
 Evidence logs: `.development-artifacts/feature-history-focus/` (not committed disposable output).
 - Sweep guide backend43/session16 and app3 passed; scratch ydmfjcfe independently absent.
@@ -92,7 +92,7 @@ Evidence logs: `.development-artifacts/feature-history-focus/` (not committed di
   timing violations. Failure-set comparison: all64 baseline failures plus19 schema expectations.
 - `just lint` passed; main.js LOC delta0. No formulas/constants, manifests or goldens changed.
 
-Final backend log: `stop-backend-final.log`. The64 baseline failures comprise11 sealed-path
+Baseline backend log: `stop-backend-final.log`. The64 baseline failures comprise11 sealed-path
 HTTP/registration,2 junction-balance tolerance, and51 historical numerical-manifest compatibility
 expectations. Suppression metadata adds19 obsolete schema-compatibility expectations. Old pins
 remain fail-closed; user explicitly declined legacy compatibility, so no manifests were regenerated.
@@ -110,8 +110,7 @@ No test session requested; focused development checks are authorized. Keep guard
 
 ## Commit and shared-worktree boundaries
 
-This task owns the latency spec, its opt-in fixture startup helper, three additional native latency
-fixtures, this handoff and the appended C8 plan evidence. The plan also has earlier uncommitted
-feature-history evidence; it is eligible under the operating contract's same-subsystem rule.
-Leave unrelated VR, simulation/activity/readiness, scientific-selection, memory hygiene and other
-project edits untouched. No stash/reset/restore, push, amend or broad staging.
+This task owns only the explicit34 paths in the local commit-paths.json plus the new memory
+milestone note. Earlier same-subsystem plan evidence is eligible under the operating contract.
+Preserve unrelated VR, activity/readiness, scientific-selection and memory-hygiene edits.
+No stash/reset/restore, push, amend or broad staging.

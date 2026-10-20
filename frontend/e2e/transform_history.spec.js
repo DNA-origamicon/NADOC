@@ -1,8 +1,102 @@
 import { test, expect } from '@playwright/test'
 import { withHistoryFixture } from './helpers/deformation_history.js'
+import { stat } from 'node:fs/promises'
 
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
 const previewPath = '/api/design/features/transform-preview'
+
+for (const size of ['small', 'large'])
+test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, request }) => {
+  test.setTimeout(240_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const panel = page.locator('#move-rotate-panel'), source = await f.checkpoint()
+    const open = async () => {
+      await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
+      await page.locator('[title="Edit this move/rotate feature"]').click()
+      const response = await pending
+      expect(response.ok(), JSON.stringify(await response.json())).toBe(true)
+      await expect(panel).toBeVisible()
+      await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    }
+    console.log(`C8 transform-${size} ` + JSON.stringify({ file: f.file, bytes: (await stat(f.file)).size,
+      helices: source.design.helices.length, strands: source.design.strands.length, gpuRaster: 'excluded (SwiftShader)' }))
+    await open()
+    const profiler = process.env.NADOC_TRANSFORM_PROFILE ? await page.context().newCDPSession(page) : null
+    if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
+    const evaluations = []
+    const record = response => {
+      if (new URL(response.url()).pathname === `${previewPath}/evaluate`)
+        evaluations.push({ status: response.status(), sequence: response.request().postDataJSON().request_sequence })
+    }
+    page.on('response', record)
+    const p95s = []
+    for (const [tool, selector] of [['move', '#mr-tx'], ['rotate', '#mr-rz']]) {
+      const samples = []
+      for (const value of [32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54]) {
+        samples.push(await page.evaluate(async ({ selector, value }) => {
+          const roots = () => window.__nadocTest.scene.children
+            .filter(n => n.name === 'privateTransformPreview').map(n => n.uuid).join()
+          const before = roots(), input = document.querySelector(selector), start = performance.now()
+          input.value = String(value)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+          await new Promise((resolve, reject) => {
+            const tick = () => roots() !== before ? resolve()
+              : performance.now() - start > 20_000 ? reject(new Error('transform preview did not update')) : setTimeout(tick, 4)
+            tick()
+          })
+          return performance.now() - start
+        }, { selector, value }))
+        await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+      }
+      const p95 = [...samples].sort((a, b) => a - b)[Math.ceil(samples.length * .95) - 1]
+      p95s.push({ tool, p95 })
+      console.log(`C8 ${tool}-${size} update_ms=${samples.map(Math.round).join(',')} p95=${Math.round(p95)}`)
+    }
+    page.off('response', record)
+    if (profiler) {
+      const { profile } = await profiler.send('Profiler.stop')
+      const nodes = new Map(profile.nodes.map(node => [node.id, node.callFrame])), totals = new Map()
+      for (let i = 0; i < profile.samples.length; i++) {
+        const frame = nodes.get(profile.samples[i])
+        const name = `${frame.functionName} ${frame.url}:${frame.lineNumber}`
+        totals.set(name, (totals.get(name) ?? 0) + profile.timeDeltas[i] / 1000)
+      }
+      console.log('DIAGNOSTIC transform CPU ms (not C8 qualification)', [...totals].sort((a, b) => b[1] - a[1]).slice(0, 30))
+      await profiler.detach()
+    }
+    expect(evaluations).toHaveLength(24)
+    expect(evaluations.every(r => r.status === 200)).toBe(true)
+    expect(new Set(evaluations.map(r => r.sequence)).size).toBe(24)
+    expect(await f.checkpoint()).toEqual(source)
+    const applyStart = Date.now()
+    await page.locator('#mr-apply-btn').click()
+    await expect(panel).not.toBeVisible({ timeout: 30_000 })
+    const applyMs = Date.now() - applyStart, committed = await f.checkpoint()
+    expect(committed.revision).toBe(source.revision + 1)
+    expect((await f.browser()).revision).toBe(committed.revision)
+    await open()
+    const canonical = await f.checkpoint(), browser = await f.browser(), reads = []
+    const recordRead = req => {
+      if (req.method() === 'GET' && ['/api/design', '/api/design/geometry'].includes(new URL(req.url()).pathname)) reads.push(req.url())
+    }
+    page.on('request', recordRead)
+    const writes = f.writes.length, cancelStart = Date.now()
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).not.toBeVisible()
+    const cancelMs = Date.now() - cancelStart
+    page.off('request', recordRead)
+    expect(reads).toEqual([])
+    expect(await f.checkpoint()).toEqual(canonical)
+    expect(await f.browser()).toEqual(browser)
+    expect(f.writes.slice(writes).every(r => r.path === `${previewPath}/cancel`)).toBe(true)
+    console.log(`C8 transform-${size} apply_ms=${applyMs} cancel_ms=${cancelMs}`)
+    for (const { tool, p95 } of p95s) expect.soft(p95, `${tool} preview p95 including 2x allowance`).toBeLessThanOrEqual(1000)
+    expect.soft(applyMs, 'Apply including 2x allowance').toBeLessThanOrEqual(size === 'large' ? 20000 : 6000)
+    expect.soft(cancelMs, 'Cancel including 2x allowance').toBeLessThanOrEqual(400)
+  }, `transform-${size}`, { pauseRendering: true })
+})
 
 for (const entry of ['menu', 'shortcut'])
 test(`Move Rotate ${entry} creation previews Cancel and creates one replayable feature`, async ({ page, request }) => {
@@ -284,4 +378,36 @@ test('Move Rotate injected downstream refusal marks error and blocked rows until
       return { expectedConsoleErrors: Array(2).fill('Failed to load resource: the server responded with a status of 409 (Conflict)') }
     } finally { await page.unroute(match, handler) }
   }, 'transform-joint')
+})
+
+for (const [tool, selector, value] of [['Move', '#mr-tx', '9'], ['Rotate', '#mr-rz', '45']])
+test(`${tool} native downstream refusal identifies the first error and blocks its descendant`, async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const before = await f.checkpoint(), panel = page.locator('#move-rotate-panel')
+    const selectedIndex = before.design.feature_log.findIndex(row => row.id === 'selected-transform')
+    const failedIndex = before.design.feature_log.findIndex(row => row.id === 'later-owner-feature')
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await page.locator(`[data-fl-row="${selectedIndex + 1}"] [title="Edit this move/rotate feature"]`).click({ timeout: 10_000 })
+    await expect(panel).toBeVisible()
+    await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    const evaluated = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/evaluate`)
+    await page.locator(selector).fill(value)
+    await page.locator(selector).press('Tab')
+    expect((await evaluated).ok()).toBe(true)
+    await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/apply`, { timeout: 15_000 })
+    await page.locator('#mr-apply-btn').click()
+    const response = await applied
+    await expect(panel).toContainText('Missing domain in overlay target')
+    await expect(page.locator(`[data-fl-row="${failedIndex + 1}"] [data-history-status="error"]`)).toHaveText('Edit failed')
+    await expect(page.locator(`[data-fl-row="${failedIndex + 2}"] [data-history-status="blocked"]`)).toHaveText('Blocked')
+    expect(await f.checkpoint()).toEqual(before)
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).not.toBeVisible()
+    await expect(page.locator('[data-history-status]')).toHaveCount(0)
+    expect(await f.checkpoint()).toEqual(before)
+    return { expectedConsoleErrors: response.status() === 409
+      ? ['Failed to load resource: the server responded with a status of 409 (Conflict)'] : [] }
+  }, 'transform-failure')
 })

@@ -135,7 +135,7 @@ def _controls(design, params, check):
     return result
 
 
-def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_entry=None):
+def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_entry=None, display_cache=None):
     from backend.api.part_transform_projection import project_admitted
 
     if type(include_geometry) is not bool:
@@ -150,7 +150,9 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
             or (source_kind != kind and (source_kind, kind) != ("cluster_op", "placement-poses"))):
         reject("Transform source and evaluated command roles differ", "invalid_preview_definition")
     envelope = _envelope(envelope, prefix, evaluated, source_kind)
-    before = inventory(prefix, check)
+    # Evaluation emits only the independently owned candidate. Admit the
+    # historical prefix when it actually supplies a before pane at preparation.
+    before = inventory(prefix, check) if prepare else None
     after = inventory(evaluated.design, check)
     native_work = _control_cost(evaluated.design, after) + (before.work * 2 if prepare else 0) + (after.work * 2 if include_geometry else 0)
     limit(native_work, MAX_CONTROL_WORK, "cumulative native display/control work")
@@ -159,19 +161,35 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         "feature_id": evaluated.entry.id, "stage": "feature", "source_equivalence_checked": False,
         "downstream_evaluated": False, "physical_validity": False,
         "control_state": _controls(evaluated.design, evaluated.params, check),
-        "candidate": project_admitted(evaluated.design, after, check) if include_geometry else None}
+        "candidate": project_admitted(evaluated.design, after, check, compact=True) if include_geometry else None}
     if prepare:
-        result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check))
+        result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check, compact=True))
         from backend.api.part_placement_pose_commands import upgrade_descriptor
         result["control_context"]["placement_upgrade"] = (
             upgrade_descriptor(source_entry) if source_kind == "cluster_op" else None)
+    elif (display_cache and envelope.get("lease_id") == display_cache.get("lease_id")
+          and result["candidate"] is not None and result["candidate"]["component_version"] == 2):
+        packed = result["candidate"]["nucleotides"]
+        # The complete fresh native projection above still validates geometry
+        # and ownership. Omit only scalar rows identical to this lease's before.
+        if packed["rows"] == display_cache.get("rows"):
+            packed.pop("rows")
+            packed["rows_ref"] = envelope["lease_id"]
     check()
-    return _bounded({**result, **envelope})
+    result = _bounded({**result, **envelope})
+    if prepare and display_cache is not None:
+        display_cache.clear()
+        if result.get("lease_id") and result["before"]["component_version"] == 2:
+            display_cache.update(lease_id=result["lease_id"],
+                                 rows=deepcopy(result["before"]["nucleotides"]["rows"]))
+    return result
 
 
-def prepare_display(prefix, evaluated, *, envelope=None, source_entry=None):
-    return _display(prefix, evaluated, prepare=True, include_geometry=True, envelope=envelope, source_entry=source_entry)
+def prepare_display(prefix, evaluated, *, envelope=None, source_entry=None, display_cache=None):
+    return _display(prefix, evaluated, prepare=True, include_geometry=True, envelope=envelope,
+                    source_entry=source_entry, display_cache=display_cache)
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, source_entry=None):
-    return _display(prefix, evaluated, prepare=False, include_geometry=include_geometry, envelope=envelope, source_entry=source_entry)
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, source_entry=None, display_cache=None):
+    return _display(prefix, evaluated, prepare=False, include_geometry=include_geometry, envelope=envelope,
+                    source_entry=source_entry, display_cache=display_cache)
