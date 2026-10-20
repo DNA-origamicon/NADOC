@@ -40,6 +40,8 @@
 #include "reference_models.hpp"
 #include "representation_buffers.hpp"
 #include "async_trace.hpp"
+#include "view_snapshot_inbox.hpp"
+#include "control_snapshot_stream.hpp"
 #include "loading_frame_trace.hpp"
 #include "frame_audit.hpp"
 #include "motion_detail.hpp"
@@ -9355,13 +9357,12 @@ class Viewer {
         featureLogPanel_.poll(eventPath_);
         pollSweepEdit();
         routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
-        { std::error_code error; const auto path=eventPath_+".share";
-          const auto changed=std::filesystem::last_write_time(path,error);
-          if(error || std::filesystem::file_time_type::clock::now()-changed>std::chrono::seconds(3)) {shareActive_=false;shareBusy_=true;}
-          else {std::ifstream share(path); int active=0,perspective=0,busy=1,ack=0,failed=0;
-            if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed; shareGuests_=shareWaiting_=0; share>>shareGuests_>>shareWaiting_; int canPerspective=1; if(share>>canPerspective)sharePerspectiveAvailable_=canPerspective; else sharePerspectiveAvailable_=true; int canStart=0; shareStartAvailable_=bool(share>>canStart) && canStart; int headset=0; shareHeadsetPerspective_=bool(share>>headset) && headset;} }
-        }
-        if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
+        if(auto packet=shareStream_.latest(eventPath_+".share")) {
+          std::istringstream share(*packet);int active=0,perspective=0,busy=1,ack=0,failed=0;
+            if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed; shareGuests_=shareWaiting_=0; share>>shareGuests_>>shareWaiting_; int canPerspective=1; if(share>>canPerspective)sharePerspectiveAvailable_=canPerspective; else sharePerspectiveAvailable_=true; int canStart=0; shareStartAvailable_=bool(share>>canStart) && canStart; int headset=0; shareHeadsetPerspective_=bool(share>>headset) && headset;}
+        } else {shareActive_=false;shareBusy_=true;}
+        if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters}, simulationPanel_.trajectory.playing &&
+            (glScene_->representation()==Representation::ballstick || glScene_->representation()==Representation::stick || glScene_->representation()==Representation::vdw))) {
         }
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||menuGripTargeted[h];
         const bool viewWasOpen=viewTools_.open;
@@ -11539,7 +11540,8 @@ class Viewer {
     bool showVRAvatar_=true;
     double avatarPublishedAt_=-1;
     nadoc_vr::PresenterUI presenterUI_;
-    bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false,sharePerspectiveAvailable_=true,shareStartAvailable_=false,shareHeadsetPerspective_=false;
+    nadoc_vr::ControlSnapshotStream shareStream_;
+  bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false,sharePerspectiveAvailable_=true,shareStartAvailable_=false,shareHeadsetPerspective_=false;
     int shareSequence_=0,shareAck_=0,shareGuests_=0,shareWaiting_=0;
     std::string shareAction_;
     nadoc_vr::SimulationPanel simulationPanel_;

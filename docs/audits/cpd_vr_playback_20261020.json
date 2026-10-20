@@ -1,0 +1,5468 @@
+{
+  "date": "2026-10-20",
+  "scope": "Read-only completed CPD NAMD production jobs; default 200/1000 frames, 1963 heavy display atoms; ballstick/stick/vdw only",
+  "policy": "docs/vr_cpd_playback.md",
+  "runs": {
+    "candidate": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": true
+      }
+    ],
+    "baseline-repeat": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": true
+      }
+    ],
+    "release-loaded": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": true
+      },
+      {
+        "job": "972af34aa9c5",
+        "passed": true
+      },
+      {
+        "job": "37d39cc6b88f",
+        "passed": false
+      }
+    ],
+    "untraced": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": true
+      },
+      {
+        "job": "972af34aa9c5",
+        "passed": true
+      },
+      {
+        "job": "37d39cc6b88f",
+        "passed": false
+      },
+      {
+        "job": "9b08bed08561",
+        "passed": true
+      }
+    ],
+    "profile": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": true
+      }
+    ],
+    "headset-only": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": false
+      }
+    ],
+    "release": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": false
+      }
+    ],
+    "resident": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": false
+      },
+      {
+        "job": "972af34aa9c5",
+        "passed": false
+      },
+      {
+        "job": "37d39cc6b88f",
+        "passed": false
+      },
+      {
+        "job": "9b08bed08561",
+        "passed": false
+      }
+    ],
+    "release-settled": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": false
+      }
+    ],
+    "baseline": [
+      {
+        "job": "d6bcdef3d59f",
+        "passed": false
+      }
+    ]
+  },
+  "measurements": [
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792525286449,
+      "end": 1792525300614,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792525302893,
+      "end": 1792525315079,
+      "frames": 137,
+      "gap_p50": 83,
+      "gap_p95": 151,
+      "gap_max": 315,
+      "coordinateRequests": 0,
+      "viewUploads": 141,
+      "app_interval_ms": {
+        "p50": 11.164,
+        "p95": 11.469,
+        "p99": 11.694,
+        "max": 13.717
+      },
+      "submitted_frames": 1090,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792525315279,
+      "end": 1792525327410,
+      "frames": 105,
+      "gap_p50": 92,
+      "gap_p95": 209,
+      "gap_max": 456,
+      "coordinateRequests": 0,
+      "viewUploads": 117,
+      "app_interval_ms": {
+        "p50": 11.164,
+        "p95": 11.532,
+        "p99": 11.743,
+        "max": 13.528
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792525330082,
+      "end": 1792525344139,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792525346397,
+      "end": 1792525358603,
+      "frames": 109,
+      "gap_p50": 84,
+      "gap_p95": 230,
+      "gap_max": 1267,
+      "coordinateRequests": 0,
+      "viewUploads": 112,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.486,
+        "p99": 11.761,
+        "max": 23.619
+      },
+      "submitted_frames": 1092,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792525358837,
+      "end": 1792525370943,
+      "frames": 117,
+      "gap_p50": 99,
+      "gap_p95": 139,
+      "gap_max": 254,
+      "coordinateRequests": 0,
+      "viewUploads": 224,
+      "app_interval_ms": {
+        "p50": 11.162,
+        "p95": 11.493,
+        "p99": 11.761,
+        "max": 13.848
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792525373617,
+      "end": 1792525387177,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792525389426,
+      "end": 1792525401545,
+      "frames": 138,
+      "gap_p50": 83,
+      "gap_p95": 105,
+      "gap_max": 469,
+      "coordinateRequests": 0,
+      "viewUploads": 141,
+      "app_interval_ms": {
+        "p50": 11.164,
+        "p95": 11.485,
+        "p99": 11.901,
+        "max": 15.884
+      },
+      "submitted_frames": 1085,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792525401764,
+      "end": 1792525413972,
+      "frames": 121,
+      "gap_p50": 100,
+      "gap_p95": 137,
+      "gap_max": 195,
+      "coordinateRequests": 0,
+      "viewUploads": 222,
+      "app_interval_ms": {
+        "p50": 11.164,
+        "p95": 11.455,
+        "p99": 11.658,
+        "max": 16.926
+      },
+      "submitted_frames": 1093,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792525098209,
+      "end": 1792525100752,
+      "count": 200,
+      "message": "200 selected frames \u00b7 16 maximum buffered"
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792525102974,
+      "end": 1792525115046,
+      "frames": 105,
+      "gap_p50": 66,
+      "gap_p95": 342,
+      "gap_max": 806,
+      "coordinateRequests": 16,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.495,
+        "p99": 11.763,
+        "max": 14.148
+      },
+      "submitted_frames": 1080,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792525115994,
+      "end": 1792525128041,
+      "frames": 120,
+      "gap_p50": 81,
+      "gap_p95": 175,
+      "gap_max": 508,
+      "coordinateRequests": 17,
+      "app_interval_ms": {
+        "p50": 11.173,
+        "p95": 11.441,
+        "p99": 11.575,
+        "max": 14.959
+      },
+      "submitted_frames": 1079,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792525130563,
+      "end": 1792525131104,
+      "count": 200,
+      "message": "200 selected frames \u00b7 16 maximum buffered"
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792525135082,
+      "end": 1792525147250,
+      "frames": 60,
+      "gap_p50": 152,
+      "gap_p95": 243,
+      "gap_max": 2507,
+      "coordinateRequests": 67,
+      "app_interval_ms": {
+        "p50": 11.164,
+        "p95": 11.487,
+        "p99": 12.125,
+        "max": 58.021
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792525148218,
+      "end": 1792525160274,
+      "frames": 33,
+      "gap_p50": 358,
+      "gap_p95": 540,
+      "gap_max": 571,
+      "coordinateRequests": 66,
+      "app_interval_ms": {
+        "p50": 11.176,
+        "p95": 11.432,
+        "p99": 11.66,
+        "max": 13.149
+      },
+      "submitted_frames": 1079,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792525162882,
+      "end": 1792525163435,
+      "count": 200,
+      "message": "200 selected frames \u00b7 16 maximum buffered"
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792525165914,
+      "end": 1792525177987,
+      "frames": 76,
+      "gap_p50": 146,
+      "gap_p95": 240,
+      "gap_max": 333,
+      "coordinateRequests": 86,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.437,
+        "p99": 11.656,
+        "max": 14.101
+      },
+      "submitted_frames": 1081,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792525178573,
+      "end": 1792525190635,
+      "frames": 34,
+      "gap_p50": 366,
+      "gap_p95": 443,
+      "gap_max": 453,
+      "coordinateRequests": 68,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.462,
+        "p99": 11.818,
+        "max": 13.972
+      },
+      "submitted_frames": 1080,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792526344916,
+      "end": 1792526350961,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792526353221,
+      "end": 1792526365361,
+      "frames": 127,
+      "gap_p50": 84,
+      "gap_p95": 136,
+      "gap_max": 627,
+      "coordinateRequests": 0,
+      "viewUploads": 135,
+      "app_interval_ms": {
+        "p50": 11.16,
+        "p95": 11.468,
+        "p99": 11.79,
+        "max": 13.542
+      },
+      "submitted_frames": 1087,
+      "delivered_scene_updates": 136,
+      "scene_update_interval_ms": {
+        "p50": 78.401,
+        "p95": 126.249,
+        "p99": 271.343,
+        "max": 491.231
+      },
+      "gpu_ms": {
+        "p50": 0.631,
+        "p95": 0.753,
+        "p99": 1.167,
+        "max": 2.335
+      },
+      "scene_updates_per_second": 11.2
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792526365589,
+      "end": 1792526377729,
+      "frames": 118,
+      "gap_p50": 79,
+      "gap_p95": 192,
+      "gap_max": 391,
+      "coordinateRequests": 0,
+      "viewUploads": 151,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.522,
+        "p99": 12.588,
+        "max": 46.239
+      },
+      "submitted_frames": 1080,
+      "delivered_scene_updates": 151,
+      "scene_update_interval_ms": {
+        "p50": 67.328,
+        "p95": 108.664,
+        "p99": 297.358,
+        "max": 413.316
+      },
+      "gpu_ms": {
+        "p50": 0.615,
+        "p95": 0.746,
+        "p99": 1.338,
+        "max": 2.46
+      },
+      "scene_updates_per_second": 12.44
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792526380349,
+      "end": 1792526401912,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792526404145,
+      "end": 1792526416319,
+      "frames": 81,
+      "gap_p50": 84,
+      "gap_p95": 280,
+      "gap_max": 1264,
+      "coordinateRequests": 0,
+      "viewUploads": 91,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.443,
+        "p99": 11.62,
+        "max": 13.019
+      },
+      "submitted_frames": 1090,
+      "delivered_scene_updates": 92,
+      "scene_update_interval_ms": {
+        "p50": 88.892,
+        "p95": 469.229,
+        "p99": 501.801,
+        "max": 692.698
+      },
+      "gpu_ms": {
+        "p50": 0.341,
+        "p95": 0.473,
+        "p99": 1.116,
+        "max": 2.4
+      },
+      "scene_updates_per_second": 7.56
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792526416521,
+      "end": 1792526428947,
+      "frames": 123,
+      "gap_p50": 83,
+      "gap_p95": 178,
+      "gap_max": 345,
+      "coordinateRequests": 0,
+      "viewUploads": 278,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.482,
+        "p99": 11.686,
+        "max": 13.843
+      },
+      "submitted_frames": 1113,
+      "delivered_scene_updates": 279,
+      "scene_update_interval_ms": {
+        "p50": 44.159,
+        "p95": 45.165,
+        "p99": 175.499,
+        "max": 491.282
+      },
+      "gpu_ms": {
+        "p50": 0.35,
+        "p95": 0.421,
+        "p99": 0.961,
+        "max": 1.996
+      },
+      "scene_updates_per_second": 22.45
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792526431662,
+      "end": 1792526440204,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792526442429,
+      "end": 1792526454623,
+      "frames": 141,
+      "gap_p50": 83,
+      "gap_p95": 116,
+      "gap_max": 197,
+      "coordinateRequests": 0,
+      "viewUploads": 144,
+      "app_interval_ms": {
+        "p50": 11.18,
+        "p95": 11.459,
+        "p99": 11.656,
+        "max": 13.266
+      },
+      "submitted_frames": 1091,
+      "delivered_scene_updates": 145,
+      "scene_update_interval_ms": {
+        "p50": 78.456,
+        "p95": 108.557,
+        "p99": 167.448,
+        "max": 278.887
+      },
+      "gpu_ms": {
+        "p50": 0.707,
+        "p95": 0.779,
+        "p99": 1.371,
+        "max": 2.718
+      },
+      "scene_updates_per_second": 11.89
+    },
+    {
+      "run": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792526454855,
+      "end": 1792526466947,
+      "frames": 122,
+      "gap_p50": 86,
+      "gap_p95": 171,
+      "gap_max": 381,
+      "coordinateRequests": 0,
+      "viewUploads": 255,
+      "app_interval_ms": {
+        "p50": 11.183,
+        "p95": 11.462,
+        "p99": 11.69,
+        "max": 13.928
+      },
+      "submitted_frames": 1083,
+      "delivered_scene_updates": 256,
+      "scene_update_interval_ms": {
+        "p50": 44.676,
+        "p95": 56.032,
+        "p99": 177.827,
+        "max": 312.986
+      },
+      "gpu_ms": {
+        "p50": 0.711,
+        "p95": 0.79,
+        "p99": 1.418,
+        "max": 2.571
+      },
+      "scene_updates_per_second": 21.17
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792526198337,
+      "end": 1792526203875,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792526206134,
+      "end": 1792526218289,
+      "frames": 138,
+      "gap_p50": 83,
+      "gap_p95": 135,
+      "gap_max": 266,
+      "coordinateRequests": 0,
+      "viewUploads": 142,
+      "app_interval_ms": {
+        "p50": 11.171,
+        "p95": 11.523,
+        "p99": 11.773,
+        "max": 13.61
+      },
+      "submitted_frames": 1088,
+      "delivered_scene_updates": 142,
+      "scene_update_interval_ms": {
+        "p50": 78.397,
+        "p95": 89.981,
+        "p99": 218.946,
+        "max": 268.088
+      },
+      "gpu_ms": {
+        "p50": 0.638,
+        "p95": 0.761,
+        "p99": 1.31,
+        "max": 2.293
+      },
+      "scene_updates_per_second": 11.68
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792526218518,
+      "end": 1792526230680,
+      "frames": 101,
+      "gap_p50": 81,
+      "gap_p95": 328,
+      "gap_max": 731,
+      "coordinateRequests": 0,
+      "viewUploads": 127,
+      "app_interval_ms": {
+        "p50": 11.165,
+        "p95": 11.494,
+        "p99": 11.846,
+        "max": 13.714
+      },
+      "submitted_frames": 1089,
+      "delivered_scene_updates": 127,
+      "scene_update_interval_ms": {
+        "p50": 77.527,
+        "p95": 187.073,
+        "p99": 382.7,
+        "max": 793.186
+      },
+      "gpu_ms": {
+        "p50": 0.642,
+        "p95": 0.768,
+        "p99": 1.278,
+        "max": 2.688
+      },
+      "scene_updates_per_second": 10.44
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792526233290,
+      "end": 1792526242830,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792526245063,
+      "end": 1792526257130,
+      "frames": 103,
+      "gap_p50": 83,
+      "gap_p95": 253,
+      "gap_max": 1614,
+      "coordinateRequests": 0,
+      "viewUploads": 109,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.502,
+        "p99": 11.831,
+        "max": 13.166
+      },
+      "submitted_frames": 1080,
+      "delivered_scene_updates": 110,
+      "scene_update_interval_ms": {
+        "p50": 78.463,
+        "p95": 207.749,
+        "p99": 551.404,
+        "max": 1742.345
+      },
+      "gpu_ms": {
+        "p50": 0.347,
+        "p95": 0.413,
+        "p99": 0.86,
+        "max": 1.679
+      },
+      "scene_updates_per_second": 9.12
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792526257334,
+      "end": 1792526269509,
+      "frames": 126,
+      "gap_p50": 85,
+      "gap_p95": 153,
+      "gap_max": 334,
+      "coordinateRequests": 0,
+      "viewUploads": 278,
+      "app_interval_ms": {
+        "p50": 11.171,
+        "p95": 11.515,
+        "p99": 11.984,
+        "max": 13.527
+      },
+      "submitted_frames": 1090,
+      "delivered_scene_updates": 279,
+      "scene_update_interval_ms": {
+        "p50": 44.461,
+        "p95": 55.769,
+        "p99": 96.834,
+        "max": 480.069
+      },
+      "gpu_ms": {
+        "p50": 0.332,
+        "p95": 0.495,
+        "p99": 0.878,
+        "max": 3.049
+      },
+      "scene_updates_per_second": 22.92
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792526272256,
+      "end": 1792526287307,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792526289546,
+      "end": 1792526301740,
+      "frames": 135,
+      "gap_p50": 84,
+      "gap_p95": 109,
+      "gap_max": 590,
+      "coordinateRequests": 0,
+      "viewUploads": 141,
+      "app_interval_ms": {
+        "p50": 11.165,
+        "p95": 11.454,
+        "p99": 11.705,
+        "max": 71.552
+      },
+      "submitted_frames": 1087,
+      "delivered_scene_updates": 142,
+      "scene_update_interval_ms": {
+        "p50": 78.377,
+        "p95": 100.584,
+        "p99": 192.221,
+        "max": 469.034
+      },
+      "gpu_ms": {
+        "p50": 0.717,
+        "p95": 0.788,
+        "p99": 1.298,
+        "max": 3.046
+      },
+      "scene_updates_per_second": 11.65
+    },
+    {
+      "run": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792526301977,
+      "end": 1792526314168,
+      "frames": 123,
+      "gap_p50": 88,
+      "gap_p95": 181,
+      "gap_max": 348,
+      "coordinateRequests": 0,
+      "viewUploads": 265,
+      "app_interval_ms": {
+        "p50": 11.171,
+        "p95": 11.465,
+        "p99": 11.752,
+        "max": 14.28
+      },
+      "submitted_frames": 1092,
+      "delivered_scene_updates": 266,
+      "scene_update_interval_ms": {
+        "p50": 44.649,
+        "p95": 55.951,
+        "p99": 131.685,
+        "max": 189.982
+      },
+      "gpu_ms": {
+        "p50": 0.69,
+        "p95": 0.774,
+        "p99": 1.267,
+        "max": 2.429
+      },
+      "scene_updates_per_second": 21.82
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792526498825,
+      "end": 1792526516884,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792526519882,
+      "end": 1792526532089,
+      "frames": 133,
+      "gap_p50": 83,
+      "gap_p95": 152,
+      "gap_max": 348,
+      "coordinateRequests": 0,
+      "viewUploads": 141,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.451,
+        "p99": 11.777,
+        "max": 13.139
+      },
+      "submitted_frames": 1093,
+      "delivered_scene_updates": 142,
+      "scene_update_interval_ms": {
+        "p50": 78.297,
+        "p95": 100.768,
+        "p99": 272.754,
+        "max": 335.342
+      },
+      "gpu_ms": {
+        "p50": 0.625,
+        "p95": 0.753,
+        "p99": 1.216,
+        "max": 2.655
+      },
+      "scene_updates_per_second": 11.63
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792526532352,
+      "end": 1792526544518,
+      "frames": 117,
+      "gap_p50": 86,
+      "gap_p95": 191,
+      "gap_max": 340,
+      "coordinateRequests": 0,
+      "viewUploads": 148,
+      "app_interval_ms": {
+        "p50": 11.184,
+        "p95": 11.542,
+        "p99": 12.941,
+        "max": 69.827
+      },
+      "submitted_frames": 1080,
+      "delivered_scene_updates": 148,
+      "scene_update_interval_ms": {
+        "p50": 67.185,
+        "p95": 156.465,
+        "p99": 282.139,
+        "max": 334.786
+      },
+      "gpu_ms": {
+        "p50": 0.618,
+        "p95": 0.761,
+        "p99": 1.169,
+        "max": 2.637
+      },
+      "scene_updates_per_second": 12.17
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792526547331,
+      "end": 1792526567897,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792526570120,
+      "end": 1792526582564,
+      "frames": 92,
+      "gap_p50": 83,
+      "gap_p95": 233,
+      "gap_max": 1683,
+      "coordinateRequests": 0,
+      "viewUploads": 97,
+      "app_interval_ms": {
+        "p50": 11.185,
+        "p95": 11.465,
+        "p99": 11.768,
+        "max": 14.245
+      },
+      "submitted_frames": 1114,
+      "delivered_scene_updates": 98,
+      "scene_update_interval_ms": {
+        "p50": 88.991,
+        "p95": 256.96,
+        "p99": 1407.014,
+        "max": 1652.955
+      },
+      "gpu_ms": {
+        "p50": 0.343,
+        "p95": 0.415,
+        "p99": 1.003,
+        "max": 2.501
+      },
+      "scene_updates_per_second": 7.88
+    },
+    {
+      "run": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792526582884,
+      "end": 1792526595782,
+      "frames": 68,
+      "gap_p50": 96,
+      "gap_p95": 825,
+      "gap_max": 1073,
+      "coordinateRequests": 0,
+      "viewUploads": 144,
+      "app_interval_ms": {
+        "p50": 11.178,
+        "p95": 11.52,
+        "p99": 14.078,
+        "max": 229.255
+      },
+      "submitted_frames": 1102,
+      "delivered_scene_updates": 145,
+      "scene_update_interval_ms": {
+        "p50": 44.514,
+        "p95": 420.93,
+        "p99": 788.105,
+        "max": 882.368
+      },
+      "gpu_ms": {
+        "p50": 0.336,
+        "p95": 0.407,
+        "p99": 0.885,
+        "max": 2.033
+      },
+      "scene_updates_per_second": 11.24
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527382730,
+      "end": 1792527388346,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527390666,
+      "end": 1792527402775,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 983,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 1716,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 114,
+      "gap_p50": 83,
+      "gap_p95": 223,
+      "gap_max": 513,
+      "coordinateRequests": 0,
+      "viewUploads": 103,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.536,
+        "p99": 11.745,
+        "max": 13.374
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 104,
+      "scene_update_interval_ms": {
+        "p50": 78.412,
+        "p95": 268.051,
+        "p99": 501.379,
+        "max": 536.483
+      },
+      "gpu_ms": {
+        "p50": 0.708,
+        "p95": 0.835,
+        "p99": 1.252,
+        "max": 2.656
+      },
+      "scene_updates_per_second": 8.59
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527404156,
+      "end": 1792527416361,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 1741,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 2531,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 124,
+      "gap_p50": 76,
+      "gap_p95": 139,
+      "gap_max": 523,
+      "coordinateRequests": 0,
+      "viewUploads": 156,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.485,
+        "p99": 11.752,
+        "max": 12.963
+      },
+      "submitted_frames": 1093,
+      "delivered_scene_updates": 158,
+      "scene_update_interval_ms": {
+        "p50": 67.046,
+        "p95": 89.526,
+        "p99": 344.769,
+        "max": 614.537
+      },
+      "gpu_ms": {
+        "p50": 0.692,
+        "p95": 0.829,
+        "p99": 1.314,
+        "max": 2.907
+      },
+      "scene_updates_per_second": 12.95
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527418890,
+      "end": 1792527426008,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527428334,
+      "end": 1792527440442,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 3243,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 3967,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 121,
+      "gap_p50": 83,
+      "gap_p95": 249,
+      "gap_max": 460,
+      "coordinateRequests": 0,
+      "viewUploads": 119,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.507,
+        "p99": 11.907,
+        "max": 15.358
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 120,
+      "scene_update_interval_ms": {
+        "p50": 78.413,
+        "p95": 235.761,
+        "p99": 526.671,
+        "max": 592.063
+      },
+      "gpu_ms": {
+        "p50": 0.368,
+        "p95": 0.554,
+        "p99": 0.712,
+        "max": 2.089
+      },
+      "scene_updates_per_second": 9.91
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527441123,
+      "end": 1792527453403,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 4001,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 4736,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 120,
+      "gap_p50": 89,
+      "gap_p95": 154,
+      "gap_max": 426,
+      "coordinateRequests": 0,
+      "viewUploads": 259,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.536,
+        "p99": 12.13,
+        "max": 19.694
+      },
+      "submitted_frames": 1099,
+      "delivered_scene_updates": 259,
+      "scene_update_interval_ms": {
+        "p50": 33.848,
+        "p95": 55.722,
+        "p99": 339.997,
+        "max": 737.102
+      },
+      "gpu_ms": {
+        "p50": 0.38,
+        "p95": 0.546,
+        "p99": 0.959,
+        "max": 2.019
+      },
+      "scene_updates_per_second": 21.09
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792527455989,
+      "end": 1792527463105,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527465428,
+      "end": 1792527477536,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 5450,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 6183,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 87,
+      "gap_max": 473,
+      "coordinateRequests": 0,
+      "viewUploads": 130,
+      "app_interval_ms": {
+        "p50": 11.166,
+        "p95": 11.535,
+        "p99": 11.86,
+        "max": 14.127
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 131,
+      "scene_update_interval_ms": {
+        "p50": 78.489,
+        "p95": 89.848,
+        "p99": 529.866,
+        "max": 558.818
+      },
+      "gpu_ms": {
+        "p50": 0.753,
+        "p95": 0.845,
+        "p99": 1.269,
+        "max": 3.603
+      },
+      "scene_updates_per_second": 10.82
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527477867,
+      "end": 1792527490087,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 6196,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 6936,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 131,
+      "gap_p50": 86,
+      "gap_p95": 117,
+      "gap_max": 258,
+      "coordinateRequests": 0,
+      "viewUploads": 274,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.491,
+        "p99": 11.742,
+        "max": 12.764
+      },
+      "submitted_frames": 1094,
+      "delivered_scene_updates": 276,
+      "scene_update_interval_ms": {
+        "p50": 44.558,
+        "p95": 55.553,
+        "p99": 173.455,
+        "max": 335.223
+      },
+      "gpu_ms": {
+        "p50": 0.78,
+        "p95": 0.858,
+        "p99": 1.394,
+        "max": 2.928
+      },
+      "scene_updates_per_second": 22.59
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527258984,
+      "end": 1792527264601,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527266925,
+      "end": 1792527279133,
+      "desktopBefore": {
+        "rendered": 1235,
+        "callbacks": 1235,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 1964,
+        "callbacks": 1964,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 97,
+      "gap_p50": 83,
+      "gap_p95": 324,
+      "gap_max": 793,
+      "coordinateRequests": 0,
+      "viewUploads": 89,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.448,
+        "p99": 11.652,
+        "max": 13.946
+      },
+      "submitted_frames": 1093,
+      "delivered_scene_updates": 90,
+      "scene_update_interval_ms": {
+        "p50": 78.446,
+        "p95": 263.763,
+        "p99": 977.636,
+        "max": 1351.297
+      },
+      "gpu_ms": {
+        "p50": 0.668,
+        "p95": 0.795,
+        "p99": 1.224,
+        "max": 2.456
+      },
+      "scene_updates_per_second": 7.37
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527279456,
+      "end": 1792527291912,
+      "desktopBefore": {
+        "rendered": 1977,
+        "callbacks": 1977,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 2731,
+        "callbacks": 2731,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 115,
+      "gap_p50": 78,
+      "gap_p95": 202,
+      "gap_max": 585,
+      "coordinateRequests": 0,
+      "viewUploads": 141,
+      "app_interval_ms": {
+        "p50": 11.173,
+        "p95": 11.505,
+        "p99": 11.79,
+        "max": 12.877
+      },
+      "submitted_frames": 1116,
+      "delivered_scene_updates": 142,
+      "scene_update_interval_ms": {
+        "p50": 67.067,
+        "p95": 189.636,
+        "p99": 529.498,
+        "max": 648.027
+      },
+      "gpu_ms": {
+        "p50": 0.676,
+        "p95": 0.806,
+        "p99": 1.22,
+        "max": 2.523
+      },
+      "scene_updates_per_second": 11.4
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527294505,
+      "end": 1792527301622,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527303941,
+      "end": 1792527316147,
+      "desktopBefore": {
+        "rendered": 3446,
+        "callbacks": 3446,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 4185,
+        "callbacks": 4185,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 121,
+      "gap_p50": 83,
+      "gap_p95": 206,
+      "gap_max": 567,
+      "coordinateRequests": 0,
+      "viewUploads": 118,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.508,
+        "p99": 11.755,
+        "max": 13.224
+      },
+      "submitted_frames": 1092,
+      "delivered_scene_updates": 119,
+      "scene_update_interval_ms": {
+        "p50": 78.463,
+        "p95": 160.089,
+        "p99": 662.367,
+        "max": 871.357
+      },
+      "gpu_ms": {
+        "p50": 0.369,
+        "p95": 0.432,
+        "p99": 0.976,
+        "max": 2.554
+      },
+      "scene_updates_per_second": 9.75
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527316472,
+      "end": 1792527328592,
+      "desktopBefore": {
+        "rendered": 4198,
+        "callbacks": 4198,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 4921,
+        "callbacks": 4921,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 124,
+      "gap_p50": 88,
+      "gap_p95": 118,
+      "gap_max": 352,
+      "coordinateRequests": 0,
+      "viewUploads": 277,
+      "app_interval_ms": {
+        "p50": 11.181,
+        "p95": 11.468,
+        "p99": 11.692,
+        "max": 13.221
+      },
+      "submitted_frames": 1085,
+      "delivered_scene_updates": 278,
+      "scene_update_interval_ms": {
+        "p50": 33.811,
+        "p95": 55.705,
+        "p99": 240.089,
+        "max": 345.75
+      },
+      "gpu_ms": {
+        "p50": 0.35,
+        "p95": 0.427,
+        "p99": 0.805,
+        "max": 2.401
+      },
+      "scene_updates_per_second": 22.94
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792527331173,
+      "end": 1792527338290,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527340610,
+      "end": 1792527352717,
+      "desktopBefore": {
+        "rendered": 5634,
+        "callbacks": 5634,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 6367,
+        "callbacks": 6367,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 140,
+      "gap_p50": 83,
+      "gap_p95": 86,
+      "gap_max": 286,
+      "coordinateRequests": 0,
+      "viewUploads": 139,
+      "app_interval_ms": {
+        "p50": 11.174,
+        "p95": 11.518,
+        "p99": 11.775,
+        "max": 13.457
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 140,
+      "scene_update_interval_ms": {
+        "p50": 78.443,
+        "p95": 89.762,
+        "p99": 241.15,
+        "max": 402.221
+      },
+      "gpu_ms": {
+        "p50": 0.724,
+        "p95": 0.813,
+        "p99": 1.261,
+        "max": 2.615
+      },
+      "scene_updates_per_second": 11.56
+    },
+    {
+      "run": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527353042,
+      "end": 1792527365265,
+      "desktopBefore": {
+        "rendered": 6380,
+        "callbacks": 6380,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 7111,
+        "callbacks": 7111,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 131,
+      "gap_p50": 88,
+      "gap_p95": 116,
+      "gap_max": 203,
+      "coordinateRequests": 0,
+      "viewUploads": 277,
+      "app_interval_ms": {
+        "p50": 11.186,
+        "p95": 11.47,
+        "p99": 11.768,
+        "max": 13.877
+      },
+      "submitted_frames": 1095,
+      "delivered_scene_updates": 279,
+      "scene_update_interval_ms": {
+        "p50": 44.594,
+        "p95": 55.765,
+        "p99": 56.148,
+        "max": 234.773
+      },
+      "gpu_ms": {
+        "p50": 0.735,
+        "p95": 0.826,
+        "p99": 1.426,
+        "max": 3.071
+      },
+      "scene_updates_per_second": 22.83
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527512778,
+      "end": 1792527518896,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527521220,
+      "end": 1792527533357,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 1388,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 2119,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 130,
+      "gap_p50": 83,
+      "gap_p95": 86,
+      "gap_max": 479,
+      "coordinateRequests": 0,
+      "viewUploads": 129,
+      "app_interval_ms": {
+        "p50": 11.161,
+        "p95": 11.555,
+        "p99": 12.021,
+        "max": 13.911
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": 130,
+      "scene_update_interval_ms": {
+        "p50": 78.437,
+        "p95": 100.532,
+        "p99": 284.513,
+        "max": 1050.129
+      },
+      "gpu_ms": {
+        "p50": 0.701,
+        "p95": 0.83,
+        "p99": 1.228,
+        "max": 2.762
+      },
+      "scene_updates_per_second": 10.71
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527533685,
+      "end": 1792527545817,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 2132,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 2855,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 110,
+      "gap_p50": 75,
+      "gap_p95": 143,
+      "gap_max": 1014,
+      "coordinateRequests": 0,
+      "viewUploads": 139,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.529,
+        "p99": 12.208,
+        "max": 276.715
+      },
+      "submitted_frames": 1058,
+      "delivered_scene_updates": 140,
+      "scene_update_interval_ms": {
+        "p50": 67.054,
+        "p95": 89.04,
+        "p99": 440.892,
+        "max": 1787.525
+      },
+      "gpu_ms": {
+        "p50": 0.691,
+        "p95": 0.824,
+        "p99": 1.312,
+        "max": 2.899
+      },
+      "scene_updates_per_second": 11.54
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527548371,
+      "end": 1792527555989,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527558311,
+      "end": 1792527570418,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 3598,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 4316,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 101,
+      "gap_p50": 83,
+      "gap_p95": 414,
+      "gap_max": 770,
+      "coordinateRequests": 0,
+      "viewUploads": 96,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.543,
+        "p99": 11.686,
+        "max": 13.627
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 97,
+      "scene_update_interval_ms": {
+        "p50": 78.446,
+        "p95": 390.614,
+        "p99": 539.593,
+        "max": 815.323
+      },
+      "gpu_ms": {
+        "p50": 0.385,
+        "p95": 0.453,
+        "p99": 0.97,
+        "max": 2.406
+      },
+      "scene_updates_per_second": 8.01
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527570745,
+      "end": 1792527582853,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 4329,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 5062,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 130,
+      "gap_p50": 88,
+      "gap_p95": 112,
+      "gap_max": 188,
+      "coordinateRequests": 0,
+      "viewUploads": 294,
+      "app_interval_ms": {
+        "p50": 11.17,
+        "p95": 11.55,
+        "p99": 12.018,
+        "max": 14.3
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 296,
+      "scene_update_interval_ms": {
+        "p50": 33.775,
+        "p95": 44.977,
+        "p99": 125.741,
+        "max": 368.898
+      },
+      "gpu_ms": {
+        "p50": 0.386,
+        "p95": 0.558,
+        "p99": 0.852,
+        "max": 2.29
+      },
+      "scene_updates_per_second": 24.45
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792527585461,
+      "end": 1792527593579,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527595895,
+      "end": 1792527608103,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 5838,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 6577,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 177,
+      "gap_max": 408,
+      "coordinateRequests": 0,
+      "viewUploads": 129,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.538,
+        "p99": 13.016,
+        "max": 22.656
+      },
+      "submitted_frames": 1088,
+      "delivered_scene_updates": 130,
+      "scene_update_interval_ms": {
+        "p50": 78.332,
+        "p95": 149.63,
+        "p99": 474.181,
+        "max": 636.842
+      },
+      "gpu_ms": {
+        "p50": 0.79,
+        "p95": 0.882,
+        "p99": 1.536,
+        "max": 2.998
+      },
+      "scene_updates_per_second": 10.65
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527608629,
+      "end": 1792527620834,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 6596,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 7333,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 75,
+      "gap_p50": 117,
+      "gap_p95": 269,
+      "gap_max": 481,
+      "coordinateRequests": 0,
+      "viewUploads": 85,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.494,
+        "p99": 12.373,
+        "max": 47.654
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 86,
+      "scene_update_interval_ms": {
+        "p50": 44.796,
+        "p95": 469.393,
+        "p99": 547.625,
+        "max": 726.384
+      },
+      "gpu_ms": {
+        "p50": 0.782,
+        "p95": 0.852,
+        "p99": 1.323,
+        "max": 39.451
+      },
+      "scene_updates_per_second": 7.05
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527642254,
+      "end": 1792527647874,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527650196,
+      "end": 1792527662302,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 1052,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 1785,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 111,
+      "gap_p50": 83,
+      "gap_p95": 213,
+      "gap_max": 1584,
+      "coordinateRequests": 0,
+      "viewUploads": 105,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.487,
+        "p99": 11.784,
+        "max": 14.875
+      },
+      "submitted_frames": 1083,
+      "delivered_scene_updates": 106,
+      "scene_update_interval_ms": {
+        "p50": 78.449,
+        "p95": 254.563,
+        "p99": 453.059,
+        "max": 1641.943
+      },
+      "gpu_ms": {
+        "p50": 0.737,
+        "p95": 0.871,
+        "p99": 1.375,
+        "max": 1.682
+      },
+      "scene_updates_per_second": 8.76
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527662628,
+      "end": 1792527674760,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 1798,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 2533,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 87,
+      "gap_p50": 78,
+      "gap_p95": 505,
+      "gap_max": 1317,
+      "coordinateRequests": 0,
+      "viewUploads": 109,
+      "app_interval_ms": {
+        "p50": 11.171,
+        "p95": 11.489,
+        "p99": 11.779,
+        "max": 13.786
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": 110,
+      "scene_update_interval_ms": {
+        "p50": 67.076,
+        "p95": 223.38,
+        "p99": 1298.389,
+        "max": 1318.276
+      },
+      "gpu_ms": {
+        "p50": 0.732,
+        "p95": 0.856,
+        "p99": 1.41,
+        "max": 2.839
+      },
+      "scene_updates_per_second": 9.07
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527677337,
+      "end": 1792527684452,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527686769,
+      "end": 1792527698876,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 3247,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 3980,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 110,
+      "gap_p50": 83,
+      "gap_p95": 213,
+      "gap_max": 1219,
+      "coordinateRequests": 0,
+      "viewUploads": 106,
+      "app_interval_ms": {
+        "p50": 11.173,
+        "p95": 11.523,
+        "p99": 12.009,
+        "max": 37.964
+      },
+      "submitted_frames": 1078,
+      "delivered_scene_updates": 107,
+      "scene_update_interval_ms": {
+        "p50": 78.596,
+        "p95": 284.999,
+        "p99": 582.476,
+        "max": 1574.843
+      },
+      "gpu_ms": {
+        "p50": 0.383,
+        "p95": 0.445,
+        "p99": 0.644,
+        "max": 2.672
+      },
+      "scene_updates_per_second": 8.84
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527699200,
+      "end": 1792527711307,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 3993,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 4718,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 115,
+      "gap_p50": 89,
+      "gap_p95": 205,
+      "gap_max": 653,
+      "coordinateRequests": 0,
+      "viewUploads": 261,
+      "app_interval_ms": {
+        "p50": 11.175,
+        "p95": 11.522,
+        "p99": 11.892,
+        "max": 13.889
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 262,
+      "scene_update_interval_ms": {
+        "p50": 33.73,
+        "p95": 44.875,
+        "p99": 346.667,
+        "max": 860.155
+      },
+      "gpu_ms": {
+        "p50": 0.389,
+        "p95": 0.465,
+        "p99": 0.812,
+        "max": 2.664
+      },
+      "scene_updates_per_second": 21.64
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792527713898,
+      "end": 1792527721020,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527723340,
+      "end": 1792527735448,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 5419,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 6152,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 88,
+      "gap_max": 582,
+      "coordinateRequests": 0,
+      "viewUploads": 132,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.473,
+        "p99": 11.706,
+        "max": 13.062
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 134,
+      "scene_update_interval_ms": {
+        "p50": 78.375,
+        "p95": 100.409,
+        "p99": 405.261,
+        "max": 614.35
+      },
+      "gpu_ms": {
+        "p50": 0.772,
+        "p95": 0.849,
+        "p99": 1.419,
+        "max": 2.936
+      },
+      "scene_updates_per_second": 11.07
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527735773,
+      "end": 1792527748008,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 6165,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 6906,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 128,
+      "gap_p50": 87,
+      "gap_p95": 118,
+      "gap_max": 354,
+      "coordinateRequests": 0,
+      "viewUploads": 259,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.521,
+        "p99": 11.818,
+        "max": 13.573
+      },
+      "submitted_frames": 1095,
+      "delivered_scene_updates": 261,
+      "scene_update_interval_ms": {
+        "p50": 44.614,
+        "p95": 55.869,
+        "p99": 137.098,
+        "max": 559.156
+      },
+      "gpu_ms": {
+        "p50": 0.73,
+        "p95": 0.823,
+        "p99": 1.204,
+        "max": 2.774
+      },
+      "scene_updates_per_second": 21.33
+    },
+    {
+      "run": "profile/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792525669865,
+      "end": 1792525689486,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "profile/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792525691997,
+      "end": 1792525704450,
+      "frames": 126,
+      "gap_p50": 84,
+      "gap_p95": 162,
+      "gap_max": 665,
+      "coordinateRequests": 0,
+      "viewUploads": 133,
+      "app_interval_ms": {
+        "p50": 11.161,
+        "p95": 11.508,
+        "p99": 11.778,
+        "max": 13.134
+      },
+      "submitted_frames": 1115,
+      "delivered_scene_updates": 134,
+      "scene_update_interval_ms": {
+        "p50": 78.419,
+        "p95": 105.138,
+        "p99": 403.527,
+        "max": 681.577
+      },
+      "gpu_ms": {
+        "p50": 0.628,
+        "p95": 0.749,
+        "p99": 1.204,
+        "max": 2.322
+      },
+      "scene_updates_per_second": 10.76
+    },
+    {
+      "run": "profile/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792525704968,
+      "end": 1792525717078,
+      "frames": 115,
+      "gap_p50": 88,
+      "gap_p95": 154,
+      "gap_max": 400,
+      "coordinateRequests": 0,
+      "viewUploads": 154,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.479,
+        "p99": 11.825,
+        "max": 13.588
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 154,
+      "scene_update_interval_ms": {
+        "p50": 68.381,
+        "p95": 94.184,
+        "p99": 271.176,
+        "max": 390.776
+      },
+      "gpu_ms": {
+        "p50": 0.594,
+        "p95": 0.75,
+        "p99": 1.192,
+        "max": 2.321
+      },
+      "scene_updates_per_second": 12.72
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527775254,
+      "end": 1792527780872,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527783195,
+      "end": 1792527795303,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 1474,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 2207,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 138,
+      "gap_p50": 83,
+      "gap_p95": 87,
+      "gap_max": 493,
+      "coordinateRequests": 0,
+      "viewUploads": 139,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.546,
+        "p99": 11.892,
+        "max": 16.383
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 140,
+      "scene_update_interval_ms": {
+        "p50": 78.371,
+        "p95": 89.815,
+        "p99": 298.742,
+        "max": 335.149
+      },
+      "gpu_ms": {
+        "p50": 0.67,
+        "p95": 0.83,
+        "p99": 1.145,
+        "max": 1.772
+      },
+      "scene_updates_per_second": 11.56
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527795631,
+      "end": 1792527807853,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 2221,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 2960,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 122,
+      "gap_p50": 74,
+      "gap_p95": 138,
+      "gap_max": 581,
+      "coordinateRequests": 0,
+      "viewUploads": 155,
+      "app_interval_ms": {
+        "p50": 11.157,
+        "p95": 11.55,
+        "p99": 11.862,
+        "max": 14.886
+      },
+      "submitted_frames": 1094,
+      "delivered_scene_updates": 156,
+      "scene_update_interval_ms": {
+        "p50": 67.054,
+        "p95": 83.448,
+        "p99": 254.788,
+        "max": 949.5
+      },
+      "gpu_ms": {
+        "p50": 0.673,
+        "p95": 0.823,
+        "p99": 1.313,
+        "max": 2.833
+      },
+      "scene_updates_per_second": 12.76
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527810479,
+      "end": 1792527825106,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527827424,
+      "end": 1792527839531,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 4128,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 4861,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 137,
+      "gap_p50": 83,
+      "gap_p95": 85,
+      "gap_max": 377,
+      "coordinateRequests": 0,
+      "viewUploads": 136,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.537,
+        "p99": 11.824,
+        "max": 13.318
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 137,
+      "scene_update_interval_ms": {
+        "p50": 78.484,
+        "p95": 89.955,
+        "p99": 193.156,
+        "max": 715.186
+      },
+      "gpu_ms": {
+        "p50": 0.395,
+        "p95": 0.46,
+        "p99": 0.671,
+        "max": 2.32
+      },
+      "scene_updates_per_second": 11.32
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527840562,
+      "end": 1792527852677,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 4917,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 5619,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 75,
+      "gap_p50": 97,
+      "gap_p95": 444,
+      "gap_max": 846,
+      "coordinateRequests": 0,
+      "viewUploads": 111,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.547,
+        "p99": 12.29,
+        "max": 26.234
+      },
+      "submitted_frames": 1078,
+      "delivered_scene_updates": 113,
+      "scene_update_interval_ms": {
+        "p50": 44.505,
+        "p95": 480.166,
+        "p99": 816.814,
+        "max": 983.194
+      },
+      "gpu_ms": {
+        "p50": 0.369,
+        "p95": 0.45,
+        "p99": 0.949,
+        "max": 18.462
+      },
+      "scene_updates_per_second": 9.33
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "vdw",
+      "start": 1792527855236,
+      "end": 1792527862354,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527864675,
+      "end": 1792527877132,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 6332,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 7086,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 106,
+      "gap_p50": 83,
+      "gap_p95": 261,
+      "gap_max": 517,
+      "coordinateRequests": 0,
+      "viewUploads": 100,
+      "app_interval_ms": {
+        "p50": 11.166,
+        "p95": 11.465,
+        "p99": 11.65,
+        "max": 14.497
+      },
+      "submitted_frames": 1116,
+      "delivered_scene_updates": 100,
+      "scene_update_interval_ms": {
+        "p50": 78.476,
+        "p95": 449.036,
+        "p99": 474.651,
+        "max": 737.309
+      },
+      "gpu_ms": {
+        "p50": 0.775,
+        "p95": 0.847,
+        "p99": 1.344,
+        "max": 2.626
+      },
+      "scene_updates_per_second": 8.03
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527877809,
+      "end": 1792527889917,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 7120,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 7854,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 113,
+      "gap_p50": 90,
+      "gap_p95": 228,
+      "gap_max": 524,
+      "coordinateRequests": 0,
+      "viewUploads": 214,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.469,
+        "p99": 11.688,
+        "max": 13.419
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 216,
+      "scene_update_interval_ms": {
+        "p50": 44.626,
+        "p95": 111.342,
+        "p99": 335.204,
+        "max": 703.981
+      },
+      "gpu_ms": {
+        "p50": 0.759,
+        "p95": 0.852,
+        "p99": 1.283,
+        "max": 2.005
+      },
+      "scene_updates_per_second": 17.84
+    },
+    {
+      "run": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527001766,
+      "end": 1792527007301,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527009560,
+      "end": 1792527022546,
+      "frames": 139,
+      "gap_p50": 83,
+      "gap_p95": 97,
+      "gap_max": 341,
+      "coordinateRequests": 0,
+      "viewUploads": 136,
+      "app_interval_ms": {
+        "p50": 11.179,
+        "p95": 11.479,
+        "p99": 11.631,
+        "max": 13.672
+      },
+      "submitted_frames": 1162,
+      "delivered_scene_updates": 136,
+      "scene_update_interval_ms": {
+        "p50": 78.361,
+        "p95": 107.359,
+        "p99": 308.141,
+        "max": 413.194
+      },
+      "gpu_ms": {
+        "p50": 0.643,
+        "p95": 0.772,
+        "p99": 1.268,
+        "max": 2.599
+      },
+      "scene_updates_per_second": 10.47
+    },
+    {
+      "run": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527022800,
+      "end": 1792527035207,
+      "frames": 121,
+      "gap_p50": 83,
+      "gap_p95": 146,
+      "gap_max": 512,
+      "coordinateRequests": 0,
+      "viewUploads": 147,
+      "app_interval_ms": {
+        "p50": 11.18,
+        "p95": 11.524,
+        "p99": 11.954,
+        "max": 15.99
+      },
+      "submitted_frames": 1111,
+      "delivered_scene_updates": 148,
+      "scene_update_interval_ms": {
+        "p50": 67.185,
+        "p95": 97.091,
+        "p99": 464.065,
+        "max": 569.943
+      },
+      "gpu_ms": {
+        "p50": 0.613,
+        "p95": 0.761,
+        "p99": 1.379,
+        "max": 3.462
+      },
+      "scene_updates_per_second": 11.93
+    },
+    {
+      "run": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792527037974,
+      "end": 1792527047516,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527049745,
+      "end": 1792527061813,
+      "frames": 80,
+      "gap_p50": 85,
+      "gap_p95": 286,
+      "gap_max": 460,
+      "coordinateRequests": 0,
+      "viewUploads": 66,
+      "app_interval_ms": {
+        "p50": 11.173,
+        "p95": 11.487,
+        "p99": 12.095,
+        "max": 56.513
+      },
+      "submitted_frames": 1073,
+      "delivered_scene_updates": 67,
+      "scene_update_interval_ms": {
+        "p50": 78.599,
+        "p95": 480.569,
+        "p99": 784.652,
+        "max": 893.456
+      },
+      "gpu_ms": {
+        "p50": 0.349,
+        "p95": 0.409,
+        "p99": 1.046,
+        "max": 48.155
+      },
+      "scene_updates_per_second": 5.55
+    },
+    {
+      "run": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792526887788,
+      "end": 1792526893831,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792526896119,
+      "end": 1792526908360,
+      "frames": 117,
+      "gap_p50": 83,
+      "gap_p95": 249,
+      "gap_max": 867,
+      "coordinateRequests": 0,
+      "viewUploads": 116,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.491,
+        "p99": 11.662,
+        "max": 13.199
+      },
+      "submitted_frames": 1096,
+      "delivered_scene_updates": 117,
+      "scene_update_interval_ms": {
+        "p50": 78.341,
+        "p95": 228.759,
+        "p99": 540.712,
+        "max": 770.689
+      },
+      "gpu_ms": {
+        "p50": 0.626,
+        "p95": 0.769,
+        "p99": 1.165,
+        "max": 2.702
+      },
+      "scene_updates_per_second": 9.56
+    },
+    {
+      "run": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792526908614,
+      "end": 1792526920768,
+      "frames": 120,
+      "gap_p50": 79,
+      "gap_p95": 149,
+      "gap_max": 575,
+      "coordinateRequests": 0,
+      "viewUploads": 146,
+      "app_interval_ms": {
+        "p50": 11.17,
+        "p95": 11.513,
+        "p99": 11.913,
+        "max": 15.131
+      },
+      "submitted_frames": 1088,
+      "delivered_scene_updates": 146,
+      "scene_update_interval_ms": {
+        "p50": 67.269,
+        "p95": 91.29,
+        "p99": 449.534,
+        "max": 637.146
+      },
+      "gpu_ms": {
+        "p50": 0.617,
+        "p95": 0.759,
+        "p99": 1.295,
+        "max": 3.258
+      },
+      "scene_updates_per_second": 12.01
+    },
+    {
+      "run": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "stick",
+      "start": 1792526923509,
+      "end": 1792526938054,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792526940297,
+      "end": 1792526952709,
+      "frames": 76,
+      "gap_p50": 166,
+      "gap_p95": 286,
+      "gap_max": 509,
+      "coordinateRequests": 0,
+      "viewUploads": 60,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.483,
+        "p99": 11.792,
+        "max": 42.765
+      },
+      "submitted_frames": 1109,
+      "delivered_scene_updates": 61,
+      "scene_update_interval_ms": {
+        "p50": 89.518,
+        "p95": 481.48,
+        "p99": 513.8,
+        "max": 513.822
+      },
+      "gpu_ms": {
+        "p50": 0.336,
+        "p95": 0.415,
+        "p99": 0.996,
+        "max": 2.594
+      },
+      "scene_updates_per_second": 4.91
+    },
+    {
+      "run": "resident/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792527188606,
+      "end": 1792527195655,
+      "count": 200,
+      "message": "200 selected frames prepared"
+    },
+    {
+      "run": "resident/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527197944,
+      "end": 1792527210395,
+      "desktopBefore": {
+        "rendered": 2238,
+        "callbacks": 2238,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 2989,
+        "callbacks": 2989,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 107,
+      "gap_p50": 83,
+      "gap_p95": 255,
+      "gap_max": 525,
+      "coordinateRequests": 0,
+      "viewUploads": 97,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.45,
+        "p99": 11.659,
+        "max": 14.549
+      },
+      "submitted_frames": 1115,
+      "delivered_scene_updates": 97,
+      "scene_update_interval_ms": {
+        "p50": 83.731,
+        "p95": 345.982,
+        "p99": 711.911,
+        "max": 860.492
+      },
+      "gpu_ms": {
+        "p50": 0.63,
+        "p95": 0.762,
+        "p99": 1.193,
+        "max": 2.363
+      },
+      "scene_updates_per_second": 7.79
+    },
+    {
+      "run": "resident/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527211046,
+      "end": 1792527223206,
+      "desktopBefore": {
+        "rendered": 3025,
+        "callbacks": 3025,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 3734,
+        "callbacks": 3734,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 78,
+      "gap_p50": 113,
+      "gap_p95": 461,
+      "gap_max": 1079,
+      "coordinateRequests": 0,
+      "viewUploads": 76,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.471,
+        "p99": 11.94,
+        "max": 239.52
+      },
+      "submitted_frames": 1065,
+      "delivered_scene_updates": 77,
+      "scene_update_interval_ms": {
+        "p50": 78.126,
+        "p95": 500.14,
+        "p99": 814.944,
+        "max": 1283.982
+      },
+      "gpu_ms": {
+        "p50": 0.639,
+        "p95": 0.765,
+        "p99": 1.277,
+        "max": 231.373
+      },
+      "scene_updates_per_second": 6.33
+    },
+    {
+      "run": "baseline/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "load",
+      "representation": "ballstick",
+      "start": 1792525022234,
+      "end": 1792525027304,
+      "count": 200,
+      "message": "200 selected frames \u00b7 16 maximum buffered"
+    },
+    {
+      "run": "baseline/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792525029751,
+      "end": 1792525041860,
+      "frames": 60,
+      "gap_p50": 150,
+      "gap_p95": 249,
+      "gap_max": 2401,
+      "coordinateRequests": 68,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.47,
+        "p99": 12.149,
+        "max": 23.863
+      },
+      "submitted_frames": 1083,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    },
+    {
+      "run": "baseline/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792525042833,
+      "end": 1792525054919,
+      "frames": 28,
+      "gap_p50": 399,
+      "gap_p95": 634,
+      "gap_max": 1101,
+      "coordinateRequests": 57,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.451,
+        "p99": 11.684,
+        "max": 13.145
+      },
+      "submitted_frames": 1082,
+      "delivered_scene_updates": null,
+      "scene_update_interval_ms": null,
+      "gpu_ms": null,
+      "scene_updates_per_second": null
+    }
+  ],
+  "transport": [
+    {
+      "path": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 140,
+      "duration_ms": {
+        "p50": 60.15,
+        "p95": 72.8,
+        "max": 310.4
+      },
+      "request_to_response_ms": {
+        "p50": 10.5,
+        "p95": 20.985,
+        "max": 259.4
+      }
+    },
+    {
+      "path": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 97,
+      "duration_ms": {
+        "p50": 35.8,
+        "p95": 235.68,
+        "max": 1648.8
+      },
+      "request_to_response_ms": {
+        "p50": 11.6,
+        "p95": 213.2,
+        "max": 1622.5
+      }
+    },
+    {
+      "path": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 144,
+      "duration_ms": {
+        "p50": 35.15,
+        "p95": 424.205,
+        "max": 873.3
+      },
+      "request_to_response_ms": {
+        "p50": 10.5,
+        "p95": 391.14,
+        "max": 823.0
+      }
+    },
+    {
+      "path": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 147,
+      "duration_ms": {
+        "p50": 63.2,
+        "p95": 142.17,
+        "max": 320.7
+      },
+      "request_to_response_ms": {
+        "p50": 13.7,
+        "p95": 92.88,
+        "max": 266.8
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 102,
+      "duration_ms": {
+        "p50": 58.65,
+        "p95": 255.89,
+        "max": 520.2
+      },
+      "request_to_response_ms": {
+        "p50": 10.8,
+        "p95": 209.995,
+        "max": 461.6
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 118,
+      "duration_ms": {
+        "p50": 32.05,
+        "p95": 206.625,
+        "max": 547.3
+      },
+      "request_to_response_ms": {
+        "p50": 8.8,
+        "p95": 184.445,
+        "max": 525.0
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-false-transport.json",
+      "requests": 129,
+      "duration_ms": {
+        "p50": 36.2,
+        "p95": 42.1,
+        "max": 511.2
+      },
+      "request_to_response_ms": {
+        "p50": 8.7,
+        "p95": 12.16,
+        "max": 270.2
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 258,
+      "duration_ms": {
+        "p50": 33.0,
+        "p95": 48.76,
+        "max": 453.1
+      },
+      "request_to_response_ms": {
+        "p50": 9.4,
+        "p95": 19.955,
+        "max": 430.1
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 156,
+      "duration_ms": {
+        "p50": 61.5,
+        "p95": 77.525,
+        "max": 567.2
+      },
+      "request_to_response_ms": {
+        "p50": 12.95,
+        "p95": 23.325,
+        "max": 520.9
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-true-transport.json",
+      "requests": 274,
+      "duration_ms": {
+        "p50": 36.0,
+        "p95": 43.735,
+        "max": 209.9
+      },
+      "request_to_response_ms": {
+        "p50": 9.0,
+        "p95": 14.235,
+        "max": 181.1
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 87,
+      "duration_ms": {
+        "p50": 61.4,
+        "p95": 257.57,
+        "max": 925.4
+      },
+      "request_to_response_ms": {
+        "p50": 11.5,
+        "p95": 204.95,
+        "max": 876.2
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 116,
+      "duration_ms": {
+        "p50": 32.1,
+        "p95": 212.55,
+        "max": 656.8
+      },
+      "request_to_response_ms": {
+        "p50": 8.8,
+        "p95": 189.75,
+        "max": 633.5
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-false-transport.json",
+      "requests": 138,
+      "duration_ms": {
+        "p50": 36.2,
+        "p95": 45.05,
+        "max": 275.4
+      },
+      "request_to_response_ms": {
+        "p50": 8.6,
+        "p95": 14.675,
+        "max": 245.1
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 277,
+      "duration_ms": {
+        "p50": 33.2,
+        "p95": 42.0,
+        "max": 347.0
+      },
+      "request_to_response_ms": {
+        "p50": 9.4,
+        "p95": 14.64,
+        "max": 324.3
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 140,
+      "duration_ms": {
+        "p50": 61.55,
+        "p95": 181.98,
+        "max": 638.6
+      },
+      "request_to_response_ms": {
+        "p50": 12.9,
+        "p95": 130.515,
+        "max": 591.7
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-true-transport.json",
+      "requests": 275,
+      "duration_ms": {
+        "p50": 36.9,
+        "p95": 43.48,
+        "max": 218.3
+      },
+      "request_to_response_ms": {
+        "p50": 9.5,
+        "p95": 13.89,
+        "max": 190.1
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 128,
+      "duration_ms": {
+        "p50": 57.8,
+        "p95": 96.795,
+        "max": 601.4
+      },
+      "request_to_response_ms": {
+        "p50": 9.75,
+        "p95": 39.42,
+        "max": 554.6
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 95,
+      "duration_ms": {
+        "p50": 33.8,
+        "p95": 356.8,
+        "max": 765.0
+      },
+      "request_to_response_ms": {
+        "p50": 9.5,
+        "p95": 333.24,
+        "max": 741.6
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-false-transport.json",
+      "requests": 127,
+      "duration_ms": {
+        "p50": 36.3,
+        "p95": 168.37,
+        "max": 416.7
+      },
+      "request_to_response_ms": {
+        "p50": 8.9,
+        "p95": 138.81,
+        "max": 389.4
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 293,
+      "duration_ms": {
+        "p50": 33.0,
+        "p95": 39.34,
+        "max": 213.6
+      },
+      "request_to_response_ms": {
+        "p50": 9.3,
+        "p95": 14.18,
+        "max": 191.0
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 137,
+      "duration_ms": {
+        "p50": 61.4,
+        "p95": 82.06,
+        "max": 1062.0
+      },
+      "request_to_response_ms": {
+        "p50": 13.2,
+        "p95": 33.1,
+        "max": 1014.0
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-true-transport.json",
+      "requests": 85,
+      "duration_ms": {
+        "p50": 41.4,
+        "p95": 257.18,
+        "max": 507.1
+      },
+      "request_to_response_ms": {
+        "p50": 13.1,
+        "p95": 229.92,
+        "max": 481.0
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 104,
+      "duration_ms": {
+        "p50": 58.0,
+        "p95": 248.42,
+        "max": 1600.6
+      },
+      "request_to_response_ms": {
+        "p50": 10.4,
+        "p95": 199.305,
+        "max": 1553.6
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 105,
+      "duration_ms": {
+        "p50": 32.1,
+        "p95": 204.94,
+        "max": 1529.2
+      },
+      "request_to_response_ms": {
+        "p50": 8.7,
+        "p95": 181.68,
+        "max": 1506.1
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-false-transport.json",
+      "requests": 132,
+      "duration_ms": {
+        "p50": 36.05,
+        "p95": 63.22,
+        "max": 578.0
+      },
+      "request_to_response_ms": {
+        "p50": 8.75,
+        "p95": 21.14,
+        "max": 550.9
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 260,
+      "duration_ms": {
+        "p50": 32.5,
+        "p95": 37.61,
+        "max": 647.5
+      },
+      "request_to_response_ms": {
+        "p50": 9.0,
+        "p95": 13.505,
+        "max": 624.2
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 107,
+      "duration_ms": {
+        "p50": 61.4,
+        "p95": 350.8,
+        "max": 1316.0
+      },
+      "request_to_response_ms": {
+        "p50": 13.0,
+        "p95": 304.04,
+        "max": 1269.0
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-true-transport.json",
+      "requests": 259,
+      "duration_ms": {
+        "p50": 36.8,
+        "p95": 44.65,
+        "max": 417.1
+      },
+      "request_to_response_ms": {
+        "p50": 9.4,
+        "p95": 14.82,
+        "max": 383.9
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 138,
+      "duration_ms": {
+        "p50": 58.45,
+        "p95": 68.49,
+        "max": 310.3
+      },
+      "request_to_response_ms": {
+        "p50": 9.95,
+        "p95": 16.03,
+        "max": 262.4
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 135,
+      "duration_ms": {
+        "p50": 31.6,
+        "p95": 48.16,
+        "max": 400.4
+      },
+      "request_to_response_ms": {
+        "p50": 8.5,
+        "p95": 19.82,
+        "max": 378.3
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-false-transport.json",
+      "requests": 98,
+      "duration_ms": {
+        "p50": 37.4,
+        "p95": 258.015,
+        "max": 513.7
+      },
+      "request_to_response_ms": {
+        "p50": 9.5,
+        "p95": 231.23,
+        "max": 488.0
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-true-transport.json",
+      "requests": 111,
+      "duration_ms": {
+        "p50": 34.8,
+        "p95": 265.95,
+        "max": 761.3
+      },
+      "request_to_response_ms": {
+        "p50": 10.6,
+        "p95": 236.7,
+        "max": 737.0
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 155,
+      "duration_ms": {
+        "p50": 61.2,
+        "p95": 74.61,
+        "max": 590.9
+      },
+      "request_to_response_ms": {
+        "p50": 12.4,
+        "p95": 19.0,
+        "max": 536.2
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/vdw-true-transport.json",
+      "requests": 214,
+      "duration_ms": {
+        "p50": 36.9,
+        "p95": 121.66,
+        "max": 515.9
+      },
+      "request_to_response_ms": {
+        "p50": 9.15,
+        "p95": 62.225,
+        "max": 489.2
+      }
+    },
+    {
+      "path": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 135,
+      "duration_ms": {
+        "p50": 59.7,
+        "p95": 116.38,
+        "max": 548.3
+      },
+      "request_to_response_ms": {
+        "p50": 10.3,
+        "p95": 67.22,
+        "max": 499.8
+      }
+    },
+    {
+      "path": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 66,
+      "duration_ms": {
+        "p50": 158.35,
+        "p95": 264.65,
+        "max": 684.8
+      },
+      "request_to_response_ms": {
+        "p50": 134.8,
+        "p95": 240.7,
+        "max": 660.7
+      }
+    },
+    {
+      "path": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 146,
+      "duration_ms": {
+        "p50": 63.3,
+        "p95": 82.55,
+        "max": 560.5
+      },
+      "request_to_response_ms": {
+        "p50": 13.2,
+        "p95": 34.3,
+        "max": 511.3
+      }
+    },
+    {
+      "path": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 115,
+      "duration_ms": {
+        "p50": 60.3,
+        "p95": 221.37,
+        "max": 765.3
+      },
+      "request_to_response_ms": {
+        "p50": 11.1,
+        "p95": 170.69,
+        "max": 453.8
+      }
+    },
+    {
+      "path": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+      "requests": 59,
+      "duration_ms": {
+        "p50": 248.2,
+        "p95": 310.47,
+        "max": 507.6
+      },
+      "request_to_response_ms": {
+        "p50": 221.9,
+        "p95": 286.31,
+        "max": 480.3
+      }
+    },
+    {
+      "path": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 145,
+      "duration_ms": {
+        "p50": 63.6,
+        "p95": 81.08,
+        "max": 592.4
+      },
+      "request_to_response_ms": {
+        "p50": 13.9,
+        "p95": 25.86,
+        "max": 541.9
+      }
+    },
+    {
+      "path": "resident/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+      "requests": 96,
+      "duration_ms": {
+        "p50": 59.75,
+        "p95": 258.6,
+        "max": 564.7
+      },
+      "request_to_response_ms": {
+        "p50": 10.5,
+        "p95": 206.375,
+        "max": 515.9
+      }
+    },
+    {
+      "path": "resident/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-true-transport.json",
+      "requests": 75,
+      "duration_ms": {
+        "p50": 66.2,
+        "p95": 443.68,
+        "max": 1278.8
+      },
+      "request_to_response_ms": {
+        "p50": 15.7,
+        "p95": 392.68,
+        "max": 1230.4
+      }
+    }
+  ],
+  "submitted_stereo": [
+    {
+      "path": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 87640,
+        "right": 86661
+      }
+    },
+    {
+      "path": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 55103,
+        "right": 54647
+      }
+    },
+    {
+      "path": "candidate/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 141357,
+        "right": 141361
+      }
+    },
+    {
+      "path": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "full",
+      "model_pixels": {
+        "left": 80746,
+        "right": 80724
+      }
+    },
+    {
+      "path": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 56311,
+        "right": 57351
+      }
+    },
+    {
+      "path": "baseline-repeat/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 124977,
+        "right": 131958
+      }
+    },
+    {
+      "path": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 85129,
+        "right": 88511
+      }
+    },
+    {
+      "path": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 54560,
+        "right": 56173
+      }
+    },
+    {
+      "path": "release-loaded/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 117925,
+        "right": 124504
+      }
+    },
+    {
+      "path": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 88888,
+        "right": 87911
+      }
+    },
+    {
+      "path": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 53719,
+        "right": 53643
+      }
+    },
+    {
+      "path": "release-loaded/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 131354,
+        "right": 129225
+      }
+    },
+    {
+      "path": "release-loaded/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 92558,
+        "right": 94965
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 88445,
+        "right": 91756
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 54451,
+        "right": 56113
+      }
+    },
+    {
+      "path": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 123589,
+        "right": 132364
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 90601,
+        "right": 89391
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 53512,
+        "right": 52849
+      }
+    },
+    {
+      "path": "untraced/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 131413,
+        "right": 129223
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 88478,
+        "right": 91811
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 55320,
+        "right": 56174
+      }
+    },
+    {
+      "path": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 132519,
+        "right": 137695
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 87690,
+        "right": 90027
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 56904,
+        "right": 57570
+      }
+    },
+    {
+      "path": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 125315,
+        "right": 130255
+      }
+    },
+    {
+      "path": "profile/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 95407,
+        "right": 94198
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 90575,
+        "right": 89156
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+      "representation": "stick",
+      "model_pixels": {
+        "left": 52957,
+        "right": 51976
+      }
+    },
+    {
+      "path": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+      "representation": "vdw",
+      "model_pixels": {
+        "left": 129933,
+        "right": 129322
+      }
+    },
+    {
+      "path": "resident/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 86760,
+        "right": 91710
+      }
+    },
+    {
+      "path": "resident/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 88921,
+        "right": 88240
+      }
+    },
+    {
+      "path": "baseline/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+      "representation": "ballstick",
+      "model_pixels": {
+        "left": 90584,
+        "right": 94639
+      }
+    }
+  ],
+  "sources": {
+    "release-loaded": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792518029911711961
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+          5671532276,
+          1792518021769776761
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+          5671712276,
+          1792519017247410041
+        ]
+      },
+      "unchanged": true
+    },
+    "untraced": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792518029911711961
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+          5671532276,
+          1792518021769776761
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+          5671712276,
+          1792519017247410041
+        ]
+      },
+      "unchanged": true
+    },
+    "headset-only": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ]
+      },
+      "unchanged": true
+    },
+    "release": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792518029911711961
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+          5671532276,
+          1792518021769776761
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+          5671712276,
+          1792519017247410041
+        ]
+      },
+      "unchanged": true
+    },
+    "resident": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792518029911711961
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+          5671532276,
+          1792518021769776761
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+          5671712276,
+          1792519017247410041
+        ]
+      },
+      "unchanged": true
+    },
+    "release-settled": {
+      "before": {
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792519016282043875
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+          5671568276,
+          1792518029911711961
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+          5671532276,
+          1792518021769776761
+        ],
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+        "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+          5671712276,
+          1792519017247410041
+        ]
+      },
+      "unchanged": true
+    }
+  },
+  "cleanup_receipts": {
+    "checks-cleanup.json": {
+      "scratch": "/media/jojo/Archive/cpf-8reln832",
+      "removed": true
+    },
+    "smoke-cleanup.json": {
+      "private_workspace": "/media/jojo/Archive/cps-uz0mqr7f",
+      "removed": true,
+      "prefixed_leftovers_before_finally": [],
+      "exit_code": 0
+    }
+  },
+  "validation": [
+    {
+      "check": "frontend-release",
+      "exit_code": 0
+    },
+    {
+      "check": "tours",
+      "exit_code": 0
+    },
+    {
+      "check": "smoke-release",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Application submission cadence is distinct from molecular scene-update cadence. Full snapshot publication remains a limit; no claim of 90 Hz molecular motion or through-lens comfort.",
+    "Short windows on a live workstation; cold/warm storage was not controlled, so baseline/candidate are not strict matched speedup trials.",
+    "baseline-repeat ballstick windows were actually Full and must be excluded from atomistic comparisons.",
+    "Initial baseline interrupted by test-environment HMR; only completed ballstick windows are usable.",
+    "release and release-settled could not switch from design-only Full to ballstick before timing. Revised harness loads default trajectory first, then switches via actual View menu.",
+    "release-loaded trans-syn-I stick Smooth failed original >80 endpoints/12s gate (68). Final resident run removes repeated companion preparation; thresholds unchanged.",
+    "Traced resident runs failed throughput in cis-syn-I Stick saved (76), cis-anti-I Stick saved (80), and trans-syn-II Ballstick Smooth (78). Trans-syn-I timed out before trajectory selection because requests were observed before publisher identity commit. The final harness settles acknowledgments before further controls.",
+    "Trace-free untraced run: three jobs passed; trans-syn-I Smooth VDW failed (75 endpoints). Desktop-off cis-syn-I repeat failed Smooth Stick (75). Threshold >80 is unchanged; soft assertions collect remaining styles without converting failures into passes.",
+    "Native app cadence is typically near 90 Hz, but worst observed interval was 276.715 ms; do not describe it as uninterrupted 90 Hz.",
+    "FOLLOW-UP: SteamVR Home relaunch storm confirmed during final measured playback, approximately 35\u201338 launches/sec. Treat the residual timing results as confounded; do not use them to isolate a NADOC-only bottleneck."
+  ],
+  "validation_notes": [
+    "Native archive runtime rebuilt successfully and used for submitted-eye measurement.",
+    "just lint reports five pre-existing unused imports in untouched backend/api/vr_prompts.py and four CPD test files; no task lint delta.",
+    "First focused launcher used root npx accidentally and was stopped; subsequent runs use repository Vitest. One fake-timer test needed a full animation-frame tick; corrected without changing production timing.",
+    "Final focused trajectory tests: 10 passed. Full frontend: 723 files, 8379 passed, 1 skipped. Tour checks: 50 passed. Private smoke: 23 passed. Task Python ruff check and git diff --check passed.",
+    "Memory lint: three pre-existing errors (oversized CPD/native VR heads; undiscoverable experimental predictor head), 61 warnings. No broad backend suite requested: task changes no backend behavior.",
+    "Native Full placement review gate clear."
+  ],
+  "primary_condition": "Trace-free, Desktop 3D during VR off and verified frozen: headset-only cis-syn-I plus untraced remaining three isomers. untraced cis-syn-I is a separate desktop-on condition.",
+  "primary_windows": [
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527390666,
+      "end": 1792527402775,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 983,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 1716,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 114,
+      "gap_p50": 83,
+      "gap_p95": 223,
+      "gap_max": 513,
+      "coordinateRequests": 0,
+      "viewUploads": 103,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.536,
+        "p99": 11.745,
+        "max": 13.374
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 104,
+      "scene_update_interval_ms": {
+        "p50": 78.412,
+        "p95": 268.051,
+        "p99": 501.379,
+        "max": 536.483
+      },
+      "gpu_ms": {
+        "p50": 0.708,
+        "p95": 0.835,
+        "p99": 1.252,
+        "max": 2.656
+      },
+      "scene_updates_per_second": 8.59
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527404156,
+      "end": 1792527416361,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 1741,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 2531,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 124,
+      "gap_p50": 76,
+      "gap_p95": 139,
+      "gap_max": 523,
+      "coordinateRequests": 0,
+      "viewUploads": 156,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.485,
+        "p99": 11.752,
+        "max": 12.963
+      },
+      "submitted_frames": 1093,
+      "delivered_scene_updates": 158,
+      "scene_update_interval_ms": {
+        "p50": 67.046,
+        "p95": 89.526,
+        "p99": 344.769,
+        "max": 614.537
+      },
+      "gpu_ms": {
+        "p50": 0.692,
+        "p95": 0.829,
+        "p99": 1.314,
+        "max": 2.907
+      },
+      "scene_updates_per_second": 12.95
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527428334,
+      "end": 1792527440442,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 3243,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 3967,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 121,
+      "gap_p50": 83,
+      "gap_p95": 249,
+      "gap_max": 460,
+      "coordinateRequests": 0,
+      "viewUploads": 119,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.507,
+        "p99": 11.907,
+        "max": 15.358
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 120,
+      "scene_update_interval_ms": {
+        "p50": 78.413,
+        "p95": 235.761,
+        "p99": 526.671,
+        "max": 592.063
+      },
+      "gpu_ms": {
+        "p50": 0.368,
+        "p95": 0.554,
+        "p99": 0.712,
+        "max": 2.089
+      },
+      "scene_updates_per_second": 9.91
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527441123,
+      "end": 1792527453403,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 4001,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 4736,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 120,
+      "gap_p50": 89,
+      "gap_p95": 154,
+      "gap_max": 426,
+      "coordinateRequests": 0,
+      "viewUploads": 259,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.536,
+        "p99": 12.13,
+        "max": 19.694
+      },
+      "submitted_frames": 1099,
+      "delivered_scene_updates": 259,
+      "scene_update_interval_ms": {
+        "p50": 33.848,
+        "p95": 55.722,
+        "p99": 339.997,
+        "max": 737.102
+      },
+      "gpu_ms": {
+        "p50": 0.38,
+        "p95": 0.546,
+        "p99": 0.959,
+        "max": 2.019
+      },
+      "scene_updates_per_second": 21.09
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527465428,
+      "end": 1792527477536,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 5450,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 6183,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 87,
+      "gap_max": 473,
+      "coordinateRequests": 0,
+      "viewUploads": 130,
+      "app_interval_ms": {
+        "p50": 11.166,
+        "p95": 11.535,
+        "p99": 11.86,
+        "max": 14.127
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 131,
+      "scene_update_interval_ms": {
+        "p50": 78.489,
+        "p95": 89.848,
+        "p99": 529.866,
+        "max": 558.818
+      },
+      "gpu_ms": {
+        "p50": 0.753,
+        "p95": 0.845,
+        "p99": 1.269,
+        "max": 3.603
+      },
+      "scene_updates_per_second": 10.82
+    },
+    {
+      "run": "untraced/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527477867,
+      "end": 1792527490087,
+      "desktopBefore": {
+        "rendered": 51,
+        "callbacks": 6196,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 51,
+        "callbacks": 6936,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 131,
+      "gap_p50": 86,
+      "gap_p95": 117,
+      "gap_max": 258,
+      "coordinateRequests": 0,
+      "viewUploads": 274,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.491,
+        "p99": 11.742,
+        "max": 12.764
+      },
+      "submitted_frames": 1094,
+      "delivered_scene_updates": 276,
+      "scene_update_interval_ms": {
+        "p50": 44.558,
+        "p95": 55.553,
+        "p99": 173.455,
+        "max": 335.223
+      },
+      "gpu_ms": {
+        "p50": 0.78,
+        "p95": 0.858,
+        "p99": 1.394,
+        "max": 2.928
+      },
+      "scene_updates_per_second": 22.59
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527521220,
+      "end": 1792527533357,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 1388,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 2119,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 130,
+      "gap_p50": 83,
+      "gap_p95": 86,
+      "gap_max": 479,
+      "coordinateRequests": 0,
+      "viewUploads": 129,
+      "app_interval_ms": {
+        "p50": 11.161,
+        "p95": 11.555,
+        "p99": 12.021,
+        "max": 13.911
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": 130,
+      "scene_update_interval_ms": {
+        "p50": 78.437,
+        "p95": 100.532,
+        "p99": 284.513,
+        "max": 1050.129
+      },
+      "gpu_ms": {
+        "p50": 0.701,
+        "p95": 0.83,
+        "p99": 1.228,
+        "max": 2.762
+      },
+      "scene_updates_per_second": 10.71
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527533685,
+      "end": 1792527545817,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 2132,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 2855,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 110,
+      "gap_p50": 75,
+      "gap_p95": 143,
+      "gap_max": 1014,
+      "coordinateRequests": 0,
+      "viewUploads": 139,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.529,
+        "p99": 12.208,
+        "max": 276.715
+      },
+      "submitted_frames": 1058,
+      "delivered_scene_updates": 140,
+      "scene_update_interval_ms": {
+        "p50": 67.054,
+        "p95": 89.04,
+        "p99": 440.892,
+        "max": 1787.525
+      },
+      "gpu_ms": {
+        "p50": 0.691,
+        "p95": 0.824,
+        "p99": 1.312,
+        "max": 2.899
+      },
+      "scene_updates_per_second": 11.54
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527558311,
+      "end": 1792527570418,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 3598,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 4316,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 101,
+      "gap_p50": 83,
+      "gap_p95": 414,
+      "gap_max": 770,
+      "coordinateRequests": 0,
+      "viewUploads": 96,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.543,
+        "p99": 11.686,
+        "max": 13.627
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 97,
+      "scene_update_interval_ms": {
+        "p50": 78.446,
+        "p95": 390.614,
+        "p99": 539.593,
+        "max": 815.323
+      },
+      "gpu_ms": {
+        "p50": 0.385,
+        "p95": 0.453,
+        "p99": 0.97,
+        "max": 2.406
+      },
+      "scene_updates_per_second": 8.01
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527570745,
+      "end": 1792527582853,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 4329,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 5062,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 130,
+      "gap_p50": 88,
+      "gap_p95": 112,
+      "gap_max": 188,
+      "coordinateRequests": 0,
+      "viewUploads": 294,
+      "app_interval_ms": {
+        "p50": 11.17,
+        "p95": 11.55,
+        "p99": 12.018,
+        "max": 14.3
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 296,
+      "scene_update_interval_ms": {
+        "p50": 33.775,
+        "p95": 44.977,
+        "p99": 125.741,
+        "max": 368.898
+      },
+      "gpu_ms": {
+        "p50": 0.386,
+        "p95": 0.558,
+        "p99": 0.852,
+        "max": 2.29
+      },
+      "scene_updates_per_second": 24.45
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527595895,
+      "end": 1792527608103,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 5838,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 6577,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 177,
+      "gap_max": 408,
+      "coordinateRequests": 0,
+      "viewUploads": 129,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.538,
+        "p99": 13.016,
+        "max": 22.656
+      },
+      "submitted_frames": 1088,
+      "delivered_scene_updates": 130,
+      "scene_update_interval_ms": {
+        "p50": 78.332,
+        "p95": 149.63,
+        "p99": 474.181,
+        "max": 636.842
+      },
+      "gpu_ms": {
+        "p50": 0.79,
+        "p95": 0.882,
+        "p99": 1.536,
+        "max": 2.998
+      },
+      "scene_updates_per_second": 10.65
+    },
+    {
+      "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527608629,
+      "end": 1792527620834,
+      "desktopBefore": {
+        "rendered": 30,
+        "callbacks": 6596,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 30,
+        "callbacks": 7333,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 75,
+      "gap_p50": 117,
+      "gap_p95": 269,
+      "gap_max": 481,
+      "coordinateRequests": 0,
+      "viewUploads": 85,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.494,
+        "p99": 12.373,
+        "max": 47.654
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 86,
+      "scene_update_interval_ms": {
+        "p50": 44.796,
+        "p95": 469.393,
+        "p99": 547.625,
+        "max": 726.384
+      },
+      "gpu_ms": {
+        "p50": 0.782,
+        "p95": 0.852,
+        "p99": 1.323,
+        "max": 39.451
+      },
+      "scene_updates_per_second": 7.05
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527650196,
+      "end": 1792527662302,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 1052,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 1785,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 111,
+      "gap_p50": 83,
+      "gap_p95": 213,
+      "gap_max": 1584,
+      "coordinateRequests": 0,
+      "viewUploads": 105,
+      "app_interval_ms": {
+        "p50": 11.168,
+        "p95": 11.487,
+        "p99": 11.784,
+        "max": 14.875
+      },
+      "submitted_frames": 1083,
+      "delivered_scene_updates": 106,
+      "scene_update_interval_ms": {
+        "p50": 78.449,
+        "p95": 254.563,
+        "p99": 453.059,
+        "max": 1641.943
+      },
+      "gpu_ms": {
+        "p50": 0.737,
+        "p95": 0.871,
+        "p99": 1.375,
+        "max": 1.682
+      },
+      "scene_updates_per_second": 8.76
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527662628,
+      "end": 1792527674760,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 1798,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 2533,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 87,
+      "gap_p50": 78,
+      "gap_p95": 505,
+      "gap_max": 1317,
+      "coordinateRequests": 0,
+      "viewUploads": 109,
+      "app_interval_ms": {
+        "p50": 11.171,
+        "p95": 11.489,
+        "p99": 11.779,
+        "max": 13.786
+      },
+      "submitted_frames": 1086,
+      "delivered_scene_updates": 110,
+      "scene_update_interval_ms": {
+        "p50": 67.076,
+        "p95": 223.38,
+        "p99": 1298.389,
+        "max": 1318.276
+      },
+      "gpu_ms": {
+        "p50": 0.732,
+        "p95": 0.856,
+        "p99": 1.41,
+        "max": 2.839
+      },
+      "scene_updates_per_second": 9.07
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527686769,
+      "end": 1792527698876,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 3247,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 3980,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 110,
+      "gap_p50": 83,
+      "gap_p95": 213,
+      "gap_max": 1219,
+      "coordinateRequests": 0,
+      "viewUploads": 106,
+      "app_interval_ms": {
+        "p50": 11.173,
+        "p95": 11.523,
+        "p99": 12.009,
+        "max": 37.964
+      },
+      "submitted_frames": 1078,
+      "delivered_scene_updates": 107,
+      "scene_update_interval_ms": {
+        "p50": 78.596,
+        "p95": 284.999,
+        "p99": 582.476,
+        "max": 1574.843
+      },
+      "gpu_ms": {
+        "p50": 0.383,
+        "p95": 0.445,
+        "p99": 0.644,
+        "max": 2.672
+      },
+      "scene_updates_per_second": 8.84
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527699200,
+      "end": 1792527711307,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 3993,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 4718,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 115,
+      "gap_p50": 89,
+      "gap_p95": 205,
+      "gap_max": 653,
+      "coordinateRequests": 0,
+      "viewUploads": 261,
+      "app_interval_ms": {
+        "p50": 11.175,
+        "p95": 11.522,
+        "p99": 11.892,
+        "max": 13.889
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 262,
+      "scene_update_interval_ms": {
+        "p50": 33.73,
+        "p95": 44.875,
+        "p99": 346.667,
+        "max": 860.155
+      },
+      "gpu_ms": {
+        "p50": 0.389,
+        "p95": 0.465,
+        "p99": 0.812,
+        "max": 2.664
+      },
+      "scene_updates_per_second": 21.64
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527723340,
+      "end": 1792527735448,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 5419,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 6152,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 132,
+      "gap_p50": 83,
+      "gap_p95": 88,
+      "gap_max": 582,
+      "coordinateRequests": 0,
+      "viewUploads": 132,
+      "app_interval_ms": {
+        "p50": 11.177,
+        "p95": 11.473,
+        "p99": 11.706,
+        "max": 13.062
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 134,
+      "scene_update_interval_ms": {
+        "p50": 78.375,
+        "p95": 100.409,
+        "p99": 405.261,
+        "max": 614.35
+      },
+      "gpu_ms": {
+        "p50": 0.772,
+        "p95": 0.849,
+        "p99": 1.419,
+        "max": 2.936
+      },
+      "scene_updates_per_second": 11.07
+    },
+    {
+      "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527735773,
+      "end": 1792527748008,
+      "desktopBefore": {
+        "rendered": 39,
+        "callbacks": 6165,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 39,
+        "callbacks": 6906,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 128,
+      "gap_p50": 87,
+      "gap_p95": 118,
+      "gap_max": 354,
+      "coordinateRequests": 0,
+      "viewUploads": 259,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.521,
+        "p99": 11.818,
+        "max": 13.573
+      },
+      "submitted_frames": 1095,
+      "delivered_scene_updates": 261,
+      "scene_update_interval_ms": {
+        "p50": 44.614,
+        "p95": 55.869,
+        "p99": 137.098,
+        "max": 559.156
+      },
+      "gpu_ms": {
+        "p50": 0.73,
+        "p95": 0.823,
+        "p99": 1.204,
+        "max": 2.774
+      },
+      "scene_updates_per_second": 21.33
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": false,
+      "start": 1792527783195,
+      "end": 1792527795303,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 1474,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 2207,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 138,
+      "gap_p50": 83,
+      "gap_p95": 87,
+      "gap_max": 493,
+      "coordinateRequests": 0,
+      "viewUploads": 139,
+      "app_interval_ms": {
+        "p50": 11.163,
+        "p95": 11.546,
+        "p99": 11.892,
+        "max": 16.383
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 140,
+      "scene_update_interval_ms": {
+        "p50": 78.371,
+        "p95": 89.815,
+        "p99": 298.742,
+        "max": 335.149
+      },
+      "gpu_ms": {
+        "p50": 0.67,
+        "p95": 0.83,
+        "p99": 1.145,
+        "max": 1.772
+      },
+      "scene_updates_per_second": 11.56
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "ballstick",
+      "smooth": true,
+      "start": 1792527795631,
+      "end": 1792527807853,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 2221,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 2960,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 122,
+      "gap_p50": 74,
+      "gap_p95": 138,
+      "gap_max": 581,
+      "coordinateRequests": 0,
+      "viewUploads": 155,
+      "app_interval_ms": {
+        "p50": 11.157,
+        "p95": 11.55,
+        "p99": 11.862,
+        "max": 14.886
+      },
+      "submitted_frames": 1094,
+      "delivered_scene_updates": 156,
+      "scene_update_interval_ms": {
+        "p50": 67.054,
+        "p95": 83.448,
+        "p99": 254.788,
+        "max": 949.5
+      },
+      "gpu_ms": {
+        "p50": 0.673,
+        "p95": 0.823,
+        "p99": 1.313,
+        "max": 2.833
+      },
+      "scene_updates_per_second": 12.76
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": false,
+      "start": 1792527827424,
+      "end": 1792527839531,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 4128,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 4861,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 137,
+      "gap_p50": 83,
+      "gap_p95": 85,
+      "gap_max": 377,
+      "coordinateRequests": 0,
+      "viewUploads": 136,
+      "app_interval_ms": {
+        "p50": 11.167,
+        "p95": 11.537,
+        "p99": 11.824,
+        "max": 13.318
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 137,
+      "scene_update_interval_ms": {
+        "p50": 78.484,
+        "p95": 89.955,
+        "p99": 193.156,
+        "max": 715.186
+      },
+      "gpu_ms": {
+        "p50": 0.395,
+        "p95": 0.46,
+        "p99": 0.671,
+        "max": 2.32
+      },
+      "scene_updates_per_second": 11.32
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "stick",
+      "smooth": true,
+      "start": 1792527840562,
+      "end": 1792527852677,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 4917,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 5619,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 75,
+      "gap_p50": 97,
+      "gap_p95": 444,
+      "gap_max": 846,
+      "coordinateRequests": 0,
+      "viewUploads": 111,
+      "app_interval_ms": {
+        "p50": 11.172,
+        "p95": 11.547,
+        "p99": 12.29,
+        "max": 26.234
+      },
+      "submitted_frames": 1078,
+      "delivered_scene_updates": 113,
+      "scene_update_interval_ms": {
+        "p50": 44.505,
+        "p95": 480.166,
+        "p99": 816.814,
+        "max": 983.194
+      },
+      "gpu_ms": {
+        "p50": 0.369,
+        "p95": 0.45,
+        "p99": 0.949,
+        "max": 18.462
+      },
+      "scene_updates_per_second": 9.33
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": false,
+      "start": 1792527864675,
+      "end": 1792527877132,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 6332,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 7086,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 106,
+      "gap_p50": 83,
+      "gap_p95": 261,
+      "gap_max": 517,
+      "coordinateRequests": 0,
+      "viewUploads": 100,
+      "app_interval_ms": {
+        "p50": 11.166,
+        "p95": 11.465,
+        "p99": 11.65,
+        "max": 14.497
+      },
+      "submitted_frames": 1116,
+      "delivered_scene_updates": 100,
+      "scene_update_interval_ms": {
+        "p50": 78.476,
+        "p95": 449.036,
+        "p99": 474.651,
+        "max": 737.309
+      },
+      "gpu_ms": {
+        "p50": 0.775,
+        "p95": 0.847,
+        "p99": 1.344,
+        "max": 2.626
+      },
+      "scene_updates_per_second": 8.03
+    },
+    {
+      "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+      "name": "play",
+      "representation": "vdw",
+      "smooth": true,
+      "start": 1792527877809,
+      "end": 1792527889917,
+      "desktopBefore": {
+        "rendered": 150,
+        "callbacks": 7120,
+        "focused": true,
+        "hidden": false
+      },
+      "desktopAfter": {
+        "rendered": 150,
+        "callbacks": 7854,
+        "focused": true,
+        "hidden": false
+      },
+      "frames": 113,
+      "gap_p50": 90,
+      "gap_p95": 228,
+      "gap_max": 524,
+      "coordinateRequests": 0,
+      "viewUploads": 214,
+      "app_interval_ms": {
+        "p50": 11.169,
+        "p95": 11.469,
+        "p99": 11.688,
+        "max": 13.419
+      },
+      "submitted_frames": 1084,
+      "delivered_scene_updates": 216,
+      "scene_update_interval_ms": {
+        "p50": 44.626,
+        "p95": 111.342,
+        "p99": 335.204,
+        "max": 703.981
+      },
+      "gpu_ms": {
+        "p50": 0.759,
+        "p95": 0.852,
+        "p99": 1.283,
+        "max": 2.005
+      },
+      "scene_updates_per_second": 17.84
+    }
+  ],
+  "outcome": {
+    "coordinate_requests": 0,
+    "windows": 24,
+    "throughput_failures": [
+      {
+        "run": "untraced/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "vdw",
+        "smooth": true,
+        "saved_endpoints": 75
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "stick",
+        "smooth": true,
+        "saved_endpoints": 75
+      }
+    ],
+    "fully_smooth": false,
+    "app_interval_p50_ms": [
+      11.157,
+      11.177
+    ],
+    "app_interval_p95_ms": [
+      11.465,
+      11.555
+    ],
+    "worst_app_interval_ms": 276.715,
+    "scene_update_hz": [
+      7.05,
+      24.45
+    ],
+    "worst_scene_interval_ms": 1787.525
+  },
+  "runtime_cleanup": {
+    "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/runtime-cleanup.json": {
+      "pid": 1270761,
+      "removed": true,
+      "directories": [
+        "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-no2r6mbj",
+        "/media/jojo/Archive/.nadoc-vr-capture/v-cgb0qcjx"
+      ]
+    },
+    "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/runtime-cleanup.json": {
+      "pid": 1237591,
+      "removed": true,
+      "directories": [
+        "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-aibr68bp",
+        "/media/jojo/Archive/.nadoc-vr-capture/v-_bkqxmhz"
+      ]
+    }
+  },
+  "runtime": {
+    "viewer_running_after": false,
+    "steamvr_running_after": true,
+    "dashboard_running_after": true,
+    "alpine_worker_pid": 219468,
+    "alpine_worker_started": "2026-10-20 11:24:41 America/Denver",
+    "deployed_binary": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-clipboard-all-20261016/native-build/nadoc-vr-viewer",
+    "binary_sha256": "eeffc1229d14753ee4c69655ebf07d0c30f42c0a1c09c56ffaeb896995640023",
+    "placement_review_gate": "clear"
+  },
+  "cleanup": {
+    "raw_artifact_directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-playback-20261020",
+    "files_removed": 947,
+    "bytes_removed": 2409060022,
+    "accidental_npx_cache_removed": "/home/jojo/.npm/_npx/69c381f8ad94b576",
+    "npx_cache_bytes": 38597481,
+    "empty_task_runtime_directories_removed": [
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-dy1cenmx",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-9sskk4au",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-lx8ssxc4",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-2i474gtr",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-5fc_gl3o",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-717sqfox",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-u1oa88ei",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-fa5t1o7n",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-fdr1ugb9",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-3ojjmxvb",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-_ztei0j_",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-3i3_euj6",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-efsi9evf",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-tpvun65t",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-d2b8nwjp",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-9j1fgbi_",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-diny9tij",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-i61jepbm",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-etbknric",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-35vdkky5",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-sn7efeob",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-qsu8i_rw",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-wlz9o2ke",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-a16qfiu0",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-lm8ba7kh",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-hg96e202",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-8kg3tde0",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-xg8dxy6k",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-q8q92i8v",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-ive569ku",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-w_59arta",
+      "/media/jojo/Archive/.nadoc-vr-capture/v-3bgdq_c7"
+    ],
+    "active_file_or_mapping_references_before": [],
+    "raw_evidence_links": "pruned after extraction of timings and submitted-eye pixel counts",
+    "preserved": [
+      "production jobs/designs/DCDs",
+      "deployed native build",
+      "existing SteamVR/dashboard",
+      "original Alpine worker",
+      "unrelated dirty files"
+    ],
+    "retained": "This compact audit, policy documentation, reusable benchmark and regression tests",
+    "verified_removed": true
+  },
+  "steamvr_home_followup": {
+    "observed_at": "2026-10-20 14:27 America/Denver",
+    "user_observation": "vrmonitor rapidly alternated NADOC and Starting SteamVR Home",
+    "confirmed": "Repeated Home launch, PID assignment, cleanup, transition abort, immediate relaunch, including within NADOC timed windows",
+    "correlations": [
+      {
+        "run": "untraced/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "vdw",
+        "smooth": true,
+        "home_launch_attempts_in_retained_log": 67,
+        "window_ms": 12235
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "ballstick",
+        "smooth": false,
+        "home_launch_attempts_in_retained_log": 450,
+        "window_ms": 12108
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "ballstick",
+        "smooth": true,
+        "home_launch_attempts_in_retained_log": 457,
+        "window_ms": 12222
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "stick",
+        "smooth": false,
+        "home_launch_attempts_in_retained_log": 460,
+        "window_ms": 12107
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "stick",
+        "smooth": true,
+        "home_launch_attempts_in_retained_log": 425,
+        "window_ms": 12115
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "vdw",
+        "smooth": false,
+        "home_launch_attempts_in_retained_log": 457,
+        "window_ms": 12457
+      },
+      {
+        "run": "headset-only/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/windows.json",
+        "representation": "vdw",
+        "smooth": true,
+        "home_launch_attempts_in_retained_log": 440,
+        "window_ms": 12108
+      }
+    ],
+    "log_coverage": "Rotating logs only retain the latest interval. Missing counts for earlier windows do not establish absence.",
+    "interpretation": "Concurrent process-launch storm is a confounder. Zero coordinate reads remains verified; remaining stalls cannot be attributed solely to scene publication. Runtime isolation is needed before further performance conclusions.",
+    "runtime_changes": "None; read-only inspection.",
+    "server_pid": 506208,
+    "compositor_pid": 506221
+  }
+}

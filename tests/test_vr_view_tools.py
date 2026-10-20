@@ -69,3 +69,64 @@ def test_trajectory_update_reuses_atlas_and_still_rotates_normals():
     struct.pack_into('<I', invalid, 32, 2048)
     with pytest.raises(HTTPException):
         validate_and_rotate(invalid, np.eye(3))
+
+
+@pytest.mark.parametrize("ipc", [False, True])
+def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, capsys, ipc):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from backend.api import routes_vr, doc_context, vr_view_transport
+    from backend.api.vr_view_tools import publish
+    data = b'NADOCVT1' + struct.pack('<10I',6,23,2048,0,0,0,0,0,0,0)
+    state = {'doc_id':'trace-test', 'event_path':str(tmp_path/'event'), 'view_rotation':np.eye(3).tolist()}
+    delivered = []
+    def send(path, payload):
+        delivered.append(bytes(payload))
+        return ipc
+    monkeypatch.setattr(vr_view_transport, 'send_snapshot', send)
+    monkeypatch.setenv('NADOC_VR_VIEW_PIPELINE','1')
+    monkeypatch.setattr(routes_vr,'_require_local',lambda _:None)
+    monkeypatch.setattr(routes_vr,'_read_state',lambda:state)
+    monkeypatch.setattr(doc_context,'get_current_doc',lambda:'trace-test')
+    async def stream():
+        yield data
+    result = asyncio.run(publish(SimpleNamespace(stream=stream)))
+    assert result == {'published':True,'bytes':len(data)}
+    assert delivered == [data]
+    if ipc:
+        assert not (tmp_path/'event.viewtools').exists()
+    else:
+        assert (tmp_path/'event.viewtools').read_bytes() == data
+    line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith('VR_VIEW_PIPELINE_BACKEND '))
+    trace = json.loads(line.split(' ',1)[1])
+    assert trace['version'] == 23
+    assert trace['transport'] == ('ipc' if ipc else 'file')
+    assert 0 <= trace['body_end_ms'] <= trace['state_end_ms'] <= trace['validation_end_ms'] <= trace['write_start_ms'] <= trace['write_end_ms']
+
+
+def test_transport_wait_does_not_block_async_handler(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+    from backend.api import routes_vr, doc_context, vr_view_transport
+    from backend.api.vr_view_tools import publish
+    state = {'doc_id':'async-test','event_path':str(tmp_path/'event'),'view_rotation':np.eye(3).tolist()}
+    monkeypatch.setattr(routes_vr,'_require_local',lambda _:None)
+    monkeypatch.setattr(routes_vr,'_read_state',lambda:state)
+    monkeypatch.setattr(doc_context,'get_current_doc',lambda:'async-test')
+    started, release = threading.Event(), threading.Event()
+    def send(*_):
+        started.set()
+        assert release.wait(1), 'Transport blocked the async event loop'
+        return True
+    monkeypatch.setattr(vr_view_transport,'send_snapshot',send)
+    async def stream():
+        yield b'NADOCVT1'+struct.pack('<10I',6,1,2048,0,0,0,0,0,0,0)
+    async def scenario():
+        task=asyncio.create_task(publish(SimpleNamespace(stream=stream)))
+        while not started.is_set():
+            await asyncio.sleep(.001)
+        release.set()
+        assert (await task)['published']
+    asyncio.run(scenario())

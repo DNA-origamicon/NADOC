@@ -1,8 +1,8 @@
 """Document-bound desktop simulation controls for the native sidebar."""
 import json
-import os
-from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
+from backend.api.vr_control_transport import deliver_control
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -94,15 +94,7 @@ async def publish(body: Snapshot, request: Request):
     from backend.api import routes_vr as vr
     from backend.api.doc_context import get_current_doc
     vr._require_local(request)
-    with vr._FEEDBACK_LOCK:
-        state = vr._read_state()
-        if not state or state.get('doc_id') != get_current_doc():
-            raise HTTPException(409, 'VR belongs to another document or is unavailable')
-        path = Path(state['event_path'] + '.simulations')
-        temporary = Path(str(path) + '.next')
-        temporary.write_text(encode(body))
-        temporary.chmod(0o600)
-        os.replace(temporary, path)
+    await run_in_threadpool(deliver_control, get_current_doc(), '.simulations', encode(body))
     return {'published': True}
 
 

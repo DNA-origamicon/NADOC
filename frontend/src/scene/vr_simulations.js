@@ -9,7 +9,20 @@ export function createVRSimulations({ jobs, engineSelector, doc = document, requ
   api, controller = () => null, companion = () => null, ensureFull = async () => {}, prepareFrame = async () => {}, onFrame = () => {}, scale = () => null }) {
   let version = Math.floor(Math.random() * 1e9), acknowledged = 0, signature = '', published = null, sending = false, epoch = 0
   let trajectoryMode = '', owner = '', pendingMessage = '', actionBusy = false
-  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, prepareFrame, request, changed: geometry => { if (geometry) { doc.documentElement.dataset.vrSimulationTrajectory = 'true'; const radio = simulationControls(doc, engineSelector.getSelected()).find(c => c.kind === 'mode' && c.group === trajectoryMode); if (radio) radio.element.checked = true; onFrame() } void publish().catch(() => {}) } }) : null
+  let trajectoryRadio = null, lastFrame = ''
+  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, prepareFrame, request, changed: geometry => {
+    if (geometry) {
+      doc.documentElement.dataset.vrSimulationTrajectory = 'true'
+      if (!trajectoryRadio?.isConnected || trajectoryRadio.value !== trajectoryMode) trajectoryRadio = simulationControls(doc, engineSelector.getSelected()).find(c => c.kind === 'mode' && c.group === trajectoryMode)?.element
+      if (trajectoryRadio) trajectoryRadio.checked = true
+      onFrame()
+      const frame = JSON.stringify([owner, trajectoryMode, trajectory.snapshot()])
+      // Interpolated subframes change pixels, not the simulation control state.
+      if (frame === lastFrame) return
+      lastFrame = frame
+    }
+    void publish().catch(() => {})
+  } }) : null
   doc.defaultView?.addEventListener('nadoc:representation-change', () => {
     if (trajectory?.active) { trajectory.pause(); void trajectory.seek(trajectory.snapshot().index) }
     onFrame()
@@ -104,7 +117,7 @@ export function createVRSimulations({ jobs, engineSelector, doc = document, requ
     } finally { actionBusy = false; pendingMessage = ''; await publish() }
   }
   return { snapshot, trajectory, activate: event => activate(event).catch(error => onError(error.message)), publish: () => publish().catch(() => {}),
-    reset() { epoch++; trajectory?.reset(); trajectoryMode = ''; owner = ''; delete doc.documentElement.dataset.vrSimulationTrajectory; version = Math.floor(Math.random() * 1e9); acknowledged = 0; signature = ''; published = null } }
+    reset() { epoch++; lastFrame = ''; trajectoryRadio = null; trajectory?.reset(); trajectoryMode = ''; owner = ''; delete doc.documentElement.dataset.vrSimulationTrajectory; version = Math.floor(Math.random() * 1e9); acknowledged = 0; signature = ''; published = null } }
 }
 export function simulationViewActive(doc) {
   return Object.values(SIMULATION_CARDS).some(id => [...(doc.getElementById(id)?.querySelectorAll('input[type="radio"]:checked') ?? [])].some(el => ['cando-display-mode', 'snupi-display-mode', 'mrdna-display-mode', 'oxdna-viz', 'md-viz', 'mode'].includes(el.name) && el.value !== 'off')) || !!doc.getElementById('exp-viz')?.checked || doc.documentElement?.dataset.vrSimulationTrajectory === 'true'

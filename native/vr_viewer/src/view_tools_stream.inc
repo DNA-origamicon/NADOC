@@ -1,11 +1,15 @@
 // Included inside VRViewTools. File I/O, validation and pose normalization are CPU
 // worker work. GL writes use spare buffers in <=256 KiB pieces, with a 1 ms budget.
-struct IncomingView {std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false,indexedAny=false,indexedGroupedAny=false;};
+struct IncomingView {std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0,readEpochMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false,indexedAny=false,indexedGroupedAny=false;};
 struct StagedView {IncomingView view;GLuint triangles=0,lines=0,texture=0;size_t buffer=0,offset=0,textureRow=0;double uploadMs=0;};
+std::unique_ptr<nadoc_vr::ViewSnapshotInbox> inbox;
 std::future<std::optional<IncomingView>> reading;
 std::optional<StagedView> staging;
-static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={},bool indexMeshes=false,bool groupIndexedMeshes=false){
- const auto start=std::chrono::steady_clock::now();std::ifstream in(path,std::ios::binary);char magic[8];IncomingView out;auto& h=out.header;
+static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={},bool indexMeshes=false,bool groupIndexedMeshes=false,std::optional<std::string> packet={}){
+ const auto epoch=std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
+ const auto start=std::chrono::steady_clock::now();std::ifstream file;std::istringstream memory;
+ if(packet)memory.str(std::move(*packet));else file.open(path,std::ios::binary);
+ std::istream& in=packet?static_cast<std::istream&>(memory):static_cast<std::istream&>(file);char magic[8];IncomingView out;auto& h=out.header;
  if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]!=4&&h[0]!=5&&h[0]!=6)||h[1]==current)return {};
  const bool atlas=h[0]!=6;
  if(h[2]>=4096||(h[2]&(128|512|1024))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[8]>10000||h[6]!=(atlas?2048U:0U)||h[7]!=(atlas?2048U:0U))return {};
@@ -40,7 +44,7 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
     b.indexedVertices=std::move(indexed.vertices);b.indices=std::move(indexed.indices);out.indexedAny=true;}
    else b.indexedGroupPlan.reason="indexed_mesh_unavailable";}}
  else for(auto& b:out.batches){b.indexPlan.reason="disabled";b.indexPlan.originalVertices=b.vertices.size();b.indexedGroupPlan.reason="indexing_disabled";}
- out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;
+ out.readEpochMs=epoch;out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;
 }
 static void discardIndexedGroups(Batch& b,const char* reason){
  if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);
@@ -56,8 +60,10 @@ static void discardIndexed(Batch& b,const char* reason){
  b.indexedVertexBuffer=b.indexBuffer=0;b.indexPlan.eligible=false;b.indexPlan.reason=reason;b.indexPlan.derivedBytes=0;
  std::vector<V>().swap(b.indexedVertices);std::vector<uint32_t>().swap(b.indices);
 }
-bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin){
+bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,bool continuous=false){
  if(path.empty())return false;
+ if(!inbox)inbox=std::make_unique<nadoc_vr::ViewSnapshotInbox>(path);
+ bool applied=false;
  if(reading.valid()&&reading.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{auto next=reading.get();if(next){staging.emplace();staging->view=std::move(*next);}}catch(const std::exception&){} }
  if(staging){auto& s=*staging;const double start=glfwGetTime();const size_t indexKind=s.view.groupedAny?3:2;const size_t indexedGroupKind=indexKind+(s.view.indexedAny?2:0);const size_t stride=indexedGroupKind+(s.view.indexedGroupedAny?2:0);const size_t count=2+s.view.batches.size()*stride;
   while(s.buffer<count&&glfwGetTime()-start<.001){GLuint* buffer;const void* data;size_t bytes;Batch* optionalIndexed=nullptr;bool optionalGroup=false;
@@ -113,10 +119,16 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin)
     if(!b.instanceTexture || !nadoc_vr::view_indexed::groupResourcesComplete(b.indexedGroupPlan,sizeof(V),vertices,elements))discardIndexedGroups(b,"indexed_group_resource_incomplete");}
    opaqueEligibility=s.view.opaqueEligibility;
    batches=std::move(s.view.batches);triangles=std::move(s.view.triangles);lines=std::move(s.view.lines);sprites=std::move(s.view.sprites);
-   cachedSceneBounds=s.view.bounds;version=s.view.header[1];flags=s.view.header[2];acknowledged=s.view.header[9];if(acknowledged>=sequence)waiting=false;parseMs=s.view.parseMs;uploadMs=s.uploadMs;staging.reset();return true;
+   static const bool pipelineTrace=[] {const char* v=std::getenv("NADOC_VR_VIEW_PIPELINE");return v&&std::string_view(v)=="1";}();
+   if(pipelineTrace)nadoc_vr::TraceRecord()<<std::fixed<<std::setprecision(6)<<"VR_VIEW_PIPELINE_NATIVE epoch_ms="<<std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count()<<" version="<<s.view.header[1]<<" read_epoch_ms="<<s.view.readEpochMs<<" read_parse_ms="<<s.view.parseMs<<" upload_ms="<<s.uploadMs<<'\n';
+   cachedSceneBounds=s.view.bounds;version=s.view.header[1];flags=s.view.header[2];acknowledged=s.view.header[9];if(acknowledged>=sequence)waiting=false;parseMs=s.view.parseMs;uploadMs=s.uploadMs;staging.reset();if(!continuous)return true;applied=true;
   }
  }
- if(!reading.valid()&&!staging&&++frames%3==0){reading=std::async(std::launch::async,[=,current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits,indexMeshes=indexedRequested,groupIndexedMeshes=indexedGroupsRequested&&groupsAvailable()]{return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits,indexMeshes,groupIndexedMeshes);});}
- return false;
+ if(!reading.valid()&&!staging&&(continuous||++frames%3==0)){
+  auto packet=inbox->take();
+  // Once IPC is established, never reapply a stale legacy file between packets.
+  if(packet || !inbox->received())reading=std::async(std::launch::async,[=,packet=std::move(packet),current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits,indexMeshes=indexedRequested,groupIndexedMeshes=indexedGroupsRequested&&groupsAvailable()]() mutable {return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits,indexMeshes,groupIndexedMeshes,std::move(packet));});
+ }
+ return applied;
 }
 void cancelStaging(){if(!staging)return;auto& s=*staging;for(auto& b:s.view.batches){if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);if(b.indexedVertexBuffer)glDeleteBuffers(1,&b.indexedVertexBuffer);if(b.indexBuffer)glDeleteBuffers(1,&b.indexBuffer);if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}if(s.triangles)glDeleteBuffers(1,&s.triangles);if(s.lines)glDeleteBuffers(1,&s.lines);if(s.texture)glDeleteTextures(1,&s.texture);staging.reset();}

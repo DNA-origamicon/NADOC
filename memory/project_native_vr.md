@@ -7,6 +7,40 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## CPD production playback — 2026-10-20
+
+Small VR atomistic trajectory selections now prepare exact coordinates before
+Ready (200 selected frames maximum, 32 MiB atom cache, separate 32 MiB coarse
+bound). Smooth defaults on for fitting atomic loads, respecting explicit choices.
+One scene upload/read remains in flight; native upload budget stays 1 ms.
+Cached playback avoids repeated ion/cell preparation and loading toasts.
+All 24 final playback windows made zero coordinate requests; two Smooth
+windows still failed the throughput gate. Native median intervals were ~11.17 ms
+(with occasional hitches); scene delivery was 7–24 Hz. This is not yet consistently
+smooth molecular animation. Follow-up SteamVR logs show a Home launch/abort
+storm (~35–38 attempts/s) during measured windows. Residual timings are
+confounded. Follow-up disabled Home autostart through live OpenVR settings: zero
+retries, all 24 throughput gates passed, but mixed scene timings (7–21 Hz) and
+a 1.843 s worst gap remain. Stopping the loop did not establish consistently
+smooth playback. See the [repeat audit](../docs/audits/cpd_vr_home_fix_20261020.json). See [policy, reusable benchmark, and evidence](../docs/vr_cpd_playback.md).
+The workflow is registered under Left sidebar in VR Tours & Tests and preserves
+source jobs and existing runtime sessions.
+
+Fidelity-first follow-up: saved-frame-only pipeline traces show no coordinate
+fetches, <=1.6 ms cached apply and <=2.25 ms native read/parse. Archive is a
+rotational HDD; synchronous scene-file write/replace blocks up to 468 ms, with
+backend event-loop resume delays up to 388 ms and submitted scene gaps ~983 ms.
+Three initial windows pass; a VDW repeat fails throughput (75 endpoints). This is
+a measured disk-backed handoff contributor, not proof that HDD alone causes all
+stalls or a smoothness fix. Implemented byte-preserving IPC for scene packets plus simulation/presenter
+control snapshots; the latter also had 160–230 ms replacement stalls. Initial
+cis-syn-I saved-frame gaps improve to 102/101/268 ms, with ~90 Hz native cadence.
+All four isomers pass all 12 saved-frame windows at 11.955–12.059 scene updates/s;
+p95 gaps ≤89.8 ms, worst 268 ms; native p95 ≤11.55 ms, worst 35 ms.
+Existing viewers retain file fallback; packet receipt is bounded and keeps scene
+atlas ordering and presenter heartbeat expiry. Persistent native mesh reuse remains
+future work. No new interpolation. See [IPC audit](../docs/audits/cpd_vr_ipc_20261020.json). See [pipeline audit](../docs/audits/cpd_vr_pipeline_20261020.json).
+
 ## CPD Full parity — 2026-10-20
 Full now exports the desktop's two CPD slab bars using shared projected sites and
 the chemical graph. Slab-frame visualization moves/rotates both endpoints; Beads

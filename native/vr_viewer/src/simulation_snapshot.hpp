@@ -16,8 +16,9 @@ struct SimulationSnapshot {
  simulation_study::TrajectoryState trajectory;
  simulation_study::ScaleState scale;
  float scaleMinimum=0,scaleMaximum=1;
- static SimulationSnapshot read(const std::string& path) {
-  SimulationSnapshot s;std::ifstream in(path);std::string magic;int ne,nj,nv;
+ static SimulationSnapshot read(const std::string& path) {std::ifstream in(path);return read(in);}
+ static SimulationSnapshot read(std::istream& in) {
+  SimulationSnapshot s;std::string magic;int ne,nj,nv;
   if(!(in>>magic>>s.version>>s.ack>>ne>>nj>>nv>>s.selected>>std::quoted(s.mode)) || (magic!="NADOC_SIMULATIONS_2" && magic!="NADOC_SIMULATIONS_3") || s.version<1 || s.ack<0 || ne<0 || ne>10 || nj<0 || nj>10000 || nv<0 || nv>1000)throw std::runtime_error("Invalid simulation menu");
   for(auto pair:{std::pair{ne,&s.engines},std::pair{nj,&s.jobs},std::pair{nv,&s.views}})for(int i=0;i<pair.first;++i){SimulationRow r;
    if(!(in>>std::quoted(r.id)>>std::quoted(r.label)>>std::quoted(r.detail)>>r.enabled>>r.active>>std::quoted(r.kind)>>std::quoted(r.group)>>r.value>>r.minimum>>r.maximum>>r.step) || r.id.size()>100 || r.label.size()>250 || !std::isfinite(r.value)||!std::isfinite(r.minimum)||!std::isfinite(r.maximum))throw std::runtime_error("Invalid simulation control");

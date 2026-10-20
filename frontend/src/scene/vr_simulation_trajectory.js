@@ -7,21 +7,22 @@ export function trajectorySelection(first, last, interval, available) {
 }
 
 /** Two coordinate pages, one network request and one render in flight.
+ * Small selections prepare one resident page before Ready; large ones stream.
  * Source IDs are one-based; API indices are zero-based and sampled globally.
  * Neither opening a job nor selecting Trajectory downloads coordinates.
  */
 export function createVRSimulationTrajectory({ api, controller, ensureFull, prepareFrame = async () => {}, companion = () => null, changed = () => {}, request = fetch, clock = () => performance.now() }) {
   let seekSequence = 0, generation = 0, abort = null, timer = null, context = '', engine = '', job = '', scope = 'job', ctrl = null, overlays = null
   let pages = new Map(), pending = null, renderedPage = null, metadataPending = false
-  let state = empty(), lastStep = 0
+  let state = empty(), lastStep = 0, pageSize = 8, resident = false, smoothChosen = false, playback = 0
   function empty() { return { available: 0, first: 1, last: 0, interval: 1, count: 0, index: 0, phase: 'idle', playing: false, smooth: false, loop: false, progress: -1, message: 'Select Load to prepare frames', source: 1 } }
-  function pause() { state.playing = false; clearTimeout(timer); timer = null; ctrl?.setPlaying?.(false); ctrl?.pauseTrajectory?.() }
-  function cancel(notify = true) { ++generation; ++seekSequence; abort?.abort(); abort = null; pending = null; metadataPending = false; pause(); overlays?.setEnabled(false); overlays?.clear?.(); pages.clear(); renderedPage = null; state.phase = 'idle'; state.progress = -1; state.message = 'Load cancelled'; ctrl?.cancelPendingLoad?.(); if (notify) changed() }
+  function pause() { ++playback; state.playing = false; clearTimeout(timer); timer = null; ctrl?.setPlaying?.(false); ctrl?.pauseTrajectory?.() }
+  function cancel(notify = true) { ++generation; ++seekSequence; abort?.abort(); abort = null; pending = null; metadataPending = false; pause(); overlays?.setEnabled(false); overlays?.clear?.(); pages.clear(); renderedPage = null; pageSize = 8; resident = false; state.phase = 'idle'; state.progress = -1; state.message = 'Load cancelled'; ctrl?.cancelPendingLoad?.(); if (notify) changed() }
   async function select(nextEngine, nextJob, nextScope = 'job') {
     const key = `${nextEngine}:${nextJob}:${nextScope}`
     if (context === key && state.phase !== 'error') return
     cancel(); context = key; engine = nextEngine; job = nextJob; scope = nextScope; ctrl = controller(engine); overlays = companion(engine)
-    state = empty(); state.phase = 'metadata'; state.message = 'Reading trajectory frame count'; metadataPending = true
+    state = empty(); smoothChosen = false; state.phase = 'metadata'; state.message = 'Reading trajectory frame count'; metadataPending = true
     const current = generation
     try {
       const meta = engine === 'namd' ? await api.getMdTrajectoryMeta(job, { stride: 1 })
@@ -43,11 +44,11 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
     cancel(false); Object.assign(state, next, { index: 0, source: next.first, message: 'Range changed; press Load' }); changed(); return true
   }
   async function pageFor(index, expectedGeneration) {
-    const start = Math.floor(index / 8) * 8
+    const start = Math.floor(index / pageSize) * pageSize
     if (pages.has(start)) return pages.get(start)
     if (pending) { await pending; if (expectedGeneration !== generation) return null; if (pages.has(start)) return pages.get(start) }
     const current = generation, selection = { ...state }, first = selection.first - 1 + start * selection.interval
-    const end = Math.min(start + 7, selection.count - 1), last = selection.first - 1 + end * selection.interval
+    const end = Math.min(start + pageSize - 1, selection.count - 1), last = selection.first - 1 + end * selection.interval
     abort = new AbortController()
     state.message = `Reading frames ${first + 1}–${last + 1}`; state.progress = -1; changed()
     let progressTimer, progressStopped = false
@@ -91,9 +92,11 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
     pending = promise
     try { return await promise } finally { progressStopped = true; clearTimeout(progressTimer); if (pending === promise) pending = null }
   }
-  async function seek(index, { initial = false } = {}) {
+  async function seek(index, { initial = false, forceCompanions = false } = {}) {
     if (!initial && !['ready', 'buffering'].includes(state.phase)) return false
     const seekId = ++seekSequence, current = generation, i = Math.max(0, Math.min(state.count - 1, Math.round(index)))
+    const trace=stage=>globalThis.__nadocVRPlaybackTrace?.({stage,epoch_ms:performance.timeOrigin+performance.now(),index:i,source:state.first+i*state.interval})
+    trace('seek_start')
     state.phase = initial ? 'loading' : 'buffering'
     try {
       if (engine === 'snupi') {
@@ -106,14 +109,34 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
         if (current !== generation || seekId !== seekSequence) return false
         state.index = i; state.source = source + 1; state.phase = 'ready'; state.progress = 1; state.message = 'Ready'; renderedPage = true; changed(true); return true
       }
-      const page = await pageFor(i, current)
+      let page = await pageFor(i, current)
       if (!page || current !== generation || seekId !== seekSequence) return false
       if (initial) {
         const result = await ctrl.loadFullTrajectoryPage(job, page.payload)
         if (!result?.ok) throw new Error(result?.reason || 'Could not prepare trajectory')
       }
       if (current !== generation || seekId !== seekSequence) return false
-      if (overlays) {
+      const preparing = initial || page !== renderedPage || forceCompanions
+      if (preparing) { state.message = 'Preparing exact trajectory frames'; changed() }
+      const capacity = await ctrl.prepareFullTrajectoryFrames?.(page.payload) ?? 0
+      if (current !== generation || seekId !== seekSequence) return false
+      // Price the complete selection using actual coordinate payloads. Surfaces
+      // and controllers without bounded atomic preparation retain small pages.
+      const coarseBytes = page.payload.frames.reduce((n, f) => n + f.byteLength, 0)
+      if (initial && state.count <= 200 && capacity >= state.count &&
+          coarseBytes / page.payload.frames.length * state.count <= 32 * 1024 * 1024) {
+        resident = true
+        if (!smoothChosen && Number.isFinite(capacity)) state.smooth = true
+        if (state.count > pageSize) {
+          pageSize = state.count; pages.clear()
+          page = await pageFor(i, current)
+          if (!page || current !== generation || seekId !== seekSequence) return false
+          state.message = 'Preparing all selected atom frames'; changed()
+          await ctrl.prepareFullTrajectoryFrames(page.payload)
+          if (current !== generation || seekId !== seekSequence) return false
+        }
+      }
+      if (overlays && preparing) {
         state.message = 'Preparing ions and periodic cell'; state.progress = -1; changed()
         const frames = page.payload.frames.map((_, n) => state.first - 1 + (page.start + n) * state.interval)
         await overlays.setJob(job, { stride: 1, nFrames: state.available, frameIndices: frames, frameIdx: frames[i - page.start], deferDraw: true })
@@ -123,15 +146,18 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
         if (current !== generation || seekId !== seekSequence) return false
         if (!ready) throw new Error('Could not load ions or periodic cell; retry Load')
       }
-      state.message = 'Preparing selected representation'; state.progress = -1; changed()
+      if (preparing) { state.message = 'Preparing selected representation'; state.progress = -1; changed() }
+      trace('apply_start')
       if (!await ctrl.showFullTrajectoryFrame(page.payload, i - page.start)) throw new Error('Could not display the selected frame')
       if (current !== generation || seekId !== seekSequence) return false
+      trace('apply_end')
       overlays?.showFrame(state.first - 1 + i * state.interval)
+      trace('companions_end')
       renderedPage = page; state.index = i; state.source = state.first + i * state.interval; state.phase = 'ready'; state.progress = 1
-      state.message = `${state.count} selected frames · 16 maximum buffered`; changed(true)
+      state.message = resident ? `${state.count} selected frames prepared` : `${state.count} selected frames · 16 maximum buffered`; changed(true)
       // Decode the next page while the current one is playing. One request and
       // two pages remain the hard bounds; a seek still owns error reporting.
-      if (state.playing && i - page.start >= 3 && page.start + 8 < state.count && !pending) void pageFor(page.start + 8, current).catch(() => {})
+      if (state.playing && i - page.start >= 3 && page.start + pageSize < state.count && !pending) void pageFor(page.start + pageSize, current).catch(() => {})
       return true
     } catch (error) { if (current === generation && error.name !== 'AbortError') { pause(); state.phase = 'error'; state.message = error.message; changed() } return false }
   }
@@ -143,26 +169,28 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
     if (current !== generation) return false
     return seek(0, { initial: true })
   }
-  async function step() {
-    if (!state.playing) return
+  async function step(run) {
+    if (run !== playback || !state.playing) return
     if (state.count < 2 || (state.index >= state.count - 1 && !state.loop)) { pause(); changed(); return }
     lastStep = clock()
     const next = (state.index + 1) % state.count, current = generation
-    if (state.smooth && engine !== 'snupi' && next % 8 !== 0 && renderedPage) {
+    if (state.smooth && engine !== 'snupi' && next !== 0 && next % pageSize !== 0 && renderedPage) {
       const from = state.index - renderedPage.start, to = next - renderedPage.start
       await ctrl.ensureInterpolationFrames?.(from, to)
-      if (current !== generation || !state.playing) return
+      if (current !== generation || run !== playback || !state.playing) return
       for (let sample = 1; sample <= 3; sample++) {
-        await new Promise(resolve => setTimeout(resolve, 1000 / 48))
-        if (current !== generation || !state.playing) return
+        await new Promise(resolve => setTimeout(resolve, Math.max(0, lastStep + sample * 1000 / 48 - clock())))
+        if (current !== generation || run !== playback || !state.playing) return
+        if (clock() >= lastStep + 1000 / 12) break
         ctrl.showInterpolatedFrame?.(from, to, sample / 4); overlays?.showInterpolatedFrame(state.first - 1 + state.index * state.interval, state.first - 1 + next * state.interval, sample / 4); changed(true)
       }
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, lastStep + 1000 / 12 - clock())))
     }
-    if (current === generation && state.playing) await seek(next)
-    if (current === generation && state.playing) timer = setTimeout(step, Math.max(0, 1000 / 12 - (clock() - lastStep)))
+    if (current === generation && run === playback && state.playing) await seek(next)
+    if (current === generation && run === playback && state.playing) timer = setTimeout(() => step(run), Math.max(0, 1000 / 12 - (clock() - lastStep)))
   }
-  function toggle() { if (!state.playing && state.phase === 'ready' && state.index === state.count - 1 && state.count > 1) { const current = generation; void seek(0).then(ok => { if (ok && current === generation) toggle() }); return } if (state.playing) pause(); else if (state.phase === 'ready' && state.count > 1) { state.playing = true; ctrl?.setPlaying?.(true); timer = setTimeout(step, 0) } changed() }
-  return { select, configure, load, cancel, pause, toggle, seek, refreshCompanions() { pause(); return seek(state.index) }, smooth() { state.smooth = !state.smooth; changed() }, loop() { state.loop = !state.loop; changed() }, snapshot: () => ({ ...state }),
+  function toggle() { if (!state.playing && state.phase === 'ready' && state.index === state.count - 1 && state.count > 1) { const current = generation; void seek(0).then(ok => { if (ok && current === generation) toggle() }); return } if (state.playing) pause(); else if (state.phase === 'ready' && state.count > 1) { state.playing = true; ctrl?.setPlaying?.(true); const run = ++playback; timer = setTimeout(() => step(run), 0) } changed() }
+  return { select, configure, load, cancel, pause, toggle, seek, refreshCompanions() { pause(); return seek(state.index, { forceCompanions: true }) }, smooth() { smoothChosen = true; state.smooth = !state.smooth; changed() }, loop() { state.loop = !state.loop; changed() }, snapshot: () => ({ ...state }),
     reset() { cancel(); context = ''; state = empty() }, dispose() { cancel() },
     get active() { return !!renderedPage }, get busy() { return !!pending || metadataPending } }
 }

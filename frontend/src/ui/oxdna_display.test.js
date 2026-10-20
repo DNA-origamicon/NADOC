@@ -1922,3 +1922,16 @@ it('keeps VR paged trajectory source indices exact across styles and page bounda
   for (repr of ['oxdna','mrdna-coarse','mrdna-fine','full']) expect(await ctrl.showFullTrajectoryFrame(page,1)).toBe(true)
   ctrl.stopAndRestore()
 })
+
+it('plays prepared VR atoms without per-frame loading notifications',async()=>{
+ const status=vi.fn(),atom={getMode:()=> 'ballstick',update:vi.fn(),applyPositionLerp:vi.fn()}
+ const api={getOxdnaAtomisticModel:async()=>({n_serials:1,atoms:[{serial:0,element:'P',strand_id:'s',x:0,y:0,z:0}],bonds:[]}),
+  getOxdnaFramesAtomistic:vi.fn(async(_,ids)=>Object.fromEntries(ids.map(i=>[i,[i,2,3]])))}
+ const ctrl=initOxdnaDisplay({designRenderer:{applyFemPositions:vi.fn(),clearScalarColors:vi.fn()},api,getCurrentRepr:()=> 'ballstick',getAtomisticRenderer:()=>atom,onHeavyStatus:status})
+ const page={keys:[['h',0,'FORWARD']],frame_start:10,frame_step:5,scope:'job',frames:[[0,0,0,1,0,0],[1,0,0,1,0,0]]}
+ await ctrl.loadFullTrajectoryPage('job',page);await ctrl.prepareFullTrajectoryFrames(page)
+ status.mockClear();const calls=api.getOxdnaFramesAtomistic.mock.calls.length
+ for(const i of [0,1,0,1])await ctrl.showFullTrajectoryFrame(page,i)
+ expect(status).not.toHaveBeenCalled();expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(calls)
+ ctrl.stopAndRestore()
+})

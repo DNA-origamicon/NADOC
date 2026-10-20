@@ -118,3 +118,14 @@ it('publishes and acknowledges the native loop toggle exactly once', async () =>
  expect(bridge.snapshot().trajectory.loop).toBe(true)
  bridge.reset()
 })
+
+it('reads wrapped and external labels without controls or DOM cloning',()=>{
+ document.body.innerHTML='<div id="cando-display-card"><label>Alpha <span>beta</span><input id="a" type="checkbox"><button>Ignore</button><select><option>Ignore too</option></select></label><label for="b">External gamma</label><input id="b" type="checkbox"></div>'
+ const clone=vi.spyOn(Element.prototype,'cloneNode')
+ try {
+  const controls=simulationControls(document,'cando')
+  expect(controls.find(c=>c.element.id==='a').label).toBe('Alpha beta')
+  expect(controls.find(c=>c.element.id==='b').label).toBe('External gamma')
+  expect(clone).not.toHaveBeenCalled()
+ }finally{clone.mockRestore()}
+})

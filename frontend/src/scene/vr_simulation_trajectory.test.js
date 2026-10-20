@@ -62,10 +62,13 @@ describe('Full trajectory gate and bounded frame pages', () => {
   expect(t.snapshot().phase).toBe('loading')
   release(true);await loading
   expect(drawn).toEqual([['dna',0],['ions',0]])
-  const seeking=t.seek(5)
+  await t.seek(5)
+  expect(drawn).toEqual([['dna',0],['ions',0],['dna',5],['ions',5]])
+  expect(overlay.prepareAll).toHaveBeenCalledTimes(1)
+  const seeking=t.refreshCompanions()
   await vi.waitFor(()=>expect(overlay.prepareAll).toHaveBeenCalledTimes(2))
   t.cancel();release(true);await seeking
-  expect(drawn).toHaveLength(2)
+  expect(drawn).toHaveLength(4)
   t.dispose()
  })
  it('reports preparation failure and permits retrying failed metadata',async()=>{
@@ -115,4 +118,37 @@ it('reloads an evicted first page at wrap and never interpolates end to start', 
   expect(fetched.filter(i=>i===4)).toHaveLength(2)
   expect(interpolated.every(([from,to])=>to===from+1)).toBe(true)
  } finally { t.dispose();vi.useRealTimers() }
+})
+
+it('prepares a fitting default selection before Ready and plays across old page boundaries without requests', async()=>{
+ vi.useFakeTimers()
+ const calls=[],drawn=[]
+ const display={loadFullTrajectoryPage:async()=>({ok:true}),prepareFullTrajectoryFrames:vi.fn(async()=>1000),showFullTrajectoryFrame:(p,i)=>{drawn.push(p.frame_start+i*p.frame_step);return true}}
+ const t=createVRSimulationTrajectory({api:{getMdTrajectoryMeta:async()=>({total_raw:1000})},controller:()=>display,ensureFull:async()=>{},request:async url=>{
+  calls.push(url);const u=new URL(url,'http://local'),lo=+u.searchParams.get('frame_start'),hi=+u.searchParams.get('frame_end'),step=+u.searchParams.get('frame_step')
+  return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>binary((hi-lo)/step+1)}
+ }})
+ try {
+  await t.select('namd','job');await t.load()
+  expect(t.snapshot()).toMatchObject({phase:'ready',count:200,message:'200 selected frames prepared'})
+  expect(calls).toHaveLength(2)
+  t.toggle();await vi.advanceTimersByTimeAsync(1800);t.pause()
+  expect(drawn.length).toBeGreaterThan(16);expect(calls).toHaveLength(2)
+  await t.seek(199);await t.seek(0);expect(calls).toHaveLength(2)
+ }finally{t.dispose();vi.useRealTimers()}
+})
+
+it('keeps the final interpolation quarter paced and honours an explicit smooth preference on reload',async()=>{
+ vi.useFakeTimers()
+ const samples=[],display={loadFullTrajectoryPage:async()=>({ok:true}),prepareFullTrajectoryFrames:async()=>1000,
+  showFullTrajectoryFrame:()=>{samples.push({t:performance.now(),fraction:1});return true},
+  ensureInterpolationFrames:async()=>true,showInterpolatedFrame:(_,__,fraction)=>samples.push({t:performance.now(),fraction})}
+ const t=createVRSimulationTrajectory({api:{getMdTrajectoryMeta:async()=>({total_raw:8})},controller:()=>display,ensureFull:async()=>{},request:async()=>({ok:true,headers:{get:()=>null},arrayBuffer:async()=>binary(8)})})
+ try {
+  await t.select('namd','job');await t.load();expect(t.snapshot().smooth).toBe(true)
+  samples.length=0;t.toggle();await vi.advanceTimersByTimeAsync(84);t.pause()
+  expect(samples.map(s=>s.fraction)).toEqual([.25,.5,.75,1])
+  expect(samples.map(s=>s.t)).toEqual([20,41,62,83])
+  t.smooth();await t.load();expect(t.snapshot().smooth).toBe(false)
+ }finally{t.dispose();vi.useRealTimers()}
 })

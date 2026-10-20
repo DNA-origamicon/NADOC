@@ -169,7 +169,7 @@ export function encodeVRView(view,version,requestSequence=0) {
   for(const b of batches)parts.push(new Uint32Array([b.vertices.length/stride,b.instances.length/20]),b.vertices,b.instances)
   return new Blob([...parts,view.pixels])
 }
-export function createVRViewTools({scene,getState,onError=console.error,doc=document}) {
+export function createVRViewTools({scene,getState,onError=console.error,doc=document,capture=captureVRView}) {
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   const refresh = () => { dirty=true; settle=0 }
@@ -187,12 +187,26 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
     const key=fingerprint()+simulationViewActive(doc)+stamp
     if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){if(!dirty||!last)settle=now+1200;last=key;dirty=true}
     geometry=s.currentGeometry;design=s.currentDesign
-    if(busy||!dirty||performance.now()<settle)return
+    if(busy||!dirty||performance.now()<settle){
+      if(dirty)doc.defaultView?.__nadocVRPlaybackTrace?.({stage:'publish_wait',epoch_ms:performance.timeOrigin+performance.now(),reason:busy?'busy':'settle',wait_ms:Math.max(0,settle-performance.now())})
+      return
+    }
     busy=true;dirty=false;const generation=epoch,requestSequence=appliedSequence
     try {
-      await nextFrame();const view=await captureVRView(scene,doc,message,false,doc.documentElement?.dataset.vrSimulationTrajectory === 'true' ? lastGood?.atlasState : null)
+      // The browser canvas is intentionally frozen/occluded during native VR.
+      // Its animation-frame throttling must not pace headset trajectory delivery.
+      if(doc.documentElement?.dataset.vrSimulationTrajectory==='true')await new Promise(resolve=>setTimeout(resolve,0))
+      else await nextFrame()
+      const tracing=typeof doc.defaultView?.__nadocVRPlaybackTrace==='function'
+      const stamp=(stage,extra={})=>{if(tracing)doc.defaultView.__nadocVRPlaybackTrace({stage,epoch_ms:performance.timeOrigin+performance.now(),version:version+1,...extra})}
+      stamp('capture_start')
+      const view=await capture(scene,doc,message,false,doc.documentElement?.dataset.vrSimulationTrajectory === 'true' ? lastGood?.atlasState : null)
       if(generation!==epoch)return
-      const response=await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(view,++version,requestSequence)})
+      stamp('capture_end')
+      const body=encodeVRView(view,++version,requestSequence)
+      stamp('upload_start',{version,bytes:body.size})
+      const response=await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body})
+      stamp('upload_end',{version})
       if(!response.ok)throw new Error(await response.text())
       lastGood=view;lastError=''
     }catch(error){
@@ -203,7 +217,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       // Preserve the last drawable scene, acknowledge the action, and leave
       // the tablet usable so the user can turn an unavailable overlay off.
       try {
-        const panel=await captureVRView(scene,doc,'View unavailable: '+error.message+'. Previous view retained.',true)
+        const panel=await capture(scene,doc,'View unavailable: '+error.message+'. Previous view retained.',true)
         let fallback={...panel,flags:256}
         if(lastGood) {
           const pixels=new Uint8Array(lastGood.pixels.length ? lastGood.pixels : lastGood.atlasState.pixels())
@@ -212,9 +226,9 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
         }
         if(generation===epoch)await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(fallback,++version,requestSequence)})
       }catch{/* Retry after reconnect; the quiver can still stow the panel. */}
-    }finally{busy=false}
+    }finally{busy=false;if(generation===epoch && dirty && performance.now()>=settle && doc.documentElement?.dataset.vrSimulationTrajectory==='true')void publish()}
   }
-  return {publish,refresh(){dirty=true;settle=0;},async activate(index,sequence=0){
+  return {publish,refresh(){dirty=true;settle=0;if(doc.documentElement?.dataset.vrSimulationTrajectory==='true')void publish()},async activate(index,sequence=0){
     appliedSequence=sequence
     const key=VR_VIEW_KEYS[index];if(!key)return
     message=viewToolUnavailable(key,getState())

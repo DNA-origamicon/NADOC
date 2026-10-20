@@ -834,3 +834,14 @@ The Visualization group includes **CPD isomers · native rendering**. This
 read-only workflow checks all four local products with native GL stereo images
 and missing-crosslink negative controls, without replacing a headset session.
 See [CPD rendering](vr_cpd_rendering.md) for scope and physical-eye limitations.
+
+CPD production playback benchmark: Debug → VR Tours & Tests → Left sidebar →
+**CPD production · atomistic playback benchmark** uses private metadata/cache copies
+and read-only DCD links for the four October 19 CPD production jobs. It loads the
+default selection and measures saved-frame and Smooth playback in Ball & Stick,
+Stick and VDW, with submitted stereo checks. Demo uses cis-syn-I; validation uses
+all four. It includes opt-in browser/backend/native pipeline timings for the direct scene
+and simulation/presenter-control IPC channels; set
+`NADOC_CPD_SAVED_ONLY=1` for exact saved-frame diagnosis without Smooth. No
+production job is launched or changed. See [playback policy](vr_cpd_playback.md)
+and `tools/vr_workflows/cpd_playback_check.py`.

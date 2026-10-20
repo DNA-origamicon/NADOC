@@ -66,6 +66,8 @@ def catalog():
         'Curved engine tabs, focused jobs, gradient-only controller touchpad colour maps and shallow speed-sensitive frame-range thumbwheels with explicit-load raised trajectory playback in Full. Checks slow/fast drags, bounds, desktop acknowledgement, wheel pixels and Loop Off/On at the selected end. Set NADOC_VR_SIM_LOOPS=1 to focus on playback loop controls. Set NADOC_VR_SIM_REPRESENTATIONS=1 to test simultaneous menus, supported styles and native-position restoration. Private result copies; optional 24HB benchmark. Validation runs all four motion profiles.', module='simulation_tour')
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
+    add('cpd-playback', 'left', 'CPD production · atomistic playback benchmark',
+        'Private completed CPD production inputs; default range, Ball & Stick, Stick and VDW, saved-frame and smooth playback. Measures exact scene/control IPC, coordinate stalls and native frame cadence with submitted-eye captures. Validation covers all four isomers; no simulation launches.', module='cpd_playback_check')
     add('simulations-24hb', 'left', '24HB simulations · Full performance benchmark',
         'Temporary benchmark using a private copy of completed 24HB NAMD results. Raised scrubber, range/load gate, static views, frame/GPU timing and four motion profiles; never starts a simulation.', module='simulation_24hb_tour')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
@@ -176,7 +178,7 @@ def arguments(tour, validate=False):
     args = ['-m', 'tools.vr_workflows.'+tour['module'], *tour['args']]
     if tour['module'] == 'menu_tour':
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
-    elif tour['module'] == 'cpd_representation_check':
+    elif tour['module'] in ('cpd_representation_check', 'cpd_playback_check'):
         if validate:
             args += ['--validate']
     elif tour['module'] == 'view_volumes_check':

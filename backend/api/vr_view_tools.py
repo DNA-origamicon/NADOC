@@ -1,6 +1,8 @@
 """Bounded binary display snapshots from the document's desktop view tools."""
 import os
 import struct
+import time
+import json
 from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, Request, HTTPException
@@ -51,20 +53,58 @@ async def publish(request:Request):
     from backend.api import routes_vr as vr
     from backend.api.doc_context import get_current_doc
     vr._require_local(request)
+    tracing = os.environ.get('NADOC_VR_VIEW_PIPELINE') == '1'
+    started = time.perf_counter()
+    epoch_ms = time.time() * 1000
+    marks = {}
+    def mark(name):
+        if tracing: marks[name] = (time.perf_counter() - started) * 1000
     data=bytearray()
     async for chunk in request.stream():
         data.extend(chunk)
         if len(data)>MAX_BYTES:raise HTTPException(413,detail='VR display snapshot too large')
+    mark('body_end_ms')
     with vr._FEEDBACK_LOCK:
         state=vr._read_state()
         if not state or state.get('doc_id')!=get_current_doc():raise HTTPException(409,detail='VR belongs to another document or is unavailable')
-    result=await run_in_threadpool(validate_and_rotate,data,state.get('view_rotation'))
-    with vr._FEEDBACK_LOCK:
-        current=vr._read_state()
-        if not current or current.get('event_path')!=state.get('event_path') or current.get('doc_id')!=get_current_doc():
-            raise HTTPException(409,detail='VR session changed during upload')
-        path=Path(state['event_path']+'.viewtools');temp=Path(str(path)+'.next')
-        temp.write_bytes(result);temp.chmod(0o600);os.replace(temp,path)
+    mark('state_end_ms')
+    def validate():
+        mark('validation_worker_start_ms')
+        result = validate_and_rotate(data,state.get('view_rotation'))
+        mark('validation_worker_end_ms')
+        return result
+    result=await run_in_threadpool(validate)
+    mark('validation_end_ms')
+    def deliver():
+        from backend.api.vr_view_transport import send_snapshot
+        with vr._FEEDBACK_LOCK:
+            current=vr._read_state()
+            if not current or current.get('event_path')!=state.get('event_path') or current.get('doc_id')!=state.get('doc_id'):
+                raise HTTPException(409,detail='VR session changed during upload')
+        mark('write_start_ms')
+        if send_snapshot(state['event_path'], result):
+            mark('write_end_ms')
+            return 'ipc'
+        # Compatibility for already-running older viewers. Disk I/O runs in the
+        # worker, never directly in the async request handler.
+        with vr._FEEDBACK_LOCK:
+            current=vr._read_state()
+            if not current or current.get('event_path')!=state.get('event_path') or current.get('doc_id')!=state.get('doc_id'):
+                raise HTTPException(409,detail='VR session changed during upload')
+            path=Path(state['event_path']+'.viewtools');temp=Path(str(path)+'.next')
+            temp.write_bytes(result)
+            mark('file_end_ms')
+            temp.chmod(0o600)
+            mark('chmod_end_ms')
+            os.replace(temp,path)
+            mark('write_end_ms')
+        return 'file'
+    try:
+        transport = await run_in_threadpool(deliver)
+    except OSError as exc:
+        raise HTTPException(503, detail='VR display transport unavailable') from exc
+    if tracing:
+        print('VR_VIEW_PIPELINE_BACKEND ' + json.dumps({'epoch_ms':epoch_ms,'version':struct.unpack_from('<I',result,12)[0],'bytes':len(result),'transport':transport,**marks}), flush=True)
     return {'published':True,'bytes':len(result)}
 
 

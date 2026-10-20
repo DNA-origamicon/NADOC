@@ -8,6 +8,23 @@ metadata:
   modified: 2026-09-08
 ---
 
+## Home relaunch storm contained — 2026-10-20
+
+The CPD playback benchmark exposed SteamVR Home launch/abort retries at roughly
+35–38 attempts/s, even while NADOC was rendering. The active vrserver stderr
+reported `steam-runtime-launch-client: Unable to connect to any of the specified
+bus names (is steam-runtime-launcher-service running?)`; no launcher service was
+running. This is separate from the proven X11/direct-mode path.
+
+Set `steamvr.enableHomeApp=false` through the live OpenVR settings API; SteamVR
+persisted it in `~/.local/share/Steam/config/steamvr.vrsettings`. The retry storm
+stopped without restarting vrserver, compositor, dashboard, or the Alpine worker.
+Home autostart remains off intentionally. This contains the retry loop; it does
+not repair Home's launcher-service integration. Restoring Home requires fixing
+that integration first, then setting the same preference back to true. Do not
+re-enable Home as a generic VR recovery step. Timing comparisons and cleanup are
+recorded in [the follow-up audit](../docs/audits/cpd_vr_home_fix_20261020.json).
+
 ## Confirmed baseline — read first
 
 **User confirmed working on 2026-09-08:** `24hb_0xT` visible in the existing native

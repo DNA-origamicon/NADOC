@@ -1,6 +1,8 @@
 #pragma once
 #include "sidebar_menu.hpp"
 #include "simulation_snapshot.hpp"
+#include "view_snapshot_inbox.hpp"
+#include <memory>
 namespace nadoc_vr {
 // Real job state comes from the document-bound desktop adapter. Disk parsing never
 // runs on the XR frame thread; modal edits stay local until an acknowledged action.
@@ -16,6 +18,7 @@ class SimulationPanel {
  simulation_study::TrajectoryGallery trajectoryUi;
  simulation_study::TrajectoryState trajectory;
  simulation_study::ColourScaleGallery mapper;
+ std::unique_ptr<ViewSnapshotInbox> inbox;
  std::future<SimulationSnapshot> pending;double lastPoll=0;std::filesystem::file_time_type stamp{};
  std::string numberId,digits;double numberMin=0,numberMax=0;bool numberReplace=true;
  std::optional<size_t> wheelHand;
@@ -31,9 +34,11 @@ class SimulationPanel {
  }
  bool poll(const std::string& path){
   bool changed=false;
+  if(!path.empty()&&!inbox)inbox=std::make_unique<ViewSnapshotInbox>(path+".simulations",false);
   if(pending.valid() && pending.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{adopt(pending.get());changed=true;}catch(const std::exception&){} }
   const double now=menu?menu->animationClock():0;
-  if(!path.empty()&&!pending.valid()&&now-lastPoll>.12){lastPoll=now;pending=std::async(std::launch::async,[path]{return SimulationSnapshot::read(path+".simulations");});}
+  if(!path.empty()&&!pending.valid()&&now-lastPoll>.12){lastPoll=now;auto packet=inbox->take();
+   if(packet || !inbox->received())pending=std::async(std::launch::async,[path,packet=std::move(packet)]{if(packet){std::istringstream in(*packet);return SimulationSnapshot::read(in);}return SimulationSnapshot::read(path+".simulations");});}
   return changed;
  }
  static std::string active(const std::vector<Row>& rows){for(const auto& r:rows)if(r.active)return r.id;return {};}

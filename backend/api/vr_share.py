@@ -1,8 +1,9 @@
 """Local, document-bound presenter controls for the presentation lifecycle."""
 import json
-import os
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from backend.api.vr_control_transport import deliver_control
 
 router = APIRouter()
 
@@ -25,15 +26,7 @@ async def share_controls(request: Request):
         raise HTTPException(422, detail='Invalid presenter availability')
     if any(type(data.get(k, 0)) is not int or not 0 <= data.get(k, 0) <= 10000 for k in ('activeGuests', 'waitingGuests')):
         raise HTTPException(422, detail='Invalid guest counts')
-    with vr._FEEDBACK_LOCK:
-        state = vr._read_state()
-        if not state or state.get('doc_id') != get_current_doc():
-            raise HTTPException(409, detail='VR belongs to another document or is unavailable')
-        path = Path(state['event_path'] + '.share')
-        temp = Path(str(path) + '.next')
-        temp.write_text(' '.join(str(int(data[k])) for k in ('active', 'perspective', 'busy', 'acknowledged', 'failed')) + f" {data.get('activeGuests', 0)} {data.get('waitingGuests', 0)} {int(data.get('perspectiveAvailable', True))} {int(data.get('startAvailable', False))} {int(data.get('headsetPerspective', False))}")
-        temp.chmod(0o600)
-        os.replace(temp, path)
+    await run_in_threadpool(deliver_control, get_current_doc(), '.share', ' '.join(str(int(data[k])) for k in ('active', 'perspective', 'busy', 'acknowledged', 'failed')) + f" {data.get('activeGuests', 0)} {data.get('waitingGuests', 0)} {int(data.get('perspectiveAvailable', True))} {int(data.get('startAvailable', False))} {int(data.get('headsetPerspective', False))}")
     return {'published': True}
 
 

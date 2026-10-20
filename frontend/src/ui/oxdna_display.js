@@ -22,6 +22,7 @@
  * Factory: initOxdnaDisplay({ designRenderer, api }) → controller.
  */
 
+import { createVRExactAtomCache } from '../scene/vr_exact_atom_cache.js'
 import { expandMdAtomFrame } from '../scene/md_atom_frames_bin.js'
 import { bindSurfaceMotion } from '../scene/surface_motion.js'
 import { cubicCoordinates } from '../scene/trajectory_interpolation.js'
@@ -574,6 +575,7 @@ export function initOxdnaDisplay({
   let _stream = null
   let _streamSeekToken = 0
   let _vrPage = false
+  const vrExactAtoms = createVRExactAtomCache({ context: () => JSON.stringify([_epoch, _jobId, _align, _trajScope, _trajStride]), fetchFrames: (indices, live) => _queueFrameFetch(() => live() ? api.getOxdnaFramesAtomistic(_jobId, indices, _align, _trajScope, _trajStride) : null) })
   const sourceFrame = i => i * (_vrPage ? (_traj?.frame_step ?? 1) : 1) + (_traj?.frame_start ?? 0)
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
@@ -1240,7 +1242,7 @@ export function initOxdnaDisplay({
     if (_mode === 'trajectory') {
       const bake = _ensureGrid(kind)
       const g = useFine ? _frameIdx : (bake ? nearestOf(bake.grid, _frameIdx) : null)
-      busy = !(bake && g != null && bake.byIdx.has(g))
+      busy = !(bake && g != null && bake.byIdx.has(g)) && !(_vrPage && kind === 'atomistic' && vrExactAtoms.has(sourceFrame(_frameIdx)))
     } else if (_mode === 'relaxed' || _mode === 'rmsf') {
       busy = !_heavyWarm(kind)
     }
@@ -1248,7 +1250,7 @@ export function initOxdnaDisplay({
     try {
       if (exact && _mode === 'trajectory' && kind === 'atomistic') {
         const frame = sourceFrame(_frameIdx)
-        const result = await _queueFrameFetch(() => live()
+        const result = _vrPage ? await vrExactAtoms.get([frame]) : await _queueFrameFetch(() => live()
           ? api.getOxdnaFramesAtomistic(_jobId, [frame], _align, _trajScope, _trajStride) : null)
         if (!live() || !await _pushAtomistic(result?.[String(frame)], epoch, live)) {
           throw new Error('Could not apply the exact atomic trajectory frame')
@@ -1971,7 +1973,7 @@ export function initOxdnaDisplay({
     _align = align
     _trajScope = scope
     _trajStride = stride
-    _vrPage = false
+    _vrPage = false; vrExactAtoms.reset()
     _trajRange = { frameStart: range.frameStart, frameEnd: range.frameEnd }
     if (preparationOnly) {
       _active = false
@@ -2085,7 +2087,7 @@ export function initOxdnaDisplay({
     const bake = _bakedAtom
     const missing = frames.filter(i => !bake?.byIdx.has(i) && _interpolationAtoms.get(i)?.epoch !== epoch)
     if (missing.length) {
-      const result = await _queueFrameFetch(() => live()
+      const result = _vrPage ? await vrExactAtoms.get(missing.map(sourceFrame)) : await _queueFrameFetch(() => live()
         ? api.getOxdnaFramesAtomistic(_jobId, missing.map(sourceFrame), _align, _trajScope, _trajStride) : null)
       if (!live()) return false
       for (const i of missing) {
@@ -2219,7 +2221,7 @@ export function initOxdnaDisplay({
     _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     trajectoryDownloads.clear()
     _stream = null
-    _vrPage = false
+    _vrPage = false; vrExactAtoms.reset()
     _traj = null
     _bakedAtom = null
     _bakedSurf = null
@@ -2270,6 +2272,7 @@ export function initOxdnaDisplay({
     strainDsdnaOnly: () => _strainDsOnly,
     loadTrajectory,
     loadFullTrajectoryPage, showFullTrajectoryFrame,
+    prepareFullTrajectoryFrames: payload => _repKind() === 'atomistic' ? vrExactAtoms.prepare(payload) : Promise.resolve(_repKind() === 'surface' ? 0 : Infinity),
     ensureTrajectoryFrame,
     bufferTrajectory: onProgress => _stream?.fill(onProgress),
     isProgressiveTrajectory: () => !!_stream && _mode === 'trajectory',

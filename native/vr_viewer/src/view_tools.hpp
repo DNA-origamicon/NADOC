@@ -4,6 +4,7 @@
 #include <vector>
 #include <future>
 #include <chrono>
+#include <memory>
 
 // Included after GL helpers: one native stereo display stream plus the exact
 // desktop-icon tablet. No desktop window capture or emulated mouse input.

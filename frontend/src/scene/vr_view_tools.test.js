@@ -34,3 +34,29 @@ it('encodes trajectory geometry with normals while reusing the native atlas',asy
   expect([...header.slice(0,8)]).toEqual([6,11,2048,3,0,0,0,0])
   expect(blob.size).toBe(48+36*4)
 })
+
+it('publishes trajectory changes without waiting for control polls and coalesces a busy upload', async()=>{
+ const {vi}=await import('vitest'),{createVRViewTools}=await import('./vr_view_tools.js'),THREE=await import('three')
+ const view={flags:2048,triangles:new Float32Array(),lines:new Float32Array(),sprites:new Float32Array(),pixels:new Uint8Array(),width:0,height:0}
+ const capture=vi.fn(async()=>view);let release
+ const request=vi.fn(async()=>({ok:true}))
+ vi.stubGlobal('fetch',request);vi.stubGlobal('requestAnimationFrame',fn=>setTimeout(fn,0));vi.useFakeTimers()
+ const trace=[];window.__nadocVRPlaybackTrace=event=>trace.push(event)
+ document.documentElement.dataset.vrSimulationTrajectory='true'
+ const state={},tools=createVRViewTools({scene:new THREE.Scene(),getState:()=>state,capture})
+ try {
+  await tools.publish();await vi.advanceTimersByTimeAsync(1300)
+  const initial=tools.publish();await vi.advanceTimersByTimeAsync(20);await initial
+  request.mockImplementationOnce(()=>new Promise(r=>{release=r}))
+  tools.refresh();await vi.advanceTimersByTimeAsync(20)
+  expect(request).toHaveBeenCalledTimes(2)
+  tools.refresh();tools.refresh();await vi.advanceTimersByTimeAsync(100)
+  expect(request).toHaveBeenCalledTimes(2)
+  release({ok:true});await vi.advanceTimersByTimeAsync(20)
+  expect(request).toHaveBeenCalledTimes(3)
+  const starts=trace.filter(e=>e.stage==='upload_start')
+  expect(starts).toHaveLength(3)
+  expect(starts.map(e=>e.version)).toEqual([starts[0].version,starts[0].version+1,starts[0].version+2])
+  expect(trace.filter(e=>e.stage==='capture_start')).toHaveLength(3)
+ }finally{delete window.__nadocVRPlaybackTrace;delete document.documentElement.dataset.vrSimulationTrajectory;vi.useRealTimers();vi.unstubAllGlobals()}
+})
