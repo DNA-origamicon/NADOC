@@ -7,6 +7,21 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## CPD Full parity — 2026-10-20
+Full now exports the desktop's two CPD slab bars using shared projected sites and
+the chemical graph. Slab-frame visualization moves/rotates both endpoints; Beads
+hides the bars. Atomic CPD bonds already used the shared atomistic builder.
+Crossover CPD Full beads/slabs now use the saved product landmarks and residue
+poses; the previous exporter silently reconstructed ordinary unconverted inserts.
+The reusable native rendering audit is registered under Visualization in VR Tours
+& Tests. See [scope and workflow](../docs/vr_cpd_rendering.md). Molecular coordinates
+and placement authorities are unchanged.
+Verification: 48 native representation cases and 20 physical-runtime submitted
+stereo cases across the four saved isomers. Saved Full/atomic sites match exactly.
+The optional closer repeat failed recorder readiness before opening a viewer;
+both runtime and viewer returned to their initial stopped state. Details and
+remaining broad-suite failures: [audit](../docs/audits/cpd_vr_rendering_20261020.json).
+
 ## Current Ball+Stick grouped-index candidate (2026-10-15)
 
 The user's requested fix is deployed; physical motion confirmation is pending.

@@ -57,6 +57,9 @@ def catalog():
             ['--tab', f"{tab['side']}:{tab['key']}"])
     add('representations', 'right', 'Visualization',
         'Switch the open design between all eleven desktop representations, including Hull, Surface, mrDNA and oxDNA. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
+    add('cpd-representations', 'right', 'CPD isomers · native rendering',
+        'Read-only export of the four local CPD isomer designs. Native GL stereo captures, chemical crosslinks and missing-crosslink negative controls. Does not start or replace a headset session; diagnostic cameras are not physical-eye evidence.',
+        module='cpd_representation_check')
     add('representation-colors', 'right', 'Representation colors',
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
     add('simulations', 'left', 'Simulation jobs · representations + trajectory loops',
@@ -173,6 +176,9 @@ def arguments(tour, validate=False):
     args = ['-m', 'tools.vr_workflows.'+tour['module'], *tour['args']]
     if tour['module'] == 'menu_tour':
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
+    elif tour['module'] == 'cpd_representation_check':
+        if validate:
+            args += ['--validate']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
     elif tour['module'] in ('compact_tabs_tour', 'quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):

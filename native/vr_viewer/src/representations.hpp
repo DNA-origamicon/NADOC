@@ -29,6 +29,7 @@ inline bool validRepresentation(std::string_view name) {
 }
 
 inline bool representationCylinderVisible(Representation rep, std::string_view identity) {
+    if (identity.starts_with("cpd:")) return rep == Representation::full;
     if (rep == Representation::vdw) return identity.starts_with("viewer:");
     return rep != Representation::beads || !identity.ends_with(":slab-connector");
 }

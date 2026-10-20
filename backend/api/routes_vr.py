@@ -1654,11 +1654,18 @@ def _serialize_scene(
 
     # Desktop and VR consume the same authoritative pose. No local solver,
     # re-pairing, inferred frame, or fallback placement exists at this boundary.
+    cpd_slabs = {}
+    cpd_keys = {key for lesion in getattr(design, "photoproduct_junctions", ()) for key in lesion.design_coordinates}
     for (index, nucleotide), pose in zip(assigned, authoritative_slab_poses([n for _, n in assigned])):
         if pose is None:
             continue
         center, frame = pose
         tangential, tangent, normal = (frame[:, column] for column in range(3))
+        if cpd_keys and base_key(nucleotide) in cpd_keys:
+            scopes = nucleotide_owner_tokens(nucleotide)
+            cpd_slabs[base_key(nucleotide)] = (
+                rotation @ center, rotation @ frame @ np.diag([.30, .06, .70]),
+                scopes, tuple((token, 1., 1.) for token in scopes if token in cluster_transform_tokens))
         raw_bead = np.asarray(nucleotide["backbone_position"], dtype=float)
         z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
         corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
@@ -1861,6 +1868,8 @@ def _serialize_scene(
                 sim_reversed=first_key not in domain_end_keys,
                 local_frame_reversed=first_key[2] == "REVERSE",
             )
+            from backend.core.vr_cpd import cpd_extra_projections
+            projections = cpd_extra_projections(design, connection_id, projections)
             bead_palette = palette_variant(palette, first_nucleotide, "#0070bb")
             slab_palette = palette_variant(palette, first_nucleotide, "#0277bd")
             backbone_points = [first]
@@ -1901,6 +1910,10 @@ def _serialize_scene(
                         connection_id,
                     ),
                 )
+                if extra_key in cpd_keys:
+                    cpd_slabs[extra_key] = (
+                        slab_center, np.column_stack((slab_axis_x, slab_axis_y, slab_axis_z)),
+                        extra_aliases, projection_transform_owners)
                 emit(
                     "P",
                     extra_base_identity(extra_key, "bead"),
@@ -2027,6 +2040,8 @@ def _serialize_scene(
 
     append_linker_geometry(include_full_bases=True)
     append_flexible_geometry()
+    from backend.core.vr_cpd import append_cpd_bars
+    append_cpd_bars(design, cpd_slabs, emit, owner_tokens, solid_palette)
 
     axis_helices = {h.id: h for h in getattr(design, 'helices', ())}
 

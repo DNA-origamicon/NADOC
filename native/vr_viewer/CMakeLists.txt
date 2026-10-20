@@ -519,6 +519,10 @@ if(BUILD_TESTING)
   target_link_libraries(nadoc-vr-resident-render-test PRIVATE
     PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
   target_compile_options(nadoc-vr-resident-render-test PRIVATE -UNDEBUG)
+  add_executable(nadoc-vr-cpd-render-test tests/cpd_render_test.cpp)
+  target_link_libraries(nadoc-vr-cpd-render-test PRIVATE
+    PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
+  target_compile_options(nadoc-vr-cpd-render-test PRIVATE -UNDEBUG -O0)
 endif()
 
 if(BUILD_TESTING)

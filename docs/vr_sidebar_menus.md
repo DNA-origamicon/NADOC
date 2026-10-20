@@ -828,3 +828,9 @@ Compact results, per-trial misses, comparison and cleanup records are in
 `.development-artifacts/vr-sideways-tabs/corrected-final/`; source/destination hash
 verification is in `../installed.json`. Temporary captures and frame traces were
 removed after inspection, and the isolated test viewer was stopped.
+# CPD representation verification
+
+The Visualization group includes **CPD isomers · native rendering**. This
+read-only workflow checks all four local products with native GL stereo images
+and missing-crosslink negative controls, without replacing a headset session.
+See [CPD rendering](vr_cpd_rendering.md) for scope and physical-eye limitations.

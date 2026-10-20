@@ -1,0 +1,116 @@
+{
+  "date": "2026-10-20",
+  "queue_commit_pushed": "68e20c69",
+  "changes": [
+    "Native Full crossover CPDs consume shared saved product landmarks and residue transforms instead of ordinary insert reconstruction",
+    "Full exports two chemistry-specific slab crosslinks; Beads hides them; native slab frames transport both ends during visualization updates",
+    "CPD crosslink endpoint scopes preserve cluster and nucleotide movement ownership",
+    "Registered native GL verification in Debug / VR Tours & Tests / Visualization / CPD isomers",
+    "Alpine worker test fixture uses short pytest directory names to avoid the 107-byte AF_UNIX path limit"
+  ],
+  "scientific_boundary": "No saved design, molecular coordinate, chemical graph, force-field parameter, placement authority, phase constant or geometry golden changed.",
+  "native_gl": {
+    "representation_cases": 48,
+    "isomers": [
+      {
+        "name": "cis-syn-I",
+        "source_sha256": "b4ae77d480b232082c5179f712612217dd039b85de5a1a843d81917dd83ebcdf",
+        "max_full_atom_site_error_nm": 0.0
+      },
+      {
+        "name": "cis-anti-I",
+        "source_sha256": "ab1b77b58eff3837a384e07d9ded35ce4c83b5236363ece86b4455827b2caeb1",
+        "max_full_atom_site_error_nm": 0.0
+      },
+      {
+        "name": "trans-syn-I",
+        "source_sha256": "54dc93552a69d61ba3a4a8566dd26a3ac928335f8d11dc96dcd796ec65daa78f",
+        "max_full_atom_site_error_nm": 0.0
+      },
+      {
+        "name": "trans-syn-II",
+        "source_sha256": "65b716fcd77a6de9cac9188ce7da8b6ae895f8329eea41e466a50865ec5d0721",
+        "max_full_atom_site_error_nm": 0.0
+      }
+    ],
+    "crosslink_negative_controls": [
+      "full",
+      "stick",
+      "ballstick"
+    ],
+    "unchanged_without_bond_cylinders": [
+      "beads",
+      "vdw"
+    ],
+    "evidence": ".development-artifacts/cpd-vr-20261020/release/report.json"
+  },
+  "physical_openxr": {
+    "submitted_stereo_cases": 20,
+    "isomers": 4,
+    "representations": [
+      "full",
+      "stick",
+      "ballstick",
+      "vdw",
+      "beads"
+    ],
+    "eyes": 40,
+    "focused_and_runtime_connected": true,
+    "direct_mode_log": ".development-artifacts/cpd-vr-20261020/compositor-direct-mode.txt",
+    "evidence": ".development-artifacts/cpd-vr-20261020/physical/summary.json",
+    "limits": "Submitted application eyes, not through-lens comfort or compositor scanout validation. Original context views supplemented by isolated native GL lesion closeups. Optional closer repeat failed recorder readiness before opening a viewer; failure retained. Runtime and viewers stopped afterward, matching initial state.",
+    "optional_repeat_failure": ".development-artifacts/cpd-vr-20261020/physical-detail/failure.json",
+    "final_ownership_pixel_parity": ".development-artifacts/cpd-vr-20261020/owner-fix-pixel-parity.json"
+  },
+  "backend_validation": {
+    "cpd_regressions_passed": 9,
+    "routes_passed": 62,
+    "native_placement_passed": 21,
+    "scene_projection_passed": 7,
+    "tour_registry_passed": 50,
+    "worker_short_path_passed": 12,
+    "fast": {
+      "passed": 14628,
+      "failed": 6,
+      "errors": 4,
+      "skipped": 92,
+      "failures": [
+        "tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[adsorption]",
+        "tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[biotin_tether]",
+        "tests/test_namd_input_provenance.py::test_old_jobs_never_backfilled_on_read",
+        "tests/test_scadnano.py::test_manual_photoproduct_round_trip_preserves_ordered_and_legacy_identity",
+        "tests/test_alpine_worker.py::test_download_outlives_client_and_new_client_reattaches",
+        "tests/test_photoproduct_api.py::test_http_atomistic_exports_fail_closed_for_product_design"
+      ],
+      "note": "Five failures and four CPD-preview fixture errors predate this task. The additional worker failure was a 108-byte test socket path, fixed afterward and verified separately. No runtime worker change.",
+      "log": ".development-artifacts/cpd-vr-20261020/test-smart-release.log"
+    },
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "slow_triage": "Aggregate-only backstop; no individual test exceeds five seconds. No budgets, guards or slow markers changed.",
+    "worker_xdist_after_fixture_fix": {
+      "passed": 12,
+      "log": ".development-artifacts/cpd-vr-20261020/worker-xdist-verified.log"
+    }
+  },
+  "native_placement_review": {
+    "incidents": [
+      "20261020T185624-5854270003fa",
+      "20261020T185648-698ef211abda"
+    ],
+    "cause": "Optional CPD field absent on legacy compact exporter test inputs; AttributeError before coordinate serialization. Corrected optional-field access, retained reports, reran tests and explicitly acknowledged complete reviews.",
+    "gate": "clear"
+  },
+  "session_preservation": {
+    "alpine_worker_pid": 219468,
+    "started_local": "2026-10-20 11:24:41 America/Denver",
+    "original_worker_preserved": true,
+    "user_designs_and_jobs_modified": false
+  },
+  "retained_attempts": [
+    "render: atomic negative-control identity encoding mismatch",
+    "render-2: trans-syn atomic links occluded by surrounding structure",
+    "render-3: pixels passed, but visual review exposed wrong unconverted Full poses; corrected before final validation",
+    "physical-detail: recorder readiness failed; first 20 stereo cases succeeded"
+  ],
+  "cleanup_manifest": ".development-artifacts/cpd-vr-20261020/cleanup.json"
+}

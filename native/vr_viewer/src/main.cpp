@@ -1,6 +1,7 @@
 #include "sweep_edit.hpp"
 #include "scrollable_set.hpp"
 #include "placement_integrity.hpp"
+#include "cpd_visualization.hpp"
 #include <atomic>
 #include <future>
 #include <deque>
@@ -2217,7 +2218,10 @@ class GlScene {
                 !hasCompleteVisualizationAtomEndpoints(source, cylinder.identity)) {
                 continue;
             }
-            const auto visualization = visualizationOffsets(source, cylinder.identity);
+            const auto visualization = nadoc_vr::cpdVisualizationOffsets(
+                source, *sourceIndex_, visualizationSlabFrames_, cylinder,
+                scene_.normalizationCenter, scene_.normalizationScale, kViewDistanceMeters,
+                visualizationOffsets(source, cylinder.identity));
             const glm::vec3 start = transformPoint(
                 cylinder.start, cylinder.identity, false, visualization);
             glm::vec3 end = transformPoint(
