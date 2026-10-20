@@ -24,6 +24,39 @@ def _key(value):
     return get("helix_id"), get("bp_index"), get("direction"), get("copy_k") or 0
 
 
+def existing_material_union(prefix, targets):
+    """Resolve ordinary material present now, not descendant/birth policy.
+
+    Native selector ranges may include unoccupied partner directions. Intersect
+    them with actual native records and deduplicate the resulting identities,
+    preserving record order. This diagnostic inventory applies no motion.
+    """
+    from backend.core.part_group_selection import resolve_deformation_targets
+
+    require_group_geometry_budget(prefix, max_work=1024)
+    if prefix.extensions or prefix.crossovers or prefix.overhangs or any(h.loop_skips for h in prefix.helices):
+        raise ValueError("Companion/copy ancestry is outside this ordinary-material inventory")
+    ranges = resolve_deformation_targets(prefix, targets)
+    records = _geometry_for_design(prefix)
+    keys = [_key(row) for row in records]
+    if len(keys) != len(set(keys)):
+        raise ValueError("Native material identities are not unique")
+    selected = []
+    for row, key in zip(records, keys, strict=True):
+        for scope in ranges:
+            if (row["helix_id"] != scope.helix_id or row["direction"] != scope.direction.value
+                    or not min(scope.start_bp, scope.end_bp) <= row["bp_index"] <= max(scope.start_bp, scope.end_bp)):
+                continue
+            if scope.strand_id is not None and (
+                    row["strand_id"] != scope.strand_id or row["domain_index"] != scope.domain_index):
+                continue
+            selected.append(key)
+            break
+    if not selected:
+        raise ValueError("Selection contains no existing ordinary material")
+    return tuple(selected)
+
+
 @dataclass(frozen=True)
 class OrderedProbe:
     source_sha256: str
@@ -35,6 +68,7 @@ class OrderedProbe:
     _prefix_atoms: object
     _native_after_records: list
     _native_after_atoms: object
+    _named_targets: list | None = None
 
     def evaluate(self, *, motion_enabled=True):
         """Detached candidate only; no source model or command is published."""
@@ -73,6 +107,7 @@ class OrderedProbe:
         return records, atoms, [
             {"feature_id": "diagnostic-world-M", "kind": "world-motion",
              "source_namespace": "helix", "source_ids": list(self.selected_helix_ids),
+             "named_targets": deepcopy(self._named_targets),
              "material_keys": [_key(r) for r in self._prefix_records if r["helix_id"] in selected],
              "pose": deepcopy(M), "frame": "world", "prefix_sha256": self.source_sha256},
             {"feature_id": self.suffix_feature_id, "kind": "native-compose-translation",
@@ -80,7 +115,7 @@ class OrderedProbe:
              "after_event": "diagnostic-world-M"}]
 
 
-def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids):
+def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_targets=None):
     """Admit one exact existing native suffix and a diagnostic selection union."""
     if suffix_entry.op_kind != "nucleotide-transform":
         raise ValueError("Only an existing native nucleotide-transform suffix is admitted")
@@ -101,6 +136,11 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids):
     captured = prefix.model_dump_json()
     after = commands.execute("nucleotide-transform", prefix.model_copy(deep=True), params)
     before_records, after_records = _geometry_for_design(prefix), _geometry_for_design(after)
+    if named_targets is not None:
+        material = existing_material_union(prefix, named_targets)
+        expected = tuple(_key(row) for row in before_records if row["helix_id"] in selected)
+        if material != expected:
+            raise ValueError("Named selection is not the admitted whole-helix material; partial frames remain unresolved")
     before_atoms, after_atoms = (build_atomistic_model(model, fast_bridges=True) for model in (prefix, after))
     if len(before_records) + len(before_atoms.atoms) > 65_536:
         raise ValueError("Offline ordering probe exceeds its fixed material budget")
@@ -140,4 +180,4 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids):
     assert prefix.model_dump_json() == captured
     return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected,
                         target, tuple(params["translation"]), before_records, before_atoms,
-                        after_records, after_atoms)
+                        after_records, after_atoms, deepcopy(named_targets))

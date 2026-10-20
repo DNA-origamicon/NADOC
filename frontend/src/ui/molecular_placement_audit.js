@@ -51,6 +51,10 @@ export function auditMetricRows(bundle) {
     ['Clashes', arrow(cur.n_clashes, cand.n_clashes), cand.n_clashes ? 'bad' : 'good'],
     ['Max bond', arrow(cur.bonds.max_length_nm.toFixed(3), `${cand.bonds.max_length_nm.toFixed(3)} nm`), cand.bonds.n_overstretched ? 'bad' : 'good'],
   ]
+  if (bundle.schema === 'nadoc.member-motion-tail-audit.v1') rows.splice(3, 0,
+    ['Displaced Full residues', bundle.full_displacement.n_displaced, ''],
+    ['Max Full displacement', `${bundle.full_displacement.max_nm.toFixed(3)} nm`, ''],
+  )
   const targetClashes = bundle.proposal_validation?.target_external_clashes
   if (targetClashes) rows.splice(5, 0, [
     'Target clashes', arrow(targetClashes.current, targetClashes.candidate),
@@ -160,12 +164,13 @@ function _axesMap(rows) {
 export function buildAuditFullLayer(scene, bundle, design, { serials = null, side = 'current' } = {}) {
   // Offline member-motion evidence supplies each side's exact native-derived
   // records. Never substitute Current's coordinates for the candidate.
-  const detached = bundle.schema === 'nadoc.member-motion-ordering-audit.v1'
+  const detached = ['nadoc.member-motion-ordering-audit.v1', 'nadoc.member-motion-tail-audit.v1'].includes(bundle.schema)
   let geometry = detached ? bundle[side].nucleotides : bundle.nucleotides
   const axes = detached ? bundle[side].helix_axes : bundle.helix_axes
   if (detached && serials) {
-    const selected = new Set(serials.map(i => bundle[side].atoms[i]).filter(Boolean).map(a => baseKey(a)))
-    geometry = geometry.filter(n => selected.has(baseKey(n)))
+    const selected = new Set(serials.map(i => bundle[side].atoms[i]).filter(Boolean)
+      .map(a => a.material_key ?? baseKey(a, a.copy_k)))
+    geometry = geometry.filter(n => selected.has(baseKey(n, n.copy_k)))
   }
   const customColors = Object.fromEntries(bundle.strand_colors)
   const affectedIds = new Set((serials ?? [])
@@ -343,6 +348,25 @@ function _boundsFromData(data, serials = null) {
 }
 
 function _panelBounds(bundle, panelId) {
+  if (bundle.schema === 'nadoc.member-motion-tail-audit.v1') {
+    const box = new THREE.Box3()
+    for (const side of ['current', 'candidate']) {
+      const serials = panelId === 'defects' ? [...new Set([
+        ...bundle.defect_atom_serials[side], ...bundle.full_affected_atom_serials,
+      ])] : null
+      box.union(_boundsFromData(bundle[side], serials))
+      const keys = serials && new Set(serials.map(i => bundle[side].atoms[i]?.material_key))
+      for (const row of bundle[side].nucleotides) {
+        if (keys && !keys.has(baseKey(row, row.copy_k))) continue
+        for (const field of ['backbone_position', 'base_position'])
+          box.expandByPoint(new THREE.Vector3(...row[field]))
+      }
+    }
+    // Include bead/atom radii and leave room for the displaced terminal ends.
+    // The shared camera otherwise fits only their centers at the panel edge.
+    if (!box.isEmpty()) box.expandByScalar(box.getSize(new THREE.Vector3()).length() * 0.15)
+    return box
+  }
   if (panelId !== 'defects') return _boundsFromData(bundle.current)
   const box = _boundsFromData(bundle.current, bundle.defect_atom_serials.current)
   box.union(_boundsFromData(bundle.candidate, bundle.defect_atom_serials.candidate))
@@ -411,6 +435,8 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
   function rebuild(next = representation) {
     representation = next
     clear()
+    const tailFull = representation === 'full' && bundle.schema === 'nadoc.member-motion-tail-audit.v1'
+    const affected = tailFull ? bundle.full_affected_atom_serials : bundle.affected_atom_serials
     if (panelId === 'current') {
       addLayer('current')
       _addPiercingMarkers(markerRoot, bundle.current, bundle.current.diagnostics)
@@ -423,23 +449,23 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
       addLayer('current', { ghost: true })
       // The whole-structure Difference panel supplies context from Current and
       // overlays only affected Candidate atoms.
-      addLayer('candidate', { serials: bundle.affected_atom_serials })
+      addLayer('candidate', { serials: affected })
       _addPiercingMarkers(markerRoot, bundle.current, bundle.current.diagnostics, 0x2f81f7)
       _addPiercingMarkers(markerRoot, bundle.candidate, bundle.candidate.diagnostics, 0xff3355)
       _addClashMarkers(markerRoot, bundle.current, bundle.current.diagnostics, 0x2f81f7)
       _addClashMarkers(markerRoot, bundle.candidate, bundle.candidate.diagnostics, 0xff3355)
-      _addDisplacements(markerRoot, bundle.displacement.vectors)
+      _addDisplacements(markerRoot, tailFull ? bundle.full_displacement.vectors : bundle.displacement.vectors)
     } else {
       // The plane is being reviewed as a future placement constraint, so always show
       // every moved insert on both sides of it. Detector atoms are added to that focus,
       // rather than being the only geometry visible in a clean junction.
       const currentSerials = [...new Set([
         ...(bundle.defect_atom_serials.current ?? []),
-        ...(bundle.affected_atom_serials ?? []),
+        ...(affected ?? []),
       ])]
       const candidateSerials = [...new Set([
         ...(bundle.defect_atom_serials.candidate ?? []),
-        ...(bundle.affected_atom_serials ?? []),
+        ...(affected ?? []),
       ])]
       if (currentSerials.length) addLayer('current', { serials: currentSerials })
       if (candidateSerials.length) addLayer('candidate', { serials: candidateSerials })

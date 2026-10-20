@@ -8,8 +8,8 @@ The overall overhaul remains open. Commit locally under the operating contract; 
 
 ## Scope and next work
 
-Next task: isolate the terminal-tail Full/atomistic discrepancy within required named-member motion.
-Fixed C8 now passes; tools/member_motion_audit.py produces an isolated 2HB ordering review.
+Next task: resolve exact named-material selection/provenance while the demonstrated tail policy awaits user input.
+Fixed C8 passes. Ordering, chronology and terminal-tail comparisons remain isolated diagnostics.
 Ordinary owner, joint/linked controls, menu/keyboard creation
 and causal downstream refusal pass app acceptance. Production transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
@@ -40,6 +40,11 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   browser scratch z6zq8uxf independently absent. Both probes retain stretched bonds; neither authorizes placement.
   This is a limited ordering probe, not full named-motion authorization. Birth/partial/overlap/frame
   and companion semantics remain required; no placement promotion or transform gate change.
+- Tail review: .development-artifacts/member-motion-tail-review/index.html,288cases/both ends/directions.
+  A moves only Full tails (2residues,3.336–6.965nm); B only atoms (3.499–6.712nm). Other representation exact.
+  Native4/UI12/browser3pass; screenshots visually inspected after camera-margin fix; scratch3zpyi3os absent.
+  Scientific A/B question pending; no placement promotion. Final frontend781files/9427pass/1skip.
+  Named ordinary-material union/overlap and Bend/Twist-prefix program11pass; partial-frame motion still refused.
 - Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
   feature error and blocked descendant appear, refusal preserves canonical state and Cancel
   clears feedback. Native4/browser2pass; capacity/unsupported refusals remain unverified.
@@ -121,8 +126,8 @@ No test session requested; focused development checks are authorized. Keep guard
 
 ## Commit and shared-worktree boundaries
 
-Performance batch committed as1336fb3a. The next bounded batch owns offline ordering/chronological
-audit tools, their tests, detached Full-side audit rendering and these plan/handoff updates.
-No production motion compiler or molecular placement is promoted.
+Performance committed as1336fb3a; ordering/chronological evidence as301041fa. Current batch owns
+offline tail hypotheses, representation-specific audit rendering and exact native-material inventory,
+their tests and these plan/handoff updates. No production motion compiler or placement is promoted.
 Preserve unrelated VR, activity/readiness, scientific-selection and memory-hygiene edits.
 No stash/reset/restore, push, amend or broad staging.

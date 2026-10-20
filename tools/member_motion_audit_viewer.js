@@ -2,7 +2,7 @@
 import { initMolecularPlacementAudit } from '../frontend/src/ui/molecular_placement_audit.js'
 
 const bundle = window.MOTION_AUDIT
-if (bundle?.schema !== 'nadoc.member-motion-ordering-audit.v1' || bundle.read_only !== true)
+if (!['nadoc.member-motion-ordering-audit.v1', 'nadoc.member-motion-tail-audit.v1'].includes(bundle?.schema) || bundle.read_only !== true)
   throw new Error('Expected isolated member-motion evidence')
 bundle.provider.panel_labels = { current: 'Current: appended owner', candidate: 'Candidate: world motion',
   ...bundle.provider.panel_labels }
@@ -27,6 +27,12 @@ for (const row of bundle.junctions) {
     tr.insertCell().textContent = value
 }
 document.getElementById('junctions').append(table)
+if (bundle.full_displacement) {
+  const full = document.createElement('pre')
+  full.textContent = 'Full bead displacement (separate from atomistic junction measurements):\n'
+    + JSON.stringify(bundle.full_displacement, null, 2)
+  document.getElementById('junctions').append(full)
+}
 if (bundle.event_trace?.length) {
   const trace = document.createElement('pre')
   trace.textContent = JSON.stringify(bundle.event_trace, null, 2)
