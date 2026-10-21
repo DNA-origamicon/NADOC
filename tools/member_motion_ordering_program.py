@@ -12,6 +12,7 @@ never select tails by anchor.
 from copy import deepcopy
 from dataclasses import dataclass, fields
 import hashlib
+from itertools import islice
 
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -104,13 +105,6 @@ class OrderedProbe:
             raise ValueError("Expected unit motion quaternion")
         records = deepcopy(self._prefix_records)
         atoms = deepcopy(self._prefix_atoms)
-        if self._component_free_records is not None:
-            # Remove the current native pose lifetime before replaying fixed-world
-            # M. This is component deletion, never inverse-N on displayed points.
-            records = [deepcopy(base) if _key(row) == self.target else row
-                       for row, base in zip(records, self._component_free_records, strict=True)]
-            atoms.atoms = [deepcopy(base) if _key(atom) == self.target else atom
-                           for atom, base in zip(atoms.atoms, self._component_free_atoms.atoms, strict=True)]
         selected = set(self.selected_material_keys)
         moved = [row for row in records if _key(row) in selected]
         for helix_id in self.selected_helix_ids:
@@ -120,20 +114,7 @@ class OrderedProbe:
         for atom in atoms.atoms:
             if _key(atom) in selected:
                 atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
-        target_moved = self.target in selected
-        if target_moved:
-            pose = {"rotation": self.rotation, "pivot": self.pivot, "translation": self.translation}
-            records = [_full_motion([record], self.target[0], pose=pose)[0]
-                       if _key(record) == self.target else record for record in records]
-            for atom in atoms.atoms:
-                if _key(atom) == self.target:
-                    atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], pose)
-        else:
-            # The native suffix owns an unselected base; carry its exact output.
-            records = [deepcopy(after) if _key(after) == self.target else record
-                       for record, after in zip(records, self._native_after_records, strict=True)]
-            atoms.atoms = [deepcopy(after) if _key(after) == self.target else atom
-                           for atom, after in zip(atoms.atoms, self._native_after_atoms.atoms, strict=True)]
+        self.apply_suffix(records, atoms, motion)
         return records, atoms, [
             {"feature_id": "diagnostic-world-M", "kind": "world-motion",
              "source_namespace": "helix", "source_ids": list(self.selected_helix_ids),
@@ -141,16 +122,53 @@ class OrderedProbe:
              "material_keys": list(self.selected_material_keys),
              "shared_helix_frame_policy": "unresolved; this probe outputs per-residue frames, not shared axes",
              "pose": deepcopy(motion), "frame": "world", "prefix_sha256": self.source_sha256},
-            {"feature_id": self.suffix_feature_id, "kind": self.suffix_mode,
-             "target": self.target, "translation": self.translation, "rotation": self.rotation,
-             "pivot": self.pivot, "frame": "world",
-             "replaced_pose_id": self.replaced_pose_id,
-             "component_policy": "current saved pose lifetime; retain authored world-motion matrices",
-             "after_event": "diagnostic-world-M"}]
+            self.suffix_trace()]
+
+    def suffix_trace(self):
+        return {"feature_id": self.suffix_feature_id, "kind": self.suffix_mode,
+                "target": self.target, "translation": self.translation, "rotation": self.rotation,
+                "pivot": self.pivot, "frame": "world", "replaced_pose_id": self.replaced_pose_id,
+                "component_policy": "current saved pose lifetime; retain authored world-motion matrices"}
+
+    def apply_suffix(self, records, atoms, motion):
+        """Apply one captured event to detached output; never replay native history."""
+        target_moved = self.target in self.selected_material_keys
+        if target_moved:
+            if self.suffix_mode != "native-compose-rigid":
+                # Reset/replacement removes this component's lifetime, including
+                # its earlier compose events. Other residues keep their chronology.
+                baseline = self._component_free_records or self._prefix_records
+                baseline_atoms = self._component_free_atoms or self._prefix_atoms
+                restored = _full_motion([row for row in baseline if _key(row) == self.target],
+                                        self.target[0], pose=motion)
+                replacement = {_key(row): row for row in restored}
+                records[:] = [replacement.get(_key(row), row) for row in records]
+                for index, atom in enumerate(atoms.atoms):
+                    if _key(atom) == self.target:
+                        atom = deepcopy(baseline_atoms.atoms[index])
+                        atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
+                        atoms.atoms[index] = atom
+            pose = {"rotation": self.rotation, "pivot": self.pivot, "translation": self.translation}
+            records[:] = [_full_motion([record], self.target[0], pose=pose)[0]
+                          if _key(record) == self.target else record for record in records]
+            for atom in atoms.atoms:
+                if _key(atom) == self.target:
+                    atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], pose)
+        else:
+            records[:] = [deepcopy(after) if _key(after) == self.target else record
+                          for record, after in zip(records, self._native_after_records, strict=True)]
+            atoms.atoms = [deepcopy(after) if _key(after) == self.target else atom
+                           for atom, after in zip(atoms.atoms, self._native_after_atoms.atoms, strict=True)]
 
 
 def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_targets=None):
     """Admit one exact existing native suffix and a diagnostic selection union."""
+    return _compile_step(prefix, suffix_entry, selected_helix_ids, named_targets=named_targets)[0]
+
+
+def _compile_step(prefix, suffix_entry, selected_helix_ids, *, named_targets=None):
+    if suffix_entry.suppressed:
+        raise ValueError("Suppressed suffix events are not admitted by this probe")
     kind = suffix_entry.op_kind
     if kind not in {"nucleotide-transform", "nucleotide-transform-delete"}:
         raise ValueError("Only native single-nucleotide pose edits are admitted")
@@ -253,4 +271,48 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
     return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected, material,
                         target, tuple(pose["translation"]), tuple(pose["rotation"]), tuple(pose["pivot"]),
                         mode, existing.id if existing else None, before_records, before_atoms,
-                        after_records, after_atoms, deepcopy(named_targets), free_records, free_atoms)
+                        after_records, after_atoms, deepcopy(named_targets), free_records, free_atoms), after
+
+
+@dataclass(frozen=True)
+class ChronologicalProgram:
+    """One fixed-world event followed by captured native residue-edit events.
+
+    Existing material only. Owner edits, construction, constraints and changed
+    named membership remain explicit compilation refusals, not approximate steps.
+    """
+    steps: tuple[OrderedProbe, ...]
+
+    def evaluate(self, *, motion_enabled=True, motion=None):
+        if not motion_enabled:
+            last = self.steps[-1]
+            return deepcopy(last._native_after_records), deepcopy(last._native_after_atoms), [
+                {**step.suffix_trace(), "native_output_exact": True} for step in self.steps]
+        full, atoms, trace = self.steps[0].evaluate(motion=motion)
+        world = trace[0]["pose"]
+        for step in self.steps[1:]:
+            step.apply_suffix(full, atoms, world)
+            trace.append(step.suffix_trace())
+        return full, atoms, trace
+
+
+def compile_chronological_program(prefix, suffix_entries, selected_helix_ids, *, named_targets=None):
+    """Capture bounded native stages once; subsequent slider samples use arithmetic."""
+    entries = tuple(islice(suffix_entries, 17))
+    if not 1 <= len(entries) <= 16:
+        raise ValueError("Chronological probe requires 1–16 suffix events")
+    if len({entry.id for entry in entries}) != len(entries):
+        raise ValueError("Chronological suffix feature identities must be unique")
+    captured = prefix.model_dump_json()
+    current, steps = prefix.model_copy(deep=True), []
+    for entry in entries:
+        step, current = _compile_step(current, entry, selected_helix_ids, named_targets=named_targets)
+        # All admitted events preserve identity. Reserve the full sequence after
+        # the first bounded capture, before allocating any subsequent stages.
+        if not steps and len(entries) * (len(step._prefix_records) + len(step._prefix_atoms.atoms)) > 65_536:
+            raise ValueError("Chronological probe exceeds its cumulative material budget")
+        if steps and step.selected_material_keys != steps[0].selected_material_keys:
+            raise ValueError("Chronological probe cannot change named membership")
+        steps.append(step)
+    assert prefix.model_dump_json() == captured
+    return ChronologicalProgram(tuple(steps))
