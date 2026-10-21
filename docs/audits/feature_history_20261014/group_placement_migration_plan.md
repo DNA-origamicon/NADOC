@@ -1101,3 +1101,14 @@ and after Cancel, canonical checkpoint and browser design/geometry/revision are
 exact. Cancel sends no mutation and historical editing remains enabled. App1pass;
 owned scratch b9yhfp3e independently absent. Log: feature-history-focus/
 transform-dependents-app.log. Test-only change; named-member rollout stays gated.
+
+Stopping-point correction (October20, user-directed): persistent goal disabled;
+30-minute autonomous review loop stopped. Resume from session_handoff.md and
+implementation checkpoint4e31b889, not the stale73654083 goal text. Tail semantics
+are resolved: only selected residues move, with no implicit following. The separate
+attached-construction frame question concerns later Sweep material when partial
+motion separates source-strand frames; see member-motion-birth-native-phase-review.
+That question must not be presented as reopening tail locality. Review the existing
+concrete artifact with the user before choosing attachment policy; no repeated
+blocker loops or speculative compiler expansion. Companion/constraint/rigid-unit
+roles and the complete acceptance matrix remain required after that decision.

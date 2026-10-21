@@ -1,8 +1,10 @@
 # Feature-history stopping-point handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
+October 20, 2026 stopping point: user disabled the persistent goal and requested this handoff.
+Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-**Sessions since last gate flip or milestone close: 2.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
+FH-20 closed. Existing Bend/Twist gates stay ON; Move/Rotate gates remain OFF.
 
 ## Scope and next work
 
@@ -24,7 +26,8 @@ Chronological7 +program23 +reset13 +existing-tail8 pass; prior constraint-invent
 Every intermediate stage checks Full positions/orientations/site frames, atoms and exact no-M control.
 Samples reuse captured stages without replay/builders. Reset/replacement deletes the current pose component,
 retaining all preceding independent world moves in order; delete/recreate tested. Canonical keys keep tails
-fixed in both representations. Explicit tail selection not admitted; no production promotion.
+fixed in both representations. Explicit tail selection is unsupported only in this diagnostic compiler;
+native single/whole-tail selection is repaired and tested. No named-motion production promotion.
 Attached Sweep after partial placement expands ownership onto unselected old material. The
 isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
 atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
@@ -38,16 +41,20 @@ phase_offset; variants were identical. Index pages withdraw phase claims; indivi
 Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
 Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
-User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
-strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
+Separate construction question: after partial motion, source strands can supply incompatible frames.
+The recorded options are matching frames/refuse ambiguous attachment, or an explicit source-strand
+frame with a stretched other junction. This is NOT the resolved tail-following question.
+Do not infer authorization from the disabled goal’s stale “tail decision pending” objective.
 Sequence A/B review integrated:8cases,11focusedpass;2pages Full/Ballstick/trace pass, screenshots inspected.
 Artifact member-motion-sequence-review; maxdelta1.578nm/bond5.733nm, no physical qualification.
 Existing out-of-span inventory fixed:4focused+23ordering pass; static input, not construction replay.
 C7 ordinary mid-log creation refusal/Cancel app1pass; existing edit-disable test retained.
 C5 ordinary upstream-deletion dialog app1pass: dependent transform listed; Cancel state exact.
-Next: revalidate remaining authorization blocker against full matrix; no speculative compiler expansion.
+Next session: inspect the existing construction A/B with the user, identify the exact affected
+attachment and frame policy, then implement only the demonstrated authorized change. Do not
+repeat blocker-status loops or passing C5/C7/C8 checks. This decision alone does not settle
+companion/constraint/rigid-unit roles or authorize the complete named-motion matrix.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
-User authorized sustained six-tool milestones/reviewers every30min, superseding stop-loss; watchdog.json owns timer.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
 placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
 
@@ -66,18 +73,8 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   Checked-block authority/DTO133pass2deselected; scalar/native UI162pass plus guides16pass.
   Log transform-block-final-app.log; root k7fzbcc9 independently absent. Frontend780files/9425pass/1skip;
   backend19185pass/83same known failures/19skip; final audit-view frontend781files/9426pass/1skip.
-- Offline ordering review: .development-artifacts/member-motion-ordering-review/index.html,144cases
-  labelled phases/both prior-residue directions/control (phase coverage withdrawn above). All72controls exact;72Ncases displaced6.892–7.169nm.
-  Native10/UI11pass; browser3cases per artifact/both representations/all4panels, no errors/network; Full and atoms
-  visually inspected. Exact atoms/bonds/rings and per-boundary metrics retained; diagnostic hit caps stated.
-  Chronological sibling adds native D after M:144cases/72exact controls; phase coverage withdrawn above.
-  browser scratch z6zq8uxf independently absent. Both probes retain stretched bonds; neither authorizes placement.
-  This is a limited ordering probe, not full named-motion authorization. Birth/partial/overlap/frame
-  and companion semantics remain required; no placement promotion or transform gate change.
-- Tail review: .development-artifacts/member-motion-tail-review/index.html,288cases; phase coverage withdrawn.
-  A moves only Full tails (2residues,3.336–6.965nm); B only atoms (3.499–6.712nm). Other representation exact.
-  Native4/UI12/browser3pass; screenshots visually inspected after camera-margin fix; scratch3zpyi3os absent.
-  User resolved locality: unselected tails stay fixed; production repair committed8fd29efb/b2db50e1.
+- Old ordering/chronology/tail artifacts retain individual counterexamples only; their phase
+  claims are withdrawn. Tail semantics are resolved and production locality is repaired.
   Named native-material union/overlap and Bend/Twist/Sweep-prefix program13pass; exact no-M controls6pass.
   Pre-existing Sweep loop copies are captured once by native copy identity; later birth/partial frames remain unresolved.
   Prefix lineage integration10pass: Sweep both ends/detach, nick/merge both directions, empty/dissolved references.
@@ -87,16 +84,9 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   clears feedback. Native4/browser2pass; capacity/unsupported response handling now browser2pass: draft
   retained, canonical/browser state exact, no false badges, Cancel works. Native DTO refusal9pass;
   injected UI responses are not capacity benchmarks. Scratch hlrxaq6s/5kcm3ls5 independently absent.
-- Focused native scale2, DTO/host/bounds96, UI149, private-guide23 and native-render14pass.
-  Full frontend780files/9395pass/1skip (344.92s), including resized-buffer ownership.
-- Final backend FAST:19185pass/83fail/19skip (361.33s), no setup errors. Exact failure-set
-  comparison matches stop-backend-final.log; zero new failures. Broad suite is not green.
-  Aggregate378s exceeds90s; no individual violators, slowest4.46s. Timing skill applied;
-  no arbitrary reclassification, scientific manifest regeneration or guard changes.
 - Evidence: axis-lines-c8.log, transform-causal-app-final.log, geometry-final-frontend.log,
   geometry-final-test-smart.log under .development-artifacts/feature-history-focus/.
   Browser roots tfn8qjbl/wg9x_zte and cancelled diagnostics mhpbkfq8/rzpelai0 independently absent.
-  All changed Python files pass Ruff; main.js LOC delta0.
 
 ## Completed user-facing behavior
 
@@ -141,10 +131,20 @@ No manifests regenerated; legacy compatibility is excluded. Latest validation is
 DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
-Keep guards and serialization; focused development checks remain authorized.
 
 ## Commit and shared-worktree boundaries
 
-Performance committed as1336fb3a; ordering/chronological evidence as301041fa; tail/union batch835e64ed.
-Native lineage integration committed as5a554447. Latest bounded evidence admits pre-existing Sweep copies
-in the offline program and tests native prefix/control parity; no production or frontend behavior changes.
+Latest implementation checkpoint: **4e31b889**. All feature-history work listed below is committed.
+- 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
+- 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.
+- 90dd75a9: isolated out-of-span inventory; native4 +ordering23 pass, Ruff pass.
+- 8637e4ac / 4e31b889: ordinary C7 rollback and C5 dependency dialog; browser1pass each.
+Logs: `.development-artifacts/feature-history-focus/{member-out-of-span,member-ordering-program,
+transform-rollback-app-final,transform-dependents-app}.log`. Final scratch roots l7zf1625/b9yhfp3e
+and failed harness root rilubkmq independently verified absent. No product changes in C5/C7 batches.
+Full required matrix/implementation sequence: [group placement plan](group_placement_migration_plan.md#required-acceptance-matrix).
+Diagnostic sources: `tools/member_motion_ordering_program.py`, `member_motion_birth_audit.py`,
+`member_motion_audit.py`; generated HTML/logs are local ignored artifacts, not portable committed evidence.
+If artifacts are unavailable, inspect those generators before regeneration; do not claim a missing view reviewed.
+Shared worktree has extensive unrelated edits (API/VR/simulation/memory/tests); preserve them. Stage explicit
+owned paths only; no reset/stash/restore, broad staging, push, lock/golden regeneration or phase-constant edits.
