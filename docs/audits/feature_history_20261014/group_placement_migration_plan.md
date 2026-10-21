@@ -1073,3 +1073,12 @@ an execution-order adjustment, not parking core work or reducing its exit.
 The isolated compiler and complete inspectable molecular comparison still
 precede any production promotion. No user decision is requested from this
 scalar evidence; it is not the required four-panel/phase-sweep artifact.
+
+Existing out-of-span inventory correction (October20): whole-helix diagnostic
+selection now includes all actual occupied ordinary residues beyond the physical
+deformation window. Domain references retain exact domain/range matching.
+Four regressions cover both directions and whole/domain scope; before repair,
+both whole-helix cases omitted four residues. After repair:4pass; existing ordering
+file23pass. Full/atom rigid oracles, unselected coordinates, bonds and source
+immutability checked. Static native fixture only: no loop-producer, construction
+replay or explicit tail-selection claim. Production deformation resolver unchanged.

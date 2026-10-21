@@ -61,8 +61,10 @@ def _apply_world(records, atoms, material_keys, motion):
 def existing_material_union(prefix, targets):
     """Resolve ordinary material present now, not descendant/birth policy.
 
-    Native selector ranges may include unoccupied partner directions. Intersect
-    them with actual native records and deduplicate the resulting identities,
+    Native whole-helix deformation ranges stop at the physical helix span.
+    Motion instead includes every existing ordinary residue on that helix,
+    including out-of-span occupied loops. Domain-backed ranges stay exact.
+    Intersect directions with actual native records and deduplicate identities,
     preserving record order. This diagnostic inventory applies no motion.
     """
     from backend.core.part_group_selection import resolve_deformation_targets
@@ -78,11 +80,11 @@ def existing_material_union(prefix, targets):
     selected = []
     for row, key in zip(records, keys, strict=True):
         for scope in ranges:
-            if (row["helix_id"] != scope.helix_id or row["direction"] != scope.direction.value
-                    or not min(scope.start_bp, scope.end_bp) <= row["bp_index"] <= max(scope.start_bp, scope.end_bp)):
+            if row["helix_id"] != scope.helix_id or row["direction"] != scope.direction.value:
                 continue
             if scope.strand_id is not None and (
-                    row["strand_id"] != scope.strand_id or row["domain_index"] != scope.domain_index):
+                    row["strand_id"] != scope.strand_id or row["domain_index"] != scope.domain_index
+                    or not min(scope.start_bp, scope.end_bp) <= row["bp_index"] <= max(scope.start_bp, scope.end_bp)):
                 continue
             selected.append(key)
             break
