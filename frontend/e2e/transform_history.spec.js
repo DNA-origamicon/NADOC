@@ -511,3 +511,32 @@ test('Move Rotate mid-log creation refusal preserves history and Cancel restores
     return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }
   }, 'transform-owner')
 })
+
+test('Move Rotate upstream deletion lists the dependent transform before commit', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const before = await f.checkpoint(), browser = await f.browser()
+    const selectedIndex = before.design.feature_log.findIndex(row => row.id === 'selected-transform')
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const deciding = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0'
+      && r.request().method() === 'DELETE')
+    await page.getByTitle('Delete this feature', { exact: true }).first().click()
+    const response = await deciding
+    expect(response.ok()).toBe(true)
+    const decision = await response.json()
+    expect(decision.needs_cascade_decision).toBe(true)
+    const dependent = decision.dependents.find(row => row.feature_ids.includes('selected-transform'))
+    expect(dependent?.index).toBe(selectedIndex)
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Delete dependent features?' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('li')).toHaveText(decision.dependents.map(row => `F${row.index + 1}: ${row.label}`))
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(browser)
+    const writes = f.writes.length
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(dialog).not.toBeVisible()
+    expect(f.writes).toHaveLength(writes)
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(browser)
+    await expect(page.getByTitle('Edit this move/rotate feature', { exact: true })).toBeEnabled()
+  }, 'transform-owner')
+})

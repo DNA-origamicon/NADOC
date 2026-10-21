@@ -44,10 +44,10 @@ Sequence A/B review integrated:8cases,11focusedpass;2pages Full/Ballstick/trace 
 Artifact member-motion-sequence-review; maxdelta1.578nm/bond5.733nm, no physical qualification.
 Existing out-of-span inventory fixed:4focused+23ordering pass; static input, not construction replay.
 C7 ordinary mid-log creation refusal/Cancel app1pass; existing edit-disable test retained.
-Next: C5 transform dependents-dialog evidence gap; construction decision pending, compiler expansion frozen.
+C5 ordinary upstream-deletion dialog app1pass: dependent transform listed; Cancel state exact.
+Next: revalidate remaining authorization blocker against full matrix; no speculative compiler expansion.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
-User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
-supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
+User authorized sustained six-tool milestones/reviewers every30min, superseding stop-loss; watchdog.json owns timer.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
 placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
 

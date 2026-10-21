@@ -1093,3 +1093,11 @@ shows a generic retained-movement refusal; store.lastError contains the cursor
 explanation. No production changes. Owned scratch rilubkmq/l7zf1625 independently
 absent. Log: feature-history-focus/transform-rollback-app-final.log. This ordinary
 lifecycle evidence does not qualify unresolved named-member molecular semantics.
+
+Ordinary Move/Rotate C5 (October20): deleting the upstream bundle opens the
+existing dependent-feature dialog and lists selected-transform at its actual
+history index. All dialog rows match the native decision; before confirmation
+and after Cancel, canonical checkpoint and browser design/geometry/revision are
+exact. Cancel sends no mutation and historical editing remains enabled. App1pass;
+owned scratch b9yhfp3e independently absent. Log: feature-history-focus/
+transform-dependents-app.log. Test-only change; named-member rollout stays gated.
