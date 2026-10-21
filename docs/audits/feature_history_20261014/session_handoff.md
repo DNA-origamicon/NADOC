@@ -1,7 +1,7 @@
 # Feature-history stopping-point handoff
 
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 20, 2026 stopping point: user disabled the persistent goal and requested this handoff.
+October 21, 2026: resumed Move/Rotate; attached-Sweep refusal authorized and implemented.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 
@@ -19,7 +19,7 @@ native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
 Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification timeout;
 complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
-FAST not rerun after classification. Aggregate412s debt remains.
+Current FAST19320pass/19skip/83same baseline failures; aggregate402s, zero per-test violators.
 The isolated compiler captures interleaved fixed-world named moves and up to16 native residue events.
 Chronological7 +program23 +reset13 +existing-tail8 pass; prior constraint-inventory4 pass.
 Every intermediate stage checks Full positions/orientations/site frames, atoms and exact no-M control.
@@ -40,19 +40,19 @@ phase_offset; variants were identical. Index pages withdraw phase claims; indivi
 Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
 Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
-Separate construction question: after partial motion, source strands can supply incompatible frames.
-The recorded options are matching frames/refuse ambiguous attachment, or an explicit source-strand
-frame with a stretched other junction. This is NOT the resolved tail-following question.
-Do not infer authorization from the disabled goal’s stale “tail decision pending” objective.
-Sequence A/B review integrated:8cases,11focusedpass;2pages Full/Ballstick/trace pass, screenshots inspected.
-Artifact member-motion-sequence-review; maxdelta1.578nm/bond5.733nm, no physical qualification.
-Existing out-of-span inventory fixed:4focused+23ordering pass; static input, not construction replay.
-C7 ordinary mid-log creation refusal/Cancel app1pass; existing edit-disable test retained.
-C5 ordinary upstream-deletion dialog app1pass: dependent transform listed; Cancel state exact.
-Next session: inspect the existing construction A/B with the user, identify the exact affected
-attachment and frame policy, then implement only the demonstrated authorized change. Do not
-repeat blocker-status loops or passing C5/C7/C8 checks. This decision alone does not settle
-companion/constraint/rigid-unit roles or authorize the complete named-motion matrix.
+User resolved attached construction: reject subsequent attached Sweep when partial motion
+separates the two occupied source-strand frames. Do not automatically convert displaced
+staples into overhangs/linkers; that was a design question, not implementation authorization.
+Production now checks source-end frame agreement (including individual residue poses) before
+preview/build, retains the existing placement for admitted cases, and explains refusal in the
+ordinary panel. Detached construction remains admitted; no selection/ownership expansion fix
+or diagnostic candidate was promoted. Native/HTTP22pass; existing Sweep39pass; browser1pass:
+message visible, Next disabled, exact Cancel, no commit. Earlier Move history edit attributes
+failure to the later Sweep and preserves source. Scratch s4kantpm independently absent.
+C7 ordinary mid-log refusal/Cancel and C5 dependent deletion dialog already pass; do not repeat.
+Next task: finish named-member Move/Rotate integration against the existing required matrix,
+starting with its chronological selection semantics and explicit companion/constraint roles.
+The attached-Sweep decision does not authorize the complete named-motion candidate matrix.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
 placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
@@ -133,7 +133,7 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 
 ## Commit and shared-worktree boundaries
 
-Latest implementation checkpoint: **4e31b889**. All feature-history work listed below is committed.
+Prior checkpoint: **4e31b889**. This session commits the Sweep refusal, native/browser tests and handoff.
 
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.

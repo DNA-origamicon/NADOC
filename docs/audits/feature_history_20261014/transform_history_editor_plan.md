@@ -683,3 +683,15 @@ No milestone split, exclusion or new completion credit.
 - Refusal UI follow-up: injected413 capacity and422 unsupported-scope responses retain a genuinely edited joint draft, exact saved/browser state, no false downstream badges, and working Cancel (browser2pass). These are transport/lifecycle checks, not native capacity benchmarks.
 - Native DTO unsupported/preallocation checks9pass; downstream failure/classification4pass. Native explicit-pose inventory4pass confirms omitted auxiliary/fixed owners stay exact; it does not prove solver feasibility or named-motion semantics.
 - Logs: transform-capacity-refusal-app.log, transform-refusal-native.log, transform-refusal-classification.log. Scratch hlrxaq6s independently absent; failed harness run5kcm3ls5 also absent. No production change or gate flip.
+
+## Separated-strand attachment decision — October 21, 2026
+- User authorized rejecting subsequent attached Sweep when partial movement separates source-strand frames. Automatic conversion to loose staple/ssDNA remains a design question, not authorized implementation.
+- Sweep checks both occupied end frames, including final residue poses, before preview/build; admitted construction coordinates are unchanged. Detached Sweep remains available.
+- Existing panel shows the reason and disables Next; direct HTTP commit also refuses. An earlier Move edit identifies the downstream Sweep failure without publishing a candidate.
+- Focused native/HTTP:22pass; existing Sweep:39pass. Browser:1pass, exact Cancel/design/history, no commit request; scratch s4kantpm independently absent.
+- Commands: guarded test_focused.py tests/test_sweep_separated_strands.py and tests/test_sweep.py; guarded history launcher with NADOC_HISTORY_E2E_GREP='Sweep explains separated'.
+- Local snap just cannot create /run/user/1000; validation used the identical recipe commands through validation_guard.sh and test_guard.sh, without bypasses.
+- Log: .development-artifacts/feature-history-focus/separated-sweep-app.log. Historical birth A/B artifacts depict pre-refusal behavior; regenerating those formerly accepted incompatible constructions now refuses.
+- No automatic strand conversion, candidate ownership promotion, scientific constant/golden change, or Move/Rotate gate flip. Full named-member acceptance remains open.
+- Guarded test-smart decision FAST:19320pass/19skip/83fail; exact failure-set match to stop-backend-final.log (no new failures). Ruff passes. FULL deferred to .nadoc-slow-pending.
+- Timing triage:402s aggregate, zero >5s violators; slowest tests span existing native worker/geometry files, no Sweep offender. Aggregate debt retained; no markers or budgets changed.

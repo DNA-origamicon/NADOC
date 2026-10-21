@@ -4,6 +4,30 @@ import { withHistoryFixture } from './helpers/deformation_history.js'
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
 const endpoint = '/api/design/features/sweep-preview'
 
+test('Sweep explains separated strand attachment refusal and Cancel is exact', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint(), stored = await f.browser()
+    await page.locator('.menu-item').filter({ hasText: 'Tools' }).first().hover()
+    await page.locator('#menu-tools-sweep').click()
+    await expect(page.locator('#sweep-panel')).toBeVisible()
+    const rejected = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/sweep/preview'
+      && r.request().postDataJSON().source_helix_id === before.design.helices[0].id)
+    await page.locator('#sweep-source').selectOption('1')
+    expect((await rejected).status()).toBe(422)
+    await expect(page.locator('#sweep-status')).toContainText('no longer share a duplex frame')
+    await expect(page.locator('#sweep-status')).toContainText('Undo the strand movement or create a detached Sweep')
+    await expect(page.locator('#sweep-apply')).toBeDisabled()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(stored)
+    await page.locator('#sweep-cancel').click()
+    await expect(page.locator('#sweep-panel')).not.toBeVisible()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(stored)
+    expect(f.writes.filter(r => r.path === '/api/design/sweep')).toEqual([])
+    return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)'] }
+  }, 'sweep-separated')
+})
+
 for (const mode of ['independent', 'attached-end', 'context-end']) test(`Sweep ${mode} creation Cancel history edit and persistence`, async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const before = await f.checkpoint(), stored = await f.browser()

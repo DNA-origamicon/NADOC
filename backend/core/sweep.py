@@ -59,7 +59,7 @@ class SweepRequest(BaseModel):
         return self
 
 
-def _site_frame(design, helix, end, *, bp=None):
+def _site_frame(design, helix, end, *, bp=None, require_common_frame=False):
     from backend.core.deformation import deformed_nucleotide_arrays, effective_helix_for_geometry
     from backend.core.geometry import nucleotide_positions_arrays
     effective = effective_helix_for_geometry(helix, design)
@@ -79,7 +79,44 @@ def _site_frame(design, helix, end, *, bp=None):
         t = arr['axis_tangents'][k]
         r = arr['radial_hats'][k]
         return np.column_stack([r, np.cross(t, r), t])
+    if require_common_frame:
+        _require_common_attachment_frame(design, helix, bp, rest, world, basis)
     return world['axis_points'][i], basis(world, i) @ basis(rest, j).T
+
+
+def _require_common_attachment_frame(design, helix, bp, rest, world, basis):
+    """Validate occupied strand sites without changing construction placement."""
+    from backend.core.design_geometry import apply_nucleotide_transforms_to_geometry
+
+    occupied = {dom.direction for strand in design.strands for dom in strand.domains
+                if dom.helix_id == helix.id
+                and min(dom.start_bp, dom.end_bp) <= bp <= max(dom.start_bp, dom.end_bp)}
+    frames = []
+    for direction in (Direction.FORWARD, Direction.REVERSE):
+        if direction not in occupied:
+            continue
+        mask = (world['bp_indices'] == bp) & (world['directions'] == (direction == Direction.REVERSE))
+        matches = np.flatnonzero(mask)
+        if not len(matches):
+            continue
+        i = int(matches[0])
+        j = int(np.flatnonzero((rest['bp_indices'] == bp) &
+                              (rest['directions'] == world['directions'][i]))[0])
+        record = {'helix_id': helix.id, 'bp_index': bp, 'direction': direction.value,
+                  'copy_k': 0, 'axis_tangent': world['axis_tangents'][i].tolist(),
+                  'helical_site': {'axis_point': world['axis_points'][i].tolist(),
+                                   'radial_hat': world['radial_hats'][i].tolist()}}
+        # Residue poses are a final pass, absent from deformed_nucleotide_arrays.
+        apply_nucleotide_transforms_to_geometry([record], design)
+        site = record['helical_site']
+        t, r = np.asarray(record['axis_tangent']), np.asarray(site['radial_hat'])
+        frames.append((np.asarray(site['axis_point']),
+                       np.column_stack([r, np.cross(t, r), t]) @ basis(rest, j).T))
+    if len(frames) == 2 and any(not np.allclose(a, b, rtol=0, atol=1e-5)
+                                for a, b in zip(*frames)):
+        raise ValueError('Cannot attach Sweep: the two strands at the source end have been '
+                         'moved apart or rotated independently and no longer share a duplex frame. '
+                         'Undo the strand movement or create a detached Sweep.')
 
 
 def sweep_source(design, body):
@@ -113,7 +150,8 @@ def sweep_source(design, body):
     members = [h for h in _arm_helices_for(design, ref.id)
                if h.lattice_frame_id == ref.lattice_frame_id
                and {c.id for c in _clusters_for_helix(design, h.id)} == cluster_ids]
-    ref_site, rotation = _site_frame(design, ref, body.source_end)
+    ref_site, rotation = _site_frame(design, ref, body.source_end,
+                                     require_common_frame=not body.detach_source)
     right, up = {'XY': ([1,0,0], [0,1,0]), 'XZ': ([1,0,0], [0,0,1]), 'YZ': ([0,1,0], [0,0,1])}[body.plane]
     ref_xy = np.asarray(_lattice_position(*ref.grid_pos, design.lattice_type))
     sources, sites = {}, []
@@ -126,7 +164,8 @@ def sweep_source(design, body):
         site = ref_site + rotation @ (np.asarray(right) * delta[0] + np.asarray(up) * delta[1])
         if matches:
             h = matches[0]
-            actual, pose = _site_frame(design, h, body.source_end)
+            actual, pose = _site_frame(design, h, body.source_end,
+                                       require_common_frame=not body.detach_source)
             if not np.allclose(pose, rotation, atol=1e-5) or not np.allclose(actual, site, atol=1e-5):
                 raise ValueError('Selected ends do not share one cross-section frame')
             sources[cell] = h
