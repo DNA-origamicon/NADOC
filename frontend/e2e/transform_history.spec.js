@@ -380,6 +380,56 @@ test('Move Rotate injected downstream refusal marks error and blocked rows until
   }, 'transform-joint')
 })
 
+for (const [code, status, message] of [
+  ['preview_limit', 413, 'Injected bounded transform capacity refusal'],
+  ['unsupported_transform_display', 422, 'Injected unsupported transform scope refusal'],
+])
+test(`Move Rotate ${code} refusal preserves the draft without blaming downstream features`, async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const before = await f.checkpoint(), panel = page.locator('#move-rotate-panel')
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const opened = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
+    await page.getByTitle('Edit placement-poses parameters', { exact: true }).click()
+    expect((await opened).ok()).toBe(true)
+    await expect(panel).toBeVisible()
+    const evaluated = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/evaluate`)
+    await page.locator('#mr-ja').fill('12')
+    await page.locator('#mr-ja').press('Tab')
+    const evaluation = await evaluated
+    expect(evaluation.ok()).toBe(true)
+    const draft = evaluation.request().postDataJSON().params
+    expect(draft.poses).not.toEqual(before.design.feature_log.find(row => row.id === 'selected-transform').params.poses)
+    await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    const browser = await f.browser(), angle = await page.locator('#mr-ja').inputValue()
+    const match = url => url.pathname === `${previewPath}/apply`
+    // Exercise transport/UI failure handling only. Native refusal classification
+    // is covered separately; this injection is not a real capacity benchmark.
+    const handler = route => route.fulfill({ status, contentType: 'application/json',
+      body: JSON.stringify({ detail: { code, status: 'unverified', detail: message } }) })
+    await page.route(match, handler)
+    try {
+      const failed = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/apply`)
+      await page.locator('#mr-apply-btn').click()
+      const failure = await failed
+      expect(failure.status()).toBe(status)
+      expect(failure.request().postDataJSON().params).toEqual(draft)
+      await expect(panel).toBeVisible()
+      await expect(panel).toContainText(message)
+      await expect(page.locator('#mr-ja')).toHaveValue(angle)
+      await expect(page.locator('[data-history-status]')).toHaveCount(0)
+      expect(await f.checkpoint()).toEqual(before)
+      expect(await f.browser()).toEqual(browser)
+      await page.locator('#mr-cancel-btn').click()
+      await expect(panel).not.toBeVisible()
+      await expect(page.locator('[data-history-status]')).toHaveCount(0)
+      expect(await f.checkpoint()).toEqual(before)
+      expect(await f.browser()).toEqual(browser)
+      return { expectedConsoleErrors: [`Failed to load resource: the server responded with a status of ${status} (${status === 413 ? 'Payload Too Large' : 'Unprocessable Entity'})`] }
+    } finally { await page.unroute(match, handler) }
+  }, 'transform-joint')
+})
+
 for (const [tool, selector, value] of [['Move', '#mr-tx', '9'], ['Rotate', '#mr-rz', '45']])
 test(`${tool} native downstream refusal identifies the first error and blocks its descendant`, async ({ page, request }) => {
   test.setTimeout(120_000)

@@ -22,7 +22,7 @@ complete branch file rerun2pass. FULL deferred; broad suite not green. One real-
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
 FAST not rerun after classification. Aggregate412s debt remains.
 The isolated compiler admits overlapping partial domains and native composed world rotations.
-Program23 +reset13 +existing-tail8 +constraint-inventory2 pass: both directions and suffix targets,
+Program23 +reset13 +existing-tail8 +constraint-inventory4 pass: both directions and suffix targets,
 Full orientations/site frames, atoms and multiple existing owners. Three different motion samples
 reuse one prefix without replay/builders. Reset/replacement delete only the current pose component,
 retaining fixed-world motion; delete/recreate tested. Canonical Atom keys keep existing unselected tails
@@ -36,15 +36,14 @@ per direction/end, all preservation checks pass. Candidate birth bonds reach6.23
 Artifact: `.development-artifacts/member-motion-birth-native-phase-review/index.html`, with
 current/candidate/difference/defect panels, exact rings/bonds and per-junction deltas.
 Audit correction: original ordering/chronology/tail and first birth artifacts varied ignored lattice
-phase_offset. All phase variants per case had
-identical atoms. Their index pages withdraw phase-coverage claims; individual counterexamples stand.
+phase_offset; all phase variants per case had identical atoms. Their index pages withdraw phase-coverage claims; individual counterexamples stand.
 Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
 Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next: constrained named-motion evidence using native flexible fixture (selected/linked/fixed owners).
-Membership alone must not infer linked poses; inventory/refusal verified. Construction answer pending.
+Next compiler work: one coherent chronological event program, not additional standalone matrices.
+Native explicit poses preserve omitted auxiliary/fixed owners; construction-frame answer pending.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
@@ -85,7 +84,9 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   This proves current-prefix selection only, not earlier-motion or later-material frame semantics.
 - Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
   feature error and blocked descendant appear, refusal preserves canonical state and Cancel
-  clears feedback. Native4/browser2pass; capacity/unsupported refusals remain unverified.
+  clears feedback. Native4/browser2pass; capacity/unsupported response handling now browser2pass: draft
+  retained, canonical/browser state exact, no false badges, Cancel works. Native DTO refusal9pass;
+  injected UI responses are not capacity benchmarks. Scratch hlrxaq6s/5kcm3ls5 independently absent.
 - Focused native scale2, DTO/host/bounds96, UI149, private-guide23 and native-render14pass.
   Full frontend780files/9395pass/1skip (344.92s), including resized-buffer ownership.
 - Final backend FAST:19185pass/83fail/19skip (361.33s), no setup errors. Exact failure-set
@@ -147,4 +148,3 @@ Keep guards and serialization; focused development checks remain authorized.
 Performance committed as1336fb3a; ordering/chronological evidence as301041fa; tail/union batch835e64ed.
 Native lineage integration committed as5a554447. Latest bounded evidence admits pre-existing Sweep copies
 in the offline program and tests native prefix/control parity; no production or frontend behavior changes.
-No production motion compiler or molecular placement is promoted; preserve unrelated shared-worktree edits.
