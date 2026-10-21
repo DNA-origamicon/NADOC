@@ -35,6 +35,29 @@ def _key(value):
     return get("helix_id"), get("bp_index"), get("direction"), get("copy_k") or 0
 
 
+def _validated_motion(motion):
+    motion = deepcopy(motion)
+    for name, size in (("rotation", 4), ("pivot", 3), ("translation", 3)):
+        value = np.asarray(motion[name], dtype=float)
+        if value.shape != (size,) or not np.all(np.isfinite(value)):
+            raise ValueError(f"Expected finite {name} with {size} components")
+    if not np.isclose(np.linalg.norm(motion["rotation"]), 1, rtol=0, atol=1e-8):
+        raise ValueError("Expected unit motion quaternion")
+    return motion
+
+
+def _apply_world(records, atoms, material_keys, motion):
+    selected = set(material_keys)
+    moved = [row for row in records if _key(row) in selected]
+    for helix_id in sorted({key[0] for key in selected}):
+        moved = _full_motion(moved, helix_id, pose=motion)
+    by_key = {_key(row): row for row in moved}
+    records[:] = [by_key.get(_key(row), row) for row in records]
+    for atom in atoms.atoms:
+        if _key(atom) in selected:
+            atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
+
+
 def existing_material_union(prefix, targets):
     """Resolve ordinary material present now, not descendant/birth policy.
 
@@ -96,24 +119,10 @@ class OrderedProbe:
             return deepcopy(self._native_after_records), deepcopy(self._native_after_atoms), [
                 {"feature_id": self.suffix_feature_id, "kind": self.suffix_mode,
                  "target": self.target, "native_output_exact": True}]
-        motion = deepcopy(M if motion is None else motion)
-        for name, size in (("rotation", 4), ("pivot", 3), ("translation", 3)):
-            value = np.asarray(motion[name], dtype=float)
-            if value.shape != (size,) or not np.all(np.isfinite(value)):
-                raise ValueError(f"Expected finite {name} with {size} components")
-        if not np.isclose(np.linalg.norm(motion["rotation"]), 1, rtol=0, atol=1e-8):
-            raise ValueError("Expected unit motion quaternion")
+        motion = _validated_motion(M if motion is None else motion)
         records = deepcopy(self._prefix_records)
         atoms = deepcopy(self._prefix_atoms)
-        selected = set(self.selected_material_keys)
-        moved = [row for row in records if _key(row) in selected]
-        for helix_id in self.selected_helix_ids:
-            moved = _full_motion(moved, helix_id, pose=motion)
-        moved_by_key = {_key(row): row for row in moved}
-        records = [moved_by_key.get(_key(row), row) for row in records]
-        for atom in atoms.atoms:
-            if _key(atom) in selected:
-                atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
+        _apply_world(records, atoms, self.selected_material_keys, motion)
         self.apply_suffix(records, atoms, motion)
         return records, atoms, [
             {"feature_id": "diagnostic-world-M", "kind": "world-motion",
@@ -130,23 +139,27 @@ class OrderedProbe:
                 "pivot": self.pivot, "frame": "world", "replaced_pose_id": self.replaced_pose_id,
                 "component_policy": "current saved pose lifetime; retain authored world-motion matrices"}
 
-    def apply_suffix(self, records, atoms, motion):
+    def apply_suffix(self, records, atoms, motion, *, world_events=None):
         """Apply one captured event to detached output; never replay native history."""
-        target_moved = self.target in self.selected_material_keys
+        events = world_events if world_events is not None else [(self.selected_material_keys, motion)]
+        retained_motions = [pose for keys, pose in events if self.target in keys]
+        target_moved = bool(retained_motions)
         if target_moved:
             if self.suffix_mode != "native-compose-rigid":
                 # Reset/replacement removes this component's lifetime, including
                 # its earlier compose events. Other residues keep their chronology.
                 baseline = self._component_free_records or self._prefix_records
                 baseline_atoms = self._component_free_atoms or self._prefix_atoms
-                restored = _full_motion([row for row in baseline if _key(row) == self.target],
-                                        self.target[0], pose=motion)
+                restored = deepcopy([row for row in baseline if _key(row) == self.target])
+                for retained in retained_motions:
+                    restored = _full_motion(restored, self.target[0], pose=retained)
                 replacement = {_key(row): row for row in restored}
                 records[:] = [replacement.get(_key(row), row) for row in records]
                 for index, atom in enumerate(atoms.atoms):
                     if _key(atom) == self.target:
                         atom = deepcopy(baseline_atoms.atoms[index])
-                        atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
+                        for retained in retained_motions:
+                            atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], retained)
                         atoms.atoms[index] = atom
             pose = {"rotation": self.rotation, "pivot": self.pivot, "translation": self.translation}
             records[:] = [_full_motion([record], self.target[0], pose=pose)[0]
@@ -276,43 +289,79 @@ def _compile_step(prefix, suffix_entry, selected_helix_ids, *, named_targets=Non
 
 @dataclass(frozen=True)
 class ChronologicalProgram:
-    """One fixed-world event followed by captured native residue-edit events.
+    """Authored fixed-world events interleaved with captured native residue edits.
 
     Existing material only. Owner edits, construction, constraints and changed
     named membership remain explicit compilation refusals, not approximate steps.
     """
     steps: tuple[OrderedProbe, ...]
+    world_events: tuple = ()
 
     def evaluate(self, *, motion_enabled=True, motion=None):
         if not motion_enabled:
             last = self.steps[-1]
             return deepcopy(last._native_after_records), deepcopy(last._native_after_atoms), [
                 {**step.suffix_trace(), "native_output_exact": True} for step in self.steps]
-        full, atoms, trace = self.steps[0].evaluate(motion=motion)
-        world = trace[0]["pose"]
-        for step in self.steps[1:]:
-            step.apply_suffix(full, atoms, world)
-            trace.append(step.suffix_trace())
+        first = self.steps[0]
+        world = _validated_motion(M if motion is None else motion)
+        full, atoms = deepcopy(first._prefix_records), deepcopy(first._prefix_atoms)
+        _apply_world(full, atoms, first.selected_material_keys, world)
+        retained = [(first.selected_material_keys, world)]
+        trace = [{"feature_id": "diagnostic-world-M", "kind": "world-motion", "pose": deepcopy(world),
+                  "material_keys": list(first.selected_material_keys), "frame": "world"}]
+        for index in range(len(self.steps) + 1):
+            for event in self.world_events:
+                if event["before_event"] != index:
+                    continue
+                _apply_world(full, atoms, event["material_keys"], event["pose"])
+                retained.append((event["material_keys"], event["pose"]))
+                trace.append(deepcopy(event))
+            if index < len(self.steps):
+                step = self.steps[index]
+                step.apply_suffix(full, atoms, world, world_events=retained)
+                trace.append(step.suffix_trace())
         return full, atoms, trace
 
 
-def compile_chronological_program(prefix, suffix_entries, selected_helix_ids, *, named_targets=None):
+def compile_chronological_program(prefix, suffix_entries, selected_helix_ids, *, named_targets=None, world_events=()):
     """Capture bounded native stages once; subsequent slider samples use arithmetic."""
     entries = tuple(islice(suffix_entries, 17))
     if not 1 <= len(entries) <= 16:
         raise ValueError("Chronological probe requires 1–16 suffix events")
+    if any(entry.id == "diagnostic-world-M" for entry in entries):
+        raise ValueError("Suffix feature identity collides with the reserved world event")
     if len({entry.id for entry in entries}) != len(entries):
         raise ValueError("Chronological suffix feature identities must be unique")
+    extra = deepcopy(tuple(islice(world_events, 17)))
+    if len(extra) > 16:
+        raise ValueError("Chronological probe allows at most16 additional world events")
+    identities = {"diagnostic-world-M", *[entry.id for entry in entries]}
+    for event in extra:
+        if (set(event) != {"feature_id", "before_event", "named_targets", "pose"}
+                or type(event["before_event"]) is not int or not 0 <= event["before_event"] <= len(entries)):
+            raise ValueError("World event requires a valid suffix insertion position and exact fields")
+        if not isinstance(event["feature_id"], str) or not event["feature_id"] or event["feature_id"] in identities:
+            raise ValueError("World event identities must be unique")
+        identities.add(event["feature_id"])
+        event["pose"] = _validated_motion(event["pose"])
     captured = prefix.model_dump_json()
     current, steps = prefix.model_copy(deep=True), []
-    for entry in entries:
+    compiled_events = []
+    for index in range(len(entries) + 1):
+        for event in extra:
+            if event["before_event"] == index:
+                keys = existing_material_union(current, event["named_targets"])
+                compiled_events.append({**event, "material_keys": keys, "kind": "world-motion", "frame": "world"})
+        if index == len(entries):
+            break
+        entry = entries[index]
         step, current = _compile_step(current, entry, selected_helix_ids, named_targets=named_targets)
         # All admitted events preserve identity. Reserve the full sequence after
         # the first bounded capture, before allocating any subsequent stages.
-        if not steps and len(entries) * (len(step._prefix_records) + len(step._prefix_atoms.atoms)) > 65_536:
+        if not steps and (len(entries) + len(extra)) * (len(step._prefix_records) + len(step._prefix_atoms.atoms)) > 65_536:
             raise ValueError("Chronological probe exceeds its cumulative material budget")
         if steps and step.selected_material_keys != steps[0].selected_material_keys:
             raise ValueError("Chronological probe cannot change named membership")
         steps.append(step)
     assert prefix.model_dump_json() == captured
-    return ChronologicalProgram(tuple(steps))
+    return ChronologicalProgram(tuple(steps), tuple(compiled_events))

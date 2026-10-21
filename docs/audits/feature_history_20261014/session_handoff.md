@@ -21,11 +21,11 @@ Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification
 complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
 FAST not rerun after classification. Aggregate412s debt remains.
-The isolated compiler now captures one fixed-world move followed by up to16 native residue events.
-Chronological5 +program23 +reset13 +existing-tail8 pass; prior constraint-inventory4 pass.
+The isolated compiler captures interleaved fixed-world named moves and up to16 native residue events.
+Chronological7 +program23 +reset13 +existing-tail8 pass; prior constraint-inventory4 pass.
 Every intermediate stage checks Full positions/orientations/site frames, atoms and exact no-M control.
 Samples reuse captured stages without replay/builders. Reset/replacement deletes the current pose component,
-retaining fixed-world motion; delete/recreate tested. Canonical Atom keys keep existing unselected tails
+retaining all preceding independent world moves in order; delete/recreate tested. Canonical keys keep tails
 fixed in both representations. Explicit tail selection not admitted; no production promotion.
 Attached Sweep after partial placement expands ownership onto unselected old material. The
 isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
@@ -42,7 +42,7 @@ Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/bot
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next compiler work: explicit provenance for repeated/interleaved named motions; current program has one M.
+Next: connect the coherent evaluator to the existing A/B review pipeline, not new per-case prototypes.
 Suppressed events, owner/topology edits and constrained roles still refuse; construction answer pending.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
