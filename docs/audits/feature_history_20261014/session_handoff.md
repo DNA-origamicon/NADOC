@@ -10,14 +10,10 @@ The overall overhaul remains open. Commit locally under the operating contract; 
 
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
 tails move only when selected. Initial locality repair is committed as 8fd29efb.
-Native regressions exposed tail identity aliases, posed crossover construction and 16 Full bridge
-records following one anchor; atomistic preview also aliased insert identities. A Full helper
-ignored native loop-copy ordinals (not the live identity-map path). Terminal end-resize capture
-also stole a Move gesture and changed topology; the tool lock now suppresses those handles.
-See [selection-locality investigation](selection_locality_investigation.md) for provenance,
-audit gaps and validation. Locality repair qualified: native20 + terminal rotation4 + bridge28;
-frontend9432pass/1skip; browser1pass through saved Apply. Backend FAST19228pass/19skip/84fail
-(83 prior failures plus corrected bridge oracle; corrected file28pass). FULL remains deferred.
+Initial repairs cover tail/insert identity aliases, bridge reconstruction and terminal resize capture.
+See [selection-locality investigation](selection_locality_investigation.md) for provenance and audits.
+Evidence: native20/rotation4/bridge28; frontend9432pass1skip; browser1pass saved Apply.
+Earlier FAST19228pass/19skip/84fail included83 baseline failures plus a corrected bridge oracle.
 Follow-up partial-owner regression exposed generic residue-command postprocessing widening
 an existing posed owner to include the opposite strand. Fixed in b2db50e1; recording/replay preserve ownership;
 native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
@@ -37,13 +33,18 @@ are emitted in each case. Ancestry records source helix/end but no explicit sour
 See member-partial-sweep-birth.json/.png and its probe script. The inspected plot compares
 new Full/atoms against original/moved-frame alternatives; gray is existing BEFORE Sweep.
 Shared-frame candidates are not qualified; repair old-material ownership before promotion.
-Next: make shared-frame construction/ancestry explicit, then remaining companion/constraint cases.
+Isolated exact-surviving-domain ownership candidate now restores every old Full/atom coordinate
+in all four cases (zero displacement), keeping280 newborn atoms and all bonds unchanged.
+Cause confirmed: generic reconciliation intentionally ignores direction for bp-overlap assignment.
+Interactive evidence: `.development-artifacts/member-motion-birth-owner-review/index.html`;
+current/candidate/difference/defect panels with per-junction atoms, rings and metrics. Four pages
+rendered in both representations without errors/network; screenshots retained, no workspace writes.
+Restoring ownership exposes reverse birth bonds2.29–2.69nm; forward one bond returns to0.136nm.
+This does NOT authorize construction geometry. No production changes in this follow-up.
+Next: finish required phase coverage of this bounded artifact and resolve explicit construction-frame
+semantics; then remaining companion/constraint cases. Avoid another general locality/C8 campaign.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
-Next production boundary: settle partial/shared frames, later-material construction and companion/constraint
-ownership through demonstrated authorization before a named-motion command or consumer is promoted.
-Fixed C8 passes. Ordering, chronology and terminal-tail comparisons remain isolated diagnostics.
-Ordinary owner, joint/linked controls, menu/keyboard creation
-and causal downstream refusal pass app acceptance. Production transform gates remain OFF.
+Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
@@ -128,36 +129,17 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
 
 ## Earlier verification and retained baseline debt
 
-Evidence logs: `.development-artifacts/feature-history-focus/` (not committed disposable output).
-- Sweep guide backend43/session16 and app3 passed; scratch ydmfjcfe independently absent.
-- Move backend26/UI5 and app4 passed; scratch uizkyodf independently absent.
-- Suppression backend20/repair-capture11/UI7 and app6 passed (four tools, Move, refusal);
-  scratch6ehu2rrw independently absent. Earlier full frontend9367 pass/1skip and smoke23 passed.
-- Final source repair12, existing selection62/repair58, archive capture45, extension routes23 passed.
-  The earlier extension capture-budget setup error did not recur in the complete file.
-- Source repair browser2 passed: selection/evaluation/Apply/undo/redo/save/reopen/cold proof.
-  Scratch `/tmp/__e2e__history-w_0rosal` independently absent. Failed diagnostic runs cleaned too.
-- Final full frontend:779 files,9367passed/1skipped (337.61s). Final smoke:23passed (2.3min);
-  scratch `/tmp/__e2e__smoke-zkgbb4ne` independently absent.
-- Final backend FAST:19078passed/83failed/19skipped (348.88s;379s aggregate), zero per-test
-  timing violations. Failure-set comparison: all64 baseline failures plus19 schema expectations.
-- `just lint` passed; main.js LOC delta0. No formulas/constants, manifests or goldens changed.
-
-Baseline backend log: `stop-backend-final.log`. The64 baseline failures comprise11 sealed-path
-HTTP/registration,2 junction-balance tolerance, and51 historical numerical-manifest compatibility
-expectations. Suppression metadata adds19 obsolete schema-compatibility expectations. Old pins
-remain fail-closed; user explicitly declined legacy compatibility, so no manifests were regenerated.
-The previous124failures/1error reduced to83failures/no errors after archive-schema and exact capture
-accounting fixes; focused archive routes28/capture45/accounting31 pass. No new current repair/runtime
-failure remains. Broad suite is not green. Aggregate timing remains above90s; per-test violators=[];
-slowest4.62s is a real native-worker test. No arbitrary reclassification or guard changes.
-Selector output:
+Earlier source-repair, suppression and reorder evidence remains in the plan and logs under
+`.development-artifacts/feature-history-focus/`. Source-repair browser2, full frontend9367/1skip,
+smoke23 and focused archive28/capture45/accounting31 passed; disposable roots verified absent.
+Backend baseline `stop-backend-final.log`:83 failures (11 sealed HTTP/registration,
+2 junction tolerances,51 historical numerical manifests,19 obsolete schema expectations).
+No manifests regenerated; legacy compatibility is excluded. Latest validation is reported above.
 ```
-decision: FAST  (fast suite only)
-  DEFERRED: this change would have needed the FULL suite, but no test-dedicated
-  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
-No test session requested; focused development checks are authorized. Keep guards and serialization.
+Keep guards and serialization; focused development checks remain authorized.
 
 ## Commit and shared-worktree boundaries
 
