@@ -67,6 +67,17 @@ def _target_exists(design, transform: NucleotideTransform) -> bool:
         connectors = [*design.crossovers, *design.forced_ligations]
         owner = next((x for x in connectors if x.id == transform.crossover_id), None)
         return owner is not None and transform.extra_base_k < len(owner.extra_bases or "")
+    if transform.helix_id.startswith("__ext_"):
+        extension = next((e for e in design.extensions
+                          if f"__ext_{e.id}" == transform.helix_id), None)
+        if (extension is None or transform.copy_k != 0
+                or not 0 <= transform.bp_index < len(extension.sequence or "")):
+            return False
+        strand = design.find_strand(extension.strand_id)
+        if strand is None or not strand.domains:
+            return False
+        terminal = strand.domains[0 if extension.end == "five_prime" else -1]
+        return terminal.direction == transform.direction
     helix = next((h for h in design.helices if h.id == transform.helix_id), None)
     if helix is None or transform.bp_index < helix.bp_start or transform.bp_index >= helix.bp_start + helix.length_bp:
         return False

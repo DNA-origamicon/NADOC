@@ -475,6 +475,9 @@ def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
     for atom in atoms:
         if atom.crossover_id is not None and atom.extra_base_k is not None:
             key = ("extra_base", atom.crossover_id, atom.extra_base_k)
+        elif atom.extension_id is not None and atom.ext_k is not None:
+            # The raw helix/bp fields are anchor metadata, not residue identity.
+            key = ("base", f"__ext_{atom.extension_id}", atom.ext_k, atom.direction, 0)
         elif atom.helix_id:
             key = (
                 "base",
@@ -1985,7 +1988,12 @@ def build_atomistic_model(
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.lattice import position_linker_virtual_helices
 
-    design = position_linker_virtual_helices(design)
+    # Reconstruct existing bridge frames before individual residue poses. A posed
+    # endpoint must not reshape the bridge or its neighboring linker atoms.
+    residue_poses = design.nucleotide_transforms
+    design = position_linker_virtual_helices(
+        design.model_copy(update={"nucleotide_transforms": []})
+    ).model_copy(update={"nucleotide_transforms": residue_poses})
 
     helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
 
@@ -2570,7 +2578,10 @@ def build_atomistic_model(
         from backend.core.design_geometry import _geometry_for_design
 
         placement_design = design.model_copy(
-            update={"deformations": [], "cluster_transforms": []}
+            # Residue poses are a final operation, after junction construction.
+            # Feeding them into construction moves unselected inserts and re-seats
+            # linker atoms belonging to the opposite, unselected endpoint.
+            update={"deformations": [], "cluster_transforms": [], "nucleotide_transforms": []}
         )
         measured_geometry = _geometry_for_design(
             placement_design, measured_positioning=True, junction_balance=True

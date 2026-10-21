@@ -135,7 +135,7 @@ def test_prospective_anchor_readers_match_full_bent_and_individually_posed_sites
     np.testing.assert_allclose(world[1], matrix[:3, :3] @ full["base_normal"], rtol=0, atol=2e-15)
 
 
-def test_bridge_uses_final_individually_transformed_anchors_once():
+def test_existing_bridge_does_not_follow_individually_transformed_anchors():
     design, _, *_ = _bridge_fixture(8, True, True)
     strands = []
     for i, side in enumerate(("a", "b")):
@@ -150,9 +150,13 @@ def test_bridge_uses_final_individually_transformed_anchors_once():
         strands=strands, nucleotide_transforms=[NucleotideTransform(kind="base", helix_id="h0",
             bp_index=0, direction=Direction.REVERSE, translation=[0, 2, 3], rotation=[0, .2, 0, .8])])
     records = _geometry_for_design(design)
+    unposed = _geometry_for_design(design.copy_with(nucleotide_transforms=[]))
     conn = design.overhang_connections[0]
-    a = linker_anchor_nucleotide(records, conn, "a_5p", True)
-    b = linker_anchor_nucleotide(records, conn, "b_5p", False)
+    # A single-residue pose is applied after bridge construction. Its connecting
+    # bond may stretch; the unselected bridge must remain exactly where it was.
+    a = linker_anchor_nucleotide(unposed, conn, "a_5p", True)
+    b = linker_anchor_nucleotide(unposed, conn, "b_5p", False)
+    assert linker_anchor_nucleotide(records, conn, "a_5p", True)["backbone_position"] != a["backbone_position"]
     geometry = bridge_axis_geometry(a["backbone_position"], a["base_normal"],
                                     b["backbone_position"], 8, True, True)
     for side, bp in [("a", 0), ("b", 7)]:

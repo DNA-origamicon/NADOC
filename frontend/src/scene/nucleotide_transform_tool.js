@@ -26,7 +26,7 @@ export function abstractResidueInfo(target, geometry = []) {
   if (!target || target.helix_id === '__xb__') return null
   const nuc = geometry.find(n => n.helix_id === target.helix_id &&
     n.bp_index === target.bp_index && n.direction === target.direction &&
-    (n.copy ?? 0) === (target.copy ?? 0))
+    (n.copy ?? n.copy_k ?? 0) === (target.copy ?? 0))
   return nuc ? { nuc, centroid: new THREE.Vector3(...nuc.backbone_position) } : null
 }
 
@@ -40,7 +40,7 @@ export function abstractPreviewUpdate(info, matrix) {
   const at = direction('axis_tangent')
   return {
     helix_id: info.nuc.helix_id, bp_index: info.nuc.bp_index,
-    direction: info.nuc.direction, copy: info.nuc.copy ?? 0,
+    direction: info.nuc.direction, copy: info.nuc.copy ?? info.nuc.copy_k ?? 0,
     backbone_position: bb, base_position: base,
     nx: bn[0], ny: bn[1], nz: bn[2],
     tx: at[0], ty: at[1], tz: at[2],
@@ -148,6 +148,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       else applyPreviews(targetInfos, liveMatrix())
     })
     if (!historySession) {
+      store.setState?.({ nucleotideTransformActive: true })
       document.getElementById('mode-indicator').textContent =
         'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
       moveRotatePanel?.setAssemblyCtx(null)
@@ -270,6 +271,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     exactSessionRef = null
     vrPreviewRef = null
     dragging = false
+    if (!historySession) store.setState?.({ nucleotideTransformActive: false })
     if (!historySession) document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 

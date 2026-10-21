@@ -62,6 +62,7 @@ const _initialState = {
 
   /** True while the Translate/Rotate tool is active. */
   translateRotateActive: false,
+  nucleotideTransformActive: false,
   sweepActive: false,
 
   /** True while the 3D Force-Crossover (forced-ligation) tool is active. Disables
@@ -386,7 +387,7 @@ const _SLICES = {
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selection',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
-                      'activeClusterId', 'translateRotateActive', 'sweepActive', 'joinActive', 'debugOverlayActive',
+                      'activeClusterId', 'translateRotateActive', 'nucleotideTransformActive', 'sweepActive', 'joinActive', 'debugOverlayActive',
                       'domainDesigner']),
 
   /** Design topology + derived geometry */

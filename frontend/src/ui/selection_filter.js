@@ -315,6 +315,7 @@ export function initSelectionFilter({ store, getSelectionManager }) {
     })
     store.subscribe((newState, prevState) => {
       if (newState.translateRotateActive === prevState.translateRotateActive &&
+          newState.nucleotideTransformActive === prevState.nucleotideTransformActive &&
           newState.selection === prevState.selection &&
           newState.assemblyActive === prevState.assemblyActive &&
           newState.activeInstanceId === prevState.activeInstanceId) return

@@ -34,6 +34,7 @@
  */
 
 import * as THREE from 'three'
+import { atomBaseKey, baseKey, xbKey } from './base_ref.js'
 
 import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
@@ -180,10 +181,9 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   function _matchesResidue(atom, target) {
     if (!atom || !target) return false
     if (target.helix_id === '__xb__') {
-      return atom.crossover_id === target.crossover_id && atom.extra_base_k === target.k
+      return atomBaseKey(atom) === xbKey(target.crossover_id, target.k)
     }
-    return atom.helix_id === target.helix_id && atom.bp_index === target.bp_index &&
-      atom.direction === target.direction && Number(atom.copy_k ?? 0) === Number(target.copy ?? 0)
+    return atomBaseKey(atom) === baseKey(target, Number(target.copy ?? 0))
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────

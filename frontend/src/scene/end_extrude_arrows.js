@@ -24,7 +24,7 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
 import { baseKey, parseBaseKey } from './base_ref.js'
-import { canonicalSelection } from './selection_model.js'
+import { canonicalSelection, moveRotateSelectionLocked } from './selection_model.js'
 import { createEndResizeAxis, projectRayToResizeAxis } from './end_resize_axis.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
@@ -291,6 +291,9 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     for (const ag of _arrowGroups) _group.remove(ag)
     _arrowGroups = []
 
+    // Move/Rotate owns the pointer gesture, including at strand termini.
+    if (moveRotateSelectionLocked(store.getState())) return
+
     const beads    = _collectBeads()
     const endBeads = beads.filter(b => b.nuc.is_five_prime || b.nuc.is_three_prime)
 
@@ -487,6 +490,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   }
 
   function _onPointerMove(e) {
+    if (moveRotateSelectionLocked(store.getState())) return
     if (_dragging) return
     const hit = _findArrowHit(e.clientX, e.clientY)
     if (hit !== _hoveredGroup) {
@@ -500,6 +504,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   // ── Pointer down (capture phase — intercept before OrbitControls) ─────────
 
   function _onPointerDown(e) {
+    if (moveRotateSelectionLocked(store.getState())) return
     if (e.button !== 0 || !_arrowGroups.length) return
     const hitGroup = _findArrowHit(e.clientX, e.clientY)
     if (!hitGroup) return
@@ -535,9 +540,15 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   // ── Reactivity ────────────────────────────────────────────────────────────
 
   store.subscribe((next, prev) => {
+    const lockChanged = moveRotateSelectionLocked(next) !== moveRotateSelectionLocked(prev)
+    if (lockChanged && moveRotateSelectionLocked(next) && _dragging) {
+      _lastDelta = 0
+      _endDrag()
+      return
+    }
     if (next.currentDesign    !== prev.currentDesign ||
         next.currentHelixAxes !== prev.currentHelixAxes ||
-        next.selection        !== prev.selection) {
+        next.selection        !== prev.selection || lockChanged) {
       _rebuild()
     }
   })

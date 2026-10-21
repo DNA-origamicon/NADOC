@@ -3,12 +3,22 @@
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 Updated October20,2026: user resumed sustained six-tool milestone work.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-**Sessions since last gate flip or milestone close: 0.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
+**Sessions since last gate flip or milestone close: 1.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
 The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
-Pending decision: user review of the demonstrated terminal-tail A/B hypotheses; no response yet.
+User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
+tails move only when selected. Locality repair is in progress before further motion promotion.
+Native regressions exposed tail identity aliases, posed crossover construction and 16 Full bridge
+records following one anchor; atomistic preview also aliased insert identities. A Full helper
+ignored native loop-copy ordinals (not the live identity-map path). Terminal end-resize capture
+also stole a Move gesture and changed topology; the tool lock now suppresses those handles.
+See [selection-locality investigation](selection_locality_investigation.md) for provenance,
+audit gaps and validation. Locality repair qualified: native20 + terminal rotation4 + bridge28;
+frontend9432pass/1skip; browser1pass through saved Apply. Backend FAST19228pass/19skip/84fail
+(83 prior failures plus corrected bridge oracle; corrected file28pass). FULL remains deferred.
+No Move/Rotate gate flip; next work returns to the complete named-motion matrix.
 Next production boundary: settle partial/shared frames, later-material construction and companion/constraint
 ownership through demonstrated authorization before a named-motion command or consumer is promoted.
 Fixed C8 passes. Ordering, chronology and terminal-tail comparisons remain isolated diagnostics.
@@ -45,7 +55,7 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
 - Tail review: .development-artifacts/member-motion-tail-review/index.html,288cases/both ends/directions.
   A moves only Full tails (2residues,3.336–6.965nm); B only atoms (3.499–6.712nm). Other representation exact.
   Native4/UI12/browser3pass; screenshots visually inspected after camera-margin fix; scratch3zpyi3os absent.
-  Scientific A/B question pending; no placement promotion. Final frontend781files/9427pass/1skip.
+  User resolved locality: unselected tails stay fixed; production repair is under final validation. Final frontend781files/9427pass/1skip.
   Named native-material union/overlap and Bend/Twist/Sweep-prefix program13pass; exact no-M controls6pass.
   Pre-existing Sweep loop copies are captured once by native copy identity; later birth/partial frames remain unresolved.
   Prefix lineage integration10pass: Sweep both ends/detach, nick/merge both directions, empty/dissolved references.

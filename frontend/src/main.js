@@ -2699,7 +2699,7 @@ async function main() {
       if (s.sweepActive) return true
       if (s.joinActive) return true
       if (s.deformToolActive) return true
-      if (s.translateRotateActive) return true
+      if (s.translateRotateActive || s.nucleotideTransformActive) return true
       return false
     },
     getUnfoldView: () => unfoldView,
@@ -3271,7 +3271,7 @@ async function main() {
       isCadnanoImport: false,
       lastError: null,
       activeClusterId: null,
-      translateRotateActive: false,
+      translateRotateActive: false, nucleotideTransformActive: false,
     })
     _setWorkspacePath(null)
   }

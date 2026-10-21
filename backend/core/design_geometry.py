@@ -176,8 +176,9 @@ def native_full_nucleotide_at(helix, design: Design, bp: int, direction: Directi
     """Resolve a prospective anchor through the same native placement and pose.
 
     Unoccupied complementary sites are needed while linker topology is built.
-    This includes a persisted per-nucleotide override, just as Full emission
-    does before deriving its bridge from the live anchor records.
+    This includes a persisted per-nucleotide override. Reconstruction of existing
+    bridges must use a design without these overrides: individual residue poses
+    are applied after construction so unselected connected material stays fixed.
     """
     arrs = native_full_arrays_for_helix(helix, design)
     matches = np.flatnonzero((arrs["bp_indices"] == bp) &
@@ -677,13 +678,13 @@ def _geometry_for_helices(
     # to derive their axis. Without this pass the bridge tube is JS-only —
     # not selectable, no real geometry payload, no slabs/cones in standard
     # rendering paths.
-    apply_nucleotide_transforms_to_geometry(result, design)
-    regular_count = len(result)
     _emit_bridge_nucs(design, nuc_info, result)
 
     if design.extensions and (full_mode or extension_ids):
         result.extend(_strand_extension_geometry(design, nuc_pos_map, extension_ids))
-    apply_nucleotide_transforms_to_geometry(result[regular_count:], design)
+    # Individual residue poses must not become construction inputs for connected,
+    # unselected bridge residues. Apply them once after all material is emitted.
+    apply_nucleotide_transforms_to_geometry(result, design)
     from backend.core.native_slab_placement import attach_native_slab_poses
     attach_native_slab_poses(result)
     return result

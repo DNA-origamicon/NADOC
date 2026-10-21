@@ -119,8 +119,8 @@ it('rejects generated/unsupported history definitions without guessing a role', 
   expect(isNativeTransformFeature({ feature_type: 'snapshot', op_kind: 'sweep', params: { _proof_version: 1 } })).toBe(false)
   expect(isNativeTransformFeature({ feature_type: 'snapshot', op_kind: 'nucleotide-transform', params: { _proof_version: 1, _generator: {} } })).toBe(false)
 })
-it('refuses acquisition while the ordinary live move tool owns the scene', async () => {
-  const f = fixture(); f.store.setState({ translateRotateActive: true })
+it.each(['translateRotateActive', 'nucleotideTransformActive'])('refuses acquisition while %s owns the scene', async flag => {
+  const f = fixture(); f.store.setState({ [flag]: true })
   expect(await f.open()).toBe(false)
   expect(f.previewAPI.prepare).not.toHaveBeenCalled(); expect(f.getPanel).not.toHaveBeenCalled()
 })

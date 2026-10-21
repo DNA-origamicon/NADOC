@@ -15,7 +15,9 @@ def test_tail_hypotheses_keep_representation_changes_separate(end, direction):
     assert full["full_displacement"]["max_nm"] > 1
     assert atoms["current"]["nucleotides"] == atoms["candidate"]["nucleotides"]
     assert atoms["full_displacement"]["n_displaced"] == 0
-    assert atoms["displacement"]["n_displaced"] > 0
+    assert atoms["displacement"]["n_displaced"] == 0
+    # The user-approved atoms-stay hypothesis now matches production locality.
+    assert atoms["current"]["atoms"] == atoms["candidate"]["atoms"]
     for serial in full["full_affected_atom_serials"]:
         # Detector hits can include other material; moved Full records must
         # resolve by extension identity, never their atomistic anchor address.

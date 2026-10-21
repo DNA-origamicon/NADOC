@@ -107,6 +107,19 @@ describe('transformBodyForTarget', () => {
 })
 
 describe('abstract nucleotide projection', () => {
+  it('preserves native loop-copy identity when resolving and previewing a residue', () => {
+    const records = [1, 0].map(copy_k => ({
+      helix_id: 'h1', bp_index: 7, direction: 'FORWARD', copy_k,
+      backbone_position: [copy_k, 0, 0], base_position: [copy_k, 1, 0],
+      base_normal: [1, 0, 0], axis_tangent: [0, 0, 1],
+    }))
+    for (const copy of [0, 1]) {
+      const info = abstractResidueInfo({ helix_id: 'h1', bp_index: 7, direction: 'FORWARD', copy }, records)
+      expect(info?.nuc.copy_k).toBe(copy)
+      expect(abstractPreviewUpdate(info, new THREE.Matrix4()).copy).toBe(copy)
+    }
+  })
+
   const nuc = {
     helix_id: 'h1', bp_index: 7, direction: 'FORWARD', copy: 0,
     backbone_position: [1, 0, 0], base_position: [0, 1, 0],
@@ -140,9 +153,10 @@ describe('abstract nucleotide projection', () => {
 describe('atomistic transform commit', () => {
   it('places a group gizmo at the mean centroid of all selected residues', () => {
     document.body.innerHTML = '<div id="mode-indicator"></div>'
-    const store = { getState: () => ({ selection: { items: [
+    const state = { selection: { items: [
       { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: 'h2:2:REVERSE' },
-    ] } }) }
+    ] } }
+    const store = { getState: () => state, setState: patch => Object.assign(state, patch) }
     const atomisticRenderer = {
       residueInfo: vi.fn(t => ({ centroid: new THREE.Vector3(t.helix_id === 'h1' ? 0 : 4, 2, 0) })),
       applyResidueMatrix: vi.fn(),
@@ -153,8 +167,10 @@ describe('atomistic transform commit', () => {
       designRenderer: {}, atomisticRenderer,
     })
     expect(tool.activate()).toBe(true)
+    expect(state.nucleotideTransformActive).toBe(true)
     expect(tool.debugState().pivot).toEqual([2, 2, 0])
     tool.cancel()
+    expect(state.nucleotideTransformActive).toBe(false)
   })
 
   it('keeps the optimistic residue pose and lets the design subscriber own the sole rebuild', async () => {

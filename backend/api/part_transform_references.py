@@ -11,6 +11,7 @@ from backend.core.part_command_errors import ReferenceResolutionError
 KINDS = frozenset({"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                    "nucleotide-transform-delete"})
 _FIELDS = {"cluster": "cluster_transforms", "helix": "helices", "strand": "strands",
+           "extension": "extensions",
            "overhang": "overhangs", "nucleotide_transform": "nucleotide_transforms", "joint": "cluster_joints"}
 
 
@@ -91,7 +92,10 @@ def _nucleotides(refs, kind, params, *, validate_slots):
         target = NucleotideTransform.model_validate({**body, "id": "reference-check"})
         if target.kind == "base":
             owner_field = "helix_id"
-            refs.resolve("helix", target.helix_id, [*path, owner_field])
+            if target.helix_id.startswith("__ext_"):
+                refs.resolve("extension", target.helix_id[len("__ext_"):], [*path, owner_field])
+            else:
+                refs.resolve("helix", target.helix_id, [*path, owner_field])
             identity = f"{target.helix_id}:{target.bp_index}:{target.direction.value}"
             if target.copy_k:
                 identity += f":{target.copy_k}"

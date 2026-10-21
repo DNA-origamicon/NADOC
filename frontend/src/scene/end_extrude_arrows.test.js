@@ -152,6 +152,28 @@ describe('setup', () => {
 // ── Arrow creation via canonical End refs ────────────────────────────────────
 
 describe('canonical End path', () => {
+  it.each(['translateRotateActive', 'nucleotideTransformActive'])(
+    'yields terminal resize handles and pointer capture while %s owns the gesture', flag => {
+      const { rootGroup, storeSub } = setup()
+      selectEndBeads([makeBead()])
+      expect(rootGroup.children).toHaveLength(1)
+      const prev = store.getState()
+      const next = { ...prev, [flag]: true }
+      store.getState.mockReturnValue(next)
+      // Even before subscriber delivery, stale handles must not capture input.
+      const down = canvas.addEventListener.mock.calls.find(c => c[0] === 'pointerdown')[1]
+      const stopImmediatePropagation = vi.fn()
+      down({ button: 0, stopImmediatePropagation })
+      expect(stopImmediatePropagation).not.toHaveBeenCalled()
+      storeSub(next, prev)
+      expect(rootGroup.children).toHaveLength(0)
+      store.getState.mockReturnValue(prev)
+      storeSub(prev, next)
+      expect(rootGroup.children).toHaveLength(1)
+      expect(resizeStrandEnds).not.toHaveBeenCalled()
+    },
+  )
+
   it('adds one arrow for a 5-prime End ref', () => {
     const { rootGroup } = setup()
     selectEndBeads([makeBead({ isFivePrime: true })])

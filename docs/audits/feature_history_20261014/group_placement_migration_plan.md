@@ -1013,13 +1013,13 @@ nonzero pivots and noncommuting transforms. They change no production geometry.
 
 The companion experiment
 [test_part_motion_native_characterization.py](../../../tests/test_part_motion_native_characterization.py)
-also reproduces **ISSUE-135**: a saved terminal-nucleotide pose moves tail atoms,
-while the corresponding Full tail remains at its prior positions. Four cases
-cover both ends and directions, exact atom identities/bonds, selected terminal
-points/vectors and unchanged controls. This is a pre-existing discrepancy;
-neither behavior is approved as the new policy. These passing characterization
-tests deliberately describe the discrepancy and must be replaced with the
-authorized common behavior when it is corrected, not preserved as a desired lock.
+originally reproduced **ISSUE-135**: a terminal-nucleotide pose moved tail atoms
+while Full tails stayed fixed. The user has now resolved the contract: unselected
+tails stay fixed in both representations. Its four cases are now locality acceptance
+tests across both ends and directions, including rotation. The broader
+[selection-locality investigation](selection_locality_investigation.md) also found
+insert/bridge reconstruction and terminal pointer-capture defects. This resolves
+existing-material locality, not later-material birth or partial-frame ownership.
 
 Existing selection and resize tests separately confirm that deformation ranges
 include unoccupied helix directions and organization lineage can grow with an

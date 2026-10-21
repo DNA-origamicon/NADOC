@@ -1,10 +1,4 @@
-"""Characterize current terminal-tail pose disagreement, not desired semantics.
-
-The native recipe and both render builds stay in memory. No candidate placement,
-production geometry, numerical pin or golden is changed here. Full and atomistic
-tail behavior are deliberately asserted separately: they currently do not share
-the same response to a saved pose of the terminal nucleotide.
-"""
+"""Native terminal poses preserve all unselected tails in both representations."""
 
 from dataclasses import fields
 from math import sqrt
@@ -74,7 +68,7 @@ def _expected_point(point):
 @pytest.mark.parametrize("end", ["five_prime", "three_prime"], ids=["5p", "3p"])
 @pytest.mark.parametrize("direction", [m.Direction.FORWARD, m.Direction.REVERSE],
                          ids=["forward", "reverse"])
-def test_saved_terminal_pose_moves_atomistic_tail_but_leaves_full_tail_at_old_anchor(
+def test_saved_terminal_pose_preserves_unselected_tail_in_both_representations(
     end, direction, record_property,
 ):
     source, target = terminal_tail_recipe(end, direction)
@@ -135,15 +129,16 @@ def test_saved_terminal_pose_moves_atomistic_tail_but_leaves_full_tail_at_old_an
     for before, after in zip(atoms_before.atoms, atoms_after.atoms, strict=True):
         is_terminal = atom_base_key(before) == terminal_key
         is_tail = before.extension_id == "selected-tail"
-        if is_terminal or is_tail:
+        if is_terminal:
             np.testing.assert_allclose(_xyz(after), _expected_point(_xyz(before)), rtol=0, atol=2e-11)
             assert np.linalg.norm(_xyz(after) - _xyz(before)) > 1.0
             moved_terminal += int(is_terminal)
-            if is_tail:
-                moved_tail.append(float(np.linalg.norm(_xyz(after) - _xyz(before))))
+
         else:
             np.testing.assert_array_equal(_xyz(after), _xyz(before))
             unchanged_control_tail += int(before.extension_id == "control-tail")
+            if is_tail:
+                moved_tail.append(float(np.linalg.norm(_xyz(after) - _xyz(before))))
     assert moved_terminal > 0 and moved_tail and unchanged_control_tail > 0
     record_property("full_selected_tail_max_displacement_nm", max(full_tail_displacements))
     record_property("atomistic_selected_tail_max_displacement_nm", max(moved_tail))
@@ -153,7 +148,7 @@ def test_saved_terminal_pose_moves_atomistic_tail_but_leaves_full_tail_at_old_an
           f"atomistic tail min/max={min(moved_tail):.6g}/{max(moved_tail):.6g} nm; "
           f"terminal/tail atoms={moved_terminal}/{len(moved_tail)}")
 
-    # This test freezes observed disagreement for review. It does not authorize
-    # carrying tails with a new group motion, nor prefer either current behavior.
+    # User contract: even a connected tail moves only when explicitly selected.
+    assert max(moved_tail) == 0
     assert source.model_dump_json() == before_source
     assert changed.model_dump_json() == before_changed

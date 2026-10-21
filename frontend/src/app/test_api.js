@@ -534,6 +534,7 @@ export function installTestApi({
         const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy}`
         const offset = slab.clone().sub(bead)
         out[key] = {
+          bead: bead.toArray(),
           offset: offset.toArray(),
           localOffset: offset.applyQuaternion(slabQuat.clone().invert()).toArray(),
           slabScale: slabScale.toArray(),

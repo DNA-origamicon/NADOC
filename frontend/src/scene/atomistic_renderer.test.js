@@ -294,6 +294,36 @@ describe('atomistic_renderer applyPositionLerp bond cutoff', () => {
 })
 
 describe('atomistic_renderer residue transform target', () => {
+  it('keeps anchor, tail, insert and loop-copy preview targets independent', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('vdw')
+    const common = { element: 'C', helix_id: 'h0', bp_index: 2, direction: 'FORWARD' }
+    ar.update({ atoms: [
+      { ...common, serial: 0, x: 0, y: 0, z: 0 },
+      { ...common, serial: 1, x: 1, y: 0, z: 0, extension_id: 'tail', ext_k: 0 },
+      { ...common, serial: 2, x: 2, y: 0, z: 0, crossover_id: 'xo', extra_base_k: 0 },
+      { ...common, serial: 3, x: 3, y: 0, z: 0, copy_k: 1 },
+    ], bonds: [] })
+    const targets = [common,
+      { helix_id: '__ext_tail', bp_index: 0, direction: 'FORWARD' },
+      { helix_id: '__xb__', crossover_id: 'xo', k: 0 },
+      { ...common, copy: 1 }]
+    try {
+      for (const [i, target] of targets.entries()) {
+        expect(ar.residueInfo(target)?.rows).toEqual([i])
+        expect(ar.applyResidueMatrix(target, new THREE.Matrix4().makeTranslation(0, 4, 0))).toBe(true)
+        const mesh = scene.children.find(child => child.isInstancedMesh && child.count === 4)
+        for (let j = 0; j < 4; j++) {
+          const matrix = new THREE.Matrix4()
+          mesh.getMatrixAt(j, matrix)
+          expect(new THREE.Vector3().setFromMatrixPosition(matrix).toArray()).toEqual([j, j === i ? 4 : 0, 0])
+        }
+        ar.applyResidueMatrix(target, new THREE.Matrix4())
+      }
+    } finally { ar.dispose() }
+  })
+
   it('resolves an extra-base residue by crossover identity and previews its matrix', () => {
     const scene = new THREE.Scene()
     const ar = initAtomisticRenderer(scene)

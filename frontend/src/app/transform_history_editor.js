@@ -33,7 +33,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
     const loadoutId = design.active_loadout_id ?? null, loadout = design.loadouts?.find(item => item.id === loadoutId)
     return { docId: getDocumentId(), designId: design.id, revision: api.currentRevisionWatermark(), loadoutId,
       cursor: design.feature_log_cursor ?? -1, subCursor: design.feature_log_sub_cursor ?? null,
-      editable: !loadout?.protected && !state.featureSeekPending && !state.cadnanoActive && !state.unfoldActive && !state.translateRotateActive }
+      editable: !loadout?.protected && !state.featureSeekPending && !state.cadnanoActive && !state.unfoldActive && !state.translateRotateActive && !state.nucleotideTransformActive }
   }
   const controller = createDeformationHistoryController({ api: previewAPI, family: 'transform', getContext: context, events,
     subscribeContext: callback => store.subscribe(callback),

@@ -17,6 +17,8 @@ describe('selection_model — approved Phase 1 reducer contract', () => {
     expect(moveRotateSelectionLocked({ translateRotateActive: false, selection: { items: [strand('a')] } })).toBe(false)
     expect(moveRotateSelectionLocked({ translateRotateActive: true, selection: { items: [] } })).toBe(false)
     expect(moveRotateSelectionLocked({ translateRotateActive: true, selection: { items: [strand('a')] } })).toBe(true)
+    expect(moveRotateSelectionLocked({ nucleotideTransformActive: true, selection: { items: [base('h:0:FORWARD')] } })).toBe(true)
+    expect(moveRotateSelectionLocked({ nucleotideTransformActive: false, selection: { items: [base('h:0:FORWARD')] } })).toBe(false)
   })
 
   it('creates a normalized empty design selection', () => {
