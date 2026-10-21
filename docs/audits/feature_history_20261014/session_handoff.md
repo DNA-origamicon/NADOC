@@ -21,8 +21,10 @@ Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification
 complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
 FAST not rerun after classification. Aggregate412s debt remains.
-The isolated exact-material compiler now admits overlapping partial domains (17pass); partial
-comparison9pass. These prove per-residue motion, not shared-axis or birth semantics.
+The isolated compiler admits overlapping partial domains and native composed world rotations.
+Program22pass +artifact9pass: nonzero pivots, both directions, selected/unselected suffix targets,
+Full orientations/site frames, atoms and multiple existing owners. Three different motion samples
+reuse one compiled prefix with native replay/builders forbidden. No production compiler promotion.
 Attached Sweep after partial placement expands ownership onto unselected old material. The
 isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
 atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
@@ -39,8 +41,8 @@ Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/bot
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next independent work: composed world rotations in the offline chronological program, then remaining
-replacement/reset and companion/constraint cases. Do not rerun general locality/C8 campaigns.
+Next independent work: resolve replacement/reset event semantics from native contracts and bounded
+evidence, then companion/constraint cases. Do not rerun general locality/C8 campaigns.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this

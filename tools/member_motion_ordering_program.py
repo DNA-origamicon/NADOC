@@ -1,7 +1,7 @@
 """Bounded offline N → M → D experiment, not a production motion compiler.
 
 M is a diagnostic exact-material world motion. D is an existing native composed
-translation of one base. Native prefix/suffix outputs are captured once; changing
+world rigid delta of one base. Native prefix/suffix outputs are captured once; changing
 M never reruns history. New material, replacement/reset and companion policy are
 deliberately outside this admitted experiment.
 """
@@ -65,43 +65,48 @@ class OrderedProbe:
     selected_material_keys: tuple[tuple, ...]
     target: tuple
     translation: tuple[float, float, float]
+    rotation: tuple[float, float, float, float]
+    pivot: tuple[float, float, float]
     _prefix_records: list
     _prefix_atoms: object
     _native_after_records: list
     _native_after_atoms: object
     _named_targets: list | None = None
 
-    def evaluate(self, *, motion_enabled=True):
+    def evaluate(self, *, motion_enabled=True, motion=None):
         """Detached candidate only; no source model or command is published."""
         if not motion_enabled:
             # An absent diagnostic event retains the exact native suffix,
             # including float representations and native quaternion choices.
             return deepcopy(self._native_after_records), deepcopy(self._native_after_atoms), [
-                {"feature_id": self.suffix_feature_id, "kind": "native-compose-translation",
+                {"feature_id": self.suffix_feature_id, "kind": "native-compose-rigid",
                  "target": self.target, "native_output_exact": True}]
+        motion = deepcopy(M if motion is None else motion)
+        for name, size in (("rotation", 4), ("pivot", 3), ("translation", 3)):
+            value = np.asarray(motion[name], dtype=float)
+            if value.shape != (size,) or not np.all(np.isfinite(value)):
+                raise ValueError(f"Expected finite {name} with {size} components")
+        if not np.isclose(np.linalg.norm(motion["rotation"]), 1, rtol=0, atol=1e-8):
+            raise ValueError("Expected unit motion quaternion")
         records = deepcopy(self._prefix_records)
         atoms = deepcopy(self._prefix_atoms)
         selected = set(self.selected_material_keys)
         moved = [row for row in records if _key(row) in selected]
         for helix_id in self.selected_helix_ids:
-            moved = _full_motion(moved, helix_id)
+            moved = _full_motion(moved, helix_id, pose=motion)
         moved_by_key = {_key(row): row for row in moved}
         records = [moved_by_key.get(_key(row), row) for row in records]
         for atom in atoms.atoms:
             if _key(atom) in selected:
-                atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z])
+                atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], motion)
         target_moved = self.target in selected
         if target_moved:
-            for record in records:
-                if _key(record) != self.target:
-                    continue
-                for name in ("backbone_position", "base_position", "slab_position"):
-                    record[name] = (np.asarray(record[name]) + self.translation).tolist()
-                site = record["helical_site"]
-                site["axis_point"] = (np.asarray(site["axis_point"]) + self.translation).tolist()
+            pose = {"rotation": self.rotation, "pivot": self.pivot, "translation": self.translation}
+            records = [_full_motion([record], self.target[0], pose=pose)[0]
+                       if _key(record) == self.target else record for record in records]
             for atom in atoms.atoms:
                 if _key(atom) == self.target:
-                    atom.x, atom.y, atom.z = (np.asarray([atom.x, atom.y, atom.z]) + self.translation).tolist()
+                    atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z], pose)
         else:
             # The native suffix owns an unselected base; carry its exact output.
             records = [deepcopy(after) if _key(after) == self.target else record
@@ -114,9 +119,10 @@ class OrderedProbe:
              "named_targets": deepcopy(self._named_targets),
              "material_keys": list(self.selected_material_keys),
              "shared_helix_frame_policy": "unresolved; this probe outputs per-residue frames, not shared axes",
-             "pose": deepcopy(M), "frame": "world", "prefix_sha256": self.source_sha256},
-            {"feature_id": self.suffix_feature_id, "kind": "native-compose-translation",
-             "target": self.target, "translation": self.translation, "frame": "world",
+             "pose": deepcopy(motion), "frame": "world", "prefix_sha256": self.source_sha256},
+            {"feature_id": self.suffix_feature_id, "kind": "native-compose-rigid",
+             "target": self.target, "translation": self.translation, "rotation": self.rotation,
+             "pivot": self.pivot, "frame": "world",
              "after_event": "diagnostic-world-M"}]
 
 
@@ -126,8 +132,8 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
         raise ValueError("Only an existing native nucleotide-transform suffix is admitted")
     params = deepcopy(suffix_entry.params)
     if (params.get("kind") != "base" or params.get("compose") is not True
-            or params.get("rotation") != [0, 0, 0, 1] or params.get("copy_k", 0) != 0):
-        raise ValueError("Only composed world translation is admitted; replacement/reset/rotation remain unresolved")
+            or params.get("copy_k", 0) != 0):
+        raise ValueError("Only composed world rigid deltas are admitted; replacement/reset remain unresolved")
     companions = ("extensions", "crossovers", "forced_ligations", "overhangs", "overhang_bindings",
                   "overhang_connections", "flexible_connections", "flexible_segment_marks",
                   "photoproduct_junctions", "cluster_joints",
@@ -160,22 +166,24 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
     target = params["helix_id"], params["bp_index"], params["direction"], 0
     if target not in {_key(r) for r in before_records}:
         raise ValueError("Suffix target is absent from the compiled prefix")
-    translation = np.asarray(params["translation"])
+    pose = {name: params[name] for name in ("rotation", "pivot", "translation")}
+    rotation = Rotation.from_quat(pose["rotation"])
     for before, final in zip(before_records, after_records, strict=True):
         if _key(before) != target:
             if before != final:
                 raise ValueError("Native suffix affected material outside its declared base")
         else:
             for name in ("backbone_position", "base_position", "slab_position"):
-                np.testing.assert_allclose(final[name], np.asarray(before[name]) + translation, rtol=0, atol=1e-10)
+                np.testing.assert_allclose(final[name], _point(before[name], pose), rtol=0, atol=1e-10)
             for name in ("base_normal", "axis_tangent"):
-                np.testing.assert_allclose(final[name], before[name], rtol=0, atol=1e-10)
+                np.testing.assert_allclose(final[name], rotation.apply(before[name]), rtol=0, atol=1e-10)
             np.testing.assert_allclose(Rotation.from_quat(final["slab_quaternion"]).as_matrix(),
-                                       Rotation.from_quat(before["slab_quaternion"]).as_matrix(), rtol=0, atol=1e-10)
+                                       (rotation * Rotation.from_quat(before["slab_quaternion"])).as_matrix(), rtol=0, atol=1e-10)
             before_site, final_site = before["helical_site"], final["helical_site"]
             np.testing.assert_allclose(final_site["axis_point"],
-                                       np.asarray(before_site["axis_point"]) + translation, rtol=0, atol=1e-10)
-            for name in ("radial_hat", "azimuth_rad", "groove_offset_rad", "phase_roll_rad"):
+                                       _point(before_site["axis_point"], pose), rtol=0, atol=1e-10)
+            np.testing.assert_allclose(final_site["radial_hat"], rotation.apply(before_site["radial_hat"]), rtol=0, atol=1e-10)
+            for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"):
                 np.testing.assert_allclose(final_site[name], before_site[name], rtol=0, atol=1e-10)
     for before, final in zip(before_atoms.atoms, after_atoms.atoms, strict=True):
         before_xyz, final_xyz = [before.x, before.y, before.z], [final.x, final.y, final.z]
@@ -183,8 +191,8 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
             if before_xyz != final_xyz:
                 raise ValueError("Native suffix affected atoms outside its declared base")
         else:
-            np.testing.assert_allclose(final_xyz, np.asarray(before_xyz) + translation, rtol=0, atol=1e-10)
+            np.testing.assert_allclose(final_xyz, _point(before_xyz, pose), rtol=0, atol=1e-10)
     assert prefix.model_dump_json() == captured
     return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected, material,
-                        target, tuple(params["translation"]), before_records, before_atoms,
+                        target, tuple(params["translation"]), tuple(params["rotation"]), tuple(params["pivot"]), before_records, before_atoms,
                         after_records, after_atoms, deepcopy(named_targets))

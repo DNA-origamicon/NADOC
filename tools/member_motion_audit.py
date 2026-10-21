@@ -75,18 +75,18 @@ def roll_native_source(source, helix_id, phase_deg):
     return rolled
 
 
-def _full_motion(records, helix_id):
+def _full_motion(records, helix_id, *, pose=M):
     result = deepcopy(records)
-    rotation = Rotation.from_quat(M["rotation"])
+    rotation = Rotation.from_quat(pose["rotation"])
     for row in result:
         if row["helix_id"] != helix_id:
             continue
         for name in ("backbone_position", "base_position", "slab_position"):
-            row[name] = _point(row[name])
+            row[name] = _point(row[name], pose)
         for name in ("base_normal", "axis_tangent"):
             row[name] = rotation.apply(row[name]).tolist()
         row["slab_quaternion"] = (rotation * Rotation.from_quat(row["slab_quaternion"])).as_quat().tolist()
-        row["helical_site"]["axis_point"] = _point(row["helical_site"]["axis_point"])
+        row["helical_site"]["axis_point"] = _point(row["helical_site"]["axis_point"], pose)
         row["helical_site"]["radial_hat"] = rotation.apply(row["helical_site"]["radial_hat"]).tolist()
     return result
 

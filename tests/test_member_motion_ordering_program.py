@@ -68,12 +68,12 @@ def test_native_suffix_on_unselected_helix_keeps_its_exact_native_output():
         a for a in native_atoms.atoms if a.helix_id == target["helix_id"]]
 
 
-@pytest.mark.parametrize("change", [{"compose": False}, {"rotation": [0, 0, 1, 0]}])
+@pytest.mark.parametrize("change", [{"compose": False}])
 def test_unsettled_suffix_roles_are_not_silently_interpreted(change):
     prefix, later, target = recipe(Direction.FORWARD)
     entry = deepcopy(later.feature_log[-1])
     entry.params.update(change)
-    with pytest.raises(ValueError, match="replacement/reset/rotation remain unresolved"):
+    with pytest.raises(ValueError, match="replacement/reset remain unresolved"):
         compile_ordered_probe(prefix, entry, [target["helix_id"]])
 
 
@@ -197,7 +197,9 @@ def test_prior_native_deformation_frames_remain_in_chronological_rigid_candidate
 
 @pytest.mark.parametrize("direction", list(Direction))
 @pytest.mark.parametrize("suffix_selected", [False, True])
-def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix(direction, suffix_selected):
+@pytest.mark.parametrize("rotate_suffix", [False, True])
+def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix(direction, suffix_selected, rotate_suffix, monkeypatch):
+    from scipy.spatial.transform import Rotation
     from backend.core.deformation import deformed_helix_axes
     from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
     from tests.test_part_group_lineage import native_nick
@@ -213,7 +215,9 @@ def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix
     suffix_target = dict(target)
     if not suffix_selected:
         suffix_target["direction"] = "REVERSE" if direction == Direction.FORWARD else "FORWARD"
-    later = _nucleotide(prefix, suffix_target, D, "later-delta", compose=True)
+    delta = {"rotation": Rotation.from_euler("y", 37, degrees=True).as_quat().tolist(),
+             "pivot": [-2, 3, .7], "translation": [1, 2, -.5]} if rotate_suffix else D
+    later = _nucleotide(prefix, suffix_target, delta, "later-delta", compose=True)
     captured, axes = prefix.model_dump_json(), deformed_helix_axes(prefix)
     program = compile_ordered_probe(prefix, later.feature_log[-1], [target["helix_id"]],
         named_targets=[{"kind": "part_group", "id": name} for name in ("partial-a", "partial-b")])
@@ -236,8 +240,24 @@ def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix
         for field in ("backbone_position", "base_position", "slab_position"):
             expected = _rigid(before[field], M)
             if _key(before) == _key(suffix_target):
-                expected = _rigid(expected, D)
+                expected = _rigid(expected, delta)
             np.testing.assert_allclose(actual[field], expected, rtol=0, atol=1e-10)
+        rotation = Rotation.from_quat(M["rotation"])
+        if _key(before) == _key(suffix_target):
+            rotation = Rotation.from_quat(delta["rotation"]) * rotation
+        for field in ("base_normal", "axis_tangent"):
+            np.testing.assert_allclose(actual[field], rotation.apply(before[field]), rtol=0, atol=1e-10)
+        np.testing.assert_allclose(Rotation.from_quat(actual["slab_quaternion"]).as_matrix(),
+                                   rotation.as_matrix() @ Rotation.from_quat(before["slab_quaternion"]).as_matrix(),
+                                   rtol=0, atol=1e-10)
+        site, prior_site = actual["helical_site"], before["helical_site"]
+        expected_axis = _rigid(prior_site["axis_point"], M)
+        if _key(before) == _key(suffix_target):
+            expected_axis = _rigid(expected_axis, delta)
+        np.testing.assert_allclose(site["axis_point"], expected_axis, rtol=0, atol=1e-10)
+        np.testing.assert_allclose(site["radial_hat"], rotation.apply(prior_site["radial_hat"]), rtol=0, atol=1e-10)
+        for field in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"):
+            assert site[field] == prior_site[field]
     prior_atoms = build_atomistic_model(prefix, fast_bridges=True)
     assert atoms.bonds == prior_atoms.bonds == native_atoms.bonds
     for before, actual, native in zip(prior_atoms.atoms, atoms.atoms, native_atoms.atoms, strict=True):
@@ -247,7 +267,68 @@ def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix
             continue
         expected = _rigid([before.x, before.y, before.z], M)
         if key == _key(suffix_target):
-            expected = _rigid(expected, D)
+            expected = _rigid(expected, delta)
         np.testing.assert_allclose([actual.x, actual.y, actual.z], expected, rtol=0, atol=1e-10)
     assert prefix.model_dump_json() == captured
     assert deformed_helix_axes(prefix) == axes
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Evaluation rebuilt native geometry or replayed history")
+    with monkeypatch.context() as scoped:
+        scoped.setattr("tools.member_motion_ordering_program.commands.execute", forbidden)
+        scoped.setattr("tools.member_motion_ordering_program._geometry_for_design", forbidden)
+        scoped.setattr("tools.member_motion_ordering_program.build_atomistic_model", forbidden)
+        repeated_full, repeated_atoms, repeated_trace = program.evaluate()
+    assert (repeated_full, repeated_atoms, repeated_trace) == (full, atoms, trace)
+
+
+@pytest.mark.parametrize("direction", list(Direction))
+def test_compiled_samples_follow_multiple_native_owners_without_replay(direction, monkeypatch):
+    from scipy.spatial.transform import Rotation
+    from tools.member_motion_birth_audit import phase_source
+    from tests.test_part_member_motion_order import _owner
+    from tests.test_part_group_lineage import native_nick
+
+    source = native_nick(phase_source(43), direction, bp=3)
+    strand, target = _target(source, direction)
+    source = _owner(source, strand)
+    prefix = _nucleotide(source, target, N, "prior-residue")
+    delta = {"rotation": Rotation.from_euler("y", 37, degrees=True).as_quat().tolist(),
+             "pivot": [-2, 3, .7], "translation": [1, 2, -.5]}
+    later = _nucleotide(prefix, target, delta, "later-rotation", compose=True)
+    captured = prefix.model_dump_json()
+    prior_full = _geometry_for_design(prefix)
+    prior_atoms = build_atomistic_model(prefix, fast_bridges=True)
+    program = compile_ordered_probe(prefix, later.feature_log[-1], [target["helix_id"]])
+    assert len(prefix.cluster_transforms) >= 2
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Slider sample replayed history or rebuilt native geometry")
+    with monkeypatch.context() as scoped:
+        scoped.setattr("tools.member_motion_ordering_program.commands.execute", forbidden)
+        scoped.setattr("tools.member_motion_ordering_program._geometry_for_design", forbidden)
+        scoped.setattr("tools.member_motion_ordering_program.build_atomistic_model", forbidden)
+        for angle in (-63, 22, 115):
+            motion = {"rotation": Rotation.from_euler("x", angle, degrees=True).as_quat().tolist(),
+                      "pivot": [3, -2, .5], "translation": [.3, -.7, 1.4]}
+            full, atoms, trace = program.evaluate(motion=motion)
+            assert trace[0]["pose"] == motion
+            assert atoms.bonds == prior_atoms.bonds
+            for before, actual in zip(prior_full, full, strict=True):
+                if before["helix_id"] != target["helix_id"]:
+                    assert actual == before
+                    continue
+                for field in ("backbone_position", "base_position", "slab_position"):
+                    expected = _rigid(before[field], motion)
+                    if _key(before) == _key(target):
+                        expected = _rigid(expected, delta)
+                    np.testing.assert_allclose(actual[field], expected, rtol=0, atol=1e-10)
+            for before, actual in zip(prior_atoms.atoms, atoms.atoms, strict=True):
+                key = before.helix_id, before.bp_index, before.direction, before.copy_k or 0
+                expected = [before.x, before.y, before.z]
+                if before.helix_id == target["helix_id"]:
+                    expected = _rigid(expected, motion)
+                    if key == _key(target):
+                        expected = _rigid(expected, delta)
+                np.testing.assert_allclose([actual.x, actual.y, actual.z], expected, rtol=0, atol=1e-10)
+    assert prefix.model_dump_json() == captured
