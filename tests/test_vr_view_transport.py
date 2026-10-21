@@ -89,3 +89,39 @@ def test_control_channel_preserves_text_bytes(receiver,tmp_path):
     finally:
         if process.poll() is None:process.kill()
         process.wait()
+
+
+def test_native_negotiates_transform_support_without_changing_packet_bytes(receiver,tmp_path):
+    path=str(tmp_path/'capabilities')
+    process=subprocess.Popen([str(receiver),path,'1'],stdout=subprocess.PIPE)
+    try:
+        assert process.stdout.readline()==b'ready\n'
+        data=packet(1);capabilities={}
+        assert send_snapshot(path,data,capabilities=capabilities)
+        assert capabilities=={'transform_updates':True}
+        assert process.stdout.read(len(data))==data
+        assert process.wait(timeout=5)==0
+    finally:
+        if process.poll() is None:process.kill()
+        process.wait()
+
+
+def test_older_listener_remains_supported_without_transform_capability(tmp_path):
+    import threading
+    path=str(tmp_path/'old-viewer')
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
+        server.bind(address(path));server.listen(1)
+        def receive():
+            client,_=server.accept()
+            with client:
+                size=struct.unpack('<I',client.recv(4))[0]
+                data=b''
+                while len(data)<size:data+=client.recv(size-len(data))
+                client.sendall(b'\x01')
+        worker=threading.Thread(target=receive);worker.start()
+        try:
+            capabilities={}
+            assert send_snapshot(path,packet(1),capabilities=capabilities)
+            assert capabilities=={'transform_updates':False}
+        finally:worker.join(timeout=5)
+        assert not worker.is_alive()

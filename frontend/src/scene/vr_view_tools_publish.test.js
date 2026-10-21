@@ -81,3 +81,25 @@ it('exports surface normals with inverse transpose and keeps lines unlit',async(
   expect(normal.x/normal.y).toBeCloseTo(.5,5)
   expect([...view.lines.slice(9,12)]).toEqual([0,0,0])
 })
+
+it('negotiates transform updates, and resets to full snapshots for new viewers or changed colors',async()=>{
+ const {Blob}=await import('node:buffer');vi.stubGlobal('Blob',Blob)
+ const scene=new THREE.Scene(),mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial(),1)
+ mesh.setMatrixAt(0,new THREE.Matrix4());scene.add(mesh)
+ document.querySelector('[data-vt="lengthHeatmap"]').classList.add('active')
+ document.documentElement.dataset.vrSimulationTrajectory='true'
+ const headers=[]
+ fetch.mockImplementation(async(_url,{body})=>{
+  const buffer=await body.arrayBuffer();headers.push([...new Uint32Array(buffer,8,10)])
+  return {ok:true,json:async()=>({transform_updates:true})}
+ })
+ controller=createVRViewTools({scene,getState:()=>state})
+ try{
+  await publishSettled()
+  mesh.setMatrixAt(0,new THREE.Matrix4().makeTranslation(1,2,3));controller.refresh();await vi.runAllTimersAsync()
+  expect(headers.map(h=>h[0])).toEqual([5,7])
+  mesh.setColorAt(0,new THREE.Color(.1,.2,.3));controller.refresh();await vi.runAllTimersAsync()
+  expect(headers.at(-1)[0]).toBe(6)
+  controller.reset();await publishSettled();expect(headers.at(-1)[0]).toBe(5)
+ }finally{delete document.documentElement.dataset.vrSimulationTrajectory}
+})

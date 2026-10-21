@@ -67,7 +67,7 @@ def catalog():
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('cpd-playback', 'left', 'CPD production · atomistic playback benchmark',
-        'Private completed CPD production inputs; default range, Ball & Stick, Stick and VDW, saved-frame and smooth playback. Measures exact scene/control IPC, coordinate stalls and native frame cadence with submitted-eye captures. Validation covers all four isomers; no simulation launches.', module='cpd_playback_check')
+        'Private completed CPD production inputs; default range, Ball & Stick, Stick and VDW, saved-frame and smooth playback. Measures lossless transform streaming into persistent native buffers, coordinate stalls and native frame cadence with submitted-eye captures. The same launcher accepts --large for both 24HB workloads; playback_metrics summarizes scene gaps separately from headset/GPU cadence. Long-window repeats expose rare publication hitches. Validation covers all four isomers; no simulation launches.', module='cpd_playback_check')
     add('simulations-24hb', 'left', '24HB simulations · Full performance benchmark',
         'Temporary benchmark using a private copy of completed 24HB NAMD results. Raised scrubber, range/load gate, static views, frame/GPU timing and four motion profiles; never starts a simulation.', module='simulation_24hb_tour')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',

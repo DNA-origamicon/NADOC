@@ -50,7 +50,12 @@ function itemByLabel(label) {
   return menuItems().find((el) => el.textContent.trim() === label)
 }
 
-afterEach(() => {
+afterEach(async () => {
+  // Let deferred outside-click handlers bind, then close menus through their
+  // normal lifecycle before jsdom destroys the document. Removing DOM alone
+  // leaves the timer and document/window listeners alive between tests.
+  await flush()
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
   document.body.innerHTML = ''
 })
 

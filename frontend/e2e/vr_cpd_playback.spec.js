@@ -30,7 +30,7 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
  page.on('pageerror',e=>errors.push(e.message))
  page.on('request',r=>{
   if(r.url().endsWith('/api/vr/simulations')){snapshot=r.postDataJSON();if(snapshot.trajectory?.phase==='ready')frames.push({at:Date.now(),...snapshot.trajectory})}
-  if(/trajectory-bin|frames-atomistic|frames-solvent|view-tools/.test(r.url()))requests.push({at:Date.now(),url:r.url(),bytes:r.postDataBuffer()?.length||0})
+  if(/trajectory-bin|frames-atomistic|frames-solvent|view-tools/.test(r.url()))requests.push({at:Date.now(),url:r.url()})
  })
  if(process.env.NADOC_CPD_BASELINE)for(const file of ['scene/vr_simulation_trajectory.js','ui/oxdna_display.js'])await page.route(`**/src/${file}*`,r=>r.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(process.env.NADOC_CPD_BASELINE,path.basename(file)),'utf8')}))
  const fixture=process.env.NADOC_CPD_BENCHMARK_FIXTURE
@@ -54,9 +54,19 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
  await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
  await page.locator('.engine-selector-btn[data-engine="namd"]').click()
  await expect(page.locator('#simulate-jobs-list [data-job-id]').first()).toBeVisible()
- await page.evaluate(()=>document.getElementById('menu-help-view-vr').click())
+ // Wait for VR session binding, not just the earlier test bridge/job-list setup.
+ await expect(page.locator('#menu-help-view-vr')).toHaveAttribute('data-vr-supported', /true|false/, {timeout:30000})
+ await expect(page.locator('#menu-help-view-vr')).toBeEnabled({timeout:30000})
+ await page.getByRole('button',{name:'Help',exact:true}).click()
+ await page.locator('#menu-help-view-vr').click()
+ await page.waitForTimeout(500)
+ fs.writeFileSync(info.outputPath('launch-ui.json'),JSON.stringify(await page.evaluate(()=>({button:document.getElementById('menu-help-view-vr').outerHTML,toasts:[...document.querySelectorAll('.toast')].map(e=>e.textContent)}))))
  let status
  await expect.poll(async()=>{status=await(await request.get(`${base}/api/vr/status`)).json();if(status.pid&&!pid){pid=status.pid;ownedStatus=status;log=status.log_path;offset=fs.existsSync(log)?fs.statSync(log).size:0}return status.running&&!!status.scrywrite_socket},{timeout:90000}).toBe(true)
+ // CDP Fetch interception serializes binary uploads even for unmatched routes.
+ // Fixture discovery and launch customization are complete before timing.
+ await page.unroute('**/api/library/files')
+ await page.unroute('**/api/vr/launch')
  await expect.poll(()=>snapshot?.jobs.length,{timeout:30000}).toBeGreaterThan(0)
  async function action(id,extra={}){
   const sequence=++seq
@@ -66,8 +76,9 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
   await page.waitForTimeout(100)
  }
  await expect.poll(async()=>{
-  if(!snapshot.selected){
-   const job=snapshot.jobs.find(j=>!j.id.endsWith(':tree'))
+  if(snapshot.selected!==process.env.NADOC_CPD_BENCHMARK_JOB){
+   const index=await page.evaluate(id=>[...document.querySelectorAll('#simulate-jobs-list [data-job-id]')].findIndex(row=>row.dataset.jobId===id),process.env.NADOC_CPD_BENCHMARK_JOB)
+   const job=snapshot.jobs.find(j=>j.id===`j:${index}`)
    if(job)await action(job.id)
   }
   return snapshot.selected
@@ -84,40 +95,70 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
  // Use the established simulation tour handoff: load the default trajectory
  // first, then switch styles on that displayed trajectory. This avoids racing
  // the live-result teardown with a design-only atom rebuild.
+ const residentFrames=Number(process.env.NADOC_PLAYBACK_RESIDENT_FRAMES)||0
+ if(residentFrames){
+  const {first,interval}=snapshot.trajectory
+  await action('t:configure',{first,last:first+(residentFrames-1)*interval,interval})
+  if(!snapshot.trajectory.loop)await action('t:loop')
+ }
  await action('t:load')
  await expect.poll(()=>snapshot.trajectory?.phase,{timeout:240000,intervals:[500]}).toBe('ready')
  for(const representation of (process.env.NADOC_CPD_STYLES||'ballstick,stick,vdw').split(',')){
-  await page.evaluate(r=>document.getElementById('menu-view-atomistic-'+r).click(),representation)
+  await page.evaluate(r=>new Promise((resolve,reject)=>{
+   const button=document.getElementById('menu-view-atomistic-'+r)
+   if(button.classList.contains('is-checked')){resolve();return}
+   const done=event=>{if(event.detail?.representation===r){clearTimeout(timer);window.removeEventListener('nadoc:representation-change',done);resolve()}}
+   const timer=setTimeout(()=>{window.removeEventListener('nadoc:representation-change',done);reject(new Error('Representation did not finish: '+r))},120000)
+   window.addEventListener('nadoc:representation-change',done);button.click()
+  }),representation)
   await expect(page.locator('#menu-view-atomistic-'+representation)).toHaveClass(/is-checked/, {timeout:120000})
   await page.waitForTimeout(2000)
   const loadStart=Date.now();await action('t:load')
   await expect.poll(()=>snapshot.trajectory?.phase,{timeout:240000,intervals:[500]}).toBe('ready')
   windows.push({name:'load',representation,start:loadStart,end:Date.now(),count:snapshot.trajectory.count,message:snapshot.trajectory.message})
+  // Separate native lazy-style preparation from steady playback timing.
+  execFileSync('../.venv/bin/python',['-c',`from frontend.scrywrite.mcp_bridge import Bridge
+import sys,time
+b=Bridge(sys.argv[1]);deadline=time.monotonic()+120
+while time.monotonic()<deadline:
+ s=b.call('scrywrite_observe',{})
+ if s.get('representation')==sys.argv[2] and not s.get('representation_loading',{}).get('pending',True) and s.get('view_tools',{}).get('instances',0)>0: break
+ time.sleep(.1)
+else: raise RuntimeError('Native style did not settle: '+str(s.get('representation_loading')))
+`,status.scrywrite_socket,representation],{cwd:process.cwd(),env:{...process.env,PYTHONPATH:path.resolve('..')},timeout:125000})
   await page.waitForTimeout(2000)
   for(const smooth of (process.env.NADOC_CPD_SAVED_ONLY ? [false] : [false,true])){
    if(snapshot.trajectory.smooth!==smooth)await action('t:smooth')
    await action('t:seek',{value:0});await expect.poll(()=>snapshot.trajectory.phase,{timeout:60000}).toBe('ready')
+   if((Number(process.env.NADOC_PLAYBACK_WINDOW_MS)>12000||snapshot.trajectory.count<160)&&!snapshot.trajectory.loop)await action('t:loop')
    const cdp=process.env.NADOC_CPD_PROFILE ? await page.context().newCDPSession(page) : null
    if(cdp){await cdp.send('Profiler.enable');await cdp.send('Profiler.start')}
    await page.evaluate(()=>{window.__nadocVRPlaybackEvents=[];window.__nadocVRPlaybackTraceDropped=0})
    const desktopBefore=await page.evaluate(()=>window.__nadocTest.viewerFrameState())
-   await action('t:play');const start=Date.now();await page.waitForTimeout(12000)
-   if(snapshot.trajectory.playing)await action('t:play')
-   const end=Date.now()
+   await action('t:play');const start=Date.now();await page.waitForTimeout(Number(process.env.NADOC_PLAYBACK_WINDOW_MS)||12000)
+   const playedThrough=snapshot.trajectory.playing
+   const end=Date.now() // Stop measuring before the deliberately paused control round-trip.
+   if(playedThrough)await action('t:play')
+   const pauseAcknowledged=Date.now()
    const desktopAfter=await page.evaluate(()=>window.__nadocTest.viewerFrameState())
    const pipeline=await page.evaluate(()=>({events:window.__nadocVRPlaybackEvents,dropped:window.__nadocVRPlaybackTraceDropped}))
    fs.writeFileSync(info.outputPath(`${representation}-${smooth}-pipeline.json`),JSON.stringify(pipeline))
    expect(pipeline.dropped).toBe(0)
-   const transport=await page.evaluate(({start,end})=>performance.getEntriesByType('resource').filter(r=>r.name.endsWith('/api/vr/view-tools')&&performance.timeOrigin+r.startTime>=start&&performance.timeOrigin+r.startTime<=end).map(r=>({start:performance.timeOrigin+r.startTime,duration:r.duration,response:r.responseStart-r.requestStart})),{start,end})
+   if(process.env.NADOC_PLAYBACK_EXPECT_TRANSFORMS==='1')expect.soft(pipeline.events.filter(e=>e.stage==='upload_start'&&e.transforms).length,'Persistent transform updates must actually reach the transport').toBeGreaterThan(0)
+   const transport=await page.evaluate(({start,end})=>performance.getEntriesByType('resource').filter(r=>r.name.endsWith('/api/vr/view-tools')&&performance.timeOrigin+r.startTime>=start&&performance.timeOrigin+r.startTime<=end).map(r=>({start:performance.timeOrigin+r.startTime,duration:r.duration,requestStart:r.requestStart-r.startTime,response:r.responseStart-r.requestStart})),{start,end})
    fs.writeFileSync(info.outputPath(`${representation}-${smooth}-transport.json`),JSON.stringify(transport))
    if(cdp){const {profile}=await cdp.send('Profiler.stop');fs.writeFileSync(info.outputPath(`${representation}-${smooth}.cpuprofile`),JSON.stringify(profile));await cdp.detach()}
    const selected=frames.filter(f=>f.at>=start&&f.at<=end)
    const unique=selected.filter((f,i)=>i===0||f.index!==selected[i-1].index)
    const gaps=unique.slice(1).map((f,i)=>f.at-unique[i].at).sort((a,b)=>a-b)
    const io=requests.filter(r=>r.at>=start&&r.at<=end&&!r.url.endsWith('view-tools'))
-   windows.push({name:'play',representation,smooth,start,end,desktopBefore,desktopAfter,frames:unique.length,gap_p50:gaps[Math.floor(gaps.length*.5)],gap_p95:gaps[Math.floor(gaps.length*.95)],gap_max:gaps.at(-1),coordinateRequests:io.length,viewUploads:requests.filter(r=>r.at>=start&&r.at<=end&&r.url.endsWith('view-tools')).length})
+   windows.push({name:'play',representation,smooth,loop:snapshot.trajectory.loop,count:snapshot.trajectory.count,start,end,pauseAcknowledged,playedThrough,desktopBefore,desktopAfter,frames:unique.length,gap_p50:gaps[Math.floor(gaps.length*.5)],gap_p95:gaps[Math.floor(gaps.length*.95)],gap_max:gaps.at(-1),coordinateRequests:io.length,viewUploads:requests.filter(r=>r.at>=start&&r.at<=end&&r.url.endsWith('view-tools')).length})
    fs.writeFileSync(info.outputPath('windows.json'),JSON.stringify(windows,null,2))
-   if(!process.env.NADOC_CPD_BASELINE){expect(io).toHaveLength(0);expect.soft(unique.length).toBeGreaterThan(80)}
+   if(!process.env.NADOC_CPD_BASELINE){
+    if(process.env.NADOC_PLAYBACK_EXPECT_RESIDENT !== '0')expect(io).toHaveLength(0)
+    expect.soft(playedThrough,'Playback must not pause after a delayed native style acknowledgement').toBe(true)
+    expect.soft(unique.length).toBeGreaterThan(80)
+   }
   }
   // Capture only after timing. Real submitted eyes and identifiable model pixels.
   const capture=info.outputPath('stereo-'+representation)

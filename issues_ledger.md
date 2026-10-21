@@ -2167,3 +2167,36 @@ evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.developm
 - [ ] Physical headset verification after the user's current viewer session ends (MV-48).
 
 Root cause: raised numeric controls used the base panel ray plane. Earlier tests aimed perpendicular rays or invoked Apply directly, masking parallax. Regression covers trajectory and generic numeric edits, unchanged frame/request on Cancel, and requested seek/value on Apply. Existing simulation tour now exercises Cancel before Apply.
+
+## ISSUE-99 — Atomistic VR frame packing and repeated native style acknowledgement (2026-10-21)
+
+- [x] Profile the completed CPD jobs and isolate resident 24HB playback from disk reads.
+- [x] Cache immutable local vertex templates; pack current instance matrices/colors directly into Float32 buffers. Geometry, saved coordinates, visibility and material semantics remain unchanged.
+- [x] Reproduce native lazy-style acknowledgement reapplying the desktop's settled representation, rebuilding geometry and pausing playback. Route this acknowledgement through `ensureRepresentation`; retain explicit forced rebuilds. The new regression failed before implementation.
+- [x] Extend the registered playback benchmark to both 24HB jobs, remove setup request interception before measurement, and wait for native style preparation. Report delivered scene versions separately from headset submissions and browser endpoints.
+- [ ] Physical through-lens comfort/continuity review: MV-49. Large-scene GPU and transport limits remain; no claim of hitch-free playback.
+
+Evidence and final validation: `docs/audits/cpd_vr_hitches_20261021.json`, `docs/vr_cpd_playback.md`. Main.js task delta: 0 lines (one thin call replacement).
+
+## ISSUE-100 — Overhang menu test leaves deferred bindings after jsdom teardown (2026-10-21)
+
+- [x] Full frontend run: all 8,384 assertions passed, then a `document is not defined` uncaught exception originated from the unchanged overhang-orientation menu test.
+- [x] Test cleanup now drains the zero-delay binding and dispatches Escape through the normal menu lifecycle before removing DOM. Runtime context-menu code is unchanged.
+- Validation is recorded with ISSUE-99 in `docs/audits/cpd_vr_hitches_20261021.json`.
+
+## ISSUE-101 — Repeated atomistic snapshot rebuild/transfer (2026-10-21)
+
+- [x] Negotiate lossless absolute transform packets with legacy fallback and immutable full-base validation.
+- [x] Preserve mesh/index/group buffers; alternate fenced instance buffers under the unchanged staging budget.
+- [x] Verify exact frontend encoding, backend rotation, native CPU/GPU bytes, rendered pixels and replacement-base rejection.
+- [x] Compare resident CPD/24HB playback and retain failed attempts in `docs/audits/vr_transform_stream_20261021.json`.
+- [ ] Physical headset continuity/comfort: MV-50. Large-scene GPU limits and publication boundary stalls remain.
+
+Main.js task delta: zero. No topology, source-coordinate or geometry-authority changes.
+
+## ISSUE-102 — Per-vector stream-read overhead in native transform decoding (2026-10-21)
+
+- [x] Compare original scalar decode with bounded block reads, retaining exact matrix bytes and arithmetic.
+- [x] Validate block boundaries, truncation/nonfinite late blocks and production GL pixel/buffer parity.
+- [x] Measure 24HB P1 end-to-end: native preparation improves ~12%; scene medians unchanged. Decoder-only tuning has diminishing returns.
+- Long CPD repeat and cleanup: `docs/audits/vr_final_pass_20261021.json`. Physical review remains MV-50. Main.js task delta: zero.

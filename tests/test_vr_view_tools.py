@@ -81,7 +81,7 @@ def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, 
     data = b'NADOCVT1' + struct.pack('<10I',6,23,2048,0,0,0,0,0,0,0)
     state = {'doc_id':'trace-test', 'event_path':str(tmp_path/'event'), 'view_rotation':np.eye(3).tolist()}
     delivered = []
-    def send(path, payload):
+    def send(path, payload, **kwargs):
         delivered.append(bytes(payload))
         return ipc
     monkeypatch.setattr(vr_view_transport, 'send_snapshot', send)
@@ -92,7 +92,7 @@ def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, 
     async def stream():
         yield data
     result = asyncio.run(publish(SimpleNamespace(stream=stream)))
-    assert result == {'published':True,'bytes':len(data)}
+    assert result == {'published':True,'bytes':len(data),'transform_updates':False}
     assert delivered == [data]
     if ipc:
         assert not (tmp_path/'event.viewtools').exists()
@@ -116,7 +116,7 @@ def test_transport_wait_does_not_block_async_handler(tmp_path, monkeypatch):
     monkeypatch.setattr(routes_vr,'_read_state',lambda:state)
     monkeypatch.setattr(doc_context,'get_current_doc',lambda:'async-test')
     started, release = threading.Event(), threading.Event()
-    def send(*_):
+    def send(*_, **kwargs):
         started.set()
         assert release.wait(1), 'Transport blocked the async event loop'
         return True

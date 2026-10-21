@@ -6490,7 +6490,7 @@ async function main() {
         // live-MD payload handoffs), serialize rapid requests, then publish the
         // acknowledged desktop state back to the companion.
         _vrStyleApply = _vrStyleApply.then(async () => {
-          await _setRepresentation(event.representation)
+          await _reprSwitcher.ensureRepresentation(event.representation)
           _setColoringMode(event.coloring); vrViewTools.refresh()
           await vrSession.publishNativeState?.()
         }).catch(error => {

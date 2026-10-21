@@ -41,6 +41,7 @@
 #include "representation_buffers.hpp"
 #include "async_trace.hpp"
 #include "view_snapshot_inbox.hpp"
+#include "view_transform_update.hpp"
 #include "control_snapshot_stream.hpp"
 #include "loading_frame_trace.hpp"
 #include "frame_audit.hpp"
@@ -8459,6 +8460,7 @@ class Viewer {
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
             << ",\"instance_groups\":" << viewTools_.instanceGroupsJson()
             << ",\"opaque_shader\":" << viewTools_.opaqueShaderJson()
+            << ",\"transform_updates\":" << viewTools_.transformUpdateCount << ",\"full_snapshots\":" << viewTools_.fullSnapshotCount
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
         out << "]}";

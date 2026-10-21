@@ -814,3 +814,11 @@ CTest invocation through the variadic just wrapper lost shell regex quoting;
 using the same validation guard directly ran the unchanged selection successfully.
 Tour catalog focused validation: 50 passed. No backend/frontend runtime behavior
 changed in this popup fix; frontend main.js task delta remains zero.
+
+2026-10-21 — ISSUE-99: bounded immutable VR vertex-template cache and direct current-instance packing remove repeated mesh allocation; settled native style acknowledgements no longer rebuild the desktop display and pause trajectories. Added byte-parity/cache-invalidation and repeated-style regression tests. App validation covers all four CPD isomers and two 24HB jobs; quantitative results and limitations are in `docs/audits/cpd_vr_hitches_20261021.json`. Main.js task LOC delta: 0. Through-lens review remains MV-49.
+
+2026-10-21 — ISSUE-100: overhang-orientation test cleanup now closes menus after deferred listener binding rather than only removing their DOM. Repairs a full-suite teardown exception discovered during ISSUE-99 validation; no application runtime change or main.js growth.
+
+2026-10-21 — ISSUE-101: negotiated absolute transform streaming retains native mesh resources and reuses fenced instance buffers. Exact CPU/GPU/pixel parity regressions and resident CPD/24HB app measurements are recorded in `docs/audits/vr_transform_stream_20261021.json`. Full snapshots remain the compatibility/structural-change path. Main.js task delta: zero. Physical review: MV-50.
+
+2026-10-21 — ISSUE-102: replace tiny per-vector transform reads with bounded 48 KiB blocks. Exact scalar-oracle, malformed-packet and production GL byte/pixel checks pass. Native preparation improves on 24HB but median playback cadence does not; retain as CPU headroom and prioritize broader rendering/publication work over more decoder tuning. Evidence: `docs/audits/vr_final_pass_20261021.json`. Main.js task delta: zero.

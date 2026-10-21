@@ -1008,3 +1008,13 @@ option. Run Debug → VR Tours & Tests → Simulation jobs with trajectory-loop
 validation across all four motion profiles. Production ray unit regression passes;
 live stereo pixels and physical headset behavior remain unchecked because viewer
 PID 1671029 was kept running. No SteamVR/session restart was performed.
+
+### MV-49 — PENDING: exact-frame CPD and 24HB VR continuity (ISSUE-99, 2026-10-21)
+
+Use the four completed CPD production jobs, default selected frames, Smooth OFF, and ball-and-stick, stick and VDW. Play after Load finishes and confirm no unsolicited pause following a style switch. Compare with 24HB P1 Alpine; separate head-motion judder from trajectory update cadence. Automated submitted-eye images establish visible molecular output, not physical comfort. Retain saved-coordinate fidelity; do not mask hitches by changing geometry or interpolation. The registered CPD playback benchmark supplies repeatable software measurements.
+
+### MV-50 — PENDING: persistent-transform playback in the headset (ISSUE-101, 2026-10-21)
+
+Repeat the registered CPD production playback workload across all four isomers and ball-and-stick, stick and VDW with Smooth OFF, then 24HB P1. Check head-motion stability separately from saved-frame delivery, including style switches and replay/seek. Automated exact-buffer/pixel parity and submitted stereo checks do not establish physical comfort. No molecular simplification is authorized by this optimization.
+
+MV-50 follow-up (ISSUE-102, 2026-10-21): bounded block decoding retains exact CPU/GPU/pixel parity. Three-minute CPD and resident 24HB P1 checks are summarized in `docs/audits/vr_final_pass_20261021.json`; physical continuity remains pending.

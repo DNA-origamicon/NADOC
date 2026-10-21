@@ -7,6 +7,46 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Decoder tuning and diminishing returns — 2026-10-21
+
+Transform reads now use bounded 1,024-instance blocks (48 KiB scratch), preserving
+exact matrices and normalization. Scalar-reference/block-boundary and production
+GL byte/pixel parity pass. 24HB P1 native preparation improves ~74→65 ms and
+58→51 ms for ball-and-stick/stick, but median scene cadence stays ~167/112/67 ms.
+Further decoder tuning is incremental; significant large-model gains require
+GPU work and broader browser/publication optimization, with independent fidelity
+checks. See [final-pass audit](../docs/audits/vr_final_pass_20261021.json).
+
+## Persistent transform stream — 2026-10-21
+
+Compatible atomistic updates use negotiated schema 7: absolute Float32 display
+translations/affine columns against an immutable full-snapshot base. Native keeps
+mesh/index/group resources and alternates fenced instance buffers within the
+existing upload budget. Structural/material changes and older viewers use full
+snapshots. Source Float64 coordinates and molecular geometry are unchanged.
+24HB P1 resident median scene gaps improved 302→168 ms (ball-and-stick), 156→112 ms
+(stick); VDW remains ~67 ms and large-scene GPU limits remain. Exact CPU/GPU-byte
+and rendered-pixel parity tests cover the production native path. Reuse the
+registered CPD playback benchmark; `NADOC_VR_TRANSFORM_UPDATES=0` is the full-stream
+comparison switch. See [audit](../docs/audits/vr_transform_stream_20261021.json).
+Physical review remains MV-50.
+
+## Exact-frame hitch follow-up — 2026-10-21
+
+Browser VR packing now caches immutable local vertex templates and packs current
+instance matrices/colors directly. Native acknowledgements of the already-settled
+desktop style use `ensureRepresentation`, avoiding duplicate rebuilds and unsolicited
+trajectory pauses; explicit `setRepresentation` still forces rebuilds. No coordinate,
+topology or molecular geometry changes.
+
+The registered CPD playback check also supports `--large` for two completed 24HB
+jobs, four-frame resident diagnostics, and separate delivered-scene/headset/GPU
+metrics. Remove setup request interception and wait for native lazy-style readiness
+before interpreting steady playback. Large ball-and-stick/VDW GPU costs exceed
+the 90 Hz budget even with zero coordinate reads. Through-lens review remains MV-49.
+See [playback policy and measurements](../docs/vr_cpd_playback.md) and
+[the audit](../docs/audits/cpd_vr_hitches_20261021.json).
+
 ## CPD production playback — 2026-10-20
 
 Small VR atomistic trajectory selections now prepare exact coordinates before

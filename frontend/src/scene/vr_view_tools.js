@@ -1,3 +1,5 @@
+import { encodeTransformUpdate } from './vr_view_transform_stream.js'
+import { createVRBatchEncoder } from './vr_view_batch_encoder.js'
 import { simulationViewActive } from './vr_simulations.js'
 import * as THREE from 'three'
 import { docHeaders } from '../shared/doc_id.js'
@@ -70,7 +72,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     if(!textures.has(map.uuid)){textures.set(map.uuid,allocate(map.image));atlasState.revision++}
     return textures.get(map.uuid)
   }
-  const atlasState = { mapUV, menu, revision:0, pixels:()=>ctx.getImageData(0,0,2048,2048).data }
+  const atlasState = { mapUV, menu, batchEncoder:createVRBatchEncoder(), revision:0, pixels:()=>ctx.getImageData(0,0,2048,2048).data }
   const geometry = await captureVRGeometry(scene, doc, atlasState, panelOnly)
   return { ...geometry, schema:5, pixels:ctx.getImageData(0,0,2048,2048).data, width:2048, height:2048, atlasState }
 }
@@ -79,8 +81,9 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
   const { mapUV, menu } = atlasState
   const flags=displayFlags(doc), desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const triangles=[],lines=[],sprites=[],batches=[]
-  const pos=new THREE.Vector3(),m=new THREE.Matrix4(),inst=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
-  const sphere=new THREE.SphereGeometry(1,24,16)
+  const pos=new THREE.Vector3(),m=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
+  const encoder=atlasState.batchEncoder ??= createVRBatchEncoder()
+  const sphere=()=>atlasState.sphere ??= new THREE.SphereGeometry(1,24,16)
   const normal=new THREE.Vector3(),normalMatrix=new THREE.Matrix3()
   const add=(out,p,color,alpha,uv=null,n=null)=>{out.push(p.x,p.y,p.z,color.r,color.g,color.b,alpha,...(uv??[-1,-1]),...(n?n.toArray():[0,0,0]));if((triangles.length+lines.length)/12>MAX_VERTICES)throw new Error('VR display exceeds vertex budget')}
   const visit=o=>{
@@ -98,39 +101,22 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
           add(lines,pos.fromBufferAttribute(attr,i).applyMatrix4(o.matrixWorld),col,mat.opacity)
         }
       } else if(o.isInstancedMesh) {
-        const spec=preparedImpostorSpec(materials[0]),g=spec?sphere:original,p=g.attributes.position
+        const spec=preparedImpostorSpec(materials[0]),g=spec?sphere():original,p=g.attributes.position
         if(p)for(const group of (g.groups.length?g.groups:[{start:0,count:g.index?.count??p.count,materialIndex:0}])) {
           const mat=materials[group.materialIndex??0]??materials[0]
           if(!mat||mat.visible===false||mat.opacity<=0)continue
-          const uv=mapUV(mat.map),vertices=[],instances=[]
-          const start=Math.max(group.start,g.drawRange.start),end=Math.min(group.start+group.count,g.index?.count??p.count,g.drawRange.start+g.drawRange.count)
-          for(let k=start;k+2<end;k+=3)for(let j=k;j<k+3;j++) {
-            const idx=g.index?g.index.getX(j):j,a=g.attributes.uv
-            col.copy(mat.color??new THREE.Color(1,1,1))
-            if(mat.vertexColors&&g.attributes.color){const c=g.attributes.color;col.multiply(new THREE.Color(c.getX(idx),c.getY(idx),c.getZ(idx)))}
-            const n=g.attributes.normal?normal.fromBufferAttribute(g.attributes.normal,idx):null
-            add(vertices,pos.fromBufferAttribute(p,idx),col,mat.opacity,uv&&a?[uv[0]+a.getX(idx)*(uv[2]-uv[0]),uv[1]+(1-a.getY(idx))*(uv[3]-uv[1])]:null,n)
-          }
-          for(let i=0;i<o.count;i++) {
-            const alpha=original.attributes.instanceAlpha?.getX(i)??1
-            if(alpha<=0)continue
-            o.getMatrixAt(i,inst);m.copy(o.matrixWorld).multiply(inst)
-            // Hidden connector instances can have degenerate poses.
-            // They produce no desktop pixels and must not poison the binary feed.
-            if(!m.elements.every(Number.isFinite)||Math.abs(m.determinant())<1e-14)continue
-            if(spec)m.scale(new THREE.Vector3(spec.radius,spec.radius,spec.radius))
-            col.setRGB(1,1,1);if(o.instanceColor)o.getColorAt(i,col)
-            instances.push(...m.elements,col.r,col.g,col.b,alpha)
-          }
-          if(vertices.length&&instances.length)batches.push({name:o.name,type:o.type,vertices:new Float32Array(vertices),instances:new Float32Array(instances)})
+          const uv=mapUV(mat.map)
+          const vertices=encoder.vertices(g,mat,group,uv,g.groups.indexOf(group))
+          const instances=encoder.instances(o,spec)
+          if(vertices.length&&instances.length)batches.push({name:o.name,type:o.type,vertices,instances})
         }
       } else {
         const count=1
         for(let instance=0;instance<count;instance++) {
-          m.copy(o.matrixWorld);if(o.isInstancedMesh){o.getMatrixAt(instance,inst);m.multiply(inst)}
+          m.copy(o.matrixWorld)
           const ia=original.attributes.instanceAlpha?.getX(instance)??1
           if(ia<=0 || Math.abs(m.determinant())<1e-14)continue
-          const spec=preparedImpostorSpec(materials[0]);const g=spec?sphere:original
+          const spec=preparedImpostorSpec(materials[0]);const g=spec?sphere():original
           if(spec)m.scale(new THREE.Vector3(spec.radius,spec.radius,spec.radius))
           const p=g.attributes.position;if(!p)continue
           normalMatrix.getNormalMatrix(m)
@@ -157,7 +143,7 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
     }
     for(const child of o.children)visit(child)
   }
-  if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene);sphere.dispose()
+  if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene)
   return {schema:6,flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:new Uint8Array(),width:0,height:0,atlasState}
 }
 
@@ -174,7 +160,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   const refresh = () => { dirty=true; settle=0 }
   for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
-  let geometry,design
+  let geometry,design,transformBase=null,transformBaseVersion=0,transformUpdates=false
   async function publish() {
     const s=getState(),now=performance.now()
     // The canonical scene already handles edits in normal Deform mode. Its
@@ -203,13 +189,22 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       const view=await capture(scene,doc,message,false,doc.documentElement?.dataset.vrSimulationTrajectory === 'true' ? lastGood?.atlasState : null)
       if(generation!==epoch)return
       stamp('capture_end')
-      const body=encodeVRView(view,++version,requestSequence)
-      stamp('upload_start',{version,bytes:body.size})
+      stamp('encode_start')
+      ++version
+      const update=transformUpdates ? encodeTransformUpdate(view,transformBase,transformBaseVersion,version,requestSequence,reason=>stamp('transform_fallback',{reason,version})) : null
+      const body=update ?? encodeVRView(view,version,requestSequence)
+      stamp('encode_end',{version})
+      stamp('upload_start',{version,bytes:body.size,transforms:!!update})
       const response=await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body})
       stamp('upload_end',{version})
       if(!response.ok)throw new Error(await response.text())
+      const receipt=await response.json?.()
+      if(generation!==epoch)return
+      transformUpdates=receipt?.transform_updates===true
+      if(!update){transformBase=view;transformBaseVersion=version}
       lastGood=view;lastError=''
     }catch(error){
+      transformBase=null;transformUpdates=false
       dirty=true;settle=performance.now()+2000
       if(generation!==epoch)return
       if(error.message!==lastError)onError(error.message)
@@ -238,7 +233,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       message=[...doc.querySelectorAll('.toast--visible')].filter(el=>!prior.has(el)).at(-1)?.querySelector('.toast-message')?.textContent??''
     }
     dirty=true;settle=performance.now()+1500
-  },reset(){epoch++;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError=''},get busy(){return busy}}
+  },reset(){epoch++;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy}}
 }
 
 export function viewToolUnavailable(key,state) {

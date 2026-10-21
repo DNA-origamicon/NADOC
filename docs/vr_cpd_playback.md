@@ -32,6 +32,181 @@ heavy display atoms. No production job is launched, resumed, or modified.
   The native atomistic playback reader checks continuously while playing; its
   asynchronous reader and 1 ms per-frame upload budget remain bounded.
 
+## Final optimization pass — October 21
+
+The native transform decoder now reads bounded blocks of 1,024 instances instead
+of one 12-byte vector at a time. Scratch is capped at 48 KiB; instance order,
+finite-value rejection, matrix components and normalization arithmetic are
+unchanged. The regression compares exact bytes with the original scalar reader,
+including block boundaries, truncated packets and a nonfinite value in the final
+block. The production GL test still checks exact CPU/GPU buffers and rendered
+pixels. Repeat the isolated comparison with
+`nadoc-vr-view-transform-update-test --benchmark` (under the validation guard).
+Its warm-buffer medians isolate decoding work, not complete frame latency.
+
+For 500,000 affine instances, isolated decode improved 13.59→7.25 ms. In resident
+24HB P1 playback, native preparation medians improved 73.60→64.64 ms (ball-and-stick)
+and 57.98→50.65 ms (stick). Delivered-scene medians stayed approximately
+167 / 112 / 67 ms for ball-and-stick / stick / VDW. GPU medians remained
+26.99 / 4.99 / 22.29 ms. This is a small CPU-headroom improvement, not a major
+playback-cadence gain. The scope recorded memory-high and socket throttling;
+large-model tail comparisons are therefore confounded.
+
+The longer cis-syn-I CPD repeat uses three 60-second windows with the default
+200-frame resident selection, Smooth OFF and looping ON. Each style advances
+723 saved endpoints with zero coordinate requests. One of 2,170 scene intervals
+exceeds 125 ms (223.1 ms, ball-and-stick); stick/VDW maxima are 111.8/111.7 ms.
+Native frame p95 stays below 11.48 ms; one of 16,115 frames exceeds 16.67 ms
+(maximum 17.29 ms). No browser long tasks, missing GPU samples or CPD-scope
+memory throttling were observed. This does not establish perfectly seamless
+playback or physical headset comfort.
+
+The outlier takes 151.3 ms in browser upload, including 137.2 ms before the
+backend handler's timing begins; browser requestStart follows resource start by
+0.4 ms, and measured backend work takes 10.9 ms. A contemporaneous simulation
+control publication takes 141.5 ms. This localizes the remaining issue to the
+publication path, not trajectory reads or decoding. Synchronous session/config
+reads and lock acquisition in async publishers are an identified candidate for
+further investigation, not a proven cause; proxy/logging/scheduling effects have
+not been separated. Do not label this a fundamental model-size limit.
+
+Further decoder micro-optimizations have diminishing end-to-end returns.
+Substantial 24HB gains need a separate GPU-rendering effort (ball-and-stick/VDW)
+and reductions across browser capture, encoding and publication (especially stick).
+Preserve atom coordinates/radii, bond semantics, stereo/depth and selection when
+evaluating such changes. No tessellation reduction or interpolation change was
+made in this pass. Headset-rate rendering and saved-endpoint delivery remain
+separate requirements.
+
+See [the final-pass audit](audits/vr_final_pass_20261021.json) for the longer CPD
+repeat, exact comparisons, environmental limits, validation and cleanup. The
+registered CPD benchmark supports `NADOC_PLAYBACK_WINDOW_MS=60000` for longer
+samples. Through-lens review remains MV-50.
+
+## Persistent transform stream — October 21 follow-up
+
+Atomistic playback now negotiates schema 7 with the native receiver. After a full
+snapshot, compatible updates carry absolute translation vectors for unchanged
+linear transforms, or all 12 affine matrix components otherwise. Meshes, instance
+colors and layout remain in the immutable full snapshot. Any material, mesh,
+instance-count or atlas change falls back to a full snapshot. Older viewers keep
+the existing full-snapshot path; `NADOC_VR_TRANSFORM_UPDATES=0` disables negotiation
+for a full-snapshot comparison.
+
+Updates refer to the full snapshot version, never the preceding animation frame.
+Coalescing therefore cannot accumulate errors. Float64 source coordinates and the
+existing Float32 display matrices are unchanged; no quantization, bond
+reconstruction, interpolation or mesh simplification is introduced. The receiver
+rejects stale bases and malformed updates. It retains vertex/index/group buffers
+and alternates two instance buffers, reusing each only after its GPU fence signals.
+The existing 1 ms staging budget and 256 KiB upload chunks remain unchanged.
+
+The production GL regression compares full/update CPU matrices, GPU buffer bytes
+and visible rendered pixels, checks buffer reuse, and rejects stale layout bases.
+Its moved-image negative case excludes agreement between two blank captures.
+Backend rotation and frontend encoding have independent exact-value tests.
+
+Final CPD validation covers all four isomers × three styles. Each 12-second window
+advanced 144 saved endpoints with zero coordinate requests. All 1,752 measured
+publications used transform packets. Ball-and-stick packets fell from 1,105,048 to
+341,616 bytes (69%); VDW from 572,128 to 23,928 bytes (96%). One of 1,729 submitted
+scene intervals exceeded 125 ms (179.3 ms); 11/12 windows passed the stricter
+boundary-inclusive cadence diagnostic. Native frame p95 stayed below 11.48 ms;
+two of 12,891 intervals exceeded 16.67 ms, maximum 19.39 ms. This is not perfectly
+hitch-free playback. The outlier upload took 98 ms in the browser versus 7.6 ms in
+backend handling, leaving publication scheduling as a separate target.
+
+The final CPD window ends before the intentional pause acknowledgment, which is
+now recorded separately. Earlier measurements included that stopped interval in
+their boundary diagnostic. Scene-to-scene gaps and the 125 ms threshold are
+unchanged. A startup log-interleaving failure is recorded; the parser now reports
+malformed records and refuses to certify affected timing windows.
+
+Resident 24HB P1 Alpine median delivered-scene gaps improved from approximately
+302 to 168 ms (ball-and-stick) and 156 to 112 ms (stick); VDW remained near 67 ms.
+All six windows across both 24HB jobs made zero coordinate requests. P1 median
+GPU times remained 27.45 / 4.73 / 22.51 ms: transfer optimization does not remove
+the large ball-and-stick/VDW rendering limit. The validation scope recorded 1,004
+memory-high events across setup/runs, no OOM and no socket throttling; this is a
+workstation comparison, not a controlled storage benchmark.
+
+Validation: 8,389 frontend tests (one skipped), 23 app smoke checks, 84 focused
+Python transport/metrics/tour checks and two native exact-buffer/pixel tests passed.
+The backend selector chose `FAST`: Archive scratch produced 14,660 passes, five
+unrelated failures, four chemistry-preview errors and 92 skips. The broad timing
+gate also reported transient outliers; isolated checks passed. Full-suite coverage
+remains deferred without a test-dedicated session. Existing repository lint and
+memory-structure debt remains; task Python lint and diff checks pass. The audit
+retains exact failure names, selector deferral text and timing-triage evidence.
+
+See [the transform-stream audit](audits/vr_transform_stream_20261021.json) for
+CPD results, boundary stalls, failed attempts, validation and cleanup. Submitted
+stereo evidence establishes molecular output, not through-lens comfort (MV-50).
+
+## October 21 hitch investigation
+
+The exact-frame follow-up keeps Smooth OFF and desktop 3D drawing OFF, measures
+12-second playback windows, and separately records browser endpoints, first native
+submissions of new scene versions, headset frame intervals and GPU time. A browser
+endpoint count alone is insufficient: a large scene can coalesce several endpoints
+before a new scene reaches the headset. `metrics.json` reports scene gaps, missing
+GPU records, boundary stalls and a 125 ms delivery diagnostic; it does not certify
+physical headset comfort. Native style preparation finishes before the timed window.
+
+Two runtime changes preserve existing geometry and coordinate precision:
+
+- Cache immutable local vertex templates by attribute identity/upload version,
+  material properties, draw range and atlas coordinates. Pack current world matrices,
+  instance colors and visibility directly into typed arrays every frame.
+- Treat the native viewer's acknowledgement of an already-settled desktop style
+  as a no-op. Previously it rebuilt the display and emitted a representation-change
+  event that could pause playback. Explicit forced rebuilds remain available.
+
+The harness also removes setup-only browser request interception before measurement:
+Chrome debugging interception inflated large binary upload timings. Initial lazy-style
+loads and failed synthetic launch attempts are recorded separately from steady playback.
+
+Compare the two completed 24HB jobs with `--large`; use
+`NADOC_PLAYBACK_RESIDENT_FRAMES=4` to loop four exact resident frames and isolate
+rendering/transfer costs from coordinate reads. With no override the normal selected
+range and bounded streaming policy apply. `NADOC_CPD_SAVED_ONLY=1` selects the
+exact-saved-frame condition; `NADOC_PLAYBACK_WINDOW_MS` extends timing windows.
+The older 24HB package lacks a frozen design snapshot; the harness retains that
+absence and uses the existing workspace design through the application's legacy path.
+These comparisons measure rendering scale, not molecular-geometry correctness.
+
+Final exact-frame CPD results (four isomers × three styles): 143–144 browser
+endpoints per 12-second window; zero coordinate requests; capture maximum 3.1 ms
+versus 123.3 ms in the initial ball-and-stick sample. Across 1,728 delivered-scene
+intervals, five exceeded 125 ms (maximum 234.6 ms). Native frame p95 stayed below
+11.50 ms; one of 13,007 submitted frames exceeded 16.67 ms (maximum 24.07 ms).
+Thus the severe packing stall is removed, but rare publication hitches remain.
+One VDW outlier spent 153.4 ms in browser upload versus 9.7 ms in backend handling;
+its exact scheduling cause remains unresolved.
+
+For 24HB P1 Alpine, resident four-frame playback had median delivered-scene
+intervals of 302 ms (ball-and-stick), 156 ms (stick), and 67 ms (VDW). Median GPU
+times were 27.36, 4.74 and 22.73 ms respectively: stick can sustain head tracking
+at approximately 90 Hz, while ball-and-stick/VDW settled near 30 submitted frames/s.
+These resident windows made zero coordinate requests. In the default-range runs,
+both 24HB jobs remained playing throughout all styles but failed the unchanged
+throughput gate: 15–76 browser endpoints per 12 seconds, with 10–23 coordinate
+requests and delivered-scene gaps as large as 3.28 s. The validation scope recorded
+6 GiB memory-high and socket throttling events (no OOM); those streaming stalls are
+not a pure HDD benchmark. GPU timings establish a separate rendering-size limit.
+
+The next implementation (below) addresses transform updates into persistent native
+buffers. Remaining targets include publication scheduling diagnostics for CPD
+outliers and equivalent
+atom/bond rendering optimizations with image/depth parity checks. None of those
+future changes is implemented or claimed validated here.
+
+Final measurements, failed attempts, cleanup and verification are recorded in
+[the hitch audit](audits/cpd_vr_hitches_20261021.json). Exact saved samples at 12 Hz
+cannot provide continuously varying 90 Hz molecular motion without interpolation;
+head-tracked rendering should nevertheless remain smooth. No additional interpolation
+or reduced-fidelity geometry was introduced.
+
 ## Reproduce
 
 Use **Debug → VR Tours & Tests… → Left sidebar → CPD production · atomistic playback benchmark**, or:
@@ -236,12 +411,12 @@ windows above. Repository lint has five pre-existing unused-import errors;
 memory lint has three pre-existing structural errors. Task Python lint and
 `git diff --check` pass. See the audit for every failed attempt and condition.
 
-## Interpretation
+## October 20 interpretation (historical)
 
 Zero coordinate requests after Ready establishes resident playback, not continuous
 headset-rate molecular animation. Report saved endpoint cadence, delivered scene
-versions, application frame cadence, and GPU time separately. The current path
-still rebuilds/transfers complete display snapshots; native render rate can stay
+versions, application frame cadence, and GPU time separately. The October 20 path
+rebuilt/transferred complete display snapshots; native render rate can stay
 near 90 Hz while molecule updates arrive more slowly. Through-lens comfort and
 head motion are not established by submitted-eye captures.
 
