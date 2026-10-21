@@ -146,6 +146,5 @@ Keep guards and serialization; focused development checks remain authorized.
 Performance committed as1336fb3a; ordering/chronological evidence as301041fa; tail/union batch835e64ed.
 Native lineage integration committed as5a554447. Latest bounded evidence admits pre-existing Sweep copies
 in the offline program and tests native prefix/control parity; no production or frontend behavior changes.
-No production motion compiler or molecular placement is promoted.
-Preserve unrelated VR, activity/readiness, scientific-selection and memory-hygiene edits.
+No production motion compiler or molecular placement is promoted; preserve unrelated shared-worktree edits.
 No stash/reset/restore, push, amend or broad staging.
