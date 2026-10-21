@@ -4,7 +4,7 @@ from backend.api.part_refinement_commands import KINDS as REFINEMENT_KINDS
 from backend.api.part_linker_commands import KINDS as LINKER_KINDS
 from backend.api.part_crossover_moves import KINDS as MOVE_KINDS
 from backend.api.part_cell_commands import KINDS as CELL_KINDS
-from backend.api.part_annotation_commands import KINDS as ANNOTATION_KINDS
+from backend.api.part_annotation_commands import KINDS as ANNOTATION_KINDS, NUCLEOTIDE_KINDS
 from backend.api.part_extension_commands import KINDS as EXTENSION_KINDS, UPSERT_VERSION as EXTENSION_UPSERT_VERSION
 from backend.api.part_ligation_commands import KINDS as LIGATION_KINDS
 from backend.api.part_auto_commands import KINDS as AUTO_KINDS
@@ -640,9 +640,12 @@ def _execute(kind, design, params, *, expensive):
     else:
         updated = replay_minor(kind, design, params)
     lineage = advance_lineage(lineage, updated, trace=lineage_trace)
-    updated = reconcile_cluster_membership(design, updated, report)
-    if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
-        updated = retry_pending_ligations(design, updated)
+    # Keep reference/budget admission and detached group lineage above, but residue
+    # deltas never rebuild placement membership or enable pending topology edits.
+    if kind not in NUCLEOTIDE_KINDS:
+        updated = reconcile_cluster_membership(design, updated, report)
+        if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
+            updated = retry_pending_ligations(design, updated)
     updated = apply_lineage(lineage, updated)
     if stale_photoproduct_ids(updated):
         raise ValueError("photoproduct_dependency")

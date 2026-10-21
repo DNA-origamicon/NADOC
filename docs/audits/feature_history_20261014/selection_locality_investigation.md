@@ -92,3 +92,46 @@ later-material ancestry rule. `crossover_geometry_diagnostics` still calls virtu
 bridge placement with the posed design and needs separate consistency review; it is
 not the atom builder or a mutation path. The full named-motion acceptance matrix and
 Move/Rotate rollout gates remain open. Four of six primary tools are complete.
+
+## Follow-up: a residue command widened an existing partial owner
+
+The next partial/shared-frame case exposed another independent path. A legacy
+placement owner covered only the forward bp 0–3 domain of a nicked 2HB. Recording
+or replaying a later single-nucleotide pose ran generic topology reconciliation.
+Its bp-overlap membership reconstruction ignores strand direction and added the
+whole opposite strand to that already-posed owner. Eight unselected nucleotides
+therefore moved, even though the residue transform itself matched correctly.
+
+The recording path entered this generic postprocessor in `c4b98ff1` (August 9,
+“Unify transform geometry and history”), when the route switched from `set_design`
+to `mutate_with_feature_log`. Replay inherited unconditional reconciliation in
+`a8bc9fc9` (October 15, “expand native part recipe replay and regeneration”). The
+reconciler documents largest-bp-overlap membership assignment; it is a topology
+repair policy, not authorization to rewrite owners during a residue pose.
+Previous locality fixtures had no nontrivially posed partial owner, so this
+indirect movement mechanism was absent from their controls.
+
+Single/batch/delete residue commands now preserve topology and membership in both
+recording and replay. Reference validation, dependency checks, occupancy checks,
+transaction rollback and undo remain active. A first repair returned before organized-group
+admission and detached lineage handling; five broad-suite regressions caught this. The final
+repair skips only reconciliation/retry and retains the complete surrounding pipeline; all 16
+organized-group tests pass. Native/HTTP regressions cover both
+directions, replacement, deletion, undo and independent cold proof: 10 pass. The
+browser test now covers both the original 2HB and a committed native partial-owner
+fixture: 2 pass through saved Apply, with owner metadata and every unselected bead
+unchanged. All disposable workspace/session/playback/project artifacts were absent.
+
+Visual evidence `locality-owner-review.png` and `.json` compares native before,
+old postprocessing and repaired output in the same XY/XZ coordinates. It was
+inspected: old output moves 8 unselected records; repaired unselected displacement
+is exactly 0 nm. The native fixture is
+`frontend/e2e/fixtures/nucleotide_partial_owner.nadoc`. Final backend FAST: 19251 passed, 19 skipped, 84 failed: the same 83 retained
+baseline failures plus a synchronous-verification timeout in the native branch test.
+That complete branch file passed both tests in isolation. The broad suite is not green.
+The selector deferred FULL to `.nadoc-slow-pending` because no test-dedicated session
+was open. One real-worker readiness Apply case exceeded five seconds twice (5.21/5.23s);
+only that parameter is now marked slow/headless, with collection verified. The fast
+suite was not rerun after classification; aggregate timing debt remains (412s).
+The earlier frontend 9432-pass result remains applicable because this follow-up changes
+backend behavior and browser coverage, not frontend production code.

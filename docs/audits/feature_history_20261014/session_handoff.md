@@ -3,13 +3,13 @@
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 Updated October20,2026: user resumed sustained six-tool milestone work.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-**Sessions since last gate flip or milestone close: 1.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
+**Sessions since last gate flip or milestone close: 2.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
 The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
-tails move only when selected. Locality repair is in progress before further motion promotion.
+tails move only when selected. Initial locality repair is committed as 8fd29efb.
 Native regressions exposed tail identity aliases, posed crossover construction and 16 Full bridge
 records following one anchor; atomistic preview also aliased insert identities. A Full helper
 ignored native loop-copy ordinals (not the live identity-map path). Terminal end-resize capture
@@ -18,7 +18,21 @@ See [selection-locality investigation](selection_locality_investigation.md) for 
 audit gaps and validation. Locality repair qualified: native20 + terminal rotation4 + bridge28;
 frontend9432pass/1skip; browser1pass through saved Apply. Backend FAST19228pass/19skip/84fail
 (83 prior failures plus corrected bridge oracle; corrected file28pass). FULL remains deferred.
-No Move/Rotate gate flip; next work returns to the complete named-motion matrix.
+Follow-up partial-owner regression exposed generic residue-command postprocessing widening
+an existing posed owner to include the opposite strand. Recording/replay now preserve ownership;
+native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
+Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification timeout;
+complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
+readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
+FAST not rerun after classification. Aggregate412s debt remains.
+The isolated exact-material compiler now admits overlapping partial domains (17pass); partial
+comparison9pass. These prove per-residue motion, not shared-axis or birth semantics.
+A four-case actual attached-Sweep birth probe shows reverse-site frame preference: forward-only
+motion leaves all14 new Full records in the original frame; reverse-only motion places all14 in the
+moved frame (~3.82nm difference). Exact native no-M rebuild controls; atomistic birth behavior and
+shared-frame candidates are not yet qualified. See member-partial-sweep-birth.json and its probe script.
+Next: make shared-frame construction/ancestry explicit, then remaining companion/constraint cases.
+No Move/Rotate gate flip; the full named-motion matrix remains required.
 Next production boundary: settle partial/shared frames, later-material construction and companion/constraint
 ownership through demonstrated authorization before a named-motion command or consumer is promoted.
 Fixed C8 passes. Ordering, chronology and terminal-tail comparisons remain isolated diagnostics.

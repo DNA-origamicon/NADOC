@@ -2,11 +2,12 @@
 
 from fastapi import HTTPException
 
-KINDS = frozenset(
+NUCLEOTIDE_KINDS = frozenset({
+    "nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete",
+})
+
+KINDS = NUCLEOTIDE_KINDS | frozenset(
     {
-        "nucleotide-transform",
-        "nucleotide-transform-batch",
-        "nucleotide-transform-delete",
         "flexible-segment-mark",
         "flexible-segment-unmark",
     }

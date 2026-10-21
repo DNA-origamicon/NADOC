@@ -3,14 +3,14 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 
-const fixture = JSON.parse(readFileSync(fileURLToPath(
-  new URL('../../workspace/2hb_1xT.nadoc', import.meta.url)), 'utf8'))
+for (const fixturePath of ['../../workspace/2hb_1xT.nadoc', './fixtures/nucleotide_partial_owner.nadoc']) {
+const fixture = JSON.parse(readFileSync(fileURLToPath(new URL(fixturePath, import.meta.url)), 'utf8'))
 fixture.id = randomUUID()
 fixture.metadata = { ...fixture.metadata, name: '__e2e__nucleotide-locality' }
 delete fixture.metadata.identity_last_known_path
 const FIXTURE = JSON.stringify(fixture)
 
-test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async ({ page }) => {
+test(`${fixturePath} nucleotide drag preserves its neighbors and placement owners`, async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/?doc=e2e-nucleotide-rigid-pair')
   await page.waitForSelector('#canvas')
@@ -48,6 +48,8 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
   const allBefore = await page.evaluate(() => window.__nadocTest.getResidueArrangements())
   const posesBefore = await page.evaluate(async () =>
     (await import('/src/state/store.js')).store.getState().currentDesign.nucleotide_transforms.length)
+  const ownersBefore = await page.evaluate(async () =>
+    (await import('/src/state/store.js')).store.getState().currentDesign.cluster_transforms)
   const resizeRequests = []
   page.on('request', request => {
     if (request.url().includes('/design/strand-end-resize')) resizeRequests.push(request.url())
@@ -86,6 +88,8 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
     window.__nadocTest.getNucleotideTransformScreenState().active)).toBe(false)
   const after = await page.evaluate(() => window.__nadocTest.getSelectedResidueArrangement())
   const allAfter = await page.evaluate(() => window.__nadocTest.getResidueArrangements())
+  expect(await page.evaluate(async () =>
+    (await import('/src/state/store.js')).store.getState().currentDesign.cluster_transforms)).toEqual(ownersBefore)
   expect(after.distance, JSON.stringify({ before, during, after })).toBeCloseTo(before.distance, 5)
   for (let i = 0; i < 3; i++) expect(after.offset[i]).toBeCloseTo(before.offset[i], 4)
 
@@ -100,3 +104,4 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
     }
   }
 })
+}

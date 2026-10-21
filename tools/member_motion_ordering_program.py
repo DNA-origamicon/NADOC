@@ -1,6 +1,6 @@
 """Bounded offline N → M → D experiment, not a production motion compiler.
 
-M is a diagnostic whole-helix world motion. D is an existing native composed
+M is a diagnostic exact-material world motion. D is an existing native composed
 translation of one base. Native prefix/suffix outputs are captured once; changing
 M never reruns history. New material, replacement/reset and companion policy are
 deliberately outside this admitted experiment.
@@ -62,6 +62,7 @@ class OrderedProbe:
     source_sha256: str
     suffix_feature_id: str
     selected_helix_ids: tuple[str, ...]
+    selected_material_keys: tuple[tuple, ...]
     target: tuple
     translation: tuple[float, float, float]
     _prefix_records: list
@@ -80,13 +81,16 @@ class OrderedProbe:
                  "target": self.target, "native_output_exact": True}]
         records = deepcopy(self._prefix_records)
         atoms = deepcopy(self._prefix_atoms)
+        selected = set(self.selected_material_keys)
+        moved = [row for row in records if _key(row) in selected]
         for helix_id in self.selected_helix_ids:
-            records = _full_motion(records, helix_id)
-        selected = set(self.selected_helix_ids)
+            moved = _full_motion(moved, helix_id)
+        moved_by_key = {_key(row): row for row in moved}
+        records = [moved_by_key.get(_key(row), row) for row in records]
         for atom in atoms.atoms:
-            if atom.helix_id in selected:
+            if _key(atom) in selected:
                 atom.x, atom.y, atom.z = _point([atom.x, atom.y, atom.z])
-        target_moved = self.target[0] in selected
+        target_moved = self.target in selected
         if target_moved:
             for record in records:
                 if _key(record) != self.target:
@@ -108,7 +112,8 @@ class OrderedProbe:
             {"feature_id": "diagnostic-world-M", "kind": "world-motion",
              "source_namespace": "helix", "source_ids": list(self.selected_helix_ids),
              "named_targets": deepcopy(self._named_targets),
-             "material_keys": [_key(r) for r in self._prefix_records if r["helix_id"] in selected],
+             "material_keys": list(self.selected_material_keys),
+             "shared_helix_frame_policy": "unresolved; this probe outputs per-residue frames, not shared axes",
              "pose": deepcopy(M), "frame": "world", "prefix_sha256": self.source_sha256},
             {"feature_id": self.suffix_feature_id, "kind": "native-compose-translation",
              "target": self.target, "translation": self.translation, "frame": "world",
@@ -136,11 +141,13 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
     captured = prefix.model_dump_json()
     after = commands.execute("nucleotide-transform", prefix.model_copy(deep=True), params)
     before_records, after_records = _geometry_for_design(prefix), _geometry_for_design(after)
+    material = tuple(_key(row) for row in before_records if row["helix_id"] in selected)
     if named_targets is not None:
         material = existing_material_union(prefix, named_targets)
-        expected = tuple(_key(row) for row in before_records if row["helix_id"] in selected)
-        if material != expected:
-            raise ValueError("Named selection is not the admitted whole-helix material; partial frames remain unresolved")
+        if any(key[0] not in selected for key in material):
+            raise ValueError("Named selection falls outside the declared helix envelope")
+    if not material:
+        raise ValueError("Selection contains no existing ordinary material")
     before_atoms, after_atoms = (build_atomistic_model(model, fast_bridges=True) for model in (prefix, after))
     if len(before_records) + len(before_atoms.atoms) > 65_536:
         raise ValueError("Offline ordering probe exceeds its fixed material budget")
@@ -178,6 +185,6 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
         else:
             np.testing.assert_allclose(final_xyz, np.asarray(before_xyz) + translation, rtol=0, atol=1e-10)
     assert prefix.model_dump_json() == captured
-    return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected,
+    return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected, material,
                         target, tuple(params["translation"]), before_records, before_atoms,
                         after_records, after_atoms, deepcopy(named_targets))

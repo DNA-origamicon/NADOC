@@ -42,8 +42,10 @@ def _transaction(session, state):
 def _run(session, before, fn, state, *, retry=True, command=None):
     state._require_compatibility_write("feature_recording_callback")
     from backend.api.part_connection_version_commands import metadata_policy
-    metadata_only = command is not None and (
-        metadata_policy(*command) or command[0] == "extension-delete")
+    from backend.api.part_annotation_commands import NUCLEOTIDE_KINDS
+    preserve_topology = command is not None and (
+        metadata_policy(*command) or command[0] == "extension-delete"
+        or command[0] in NUCLEOTIDE_KINDS)
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
@@ -53,7 +55,9 @@ def _run(session, before, fn, state, *, retry=True, command=None):
         session.design = result
     elif isinstance(result, MutationReport):
         report = result
-    if not metadata_only:
+    # Residue poses do not change topology or placement membership. Reconciliation
+    # can widen a partial owner and move unselected material as a side effect.
+    if not preserve_topology:
         reconciled = state.reconcile_cluster_membership(before, session.design, report)
         session.design = state._retry_pending_ligations(before, reconciled) if retry else reconciled
     from backend.core.part_repair_document import preserve_repair_draft

@@ -1,8 +1,9 @@
 """Offline ordering evidence; never imported by display, export or simulation.
 
 Compare native appended-owner placement with rigid world motion of exact native
-prefix material. This deliberately excludes companions, birth, partial helices
-and overlapping groups. It is an ordering probe, not an approved motion compiler.
+prefix material. Optional partial cases resolve overlapping named domains while
+preserving every unselected residue. Companions, birth and shared-frame ownership
+remain excluded. This is an ordering probe, not an approved motion compiler.
 """
 from __future__ import annotations
 
@@ -80,22 +81,42 @@ def _junction_rows(current, candidate, diagnostics):
     return rows
 
 
-def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronological=False):
+def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronological=False, partial=False):
     """Native 2HB input; phase changes are confined to this disposable fixture."""
     source = _source()
     selected = source.helices[0].id
     source = source.copy_with(helices=[
         h.model_copy(update={"phase_offset": h.phase_offset + math.radians(phase_deg)})
         if h.id == selected else h for h in source.helices])
+    if partial:
+        if not chronological:
+            raise ValueError("Partial selection requires the chronological compiler")
+        from tests.test_part_group_lineage import native_nick
+        source = native_nick(source, Direction(direction), bp=3)
     _, target = _target(source, Direction(direction))
     prefix = _nucleotide(source, target, N, "prior-residue") if prior_pose else source
+    legacy_prefix = prefix
+    selected_strand, named_targets = None, None
+    if partial:
+        from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
+        member = next(row for row in _geometry_for_design(prefix) if
+                      row["helix_id"] == selected and row["bp_index"] == target["bp_index"]
+                      and row["direction"] == direction)
+        selected_strand = prefix.find_strand(member["strand_id"])
+        prefix = prefix.copy_with(group_organization=GroupOrganization(groups=[
+            PartGroup(id=name, helix_ids=[selected], domain_ids=[GroupDomainRef(
+                strand_id=member["strand_id"], domain_index=member["domain_index"])])
+            for name in ("partial-a", "partial-b")]))
+        named_targets = [{"kind": "part_group", "id": name} for name in ("partial-a", "partial-b")]
     source_json, prefix_json = source.model_dump_json(), prefix.model_dump_json()
-    appended = _owner(prefix)
+    # Compare the existing legacy owner action on its admitted source. Named
+    # groups belong only to the detached candidate; do not bypass native guards.
+    appended = _owner(legacy_prefix, selected_strand)
     event_trace = []
     if chronological:
         from tools.member_motion_ordering_program import compile_ordered_probe
         later = _nucleotide(prefix, target, D, "later-world-delta", compose=True)
-        program = compile_ordered_probe(prefix, later.feature_log[-1], [selected])
+        program = compile_ordered_probe(prefix, later.feature_log[-1], [selected], named_targets=named_targets)
         candidate_full, candidate, event_trace = program.evaluate()
         appended = _nucleotide(appended, target, D, "later-world-delta", compose=True)
     current = build_atomistic_model(appended, fast_bridges=True)
@@ -123,13 +144,16 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
     diagnostics = [_model_diagnostics(appended, model) for model in (current, candidate)]
     affected, displacement = _affected_serials(current, candidate, *diagnostics)
     design = appended.model_dump(mode="json")
-    axes = deformed_helix_axes(appended)  # whole-helix M is shared by both cases
+    axes = deformed_helix_axes(appended)
+    candidate_axes = deformed_helix_axes(prefix) if partial else deepcopy(axes)
     result = {
         "schema": "nadoc.member-motion-ordering-audit.v1", "read_only": True,
         "diagnostic_limits": {"clash_hit_cap": 200, "overstretched_bond_row_cap": 200,
                               "note": "Local defect counts use reported detector hits; capped lists are not exhaustive."},
         "case": {"phase_deg": phase_deg, "direction": direction, "prior_pose": prior_pose,
-                 "selected_helix_id": selected, "selected_material": "whole helix, both directions",
+                 "selected_helix_id": selected,
+                 "selected_material": "overlapping groups of one nicked domain" if partial else "whole helix, both directions",
+                 "partial": partial,
                  "prior_N": N if prior_pose else None, "world_M": M,
                  "later_D": D if chronological else None},
         "event_trace": event_trace,
@@ -143,7 +167,7 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
         "current": {**atomistic_to_json(current), "diagnostics": diagnostics[0],
                     "nucleotides": current_full, "helix_axes": axes},
         "candidate": {**atomistic_to_json(candidate), "diagnostics": diagnostics[1],
-                      "nucleotides": candidate_full, "helix_axes": deepcopy(axes)},
+                      "nucleotides": candidate_full, "helix_axes": candidate_axes},
         "affected_atom_serials": affected, "displacement": displacement,
         "defect_atom_serials": {side: _defect_serials(diag) for side, diag in zip(
             ("current", "candidate"), diagnostics, strict=True)},
@@ -161,6 +185,21 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
             "panel_notes": {"current": "Existing native owner and residue ordering",
                             "candidate": "Detached chronological events — not authorized"},
         })
+    if partial:
+        from tools.member_motion_ordering_program import _key
+        material = set(program.selected_material_keys)
+        control = [i for i, atom in enumerate(current.atoms) if _key(atom) not in material]
+        np.testing.assert_array_equal(_positions(current)[control], _positions(candidate)[control])
+        assert [row for row in current_full if _key(row) not in material] == [
+            row for row in candidate_full if _key(row) not in material]
+        result["invariants"].update(unselected_material_exact=True,
+            selected_atom_count=sum(_key(atom) in material for atom in candidate.atoms),
+            selected_residue_count=len(material))
+        result["candidate_design"] = later.model_dump(mode="json")
+        result["case"]["shared_axis"] = "Candidate retains prefix axes as context; no shared-frame or birth policy is inferred."
+        result["provider"]["description"] = (
+            "Native partial-domain owner versus chronological exact named members, including overlapping groups. "
+            "Opposite direction and same-direction siblings remain exact. Shared-axis ownership and birth remain unresolved.")
     assert source.model_dump_json() == source_json and prefix.model_dump_json() == prefix_json
     return result
 
@@ -171,7 +210,10 @@ def main():
     parser.add_argument("--phase-step", type=int, default=10)
     parser.add_argument("--viewer-bundle", type=Path, required=True)
     parser.add_argument("--chronological", action="store_true")
+    parser.add_argument("--partial", action="store_true")
     args = parser.parse_args()
+    if args.partial and not args.chronological:
+        parser.error("--partial requires --chronological")
     root = Path(__file__).resolve().parents[1] / ".development-artifacts"
     output = args.output.resolve()
     if not output.is_relative_to(root) or output.exists():
@@ -190,7 +232,8 @@ def main():
     for phase in range(0, 360, args.phase_step):
         for direction in ("FORWARD", "REVERSE"):
             for prior in (False, True):
-                case = build_case(phase, direction, prior_pose=prior, chronological=args.chronological)
+                case = build_case(phase, direction, prior_pose=prior,
+                                  chronological=args.chronological, partial=args.partial)
                 name = f"phase-{phase:03d}-{direction.lower()}-{'N' if prior else 'control'}.json"
                 text = json.dumps(case, separators=(",", ":"), allow_nan=False)
                 total_bytes += 2 * len(text.encode())
@@ -217,7 +260,7 @@ def main():
         print(f"Recorded phase {phase} degrees", flush=True)
     (output / "index.json").write_text(json.dumps({
         "scope": "Isolated ordering probe only; not complete member-motion authorization evidence",
-        "phase_step_deg": args.phase_step, "chronological": args.chronological,
+        "phase_step_deg": args.phase_step, "chronological": args.chronological, "partial": args.partial,
         "cases": summaries}, separators=(",", ":"), allow_nan=False))
     rows = []
     for row in summaries:
@@ -236,8 +279,13 @@ def main():
         '<p>Current native owner placement versus motion of exact native prefix material. '
         + ('The chronological variant applies the existing native residue translation D after diagnostic M, '
            'with an inspectable event trace. ' if args.chronological else '') +
-        'No production placement is changed. Both helix directions are selected; the second helix is an exact control. '
-        'Tails, partial helices, material birth, overlaps and later edit semantics are outside this probe. '
+        ('No production placement is changed. Two overlapping groups select one nicked domain. '
+         'Every unselected residue, including the opposite direction on the same helix, is an exact control. '
+         'Candidate axes retain prefix context; shared-axis ownership and future construction are unresolved. '
+         if args.partial else
+         'No production placement is changed. Both helix directions are selected; the second helix is an exact control. '
+         'Partial helices and overlaps are outside this whole-helix probe. ') +
+        'Tails, material birth and later replacement/reset semantics are outside this probe. '
         'Phase variations are direct native fixture inputs, not cold-replayed history claims. '
         'Clash hits and overstretched-bond listings use the existing 200-row diagnostic caps; local counts '
         'refer to reported hits and may not be exhaustive.</p>'

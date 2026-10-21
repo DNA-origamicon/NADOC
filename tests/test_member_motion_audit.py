@@ -36,3 +36,16 @@ def test_chronological_artifact_identifies_native_later_event(prior):
     assert [e["feature_id"] for e in case["event_trace"]] == ["diagnostic-world-M", "later-world-delta"]
     assert case["case"]["later_D"]["translation"] == [3, -2, 1]
     assert bool(case["displacement"]["n_displaced"]) is prior
+
+
+@pytest.mark.parametrize("direction", ["FORWARD", "REVERSE"])
+@pytest.mark.parametrize("prior", [False, True])
+def test_partial_artifact_keeps_all_unselected_material_exact(direction, prior):
+    case = build_case(30, direction, prior_pose=prior, chronological=True, partial=True)
+    assert case["case"]["partial"]
+    assert case["invariants"]["unselected_material_exact"]
+    assert case["invariants"]["selected_residue_count"] == (4 if direction == "FORWARD" else 5)
+    assert bool(case["displacement"]["n_displaced"]) is prior
+    assert len(case["event_trace"][0]["named_targets"]) == 2
+    assert len(case["event_trace"][0]["material_keys"]) == case["invariants"]["selected_residue_count"]
+    assert "unresolved" in case["provider"]["description"]

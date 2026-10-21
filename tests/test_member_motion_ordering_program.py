@@ -121,8 +121,18 @@ def test_compiled_named_overlap_matches_one_whole_motion_and_owns_its_references
     references[0]["id"] = "changed-after-compile"
     assert trace[0]["named_targets"] == [{"kind": "part_group", "id": "a"}, {"kind": "part_group", "id": "b"}]
     assert program.evaluate()[2][0]["named_targets"] == trace[0]["named_targets"]
-    with pytest.raises(ValueError, match="partial frames"):
-        compile_ordered_probe(prefix, entry, [selected], named_targets=[{"kind": "part_group", "id": "partial"}])
+    partial = compile_ordered_probe(prefix, entry, [selected],
+                                   named_targets=[{"kind": "part_group", "id": "partial"}])
+    assert set(partial.selected_material_keys) < set(program.selected_material_keys)
+    partial_full, partial_atoms, _ = partial.evaluate()
+    native_full, native_atoms, _ = partial.evaluate(motion_enabled=False)
+    keys = set(partial.selected_material_keys)
+    assert [row for row in partial_full if _key(row) not in keys] == [
+        row for row in native_full if _key(row) not in keys]
+    def atom_key(atom):
+        return atom.helix_id, atom.bp_index, atom.direction, atom.copy_k or 0
+    assert [atom for atom in partial_atoms.atoms if atom_key(atom) not in keys] == [
+        atom for atom in native_atoms.atoms if atom_key(atom) not in keys]
 
 
 @pytest.mark.parametrize("kind", ["bend", "twist", "sweep"])
@@ -183,3 +193,61 @@ def test_prior_native_deformation_frames_remain_in_chronological_rigid_candidate
                 xyz = _rigid(xyz, D)
         np.testing.assert_allclose([after.x, after.y, after.z], xyz, atol=1e-10, rtol=0)
     assert prefix.model_dump_json() == locked
+
+
+@pytest.mark.parametrize("direction", list(Direction))
+@pytest.mark.parametrize("suffix_selected", [False, True])
+def test_partial_named_motion_preserves_shared_frame_neighbors_and_native_suffix(direction, suffix_selected):
+    from backend.core.deformation import deformed_helix_axes
+    from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
+    from tests.test_part_group_lineage import native_nick
+
+    source = native_nick(_source(), direction, bp=3)
+    _, target = _target(source, direction)
+    prefix = _nucleotide(source, target, N, "prior-residue")
+    member = next(row for row in _geometry_for_design(prefix) if _key(row) == _key(target))
+    domain = GroupDomainRef(strand_id=member["strand_id"], domain_index=member["domain_index"])
+    prefix = prefix.copy_with(group_organization=GroupOrganization(groups=[
+        PartGroup(id=name, helix_ids=[target["helix_id"]], domain_ids=[domain])
+        for name in ("partial-a", "partial-b")]))
+    suffix_target = dict(target)
+    if not suffix_selected:
+        suffix_target["direction"] = "REVERSE" if direction == Direction.FORWARD else "FORWARD"
+    later = _nucleotide(prefix, suffix_target, D, "later-delta", compose=True)
+    captured, axes = prefix.model_dump_json(), deformed_helix_axes(prefix)
+    program = compile_ordered_probe(prefix, later.feature_log[-1], [target["helix_id"]],
+        named_targets=[{"kind": "part_group", "id": name} for name in ("partial-a", "partial-b")])
+    keys = set(program.selected_material_keys)
+    # Native nick polarity puts bp 3 on the low forward / high reverse child.
+    expected_bps = range(4) if direction == Direction.FORWARD else range(3, 8)
+    assert keys == {(target["helix_id"], bp, direction.value, 0) for bp in expected_bps}
+    assert len(keys) == len(program.selected_material_keys)
+    assert _key(target) in keys
+    full, atoms, trace = program.evaluate()
+    assert trace[0]["shared_helix_frame_policy"].startswith("unresolved")
+    native_full, native_atoms, _ = program.evaluate(motion_enabled=False)
+    assert native_full == _geometry_for_design(later)
+    assert native_atoms == build_atomistic_model(later, fast_bridges=True)
+    prior_full = _geometry_for_design(prefix)
+    for before, actual, native in zip(prior_full, full, native_full, strict=True):
+        if _key(before) not in keys:
+            assert actual == native
+            continue
+        for field in ("backbone_position", "base_position", "slab_position"):
+            expected = _rigid(before[field], M)
+            if _key(before) == _key(suffix_target):
+                expected = _rigid(expected, D)
+            np.testing.assert_allclose(actual[field], expected, rtol=0, atol=1e-10)
+    prior_atoms = build_atomistic_model(prefix, fast_bridges=True)
+    assert atoms.bonds == prior_atoms.bonds == native_atoms.bonds
+    for before, actual, native in zip(prior_atoms.atoms, atoms.atoms, native_atoms.atoms, strict=True):
+        key = before.helix_id, before.bp_index, before.direction, before.copy_k or 0
+        if key not in keys:
+            assert actual == native
+            continue
+        expected = _rigid([before.x, before.y, before.z], M)
+        if key == _key(suffix_target):
+            expected = _rigid(expected, D)
+        np.testing.assert_allclose([actual.x, actual.y, actual.z], expected, rtol=0, atol=1e-10)
+    assert prefix.model_dump_json() == captured
+    assert deformed_helix_axes(prefix) == axes

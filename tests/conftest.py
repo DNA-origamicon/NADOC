@@ -991,6 +991,8 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    # Real preview/display workers and readiness-drain Apply: 5.21–5.23 s in FAST.
+    "test_http_history_waits_for_passive_readiness[apply]",
     # Real geometry/proof workers plus HTTP lifecycle / background-drain publication (5.08–5.09 s).
     "test_native_http_lifecycle_receipt_and_exact_undo[twist]",
     "test_native_http_lifecycle_receipt_and_exact_undo[bend]",
