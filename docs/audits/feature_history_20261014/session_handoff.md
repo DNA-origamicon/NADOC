@@ -1,12 +1,9 @@
 # Feature-history stopping-point handoff
-
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 October 21, 2026: resumed Move/Rotate; attached-Sweep refusal authorized and implemented.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-
 ## Scope and next work
-
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
 tails move only when selected. Initial locality repair is committed as 8fd29efb.
 Initial repairs cover tail/insert identity aliases, bridge reconstruction and terminal resize capture.
@@ -50,8 +47,11 @@ or diagnostic candidate was promoted. Native/HTTP22pass; existing Sweep39pass; b
 message visible, Next disabled, exact Cancel, no commit. Earlier Move history edit attributes
 failure to the later Sweep and preserves source. Scratch s4kantpm independently absent.
 C7 ordinary mid-log refusal/Cancel and C5 dependent deletion dialog already pass; do not repeat.
-Next task: finish named-member Move/Rotate integration against the existing required matrix,
-starting with its chronological selection semantics and explicit companion/constraint roles.
+Next task (user-directed October21): fully explore an explicit unpair-to-ssDNA operation.
+Cover free strands, one-ended overhangs and two-ended linkers; preserve identity, sequence and
+backbone connectivity; assess selection/movement, reattachment, history/replay and export.
+Review native A/B placement evidence before implementation; no implicit conversion on Move.
+Named-member Move/Rotate integration remains open after this exploration.
 The attached-Sweep decision does not authorize the complete named-motion candidate matrix.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
@@ -133,7 +133,7 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 
 ## Commit and shared-worktree boundaries
 
-Prior checkpoint: **4e31b889**. This session commits the Sweep refusal, native/browser tests and handoff.
+Latest implementation checkpoint: **57b1f613** (Sweep refusal and native/browser tests).
 
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.

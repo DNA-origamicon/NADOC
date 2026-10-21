@@ -695,3 +695,4 @@ No milestone split, exclusion or new completion credit.
 - No automatic strand conversion, candidate ownership promotion, scientific constant/golden change, or Move/Rotate gate flip. Full named-member acceptance remains open.
 - Guarded test-smart decision FAST:19320pass/19skip/83fail; exact failure-set match to stop-backend-final.log (no new failures). Ruff passes. FULL deferred to .nadoc-slow-pending.
 - Timing triage:402s aggregate, zero >5s violators; slowest tests span existing native worker/geometry files, no Sweep offender. Aggregate debt retained; no markers or budgets changed.
+- Next, user-directed October21: fully explore explicit unpair-to-ssDNA, covering free/one-anchor/two-anchor strands, identity/sequence/backbone preservation, subsequent editing, reattachment, history and export. Prepare native A/B evidence before molecular implementation; do not infer automatic conversion from movement.
