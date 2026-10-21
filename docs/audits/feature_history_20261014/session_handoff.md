@@ -22,9 +22,10 @@ complete branch file rerun2pass. FULL deferred; broad suite not green. One real-
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
 FAST not rerun after classification. Aggregate412s debt remains.
 The isolated compiler admits overlapping partial domains and native composed world rotations.
-Program22pass +artifact9pass: nonzero pivots, both directions, selected/unselected suffix targets,
+Program23pass +reset13pass (3dc54292): nonzero pivots, both directions and suffix targets,
 Full orientations/site frames, atoms and multiple existing owners. Three different motion samples
-reuse one compiled prefix with native replay/builders forbidden. No production compiler promotion.
+reuse one prefix without replay/builders. Reset/replacement delete only the current pose component,
+retaining fixed-world motion; delete/recreate tested. Isolated contract only, no production promotion.
 Attached Sweep after partial placement expands ownership onto unselected old material. The
 isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
 atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
@@ -41,8 +42,8 @@ Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/bot
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next independent work: resolve replacement/reset event semantics from native contracts and bounded
-evidence, then companion/constraint cases. Do not rerun general locality/C8 campaigns.
+Next: companion/constraint cases against the required matrix; construction-frame answer pending.
+Do not rerun general locality/C8 campaigns.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
@@ -127,10 +128,9 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
 - ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
   a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
 
-## Earlier verification and retained baseline debt
+## Retained baseline debt
 
-Earlier source-repair, suppression and reorder evidence remains in the plan and logs under
-`.development-artifacts/feature-history-focus/`. Source-repair browser2, full frontend9367/1skip,
+Earlier source-repair, suppression and reorder evidence: plan and `.development-artifacts/feature-history-focus/`. Source-repair browser2, full frontend9367/1skip,
 smoke23 and focused archive28/capture45/accounting31 passed; disposable roots verified absent.
 Backend baseline `stop-backend-final.log`:83 failures (11 sealed HTTP/registration,
 2 junction tolerances,51 historical numerical manifests,19 obsolete schema expectations).
