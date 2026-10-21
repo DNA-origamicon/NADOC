@@ -4,7 +4,10 @@ M is a diagnostic exact-material world motion. D is an existing native composed
 world rigid delta or saved-component edit of one base. Native prefix/suffix outputs
 are captured once; changing M never reruns history. Reset/replacement remove only
 the current saved pose lifetime, preserving authored fixed-world M. New material
-and companion policy remain outside this admitted experiment.
+and constrained companions remain outside this admitted experiment. Existing
+terminal extensions retain their independent canonical identities and stay fixed.
+Explicit tail selection is not yet admitted by this probe; ordinary named ranges
+never select tails by anchor.
 """
 from copy import deepcopy
 from dataclasses import dataclass, fields
@@ -16,11 +19,17 @@ from scipy.spatial.transform import Rotation
 from backend.api import part_proof_commands as commands
 from backend.core.atomistic import Atom, build_atomistic_model
 from backend.core.design_geometry import _geometry_for_design
+from backend.core.base_keys import atom_base_key, parse_base_key
 from backend.api.part_group_geometry_budget import require_group_geometry_budget
 from tools.member_motion_audit import M, _full_motion, _point
 
 
 def _key(value):
+    if isinstance(value, Atom):
+        parsed = parse_base_key(atom_base_key(value))
+        if parsed is None or parsed.family == "xover":
+            raise ValueError("Atom has no admitted canonical residue identity")
+        return parsed.helix_id, parsed.bp_index, parsed.direction, parsed.copy
     get = value.get if isinstance(value, dict) else lambda key, default=None: getattr(value, key, default)
     return get("helix_id"), get("bp_index"), get("direction"), get("copy_k") or 0
 
@@ -35,7 +44,7 @@ def existing_material_union(prefix, targets):
     from backend.core.part_group_selection import resolve_deformation_targets
 
     require_group_geometry_budget(prefix, max_work=1024)
-    if prefix.extensions or prefix.crossovers or prefix.overhangs:
+    if prefix.crossovers or prefix.overhangs:
         raise ValueError("Companion ancestry is outside this ordinary-material inventory")
     ranges = resolve_deformation_targets(prefix, targets)
     records = _geometry_for_design(prefix)
@@ -165,7 +174,7 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
     if existing is None:
         existing = next((value for value in prefix.nucleotide_transforms
                          if (value.helix_id, value.bp_index, value.direction.value, value.copy_k) == target), None)
-    companions = ("extensions", "crossovers", "forced_ligations", "overhangs", "overhang_bindings",
+    companions = ("crossovers", "forced_ligations", "overhangs", "overhang_bindings",
                   "overhang_connections", "flexible_connections", "flexible_segment_marks",
                   "photoproduct_junctions", "cluster_joints",
                   "cluster_join_constraints", "duplexes")

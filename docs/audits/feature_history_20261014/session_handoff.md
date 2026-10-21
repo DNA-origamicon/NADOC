@@ -22,10 +22,11 @@ complete branch file rerun2pass. FULL deferred; broad suite not green. One real-
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
 FAST not rerun after classification. Aggregate412s debt remains.
 The isolated compiler admits overlapping partial domains and native composed world rotations.
-Program23pass +reset13pass (3dc54292): nonzero pivots, both directions and suffix targets,
+Program23 +reset13 +existing-tail8 +constraint-inventory2 pass: both directions and suffix targets,
 Full orientations/site frames, atoms and multiple existing owners. Three different motion samples
 reuse one prefix without replay/builders. Reset/replacement delete only the current pose component,
-retaining fixed-world motion; delete/recreate tested. Isolated contract only, no production promotion.
+retaining fixed-world motion; delete/recreate tested. Canonical Atom keys keep existing unselected tails
+fixed in both representations. Explicit tail selection not admitted; no production promotion.
 Attached Sweep after partial placement expands ownership onto unselected old material. The
 isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
 atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
@@ -34,16 +35,16 @@ Real phase coverage now uses native source-duplex axial rotations:144 cases,36 d
 per direction/end, all preservation checks pass. Candidate birth bonds reach6.234nm; no promotion.
 Artifact: `.development-artifacts/member-motion-birth-native-phase-review/index.html`, with
 current/candidate/difference/defect panels, exact rings/bonds and per-junction deltas.
-Important audit correction: original ordering/chronology/tail and first birth phase artifacts varied
-stored lattice phase_offset, which canonical preparation ignored. All phase variants per case had
+Audit correction: original ordering/chronology/tail and first birth artifacts varied ignored lattice
+phase_offset. All phase variants per case had
 identical atoms. Their index pages withdraw phase-coverage claims; individual counterexamples stand.
 Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
 Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next: companion/constraint cases against the required matrix; construction-frame answer pending.
-Do not rerun general locality/C8 campaigns.
+Next: constrained named-motion evidence using native flexible fixture (selected/linked/fixed owners).
+Membership alone must not infer linked poses; inventory/refusal verified. Construction answer pending.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
@@ -147,4 +148,3 @@ Performance committed as1336fb3a; ordering/chronological evidence as301041fa; ta
 Native lineage integration committed as5a554447. Latest bounded evidence admits pre-existing Sweep copies
 in the offline program and tests native prefix/control parity; no production or frontend behavior changes.
 No production motion compiler or molecular placement is promoted; preserve unrelated shared-worktree edits.
-No stash/reset/restore, push, amend or broad staging.
