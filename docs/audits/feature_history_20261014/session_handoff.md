@@ -4,7 +4,6 @@ Binding: [operating_contract.md](operating_contract.md); current user instructio
 October 20, 2026 stopping point: user disabled the persistent goal and requested this handoff.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-FH-20 closed. Existing Bend/Twist gates stay ON; Move/Rotate gates remain OFF.
 
 ## Scope and next work
 
@@ -135,13 +134,14 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ## Commit and shared-worktree boundaries
 
 Latest implementation checkpoint: **4e31b889**. All feature-history work listed below is committed.
+
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.
 - 90dd75a9: isolated out-of-span inventory; native4 +ordering23 pass, Ruff pass.
 - 8637e4ac / 4e31b889: ordinary C7 rollback and C5 dependency dialog; browser1pass each.
-Logs: `.development-artifacts/feature-history-focus/{member-out-of-span,member-ordering-program,
-transform-rollback-app-final,transform-dependents-app}.log`. Final scratch roots l7zf1625/b9yhfp3e
-and failed harness root rilubkmq independently verified absent. No product changes in C5/C7 batches.
+
+Logs: `.development-artifacts/feature-history-focus/` (member-out-of-span, member-ordering-program, transform-rollback-app-final, transform-dependents-app).
+Scratch l7zf1625/b9yhfp3e/rilubkmq independently absent; C5/C7 batches change tests only.
 Full required matrix/implementation sequence: [group placement plan](group_placement_migration_plan.md#required-acceptance-matrix).
 Diagnostic sources: `tools/member_motion_ordering_program.py`, `member_motion_birth_audit.py`,
 `member_motion_audit.py`; generated HTML/logs are local ignored artifacts, not portable committed evidence.
