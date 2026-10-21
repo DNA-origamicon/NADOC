@@ -19,7 +19,7 @@ audit gaps and validation. Locality repair qualified: native20 + terminal rotati
 frontend9432pass/1skip; browser1pass through saved Apply. Backend FAST19228pass/19skip/84fail
 (83 prior failures plus corrected bridge oracle; corrected file28pass). FULL remains deferred.
 Follow-up partial-owner regression exposed generic residue-command postprocessing widening
-an existing posed owner to include the opposite strand. Recording/replay now preserve ownership;
+an existing posed owner to include the opposite strand. Fixed in b2db50e1; recording/replay preserve ownership;
 native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
 Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification timeout;
 complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
@@ -29,8 +29,14 @@ The isolated exact-material compiler now admits overlapping partial domains (17p
 comparison9pass. These prove per-residue motion, not shared-axis or birth semantics.
 A four-case actual attached-Sweep birth probe shows reverse-site frame preference: forward-only
 motion leaves all14 new Full records in the original frame; reverse-only motion places all14 in the
-moved frame (~3.82nm difference). Exact native no-M rebuild controls; atomistic birth behavior and
-shared-frame candidates are not yet qualified. See member-partial-sweep-birth.json and its probe script.
+moved frame (~3.82nm difference). Exact native no-M rebuild controls. The same four cases now include280 atoms each:
+new atom output follows the same direction-dependent frame (~4.07nm alternative separation).
+Crucially, Sweep also changes old material: max Full3.83nm/atoms4.08nm. This is an OPEN
+construction/postprocessing defect, not a passed locality control. Two old/new atom bonds
+are emitted in each case. Ancestry records source helix/end but no explicit source strand.
+See member-partial-sweep-birth.json/.png and its probe script. The inspected plot compares
+new Full/atoms against original/moved-frame alternatives; gray is existing BEFORE Sweep.
+Shared-frame candidates are not qualified; repair old-material ownership before promotion.
 Next: make shared-frame construction/ancestry explicit, then remaining companion/constraint cases.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Next production boundary: settle partial/shared frames, later-material construction and companion/constraint
