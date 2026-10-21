@@ -1,3 +1,4 @@
+import { registerRecordingSource } from '../record/source.js'
 /**
  * NADOC Origami Editor — main entry point.
  *
@@ -58,6 +59,7 @@ import { openStrandExtensionDialog } from '../ui/strand_extension_dialog.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
 
+registerRecordingSource()
 initMenuFlyouts()
 import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey, parseForcedLigKey } from './element_keys.js'
 import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'

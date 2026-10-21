@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Record — NADOC</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+    body { max-width: 920px; margin: 40px auto; padding: 0 24px; }
+    h1 { font-size: 28px; } p { color: #aeb9c6; line-height: 1.6; }
+    section { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin: 20px 0; }
+    .row { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 16px 0; }
+    label { display: grid; gap: 8px; } button, select { font: inherit; padding: 10px 16px; border: 1px solid #485463; border-radius: 6px; background: #21262d; color: inherit; }
+    button { cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
+    #start { background: #238636; } #stop { background: #a12632; }
+    video { width: 100%; max-height: 440px; background: #000; border-radius: 8px; }
+    #status { min-height: 24px; } a { color: #79c0ff; } li { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Record NADOC</h1>
+  <p>Capture a NADOC 3D viewer or cadnano editor tab, including its menus and panels. Audio is not recorded.</p>
+  <section aria-label="Recording controls">
+    <div class="row"><button id="select-tab">Select tab…</button><span id="source-name">No tab selected</span></div>
+    <p>Select a NADOC tab and confirm Share in the browser chooser. You can switch tabs during recording; the current tab continues recording until the new selection is ready. Chrome requires Share confirmation for each selection.</p>
+    <div class="row"><button id="directory">Choose save directory…</button><span id="destination">Browser downloads</span></div>
+    <div class="row">
+      <label>Resolution<select id="resolution"><option value="native">Original size</option><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
+      <label>Framerate<select id="fps"><option>15</option><option selected>30</option><option>60</option></select></label>
+    </div>
+    <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="annotations" aria-describedby="annotations-help">Show key presses and mouse clicks</label>
+    <p id="annotations-help">Shows shortcuts, mouse buttons, and click locations in NADOC, the preview, and saved captures. Can be toggled during recording. Typing in text fields is omitted.</p>
+    <div class="row"><button id="start">Start recording</button><button id="stop" disabled>Stop &amp; save</button><button id="screenshot">Take screenshot</button><button id="release" disabled>Disconnect capture</button></div>
+    <p id="status" role="status" aria-live="polite">Ready. Screenshots save as PNG; recordings save as WebM.</p>
+    <p>Keep this controls tab open until saving finishes. Fixed resolutions preserve the entire image with black borders when needed. Framerate is a target and depends on browser performance.</p>
+  </section>
+  <video id="preview" autoplay muted playsinline aria-label="NADOC capture preview"></video>
+  <section><h2>Saved captures</h2><p>Download links remain available here until this tab closes.</p><ul id="files"></ul></section>
+  <script type="module" src="/src/record/main.js"></script>
+</body>
+</html>

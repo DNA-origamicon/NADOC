@@ -1,0 +1,27 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { registerRecordingSource } from './source.js'
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
+it('registers tab identity and expires annotation requests if controls disappear', () => {
+  vi.useFakeTimers()
+  const setCaptureHandleConfig = vi.fn()
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { setCaptureHandleConfig } })
+  let channel, cleanup
+  vi.spyOn(window, 'addEventListener').mockImplementation((type, fn) => { if (type === 'pagehide') cleanup = fn })
+  vi.stubGlobal('BroadcastChannel', class { constructor(name) { this.name = name; this.close = vi.fn(); channel = this } })
+  const handle = registerRecordingSource()
+  expect(setCaptureHandleConfig).toHaveBeenCalledWith({ handle, exposeOrigin: true, permittedOrigins: [location.origin] })
+  expect(channel.name).toBe(handle)
+  channel.onmessage({ data: { type: 'annotations', enabled: true } })
+  expect(document.querySelector('[data-nadoc-input-annotations]')).not.toBeNull()
+  vi.advanceTimersByTime(5000)
+  channel.onmessage({ data: { type: 'annotations', enabled: true } })
+  vi.advanceTimersByTime(2000)
+  expect(document.querySelector('[data-nadoc-input-annotations]')).not.toBeNull()
+  vi.advanceTimersByTime(4000)
+  expect(document.querySelector('[data-nadoc-input-annotations]')).toBeNull()
+  channel.onmessage({ data: { type: 'annotations', enabled: true } })
+  cleanup()
+  expect(channel.close).toHaveBeenCalled()
+  expect(document.querySelector('[data-nadoc-input-annotations]')).toBeNull()
+  expect(vi.getTimerCount()).toBe(0)
+})

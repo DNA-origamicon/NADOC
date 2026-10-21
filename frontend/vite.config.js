@@ -35,6 +35,7 @@ export default {
     rollupOptions: {
       input: {
         main:            resolve(__dirname, 'index.html'),
+        record:          resolve(__dirname, 'record.html'),
         viewer:          resolve(__dirname, 'viewer.html'),
         'cadnano-editor': resolve(__dirname, 'cadnano-editor.html'),
         'strand-anim':    resolve(__dirname, 'strand-anim.html'),

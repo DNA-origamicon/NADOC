@@ -1,3 +1,4 @@
+import { initRecordLauncher } from './ui/record_launcher.js'
 import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
@@ -3836,6 +3837,7 @@ async function main() {
   })
 
   // ── Tools menu (Bend / Twist) ─────────────────────────────────────────────
+  initRecordLauncher({ onError: message => showToast(message, { severity: 'error' }) })
 
   /** Returns false and shows a toast if the user must pick a cluster first. */
   function _clusterDeformGuard() {
