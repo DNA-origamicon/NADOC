@@ -36,15 +36,15 @@ per direction/end, all preservation checks pass. Candidate birth bonds reach6.23
 Artifact: `.development-artifacts/member-motion-birth-native-phase-review/index.html`, with
 current/candidate/difference/defect panels, exact rings/bonds and per-junction deltas.
 Audit correction: original ordering/chronology/tail and first birth artifacts varied ignored lattice
-phase_offset; all phase variants per case had identical atoms. Their index pages withdraw phase-coverage claims; individual counterexamples stand.
+phase_offset; variants were identical. Index pages withdraw phase claims; individual counterexamples stand.
 Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
 Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
 pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
 User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
 strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
-Next: connect the coherent evaluator to the existing A/B review pipeline, not new per-case prototypes.
-Suppressed events, owner/topology edits and constrained roles still refuse; construction answer pending.
-No Move/Rotate gate flip; the full named-motion matrix remains required.
+Sequence A/B review integrated:8cases,11focusedpass;2pages Full/Ballstick/trace pass, screenshots inspected.
+Artifact member-motion-sequence-review; maxdelta1.578nm/bond5.733nm, no physical qualification.
+Next: existing out-of-span scaffold-loop acceptance gap; freeze compiler expansion. Construction answer pending.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.

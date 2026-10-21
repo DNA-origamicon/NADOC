@@ -308,7 +308,7 @@ class ChronologicalProgram:
         _apply_world(full, atoms, first.selected_material_keys, world)
         retained = [(first.selected_material_keys, world)]
         trace = [{"feature_id": "diagnostic-world-M", "kind": "world-motion", "pose": deepcopy(world),
-                  "material_keys": list(first.selected_material_keys), "frame": "world"}]
+                  "material_keys": list(first.selected_material_keys), "named_targets": deepcopy(first._named_targets), "frame": "world"}]
         for index in range(len(self.steps) + 1):
             for event in self.world_events:
                 if event["before_event"] != index:

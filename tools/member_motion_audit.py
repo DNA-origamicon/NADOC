@@ -121,7 +121,48 @@ def _junction_rows(current, candidate, diagnostics):
     return rows
 
 
-def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronological=False, partial=False):
+def _sequence_comparison(prefix, appended, target, selected, named_targets):
+    """Use the compiled event interpreter for a reset/interleaved-owner comparison."""
+    from backend.core.models import ClusterRigidTransform, ClusterCreateLogEntry
+    from tests.test_part_deformation_preview import _append
+    from tests.test_part_transform_preview import snapshot
+    from tools.member_motion_ordering_program import compile_chronological_program, _key
+
+    rotation = {"rotation": Rotation.from_euler("y", 37, degrees=True).as_quat().tolist(),
+                "pivot": [-2, 3, .7], "translation": [1, 2, -.5]}
+    world = {"rotation": Rotation.from_euler("x", -25, degrees=True).as_quat().tolist(),
+             "pivot": [1, -.5, .3], "translation": [.4, -.2, .6]}
+    native, entries = prefix, []
+    for index, action in enumerate(("compose", "reset", "replace", "compose")):
+        if index == 3:
+            # Existing owner comparison remains an authored native recipe. The
+            # candidate instead records an independent exact-member world event.
+            first_owner = next(owner for owner in appended.cluster_transforms if owner.id == "probe-owner")
+            owner = ClusterRigidTransform(id="second-probe-owner", name="Second native placement",
+                helix_ids=first_owner.helix_ids, domain_ids=first_owner.domain_ids, **world)
+            appended = _append(appended, ClusterCreateLogEntry(id="second-native-placement", proof_version=2,
+                cluster_id=owner.id, name=owner.name, helix_ids=owner.helix_ids,
+                domain_ids=owner.domain_ids, cluster_snapshot=owner))
+        if action == "reset":
+            def reset(model):
+                saved = next(p for p in model.nucleotide_transforms
+                    if (p.helix_id, p.bp_index, p.direction.value, p.copy_k) == _key(target))
+                return snapshot(model, "nucleotide-transform-delete", {"transform_id": saved.id}, f"sequence-{index}")
+            native, appended = reset(native), reset(appended)
+        else:
+            pose = rotation if action == "replace" else D
+            native = _nucleotide(native, target, pose, f"sequence-{index}", compose=action == "compose")
+            appended = _nucleotide(appended, target, pose, f"sequence-{index}", compose=action == "compose")
+        entries.append(native.feature_log[-1])
+    program = compile_chronological_program(prefix, entries, [selected], named_targets=named_targets,
+        world_events=[{"feature_id": "second-world-motion", "before_event": 3,
+                       "named_targets": named_targets, "pose": world}])
+    assert program.evaluate(motion_enabled=False)[:2] == (
+        _geometry_for_design(native), build_atomistic_model(native, fast_bridges=True))
+    return program, native, appended
+
+
+def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronological=False, partial=False, sequence=False):
     """Native 2HB input; phase changes are confined to this disposable fixture."""
     source = _source()
     selected = source.helices[0].id
@@ -146,17 +187,27 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
                 strand_id=member["strand_id"], domain_index=member["domain_index"])])
             for name in ("partial-a", "partial-b")]))
         named_targets = [{"kind": "part_group", "id": name} for name in ("partial-a", "partial-b")]
+    if sequence and not chronological:
+        raise ValueError("Sequence review requires the chronological compiler")
+    if sequence and named_targets is None:
+        from backend.core.part_group_model import GroupOrganization, PartGroup
+        prefix = prefix.copy_with(group_organization=GroupOrganization(groups=[
+            PartGroup(id="sequence-members", helix_ids=[selected])]))
+        named_targets = [{"kind": "part_group", "id": "sequence-members"}]
     source_json, prefix_json = source.model_dump_json(), prefix.model_dump_json()
     # Compare the existing legacy owner action on its admitted source. Named
     # groups belong only to the detached candidate; do not bypass native guards.
     appended = _owner(legacy_prefix, selected_strand)
     event_trace = []
     if chronological:
-        from tools.member_motion_ordering_program import compile_ordered_probe
-        later = _nucleotide(prefix, target, D, "later-world-delta", compose=True)
-        program = compile_ordered_probe(prefix, later.feature_log[-1], [selected], named_targets=named_targets)
+        from tools.member_motion_ordering_program import compile_chronological_program
+        if sequence:
+            program, later, appended = _sequence_comparison(prefix, appended, target, selected, named_targets)
+        else:
+            later = _nucleotide(prefix, target, D, "later-world-delta", compose=True)
+            program = compile_chronological_program(prefix, [later.feature_log[-1]], [selected], named_targets=named_targets)
+            appended = _nucleotide(appended, target, D, "later-world-delta", compose=True)
         candidate_full, candidate, event_trace = program.evaluate()
-        appended = _nucleotide(appended, target, D, "later-world-delta", compose=True)
     current = build_atomistic_model(appended, fast_bridges=True)
     if not chronological:
         prefix_atoms = build_atomistic_model(prefix, fast_bridges=True)
@@ -225,7 +276,7 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
         })
     if partial:
         from tools.member_motion_ordering_program import _key
-        material = set(program.selected_material_keys)
+        material = set(program.steps[0].selected_material_keys)
         control = [i for i, atom in enumerate(current.atoms) if _key(atom) not in material]
         np.testing.assert_array_equal(_positions(current)[control], _positions(candidate)[control])
         assert [row for row in current_full if _key(row) not in material] == [
@@ -238,6 +289,13 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
         result["provider"]["description"] = (
             "Native partial-domain owner versus chronological exact named members, including overlapping groups. "
             "Opposite direction and same-direction siblings remain exact. Shared-axis ownership and birth remain unresolved.")
+    if sequence:
+        result["case"].update(sequence=True, prior_pose_role="Reset deletes the prior pose; both prior variants should converge")
+        result["provider"].update(label="Chronological reset and interleaved motion",
+            description="Native authored owner placements versus compiled independent named-world events. "
+                        "Reset removes the saved residue component; both named moves remain. No construction or constraint policy.",
+            panel_labels={"current": "Current: native owner/residue ordering", "candidate": "Candidate: chronological world events"})
+        result["invariants"]["native_disabled_control_exact"] = True
     assert source.model_dump_json() == source_json and prefix.model_dump_json() == prefix_json
     return result
 
@@ -249,9 +307,10 @@ def main():
     parser.add_argument("--viewer-bundle", type=Path, required=True)
     parser.add_argument("--chronological", action="store_true")
     parser.add_argument("--partial", action="store_true")
+    parser.add_argument("--sequence", action="store_true")
     args = parser.parse_args()
-    if args.partial and not args.chronological:
-        parser.error("--partial requires --chronological")
+    if (args.partial or args.sequence) and not args.chronological:
+        parser.error("--partial/--sequence require --chronological")
     root = Path(__file__).resolve().parents[1] / ".development-artifacts"
     output = args.output.resolve()
     if not output.is_relative_to(root) or output.exists():
@@ -271,7 +330,7 @@ def main():
         for direction in ("FORWARD", "REVERSE"):
             for prior in (False, True):
                 case = build_case(phase, direction, prior_pose=prior,
-                                  chronological=args.chronological, partial=args.partial)
+                                  chronological=args.chronological, partial=args.partial, sequence=args.sequence)
                 name = f"phase-{phase:03d}-{direction.lower()}-{'N' if prior else 'control'}.json"
                 text = json.dumps(case, separators=(",", ":"), allow_nan=False)
                 total_bytes += 2 * len(text.encode())
@@ -298,7 +357,7 @@ def main():
         print(f"Recorded phase {phase} degrees", flush=True)
     (output / "index.json").write_text(json.dumps({
         "scope": "Isolated ordering probe only; not complete member-motion authorization evidence",
-        "phase_step_deg": args.phase_step, "chronological": args.chronological, "partial": args.partial,
+        "phase_step_deg": args.phase_step, "chronological": args.chronological, "partial": args.partial, "sequence": args.sequence,
         "cases": summaries}, separators=(",", ":"), allow_nan=False))
     rows = []
     for row in summaries:
@@ -315,19 +374,20 @@ def main():
         'a{color:#79c0ff}td,th{padding:8px;border-bottom:1px solid #444}</style>'
         '<h1>Isolated member-motion ordering review</h1>'
         '<p>Current native owner placement versus motion of exact native prefix material. '
+        + ('Sequence review: compose, reset, replace, second named move, compose. Both prior-pose variants should converge after reset. ' if args.sequence else '')
         + ('The chronological variant applies the existing native residue translation D after diagnostic M, '
-           'with an inspectable event trace. ' if args.chronological else '') +
+           'with an inspectable event trace. ' if args.chronological and not args.sequence else '') +
         ('No production placement is changed. Two overlapping groups select one nicked domain. '
          'Every unselected residue, including the opposite direction on the same helix, is an exact control. '
          'Candidate axes retain prefix context; shared-axis ownership and future construction are unresolved. '
          if args.partial else
          'No production placement is changed. Both helix directions are selected; the second helix is an exact control. '
          'Partial helices and overlaps are outside this whole-helix probe. ') +
-        'Tails, material birth and later replacement/reset semantics are outside this probe. '
+        'Tails, material birth, shared construction frames and constrained roles remain outside this probe. '
         'Phase variations are direct native fixture inputs, not cold-replayed history claims. '
         'Clash hits and overstretched-bond listings use the existing 200-row diagnostic caps; local counts '
         'refer to reported hits and may not be exhaustive.</p>'
-        f'<p>Full 0–360° sampled phase coverage, step {args.phase_step}°. Each phase has both prior-residue '
+        f'<p>Sampled native roll angles, step {args.phase_step}°; bounded review evidence, not full acceptance qualification. Each angle has both prior-residue '
         'directions and no-prior-pose controls. Each case opens Current, Candidate, Difference and Defects '
         'with Full and Ball and Stick. Coordinates remain in one shared world frame.</p>'
         '<table><tr><th>Case</th><th>Max displacement nm</th><th>Piercings</th>'

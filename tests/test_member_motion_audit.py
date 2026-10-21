@@ -58,3 +58,23 @@ def test_partial_artifact_keeps_all_unselected_material_exact(direction, prior):
     assert len(case["event_trace"][0]["named_targets"]) == 2
     assert len(case["event_trace"][0]["material_keys"]) == case["invariants"]["selected_residue_count"]
     assert "unresolved" in case["provider"]["description"]
+
+
+@pytest.mark.parametrize("direction", ["FORWARD", "REVERSE"])
+def test_sequence_review_uses_compiled_events_and_reset_erases_prior_component(direction):
+    cases = [build_case(43, direction, prior_pose=prior, chronological=True, partial=True, sequence=True)
+             for prior in (False, True)]
+    for case in cases:
+        assert case["invariants"]["native_disabled_control_exact"]
+        assert case["invariants"]["unselected_material_exact"]
+        assert [event["feature_id"] for event in case["event_trace"]] == [
+            "diagnostic-world-M", "sequence-0", "sequence-1", "sequence-2", "second-world-motion", "sequence-3"]
+        assert case["event_trace"][2]["kind"] == "native-reset-component"
+        assert case["event_trace"][3]["kind"] == "native-replace-component"
+        assert case["provider"]["not_authorized_for_production"]
+        assert case["displacement"]["n_displaced"] > 0
+        assert case["junctions"]
+        assert case["current"]["bonds"] == case["candidate"]["bonds"]
+    for side in ("current", "candidate"):
+        assert cases[0][side]["atoms"] == cases[1][side]["atoms"]
+        assert cases[0][side]["nucleotides"] == cases[1][side]["nucleotides"]
