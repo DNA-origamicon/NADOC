@@ -1,7 +1,7 @@
 """Isolated terminal-tail representation hypotheses; no production policy."""
+import math
 from copy import deepcopy
 from dataclasses import fields
-import math
 from uuid import UUID
 
 import numpy as np
@@ -18,7 +18,7 @@ from tests.test_part_deformation_preview import _append
 from tests.test_part_motion_native_characterization import _expected_point, _PIVOT, _ROTATION, _TRANSLATION
 from tests.test_part_transform_inputs import pose
 from tests.test_part_transform_preview import snapshot
-from tools.member_motion_audit import _junction_rows
+from tools.member_motion_audit import _junction_rows, roll_native_source
 
 
 def tail_source(end, direction, phase_deg):
@@ -26,9 +26,7 @@ def tail_source(end, direction, phase_deg):
                       crud.BundleRequest(cells=[[0, 0], [1, 0]], length_bp=8, ligate_adjacent=False,
                                          history_seed=UUID(int=16001)).model_dump(mode="json"), "native-bundle")
     helix_id = source.helices[0].id
-    source = source.copy_with(helices=[
-        h.model_copy(update={"phase_offset": h.phase_offset + math.radians(phase_deg)})
-        if h.id == helix_id else h for h in source.helices])
+    source = roll_native_source(source, helix_id, phase_deg)
     selected = next(s for s in source.strands
                     if s.domains[0].helix_id == helix_id and s.domains[0].direction == direction)
     control = next(s for s in source.strands

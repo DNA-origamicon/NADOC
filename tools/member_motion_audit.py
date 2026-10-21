@@ -12,7 +12,6 @@ from copy import deepcopy
 from dataclasses import fields
 from html import escape
 import json
-import math
 from pathlib import Path
 import shutil
 
@@ -33,6 +32,47 @@ def _point(value, pose=M):
     pivot = np.asarray(pose["pivot"])
     return (Rotation.from_quat(pose["rotation"]).apply(np.asarray(value) - pivot)
             + pivot + pose["translation"]).tolist()
+
+
+
+def roll_native_source(source, helix_id, phase_deg):
+    """Roll the source duplex with a real native owner, never a dead phase field."""
+    from backend.core.models import ClusterRigidTransform, ClusterCreateLogEntry
+    from tests.test_part_deformation_preview import _append
+    helix = source.find_helix(helix_id)
+    pivot = [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z]
+    rotation = Rotation.from_euler("z", phase_deg, degrees=True)
+    owner = ClusterRigidTransform(
+        id="diagnostic-phase",
+        name="Diagnostic source roll",
+        helix_ids=[helix.id],
+        rotation=rotation.as_quat().tolist(),
+        pivot=pivot,
+    )
+    rolled = _append(
+        source,
+        ClusterCreateLogEntry(
+            id="diagnostic-phase-feature",
+            proof_version=2,
+            cluster_id=owner.id,
+            name=owner.name,
+            helix_ids=owner.helix_ids,
+            domain_ids=[],
+            cluster_snapshot=owner,
+        ),
+    )
+    before, after = _geometry_for_design(source), _geometry_for_design(rolled)
+    for a, b in zip(before, after, strict=True):
+        point = np.asarray(a["backbone_position"])
+        expected = (
+            rotation.apply(point - pivot) + pivot
+            if a["helix_id"] == helix.id
+            else point
+        )
+        np.testing.assert_allclose(b["backbone_position"], expected, rtol=0, atol=1e-12)
+    if phase_deg % 360:
+        assert before != after, "Phase fixture did not change evaluated coordinates"
+    return rolled
 
 
 def _full_motion(records, helix_id):
@@ -85,9 +125,7 @@ def build_case(phase_deg=0, direction="FORWARD", *, prior_pose=True, chronologic
     """Native 2HB input; phase changes are confined to this disposable fixture."""
     source = _source()
     selected = source.helices[0].id
-    source = source.copy_with(helices=[
-        h.model_copy(update={"phase_offset": h.phase_offset + math.radians(phase_deg)})
-        if h.id == selected else h for h in source.helices])
+    source = roll_native_source(source, selected, phase_deg)
     if partial:
         if not chronological:
             raise ValueError("Partial selection requires the chronological compiler")

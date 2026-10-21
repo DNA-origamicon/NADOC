@@ -23,26 +23,24 @@ readiness Apply parameter classified slow/headless after two >5s runs; collectio
 FAST not rerun after classification. Aggregate412s debt remains.
 The isolated exact-material compiler now admits overlapping partial domains (17pass); partial
 comparison9pass. These prove per-residue motion, not shared-axis or birth semantics.
-A four-case actual attached-Sweep birth probe shows reverse-site frame preference: forward-only
-motion leaves all14 new Full records in the original frame; reverse-only motion places all14 in the
-moved frame (~3.82nm difference). Exact native no-M rebuild controls. The same four cases now include280 atoms each:
-new atom output follows the same direction-dependent frame (~4.07nm alternative separation).
-Crucially, Sweep also changes old material: max Full3.83nm/atoms4.08nm. This is an OPEN
-construction/postprocessing defect, not a passed locality control. Two old/new atom bonds
-are emitted in each case. Ancestry records source helix/end but no explicit source strand.
-See member-partial-sweep-birth.json/.png and its probe script. The inspected plot compares
-new Full/atoms against original/moved-frame alternatives; gray is existing BEFORE Sweep.
-Shared-frame candidates are not qualified; repair old-material ownership before promotion.
-Isolated exact-surviving-domain ownership candidate now restores every old Full/atom coordinate
-in all four cases (zero displacement), keeping280 newborn atoms and all bonds unchanged.
-Cause confirmed: generic reconciliation intentionally ignores direction for bp-overlap assignment.
-Interactive evidence: `.development-artifacts/member-motion-birth-owner-review/index.html`;
-current/candidate/difference/defect panels with per-junction atoms, rings and metrics. Four pages
-rendered in both representations without errors/network; screenshots retained, no workspace writes.
-Restoring ownership exposes reverse birth bonds2.29–2.69nm; forward one bond returns to0.136nm.
-This does NOT authorize construction geometry. No production changes in this follow-up.
-Next: finish required phase coverage of this bounded artifact and resolve explicit construction-frame
-semantics; then remaining companion/constraint cases. Avoid another general locality/C8 campaign.
+Attached Sweep after partial placement expands ownership onto unselected old material. The
+isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
+atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
+The original four native cases identified reverse-site frame preference and stretched birth bonds.
+Real phase coverage now uses native source-duplex axial rotations:144 cases,36 distinct geometries
+per direction/end, all preservation checks pass. Candidate birth bonds reach6.234nm; no promotion.
+Artifact: `.development-artifacts/member-motion-birth-native-phase-review/index.html`, with
+current/candidate/difference/defect panels, exact rings/bonds and per-junction deltas.
+Important audit correction: original ordering/chronology/tail and first birth phase artifacts varied
+stored lattice phase_offset, which canonical preparation ignored. All phase variants per case had
+identical atoms. Their index pages withdraw phase-coverage claims; individual counterexamples stand.
+Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
+Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
+pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
+User question pending: require matching source frames/refuse ambiguous attachment, or explicit source-
+strand frame choice with stretched other junction. Existing selection locality needs no reapproval.
+Next independent work: composed world rotations in the offline chronological program, then remaining
+replacement/reset and companion/constraint cases. Do not rerun general locality/C8 campaigns.
 No Move/Rotate gate flip; the full named-motion matrix remains required.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
@@ -66,17 +64,17 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   Log transform-block-final-app.log; root k7fzbcc9 independently absent. Frontend780files/9425pass/1skip;
   backend19185pass/83same known failures/19skip; final audit-view frontend781files/9426pass/1skip.
 - Offline ordering review: .development-artifacts/member-motion-ordering-review/index.html,144cases
-  across36phases/both prior-residue directions/control. All72controls exact;72Ncases displaced6.892–7.169nm.
+  labelled phases/both prior-residue directions/control (phase coverage withdrawn above). All72controls exact;72Ncases displaced6.892–7.169nm.
   Native10/UI11pass; browser3cases per artifact/both representations/all4panels, no errors/network; Full and atoms
   visually inspected. Exact atoms/bonds/rings and per-boundary metrics retained; diagnostic hit caps stated.
-  Chronological sibling member-motion-chronological-review adds native D after M:144cases/72exact controls;
+  Chronological sibling adds native D after M:144cases/72exact controls; phase coverage withdrawn above.
   browser scratch z6zq8uxf independently absent. Both probes retain stretched bonds; neither authorizes placement.
   This is a limited ordering probe, not full named-motion authorization. Birth/partial/overlap/frame
   and companion semantics remain required; no placement promotion or transform gate change.
-- Tail review: .development-artifacts/member-motion-tail-review/index.html,288cases/both ends/directions.
+- Tail review: .development-artifacts/member-motion-tail-review/index.html,288cases; phase coverage withdrawn.
   A moves only Full tails (2residues,3.336–6.965nm); B only atoms (3.499–6.712nm). Other representation exact.
   Native4/UI12/browser3pass; screenshots visually inspected after camera-margin fix; scratch3zpyi3os absent.
-  User resolved locality: unselected tails stay fixed; production repair is under final validation. Final frontend781files/9427pass/1skip.
+  User resolved locality: unselected tails stay fixed; production repair committed8fd29efb/b2db50e1.
   Named native-material union/overlap and Bend/Twist/Sweep-prefix program13pass; exact no-M controls6pass.
   Pre-existing Sweep loop copies are captured once by native copy identity; later birth/partial frames remain unresolved.
   Prefix lineage integration10pass: Sweep both ends/detach, nick/merge both directions, empty/dissolved references.

@@ -14,7 +14,16 @@ def test_ordering_probe_preserves_identity_and_shows_noncommuting_motion(directi
     assert case["current"]["bonds"] == case["candidate"]["bonds"]
     assert case["displacement"]["max_nm"] > 1
     assert case["junctions"]
-    assert any(abs(j["length_delta_nm"]) > .1 for j in case["junctions"])
+    # Bond-length changes need not exceed a fixed cutoff at every real phase.
+    # Check each reported delta against the independently serialized coordinates.
+    for junction in case["junctions"]:
+        lengths = []
+        for side in ("current", "candidate"):
+            a, b = [case[side]["atoms"][i] for i in junction["serials"]]
+            lengths.append(np.linalg.norm([a[k] - b[k] for k in ("x", "y", "z")]))
+        # Atom JSON rounds to five decimals; two endpoint roundoffs bound error.
+        np.testing.assert_allclose(junction["length_delta_nm"], lengths[1] - lengths[0],
+                                   rtol=0, atol=4e-5)
     assert case["current"]["nucleotides"] != case["candidate"]["nucleotides"]
     for side in ("current", "candidate"):
         count = len(case[side]["atoms"])
