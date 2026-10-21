@@ -1,9 +1,10 @@
 """Bounded offline N → M → D experiment, not a production motion compiler.
 
 M is a diagnostic exact-material world motion. D is an existing native composed
-world rigid delta of one base. Native prefix/suffix outputs are captured once; changing
-M never reruns history. New material, replacement/reset and companion policy are
-deliberately outside this admitted experiment.
+world rigid delta or saved-component edit of one base. Native prefix/suffix outputs
+are captured once; changing M never reruns history. Reset/replacement remove only
+the current saved pose lifetime, preserving authored fixed-world M. New material
+and companion policy remain outside this admitted experiment.
 """
 from copy import deepcopy
 from dataclasses import dataclass, fields
@@ -67,11 +68,15 @@ class OrderedProbe:
     translation: tuple[float, float, float]
     rotation: tuple[float, float, float, float]
     pivot: tuple[float, float, float]
+    suffix_mode: str
+    replaced_pose_id: str | None
     _prefix_records: list
     _prefix_atoms: object
     _native_after_records: list
     _native_after_atoms: object
     _named_targets: list | None = None
+    _component_free_records: list | None = None
+    _component_free_atoms: object = None
 
     def evaluate(self, *, motion_enabled=True, motion=None):
         """Detached candidate only; no source model or command is published."""
@@ -79,7 +84,7 @@ class OrderedProbe:
             # An absent diagnostic event retains the exact native suffix,
             # including float representations and native quaternion choices.
             return deepcopy(self._native_after_records), deepcopy(self._native_after_atoms), [
-                {"feature_id": self.suffix_feature_id, "kind": "native-compose-rigid",
+                {"feature_id": self.suffix_feature_id, "kind": self.suffix_mode,
                  "target": self.target, "native_output_exact": True}]
         motion = deepcopy(M if motion is None else motion)
         for name, size in (("rotation", 4), ("pivot", 3), ("translation", 3)):
@@ -90,6 +95,13 @@ class OrderedProbe:
             raise ValueError("Expected unit motion quaternion")
         records = deepcopy(self._prefix_records)
         atoms = deepcopy(self._prefix_atoms)
+        if self._component_free_records is not None:
+            # Remove the current native pose lifetime before replaying fixed-world
+            # M. This is component deletion, never inverse-N on displayed points.
+            records = [deepcopy(base) if _key(row) == self.target else row
+                       for row, base in zip(records, self._component_free_records, strict=True)]
+            atoms.atoms = [deepcopy(base) if _key(atom) == self.target else atom
+                           for atom, base in zip(atoms.atoms, self._component_free_atoms.atoms, strict=True)]
         selected = set(self.selected_material_keys)
         moved = [row for row in records if _key(row) in selected]
         for helix_id in self.selected_helix_ids:
@@ -120,20 +132,39 @@ class OrderedProbe:
              "material_keys": list(self.selected_material_keys),
              "shared_helix_frame_policy": "unresolved; this probe outputs per-residue frames, not shared axes",
              "pose": deepcopy(motion), "frame": "world", "prefix_sha256": self.source_sha256},
-            {"feature_id": self.suffix_feature_id, "kind": "native-compose-rigid",
+            {"feature_id": self.suffix_feature_id, "kind": self.suffix_mode,
              "target": self.target, "translation": self.translation, "rotation": self.rotation,
              "pivot": self.pivot, "frame": "world",
+             "replaced_pose_id": self.replaced_pose_id,
+             "component_policy": "current saved pose lifetime; retain authored world-motion matrices",
              "after_event": "diagnostic-world-M"}]
 
 
 def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_targets=None):
     """Admit one exact existing native suffix and a diagnostic selection union."""
-    if suffix_entry.op_kind != "nucleotide-transform":
-        raise ValueError("Only an existing native nucleotide-transform suffix is admitted")
+    kind = suffix_entry.op_kind
+    if kind not in {"nucleotide-transform", "nucleotide-transform-delete"}:
+        raise ValueError("Only native single-nucleotide pose edits are admitted")
     params = deepcopy(suffix_entry.params)
-    if (params.get("kind") != "base" or params.get("compose") is not True
-            or params.get("copy_k", 0) != 0):
-        raise ValueError("Only composed world rigid deltas are admitted; replacement/reset remain unresolved")
+    existing = None
+    if kind == "nucleotide-transform-delete":
+        existing = next((pose for pose in prefix.nucleotide_transforms
+                         if pose.id == params["transform_id"]), None)
+        if existing is None:
+            raise ValueError("Reset does not address the current saved pose lifetime")
+        target_params = existing.model_dump(mode="json")
+        mode = "native-reset-component"
+        pose = {"rotation": [0, 0, 0, 1], "pivot": [0, 0, 0], "translation": [0, 0, 0]}
+    else:
+        target_params = params
+        mode = "native-compose-rigid" if params.get("compose") is True else "native-replace-component"
+        pose = {name: params[name] for name in ("rotation", "pivot", "translation")}
+    if target_params.get("kind") != "base" or target_params.get("copy_k", 0) != 0:
+        raise ValueError("Only ordinary base pose components are admitted")
+    target = target_params["helix_id"], target_params["bp_index"], target_params["direction"], 0
+    if existing is None:
+        existing = next((value for value in prefix.nucleotide_transforms
+                         if (value.helix_id, value.bp_index, value.direction.value, value.copy_k) == target), None)
     companions = ("extensions", "crossovers", "forced_ligations", "overhangs", "overhang_bindings",
                   "overhang_connections", "flexible_connections", "flexible_segment_marks",
                   "photoproduct_junctions", "cluster_joints",
@@ -145,7 +176,7 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
         raise ValueError("Expected an exact nonempty whole-helix selection")
     require_group_geometry_budget(prefix, max_work=1024)
     captured = prefix.model_dump_json()
-    after = commands.execute("nucleotide-transform", prefix.model_copy(deep=True), params)
+    after = commands.execute(kind, prefix.model_copy(deep=True), params)
     before_records, after_records = _geometry_for_design(prefix), _geometry_for_design(after)
     material = tuple(_key(row) for row in before_records if row["helix_id"] in selected)
     if named_targets is not None:
@@ -163,12 +194,29 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
             or before_atoms.bonds != after_atoms.bonds
             or [_key(r) for r in before_records] != [_key(r) for r in after_records]):
         raise ValueError("Native suffix changed material identity or topology; birth is not admitted")
-    target = params["helix_id"], params["bp_index"], params["direction"], 0
     if target not in {_key(r) for r in before_records}:
         raise ValueError("Suffix target is absent from the compiled prefix")
-    pose = {name: params[name] for name in ("rotation", "pivot", "translation")}
+    free_records = free_atoms = None
+    check_records, check_atoms = before_records, before_atoms
+    if mode != "native-compose-rigid" and existing is not None:
+        component_free = commands.execute("nucleotide-transform-delete", prefix.model_copy(deep=True),
+                                          {"transform_id": existing.id, "_proof_version": 1})
+        free_records = _geometry_for_design(component_free)
+        free_atoms = build_atomistic_model(component_free, fast_bridges=True)
+        if ([tuple(getattr(a, field) for field in identity) for a in free_atoms.atoms]
+                != [tuple(getattr(a, field) for field in identity) for a in before_atoms.atoms]
+                or free_atoms.bonds != before_atoms.bonds
+                or [_key(r) for r in free_records] != [_key(r) for r in before_records]):
+            raise ValueError("Removing the current pose component changed material identity")
+        for old, free in zip(before_records, free_records, strict=True):
+            if _key(old) != target and old != free:
+                raise ValueError("Component deletion affected an unselected Full record")
+        for old, free in zip(before_atoms.atoms, free_atoms.atoms, strict=True):
+            if _key(old) != target and old != free:
+                raise ValueError("Component deletion affected an unselected atom")
+        check_records, check_atoms = free_records, free_atoms
     rotation = Rotation.from_quat(pose["rotation"])
-    for before, final in zip(before_records, after_records, strict=True):
+    for before, final in zip(check_records, after_records, strict=True):
         if _key(before) != target:
             if before != final:
                 raise ValueError("Native suffix affected material outside its declared base")
@@ -185,7 +233,7 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
             np.testing.assert_allclose(final_site["radial_hat"], rotation.apply(before_site["radial_hat"]), rtol=0, atol=1e-10)
             for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"):
                 np.testing.assert_allclose(final_site[name], before_site[name], rtol=0, atol=1e-10)
-    for before, final in zip(before_atoms.atoms, after_atoms.atoms, strict=True):
+    for before, final in zip(check_atoms.atoms, after_atoms.atoms, strict=True):
         before_xyz, final_xyz = [before.x, before.y, before.z], [final.x, final.y, final.z]
         if _key(before) != target:
             if before_xyz != final_xyz:
@@ -194,5 +242,6 @@ def compile_ordered_probe(prefix, suffix_entry, selected_helix_ids, *, named_tar
             np.testing.assert_allclose(final_xyz, _point(before_xyz, pose), rtol=0, atol=1e-10)
     assert prefix.model_dump_json() == captured
     return OrderedProbe(hashlib.sha256(captured.encode()).hexdigest(), suffix_entry.id, selected, material,
-                        target, tuple(params["translation"]), tuple(params["rotation"]), tuple(params["pivot"]), before_records, before_atoms,
-                        after_records, after_atoms, deepcopy(named_targets))
+                        target, tuple(pose["translation"]), tuple(pose["rotation"]), tuple(pose["pivot"]),
+                        mode, existing.id if existing else None, before_records, before_atoms,
+                        after_records, after_atoms, deepcopy(named_targets), free_records, free_atoms)

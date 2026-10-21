@@ -68,12 +68,12 @@ def test_native_suffix_on_unselected_helix_keeps_its_exact_native_output():
         a for a in native_atoms.atoms if a.helix_id == target["helix_id"]]
 
 
-@pytest.mark.parametrize("change", [{"compose": False}])
+@pytest.mark.parametrize("change", [{"copy_k": 1}, {"kind": "extension"}])
 def test_unsettled_suffix_roles_are_not_silently_interpreted(change):
     prefix, later, target = recipe(Direction.FORWARD)
     entry = deepcopy(later.feature_log[-1])
     entry.params.update(change)
-    with pytest.raises(ValueError, match="replacement/reset remain unresolved"):
+    with pytest.raises(ValueError, match="Only ordinary base pose components"):
         compile_ordered_probe(prefix, entry, [target["helix_id"]])
 
 
