@@ -1082,3 +1082,14 @@ both whole-helix cases omitted four residues. After repair:4pass; existing order
 file23pass. Full/atom rigid oracles, unselected coordinates, bonds and source
 immutability checked. Static native fixture only: no loop-producer, construction
 replay or explicit tail-selection claim. Production deformation resolver unchanged.
+
+Ordinary Move/Rotate C7 (October20): one real-app mid-log menu creation attempt
+with translation and rotation receives native409 historical_cursor. Canonical
+checkpoint/history remain exact; draft stays open, Cancel restores browser
+design/geometry/revision exactly, and returning to tip re-enables historical edit.
+Existing owner-edit app test already covers disabled historical editing at rollback.
+App1pass; first harness attempt expected a specific toast incorrectly. Actual UI
+shows a generic retained-movement refusal; store.lastError contains the cursor
+explanation. No production changes. Owned scratch rilubkmq/l7zf1625 independently
+absent. Log: feature-history-focus/transform-rollback-app-final.log. This ordinary
+lifecycle evidence does not qualify unresolved named-member molecular semantics.

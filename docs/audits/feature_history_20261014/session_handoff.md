@@ -3,7 +3,6 @@
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 **Sessions since last gate flip or milestone close: 2.** FH-20 closed; delta+1 completed/0 scope. Existing Bend/Twist gates stay ON.
-The overall overhaul remains open. Commit locally under the operating contract; no push.
 
 ## Scope and next work
 
@@ -44,7 +43,8 @@ strand frame choice with stretched other junction. Existing selection locality n
 Sequence A/B review integrated:8cases,11focusedpass;2pages Full/Ballstick/trace pass, screenshots inspected.
 Artifact member-motion-sequence-review; maxdelta1.578nm/bond5.733nm, no physical qualification.
 Existing out-of-span inventory fixed:4focused+23ordering pass; static input, not construction replay.
-Next: independent companion/shared-frame gap assessment; freeze compiler expansion. Construction answer pending.
+C7 ordinary mid-log creation refusal/Cancel app1pass; existing edit-disable test retained.
+Next: C5 transform dependents-dialog evidence gap; construction decision pending, compiler expansion frozen.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 User authorized sustained six-tool milestones and fresh reviewers every30minutes; this
 supersedes the prior one-task/session stop-loss. watchdog.json owns the active timer.

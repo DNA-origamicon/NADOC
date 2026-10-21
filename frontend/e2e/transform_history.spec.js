@@ -461,3 +461,53 @@ test(`${tool} native downstream refusal identifies the first error and blocks it
       ? ['Failed to load resource: the server responded with a status of 409 (Conflict)'] : [] }
   }, 'transform-failure')
 })
+
+test('Move Rotate mid-log creation refusal preserves history and Cancel restores display', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const tip = await f.checkpoint(), panel = page.locator('#move-rotate-panel')
+    const id = tip.design.feature_log.find(row => row.id === 'selected-transform').cluster_id
+    await page.evaluate(async id => {
+      const api = await import('/src/api/client.js')
+      if (!await api.seekFeatures(1)) throw new Error('Seek failed')
+      const { store } = await import('/src/state/store.js')
+      const { createSelectionController } = await import('/src/scene/selection_controller.js')
+      createSelectionController({ store }).replace([{ kind: 'cluster', id }])
+    }, id)
+    const before = await f.checkpoint(), browser = await f.browser()
+    expect(before.design.feature_log_cursor).toBe(1)
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await expect(page.locator('[data-fl-row="2"]').getByTitle('Return to the latest history position before editing feature inputs.', { exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: 'Tools', exact: true }).hover()
+    await page.locator('#menu-tools-translate-rotate').click()
+    await expect(panel).toBeVisible()
+    await page.locator('#mr-tx').fill('9')
+    await page.locator('#mr-tx').press('Tab')
+    await page.locator('#mr-rz').fill('45')
+    await page.locator('#mr-rz').press('Tab')
+    expect(await f.checkpoint()).toEqual(before)
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === `/api/design/cluster/${id}`
+      && r.request().method() === 'PATCH')
+    await page.locator('#mr-apply-btn').click()
+    const response = await applied
+    expect(response.status()).toBe(409)
+    expect((await response.json()).detail.code).toBe('historical_cursor')
+    await expect(page.locator('.toast-message').filter({ hasText: 'A placement was not accepted. Unapplied movement has been retained.' })).toBeVisible()
+    expect(await page.evaluate(() => window.__nadocTest.store.getState().lastError)).toEqual({
+      status: 409, message: 'Return to the latest history position before editing a group.',
+    })
+    await expect(panel).toBeVisible()
+    expect(await f.checkpoint()).toEqual(before)
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).not.toBeVisible()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(browser)
+    await page.evaluate(async () => {
+      if (!await (await import('/src/api/client.js')).seekFeatures(-1)) throw new Error('Return to tip failed')
+    })
+    const restored = await f.checkpoint()
+    expect(restored.design.feature_log).toEqual(tip.design.feature_log)
+    await expect(page.getByTitle('Edit this move/rotate feature', { exact: true })).toBeEnabled()
+    return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }
+  }, 'transform-owner')
+})
