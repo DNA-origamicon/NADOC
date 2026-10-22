@@ -773,3 +773,9 @@ No milestone split, exclusion or new completion credit.
 - Browser1pass11.4s (17.6s total): six labeled entries, F5/F6 rendered base/backbone parity, OH1, pose removal and animation Play/Pause. Screenshot `feature-history-focus/pose-reset-f6.png` inspected.
 - First browser run passed geometry checks then timed out at hidden animation heading; fixed test navigation by opening Scene. Both scratch roots4ie5kbcu/2alyiqmp independently verified absent; retained only logs/screenshot.
 - Focused checks only for test/example changes; prior broad-suite debt remains unchanged. No production gate advanced.
+
+## Original issue status and example cleanup — October 22, 2026
+- Corrected scope: axis/OH1/scrubbing repairs and reset tests do not solve the original chronological Move/Rotate defect. Current five-step F5 base3 backbone differs6.935091655nm from applying the cluster move to its F3 displayed position.
+- Re-ran native ordering counterexamples:2pass (FORWARD6.935091655nm, REVERSE6.336679237nm); these assert the defect remains, not successful chronological motion. No production fix claimed.
+- User authorized old example cleanup: deleted `move_rotate_ordering_example.nadoc`, `move_rotate_cluster_steps.nadoc`, `move_rotate_axes_overhang.nadoc` from workspace (288073 bytes). Historical links to these files are pruned.
+- Checked workspace NADOC references (only self identity paths) and open file handles (none); verified all three absent. Retained five-step focused and six-step reset examples, generator sources and regression tests.

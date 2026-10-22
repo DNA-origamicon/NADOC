@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 22, 2026: pose reset tested after cluster motion; six-step example adds only F6 to the five-step axes/OH1 case.
+October 22, 2026: original Move/Rotate chronology remains unresolved; current F5 base3 differs from chronological motion by6.93509nm.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -56,7 +56,7 @@ Manual examples: `workspace/move_rotate_axes_overhang_focused.nadoc` (5 steps), 
 User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native examples precede engineering phase sweeps.
 Axes/OH1: native36+cluster122+final65 pass; frontend9458/1skip; browser verifies actual axes, OH toggles, scrubbing and animation.
 Ordinary cluster separation now reclassifies; linked/deformed/loop-skip, independent residue-owner and named-member integration remain unsupported.
-Reset: 15 focused tests pass (ordinary API, undo/redo, cold proof, locality); only base3 moves, cluster/OH1 retained, axis extends0–3. Gates OFF.
+Reset/locality tests pass but do not solve chronological movement. Next: fix F5 carrying already-posed base3 through the cluster move. Gates OFF.
 Latest FAST19376pass/19skip/83 baseline failures; FULL deferred. Two display-worker parameters slow/headless; shared tests/conftest.py left uncommitted.
 Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
 Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
