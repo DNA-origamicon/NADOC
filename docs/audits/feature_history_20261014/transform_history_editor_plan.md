@@ -765,3 +765,11 @@ No milestone split, exclusion or new completion credit.
 - F1 Extrude provides duplexes and a stationary reference; F2 Nick defines scaffold bases0–3; F3 Move/Rotate exposes OH1; F4 Make Cluster defines selection; F5 Move/Rotate splits axes and expands OH1.
 - F6–F11 belong to separate pose composition/reset/replacement and repeated-cluster regression coverage; keep them in the engineering fixture, exclude them from this manual review.
 - Artifact-only change: validate native proof/save-reopen, all five prefix geometries against the original, scrubbing, animation indices and stable OH1 growth. No application behavior changed.
+
+## Pose reset after cluster motion — October 22, 2026
+- User requested reset testing after the five-step example. `tools/member_motion_reset_example.py` adds only F6 Move/Rotate [Reset base 3 pose; retain the cluster move]; writes `workspace/move_rotate_pose_reset.nadoc` exclusively, preserving prior examples.
+- Native15pass covers reset/replacement contracts plus ordinary reset API, undo/redo, save/reopen/proof, repeated F5/F6 scrubbing, atom locality and independent rigid-motion coordinates.
+- Only base3 moves; its individual pose disappears, cluster motion remains, OH1 retains its four-base identity, scaffold axis extends0–2 to0–3. No production behavior changed.
+- Browser1pass11.4s (17.6s total): six labeled entries, F5/F6 rendered base/backbone parity, OH1, pose removal and animation Play/Pause. Screenshot `feature-history-focus/pose-reset-f6.png` inspected.
+- First browser run passed geometry checks then timed out at hidden animation heading; fixed test navigation by opening Scene. Both scratch roots4ie5kbcu/2alyiqmp independently verified absent; retained only logs/screenshot.
+- Focused checks only for test/example changes; prior broad-suite debt remains unchanged. No production gate advanced.

@@ -5,6 +5,61 @@ import { stat } from 'node:fs/promises'
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
 const previewPath = '/api/design/features/transform-preview'
 
+test('Pose reset keeps cluster motion in the six-step example', async ({ page, request }) => {
+  const { execFileSync } = await import('node:child_process')
+  const { readFile } = await import('node:fs/promises')
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const file = `${f.root}/workspace/__e2e__pose-reset.nadoc`
+    const expectedPath = `${f.root}/expected-reset-states.json`
+    execFileSync('.venv/bin/python', ['-c', `
+import json, sys
+from pathlib import Path
+from tools.member_motion_native_example import build
+from tools.member_motion_reset_example import build as reset
+from backend.api.crud import _seek_feature_log
+from backend.core.design_geometry import _geometry_for_design
+design = reset(build())
+Path(sys.argv[1]).write_text(design.to_json())
+Path(sys.argv[2]).write_text(json.dumps([_geometry_for_design(_seek_feature_log(design, i)) for i in (4, 5)]))
+`, file, expectedPath], { cwd: '..', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } })
+    const expected = JSON.parse(await readFile(expectedPath, 'utf8'))
+    await page.evaluate(async file => {
+      if (!await (await import('/src/api/client.js')).loadDesign(file)) throw Error('Load failed')
+    }, file)
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await expect(page.locator('#fl-list [data-fl-row="6"]')).toContainText('F6: Move/Rotate 3 [Reset base 3 pose')
+    await expect(page.locator('#fl-list [data-fl-row="7"]')).toHaveCount(0)
+    for (const position of [4, 5, 4, 5]) {
+      const actual = await page.evaluate(async position => {
+        if (!await (await import('/src/api/client.js')).seekFeatures(position)) throw Error('Seek failed')
+        const s = (await import('/src/state/store.js')).store.getState()
+        return { geometry: s.currentGeometry, poses: s.currentDesign.nucleotide_transforms,
+          overhangs: s.currentDesign.overhangs }
+      }, position)
+      expect(actual.poses).toHaveLength(position === 5 ? 0 : 1)
+      expect(actual.overhangs[0].label).toBe('OH1')
+      expect(actual.overhangs[0].sub_domains[0].length_bp).toBe(4)
+      const key = n => JSON.stringify([n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0])
+      const byKey = new Map(expected[position - 4].map(n => [key(n), n]))
+      expect(actual.geometry).toHaveLength(byKey.size)
+      for (const n of actual.geometry) {
+        const reference = byKey.get(key(n))
+        expect(reference).toBeDefined()
+        for (const field of ['base_position', 'backbone_position'])
+          for (let axis = 0; axis < 3; axis++) expect(n[field][axis]).toBeCloseTo(reference[field][axis], 8)
+      }
+    }
+    await page.setViewportSize({ width: 2200, height: 1200 })
+    await page.screenshot({ path: '../.development-artifacts/feature-history-focus/pose-reset-f6.png' })
+    await page.locator('.left-tab-btn[data-tab="scene"]').click()
+    if (!await page.locator('#animation-panel-body').isVisible()) await page.locator('#animation-panel-heading').click()
+    await page.locator('#anim-playpause-btn').click()
+    await expect(page.locator('#anim-playpause-btn')).toHaveAttribute('title', 'Pause', { timeout: 20000 })
+    await page.locator('#anim-playpause-btn').click()
+    await expect(page.locator('#anim-playpause-btn')).toHaveAttribute('title', 'Play')
+  }, 'unpair')
+})
+
 test('Move history edits reclassified staple addresses with exact Cancel and cold replay', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'transform', async f => {
     await page.evaluate(async () => {
