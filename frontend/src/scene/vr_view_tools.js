@@ -160,6 +160,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   const refresh = () => { dirty=true; settle=0 }
   for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
+  let deliveryMilliseconds=0
   let geometry,design,transformBase=null,transformBaseVersion=0,transformUpdates=false
   async function publish() {
     const s=getState(),now=performance.now()
@@ -177,7 +178,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       if(dirty)doc.defaultView?.__nadocVRPlaybackTrace?.({stage:'publish_wait',epoch_ms:performance.timeOrigin+performance.now(),reason:busy?'busy':'settle',wait_ms:Math.max(0,settle-performance.now())})
       return
     }
-    busy=true;dirty=false;const generation=epoch,requestSequence=appliedSequence
+    busy=true;dirty=false;const publicationStart=performance.now(),generation=epoch,requestSequence=appliedSequence
     try {
       // The browser canvas is intentionally frozen/occluded during native VR.
       // Its animation-frame throttling must not pace headset trajectory delivery.
@@ -202,6 +203,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       if(generation!==epoch)return
       transformUpdates=receipt?.transform_updates===true
       if(!update){transformBase=view;transformBaseVersion=version}
+      deliveryMilliseconds=performance.now()-publicationStart
       lastGood=view;lastError=''
     }catch(error){
       transformBase=null;transformUpdates=false
@@ -233,7 +235,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       message=[...doc.querySelectorAll('.toast--visible')].filter(el=>!prior.has(el)).at(-1)?.querySelector('.toast-message')?.textContent??''
     }
     dirty=true;settle=performance.now()+1500
-  },reset(){epoch++;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy}}
+  },reset(){epoch++;deliveryMilliseconds=0;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy},get delivery(){return {busy,milliseconds:deliveryMilliseconds}}}
 }
 
 export function viewToolUnavailable(key,state) {

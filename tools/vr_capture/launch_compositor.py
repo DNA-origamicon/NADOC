@@ -64,6 +64,14 @@ def process_ids(name):
     return sorted(found)
 
 
+def server_pipe_ready(pids, sockets=None):
+    """A process name appears before OpenVR can connect to the server pipe."""
+    if sockets is None:
+        sockets = Path('/proc/net/unix').read_text()
+    names = {line.split()[-1].lstrip('@') for line in sockets.splitlines()[1:] if len(line.split()) >= 8}
+    return any(f'/steamvr/VR_ServerPipe_{pid}' in names for pid in pids)
+
+
 def launch_stack(output, layer_directory=None, mode='pixels', diagnostic_fds=False):
     if any(process_ids(name) for name in ('vrserver', 'vrcompositor', 'vrmonitor')):
         raise RuntimeError('A VR runtime is already active; preserve or stop it before starting a separate capture stack')
@@ -81,10 +89,10 @@ def launch_stack(output, layer_directory=None, mode='pixels', diagnostic_fds=Fal
     record['vrserver'] = start('vrserver', ['-waitformonitor'])
     (output/'stack-launch.json').write_text(json.dumps(record, indent=2)+'\n')
     deadline = time.monotonic()+10
-    while not process_ids('vrserver') and time.monotonic()<deadline:
+    while not server_pipe_ready(process_ids('vrserver')) and time.monotonic()<deadline:
         time.sleep(.1)
-    if not process_ids('vrserver'):
-        raise RuntimeError('Stock vrserver did not start; retained launch evidence')
+    if not server_pipe_ready(process_ids('vrserver')):
+        raise RuntimeError('Stock vrserver pipe did not become ready; retained launch evidence')
     record['compositor'] = launch(output/'compositor', layer_directory, mode, diagnostic_fds=diagnostic_fds)
     record['vrmonitor'] = start('vrmonitor', ['-nokillprocess', '-startupappid', '250820',
                                             '-startupreason', 'steamvr_vrstartup', '-startupapptype', '7'])

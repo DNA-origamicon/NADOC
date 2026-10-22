@@ -112,7 +112,7 @@ it('reloads an evicted first page at wrap and never interpolates end to start', 
  try {
   await t.select('namd','job');t.configure({first:5,last:37,interval:2});await t.load()
   t.loop();t.smooth();t.toggle()
-  await vi.advanceTimersByTimeAsync(1420)
+  await vi.advanceTimersByTimeAsync(4300)
   t.pause()
   expect(drawn.slice(0,18)).toEqual([...Array.from({length:17},(_,i)=>4+2*i),4])
   expect(fetched.filter(i=>i===4)).toHaveLength(2)
@@ -132,13 +132,13 @@ it('prepares a fitting default selection before Ready and plays across old page 
   await t.select('namd','job');await t.load()
   expect(t.snapshot()).toMatchObject({phase:'ready',count:200,message:'200 selected frames prepared'})
   expect(calls).toHaveLength(2)
-  t.toggle();await vi.advanceTimersByTimeAsync(1800);t.pause()
+  t.smooth();t.toggle();await vi.advanceTimersByTimeAsync(1800);t.pause()
   expect(drawn.length).toBeGreaterThan(16);expect(calls).toHaveLength(2)
   await t.seek(199);await t.seek(0);expect(calls).toHaveLength(2)
  }finally{t.dispose();vi.useRealTimers()}
 })
 
-it('keeps the final interpolation quarter paced and honours an explicit smooth preference on reload',async()=>{
+it('keeps all eight slower presentation intervals paced and honours an explicit smooth preference on reload',async()=>{
  vi.useFakeTimers()
  const samples=[],display={loadFullTrajectoryPage:async()=>({ok:true}),prepareFullTrajectoryFrames:async()=>1000,
   showFullTrajectoryFrame:()=>{samples.push({t:performance.now(),fraction:1});return true},
@@ -146,9 +146,9 @@ it('keeps the final interpolation quarter paced and honours an explicit smooth p
  const t=createVRSimulationTrajectory({api:{getMdTrajectoryMeta:async()=>({total_raw:8})},controller:()=>display,ensureFull:async()=>{},request:async()=>({ok:true,headers:{get:()=>null},arrayBuffer:async()=>binary(8)})})
  try {
   await t.select('namd','job');await t.load();expect(t.snapshot().smooth).toBe(true)
-  samples.length=0;t.toggle();await vi.advanceTimersByTimeAsync(84);t.pause()
-  expect(samples.map(s=>s.fraction)).toEqual([.25,.5,.75,1])
-  expect(samples.map(s=>s.t)).toEqual([20,41,62,83])
+  samples.length=0;t.toggle();await vi.advanceTimersByTimeAsync(250);t.pause()
+  expect(samples.map(s=>s.fraction)).toEqual([.125,.25,.375,.5,.625,.75,.875,1])
+  expect(samples.map(s=>s.t)).toEqual([31,62,93,124,155,186,217,248])
   t.smooth();await t.load();expect(t.snapshot().smooth).toBe(false)
  }finally{t.dispose();vi.useRealTimers()}
 })

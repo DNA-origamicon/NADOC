@@ -116,7 +116,7 @@ if [ "${NADOC_RELOAD:-1}" != "0" ]; then
   BACKEND_RELOAD_ARGS=(--reload --reload-dir backend --reload-dir scripts)
   info "Backend code reload enabled (NADOC_RELOAD=0 disables it)."
 fi
-uv run uvicorn backend.api.main:app --host "$BACKEND_HOST" --port 8000 \
+uv run uvicorn server_bootstrap:create_app --factory --host "$BACKEND_HOST" --port 8000 \
   --timeout-graceful-shutdown 5 "${BACKEND_RELOAD_ARGS[@]}" &
 BACKEND_PID=$!
 

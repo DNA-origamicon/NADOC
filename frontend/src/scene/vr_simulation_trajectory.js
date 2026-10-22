@@ -1,3 +1,4 @@
+import { presentSmoothTransition } from './vr_smooth_pacing.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { parseOxdnaTrajectoryBin } from './oxdna_trajectory_bin.js'
 
@@ -11,7 +12,7 @@ export function trajectorySelection(first, last, interval, available) {
  * Source IDs are one-based; API indices are zero-based and sampled globally.
  * Neither opening a job nor selecting Trajectory downloads coordinates.
  */
-export function createVRSimulationTrajectory({ api, controller, ensureFull, prepareFrame = async () => {}, companion = () => null, changed = () => {}, request = fetch, clock = () => performance.now() }) {
+export function createVRSimulationTrajectory({ api, controller, ensureFull, prepareFrame = async () => {}, companion = () => null, changed = () => {}, delivery = () => ({}), request = fetch, clock = () => performance.now() }) {
   let seekSequence = 0, generation = 0, abort = null, timer = null, context = '', engine = '', job = '', scope = 'job', ctrl = null, overlays = null
   let pages = new Map(), pending = null, renderedPage = null, metadataPending = false
   let state = empty(), lastStep = 0, pageSize = 8, resident = false, smoothChosen = false, playback = 0
@@ -176,15 +177,25 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
     const next = (state.index + 1) % state.count, current = generation
     if (state.smooth && engine !== 'snupi' && next !== 0 && next % pageSize !== 0 && renderedPage) {
       const from = state.index - renderedPage.start, to = next - renderedPage.start
-      await ctrl.ensureInterpolationFrames?.(from, to)
-      if (current !== generation || run !== playback || !state.playing) return
-      for (let sample = 1; sample <= 3; sample++) {
-        await new Promise(resolve => setTimeout(resolve, Math.max(0, lastStep + sample * 1000 / 48 - clock())))
-        if (current !== generation || run !== playback || !state.playing) return
-        if (clock() >= lastStep + 1000 / 12) break
-        ctrl.showInterpolatedFrame?.(from, to, sample / 4); overlays?.showInterpolatedFrame(state.first - 1 + state.index * state.interval, state.first - 1 + next * state.interval, sample / 4); changed(true)
+      try {
+        await presentSmoothTransition({
+          prepare: () => ctrl.ensureInterpolationFrames?.(from, to),
+          active: () => current === generation && run === playback && state.playing && state.smooth,
+          delivery, wait: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+          show: fraction => {
+            ctrl.showInterpolatedFrame?.(from, to, fraction)
+            overlays?.showInterpolatedFrame(state.first - 1 + state.index * state.interval, state.first - 1 + next * state.interval, fraction)
+            globalThis.__nadocVRPlaybackTrace?.({stage:'interpolation_applied',epoch_ms:performance.timeOrigin+performance.now(),from:state.index,to:next,fraction})
+            changed(true)
+          },
+        })
+      } catch (error) {
+        if (current === generation && run === playback) { pause(); state.phase = 'error'; state.message = error.message; changed() }
+        return
       }
-      await new Promise(resolve => setTimeout(resolve, Math.max(0, lastStep + 1000 / 12 - clock())))
+    } else if (state.smooth && engine !== 'snupi') {
+      // Page boundaries and loop wraps remain exact; hold the same nominal pace.
+      await new Promise(resolve => setTimeout(resolve, 250))
     }
     if (current === generation && run === playback && state.playing) await seek(next)
     if (current === generation && run === playback && state.playing) timer = setTimeout(() => step(run), Math.max(0, 1000 / 12 - (clock() - lastStep)))

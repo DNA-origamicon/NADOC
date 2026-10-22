@@ -1018,3 +1018,19 @@ Use the four completed CPD production jobs, default selected frames, Smooth OFF,
 Repeat the registered CPD production playback workload across all four isomers and ball-and-stick, stick and VDW with Smooth OFF, then 24HB P1. Check head-motion stability separately from saved-frame delivery, including style switches and replay/seek. Automated exact-buffer/pixel parity and submitted stereo checks do not establish physical comfort. No molecular simplification is authorized by this optimization.
 
 MV-50 follow-up (ISSUE-102, 2026-10-21): bounded block decoding retains exact CPU/GPU/pixel parity. Three-minute CPD and resident 24HB P1 checks are summarized in `docs/audits/vr_final_pass_20261021.json`; physical continuity remains pending.
+
+
+### MV-51 — PENDING: slower Smooth pacing and compact vertices (ISSUE-104, 2026-10-21)
+
+Use Debug → VR Tours & Tests → CPD production playback, then the large-workload
+variant. Compare Smooth on/off across ball-and-stick, stick and VDW while moving
+the head. Smooth deliberately advances saved endpoints more slowly and retains
+all seven display interpolation fractions. Confirm the slower presentation feels
+continuous, including pause, seek, loop wrap and style changes. Submitted stereo
+and automated pixel/timing evidence do not establish through-lens comfort.
+
+Publication follow-up (2026-10-21): startup-heap freezing removes the identified
+long backend GC scan without changing GC for later objects. Four-isomer
+atomistic checks pass, but browser-side request waits and encoding outliers
+remain. Use the new startup factory on the next normal backend start; the live
+session was deliberately not restarted. See `docs/audits/vr_publication_20261021.json`.

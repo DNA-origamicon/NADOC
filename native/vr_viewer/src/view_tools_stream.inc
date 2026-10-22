@@ -9,7 +9,7 @@ struct StagedView {IncomingView view;GLuint triangles=0,lines=0,texture=0;size_t
 std::unique_ptr<nadoc_vr::ViewSnapshotInbox> inbox;
 std::future<std::optional<IncomingView>> reading;
 std::optional<StagedView> staging;
-static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={},bool indexMeshes=false,bool groupIndexedMeshes=false,std::optional<std::string> packet={},std::shared_ptr<const TransformBase> base={}){
+static std::optional<IncomingView> readView(const std::string& path,uint32_t current,glm::vec3 center,float scale,glm::vec3 origin,bool classifyOpaque=false,bool groupInstances=false,nadoc_vr::view_groups::Limits groupLimits={},bool indexMeshes=false,bool groupIndexedMeshes=false,std::optional<std::string> packet={},std::shared_ptr<const TransformBase> base={},bool compactMeshes=true){
  const auto epoch=std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
  const auto start=std::chrono::steady_clock::now();std::ifstream file;std::istringstream memory;
  if(packet)memory.str(std::move(*packet));else file.open(path,std::ios::binary);
@@ -62,6 +62,10 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
     b.indexedVertices=std::move(indexed.vertices);b.indices=std::move(indexed.indices);out.indexedAny=true;}
    else b.indexedGroupPlan.reason="indexed_mesh_unavailable";}}
  else for(auto& b:out.batches){b.indexPlan.reason="disabled";b.indexPlan.originalVertices=b.vertices.size();b.indexedGroupPlan.reason="indexing_disabled";}
+ if(compactMeshes && out.opaqueEligibility.eligible){size_t remaining=nadoc_vr::view_compact::maxBytes;
+  for(auto& b:out.batches)if(b.indexedGroupPlan.eligible || b.groupPlan.eligible){
+   b.compactGroup=nadoc_vr::view_compact::pack(b.indexedGroupPlan.eligible?b.indexedGroupVertices:b.groupedVertices,remaining);
+   remaining-=b.compactGroup.capacity()*sizeof(nadoc_vr::view_compact::Vertex);}}
  out.readEpochMs=epoch;out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;
 }
 static void discardIndexedGroups(Batch& b,const char* reason){
@@ -69,7 +73,7 @@ static void discardIndexedGroups(Batch& b,const char* reason){
  if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);
  if(b.instanceTexture && !b.groupPlan.eligible){glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;}
  b.indexedGroupVertexBuffer=b.indexedGroupIndexBuffer=0;b.indexedGroupPlan.eligible=false;b.indexedGroupPlan.reason=reason;b.indexedGroupPlan.derivedBytes=0;
- std::vector<V>().swap(b.indexedGroupVertices);std::vector<uint32_t>().swap(b.indexedGroupIndices);
+ std::vector<nadoc_vr::view_compact::Vertex>().swap(b.compactGroup);std::vector<V>().swap(b.indexedGroupVertices);std::vector<uint32_t>().swap(b.indexedGroupIndices);
 }
 static void discardIndexed(Batch& b,const char* reason){
  discardIndexedGroups(b,"indexed_base_unavailable");
@@ -93,12 +97,12 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
    }
    else {auto& b=s.view.batches[(s.buffer-2)/stride];const size_t kind=(s.buffer-2)%stride;
     if(kind>=indexedGroupKind){optionalIndexed=&b;optionalGroup=true;const bool elements=kind==indexedGroupKind+1;
-     buffer=elements?&b.indexedGroupIndexBuffer:&b.indexedGroupVertexBuffer;data=elements?(const void*)b.indexedGroupIndices.data():(const void*)b.indexedGroupVertices.data();bytes=elements?b.indexedGroupIndices.size()*sizeof(uint32_t):b.indexedGroupVertices.size()*sizeof(V);}
+     buffer=elements?&b.indexedGroupIndexBuffer:&b.indexedGroupVertexBuffer;data=elements?(const void*)b.indexedGroupIndices.data():!b.compactGroup.empty()?(const void*)b.compactGroup.data():(const void*)b.indexedGroupVertices.data();bytes=elements?b.indexedGroupIndices.size()*sizeof(uint32_t):b.indexedGroupVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex));}
     else if(kind>=indexKind){optionalIndexed=&b;const bool elements=kind==indexKind+1;
      buffer=elements?&b.indexBuffer:&b.indexedVertexBuffer;data=elements?(const void*)b.indices.data():(const void*)b.indexedVertices.data();bytes=elements?b.indices.size()*sizeof(uint32_t):b.indexedVertices.size()*sizeof(V);}
     else {buffer=kind==2?&b.groupedVertexBuffer:kind==1?&b.instanceBuffer:&b.vertexBuffer;
-     data=kind==2?(const void*)b.groupedVertices.data():kind==1?(const void*)b.instances.data():(const void*)b.vertices.data();
-     bytes=kind==2?b.groupedVertices.size()*sizeof(V):kind==1?b.instances.size()*sizeof(Instance):b.vertices.size()*sizeof(V);}}
+     data=kind==2?(!b.compactGroup.empty()?(const void*)b.compactGroup.data():(const void*)b.groupedVertices.data()):kind==1?(const void*)b.instances.data():(const void*)b.vertices.data();
+     bytes=kind==2?b.groupedVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex)):kind==1?b.instances.size()*sizeof(Instance):b.vertices.size()*sizeof(V);}}
    const auto discardOptional=[&](const char* reason){if(optionalGroup)discardIndexedGroups(*optionalIndexed,reason);else discardIndexed(*optionalIndexed,reason);};
    const auto noteOptionalError=[&](GLenum error){if(optionalGroup)optionalIndexed->indexedGroupUploadGlError=error;else optionalIndexed->indexUploadGlError=error;};
    if(!bytes){++s.buffer;s.offset=0;continue;}
@@ -129,9 +133,9 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
      if(b.groupPlan.eligible){glBindBuffer(GL_ARRAY_BUFFER,b.groupedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertexBytes);}
      if(b.instanceTexture){glBindTexture(GL_TEXTURE_BUFFER,b.instanceTexture);glTexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32F,b.instanceBuffer);glGetTexLevelParameteriv(GL_TEXTURE_BUFFER,0,GL_TEXTURE_WIDTH,&width);glGetTexLevelParameteriv(GL_TEXTURE_BUFFER,0,GL_TEXTURE_INTERNAL_FORMAT,&format);}
      const auto error=b.indexedGroupPlan.eligible?glGetError():GL_NO_ERROR;
-     if((b.groupPlan.eligible && vertexBytes!=int(b.groupedVertices.size()*sizeof(V))) || width!=int(b.instances.size()*5) || format!=GL_RGBA32F || error!=GL_NO_ERROR){if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;
+     if((b.groupPlan.eligible && vertexBytes!=int(b.groupedVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex)))) || width!=int(b.instances.size()*5) || format!=GL_RGBA32F || error!=GL_NO_ERROR){if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);b.instanceTexture=0;
       if(b.indexedGroupPlan.eligible){b.indexedGroupUploadGlError=error;discardIndexedGroups(b,"indexed_group_texture_incomplete");}
-      if(b.groupPlan.eligible){glDeleteBuffers(1,&b.groupedVertexBuffer);b.groupedVertexBuffer=0;std::vector<V>().swap(b.groupedVertices);b.groupPlan={false,"grouped_resource_incomplete"};}}}
+      if(b.groupPlan.eligible){glDeleteBuffers(1,&b.groupedVertexBuffer);b.groupedVertexBuffer=0;std::vector<V>().swap(b.groupedVertices);std::vector<nadoc_vr::view_compact::Vertex>().swap(b.compactGroup);b.groupPlan={false,"grouped_resource_incomplete"};}}}
     glActiveTexture(active);}
    if(s.view.indexedAny)for(auto& b:s.view.batches)if(b.indexPlan.eligible){GLint vertices=0,elements=0;
     if(b.indexedVertexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertices);}
@@ -140,7 +144,7 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
    if(s.view.indexedGroupedAny)for(auto& b:s.view.batches)if(b.indexedGroupPlan.eligible){GLint vertices=0,elements=0;
     if(b.indexedGroupVertexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedGroupVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertices);}
     if(b.indexedGroupIndexBuffer){glBindBuffer(GL_ARRAY_BUFFER,b.indexedGroupIndexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&elements);}
-    if(!b.instanceTexture || !nadoc_vr::view_indexed::groupResourcesComplete(b.indexedGroupPlan,sizeof(V),vertices,elements))discardIndexedGroups(b,"indexed_group_resource_incomplete");}
+    if(!b.instanceTexture || !nadoc_vr::view_indexed::groupResourcesComplete(b.indexedGroupPlan,b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex),vertices,elements))discardIndexedGroups(b,"indexed_group_resource_incomplete");}
    opaqueEligibility=s.view.opaqueEligibility;
    if(s.view.transformsOnly){
     for(size_t i=0;i<batches.size();++i){auto& active=batches[i];auto& next=s.view.batches[i];
@@ -158,7 +162,7 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
  if(!reading.valid()&&!staging&&(continuous||++frames%3==0)){
   auto packet=inbox->take();
   // Once IPC is established, never reapply a stale legacy file between packets.
-  if(packet || !inbox->received())reading=std::async(std::launch::async,[=,packet=std::move(packet),current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits,indexMeshes=indexedRequested,groupIndexedMeshes=indexedGroupsRequested&&groupsAvailable(),base=transformBase]() mutable {return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits,indexMeshes,groupIndexedMeshes,std::move(packet),base);});
+  if(packet || !inbox->received())reading=std::async(std::launch::async,[=,packet=std::move(packet),current=version,classifyOpaque=opaqueRequested,groupInstances=groupsAvailable(),limits=groupLimits,indexMeshes=indexedRequested,groupIndexedMeshes=indexedGroupsRequested&&groupsAvailable(),base=transformBase,compactMeshes=compactRequested]() mutable {return readView(path+".viewtools",current,center,scale,origin,classifyOpaque,groupInstances,limits,indexMeshes,groupIndexedMeshes,std::move(packet),base,compactMeshes);});
  }
  return applied;
 }

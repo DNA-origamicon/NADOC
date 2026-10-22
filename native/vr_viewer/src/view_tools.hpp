@@ -15,7 +15,7 @@ class VRViewTools {
     struct Instance {glm::mat4 matrix;glm::vec4 color;};
     static_assert(sizeof(glm::mat4)==64 && sizeof(Instance)==80 && offsetof(Instance,color)==64,"Grouped texture view requires exact matrix+color wire layout");
     static_assert(sizeof(V)==48 && offsetof(V,p)==0 && offsetof(V,color)==12 && offsetof(V,uv)==28 && offsetof(V,normal)==36,"Exact indexing requires the complete padding-free wire vertex");
-    struct Batch {std::vector<V> vertices,groupedVertices,indexedVertices,indexedGroupVertices;std::vector<uint32_t> indices,indexedGroupIndices;std::vector<Instance> instances;GLsync spareInstanceFence=nullptr;GLuint spareInstanceBuffer=0;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0,indexedVertexBuffer=0,indexBuffer=0,indexedGroupVertexBuffer=0,indexedGroupIndexBuffer=0;nadoc_vr::view_groups::Plan groupPlan;nadoc_vr::view_indexed::Plan indexPlan;nadoc_vr::view_indexed::GroupPlan indexedGroupPlan;uint32_t indexUploadGlError=0,indexedGroupUploadGlError=0;};
+    struct Batch {std::vector<nadoc_vr::view_compact::Vertex> compactGroup;std::vector<V> vertices,groupedVertices,indexedVertices,indexedGroupVertices;std::vector<uint32_t> indices,indexedGroupIndices;std::vector<Instance> instances;GLsync spareInstanceFence=nullptr;GLuint spareInstanceBuffer=0;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0,indexedVertexBuffer=0,indexBuffer=0,indexedGroupVertexBuffer=0,indexedGroupIndexBuffer=0;nadoc_vr::view_groups::Plan groupPlan;nadoc_vr::view_indexed::Plan indexPlan;nadoc_vr::view_indexed::GroupPlan indexedGroupPlan;uint32_t indexUploadGlError=0,indexedGroupUploadGlError=0;};
     std::vector<Batch> batches;
     bool open=false,waiting=false;
     uint32_t version=0,flags=256,acknowledged=0;
@@ -38,6 +38,7 @@ class VRViewTools {
     bool opaqueRequested=false;
     nadoc_vr::view_opaque::Eligibility opaqueEligibility;
     GLuint legacyProgram=0,opaqueProgram=0,groupedLegacyProgram=0,groupedOpaqueProgram=0;
+    bool compactRequested=true;
     bool indexedRequested=false,indexedGroupsRequested=false;const char* indexedSelectionSource="default";const char* indexedGroupsSelectionSource="default";uint64_t indexedBatchDraws=0,indexedShadowBatchDraws=0,indexedGroupBatchDraws=0,indexedGroupLogicalInstances=0,indexedGroupHardwareInstances=0;
     bool groupsRequested=false;nadoc_vr::view_groups::Limits groupLimits;
     const char* opaqueSelectionSource="default";const char* groupsSelectionSource="default";
@@ -48,23 +49,23 @@ class VRViewTools {
         size_t eligible=0,grouped=0,cpuBytes=0,gpuBytes=0;std::string entries="[";
         for(size_t i=0;i<batches.size();++i){const auto& b=batches[i];const bool active=indexedRequested && b.indexPlan.eligible && b.indexedVertexBuffer && b.indexBuffer;
             const bool group=active && indexedGroupsRequested && groupsAvailable() && b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer && b.instanceTexture;
-            eligible+=active;grouped+=group;cpuBytes+=b.indexPlan.derivedBytes+b.indexedGroupPlan.derivedBytes;
-            gpuBytes+=b.indexedVertices.size()*sizeof(V)+b.indices.size()*sizeof(uint32_t)+b.indexedGroupVertices.size()*sizeof(V)+b.indexedGroupIndices.size()*sizeof(uint32_t);
+            eligible+=active;grouped+=group;cpuBytes+=b.indexPlan.derivedBytes+b.indexedGroupPlan.derivedBytes+b.compactGroup.capacity()*sizeof(nadoc_vr::view_compact::Vertex);
+            gpuBytes+=b.indexedVertices.size()*sizeof(V)+b.indices.size()*sizeof(uint32_t)+b.indexedGroupVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex))+b.indexedGroupIndices.size()*sizeof(uint32_t);
             if(i)entries+=",";
-            entries+="{\"active\":"+std::string(active?"true":"false")+",\"reason\":\""+b.indexPlan.reason+"\",\"original_vertices\":"+std::to_string(b.vertices.size())+",\"unique_vertices\":"+std::to_string(b.indexPlan.uniqueVertices)+",\"index_count\":"+std::to_string(b.indexPlan.indexCount)+",\"instances\":"+std::to_string(b.instances.size())+",\"upload_gl_error\":"+std::to_string(b.indexUploadGlError)+
+            entries+="{\"compact_vertices\":"+std::string(!b.compactGroup.empty()?"true":"false")+",\"active\":"+std::string(active?"true":"false")+",\"reason\":\""+b.indexPlan.reason+"\",\"original_vertices\":"+std::to_string(b.vertices.size())+",\"unique_vertices\":"+std::to_string(b.indexPlan.uniqueVertices)+",\"index_count\":"+std::to_string(b.indexPlan.indexCount)+",\"instances\":"+std::to_string(b.instances.size())+",\"upload_gl_error\":"+std::to_string(b.indexUploadGlError)+
                 ",\"grouped_active\":"+(group?"true":"false")+",\"grouped_reason\":\""+b.indexedGroupPlan.reason+"\",\"grouped_vertices\":"+std::to_string(b.indexedGroupVertices.size())+",\"grouped_indices\":"+std::to_string(b.indexedGroupIndices.size())+",\"grouped_upload_gl_error\":"+std::to_string(b.indexedGroupUploadGlError)+"}";}
         entries+="]";
         return "{\"requested\":"+std::string(indexedRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+indexedSelectionSource+"\",\"active_batches\":"+std::to_string(eligible)+
             ",\"grouping_requested\":"+(indexedGroupsRequested?"true":"false")+",\"grouping_default_enabled\":true,\"grouping_selection_source\":\""+indexedGroupsSelectionSource+"\",\"group_size\":8,\"grouped_active_batches\":"+std::to_string(grouped)+
-            ",\"derived_cpu_bytes\":"+std::to_string(cpuBytes)+",\"derived_gpu_bytes\":"+std::to_string(gpuBytes)+",\"cpu_budget_bytes\":"+std::to_string(nadoc_vr::view_indexed::maxDerivedBytes)+",\"indexed_batch_draws\":"+std::to_string(indexedBatchDraws)+",\"indexed_shadow_batch_draws\":"+std::to_string(indexedShadowBatchDraws)+
+            ",\"derived_cpu_bytes\":"+std::to_string(cpuBytes)+",\"derived_gpu_bytes\":"+std::to_string(gpuBytes)+",\"cpu_budget_bytes\":"+std::to_string(nadoc_vr::view_indexed::maxDerivedBytes+nadoc_vr::view_compact::maxBytes)+",\"indexed_batch_draws\":"+std::to_string(indexedBatchDraws)+",\"indexed_shadow_batch_draws\":"+std::to_string(indexedShadowBatchDraws)+
             ",\"grouped_batch_draws\":"+std::to_string(indexedGroupBatchDraws)+",\"grouped_logical_instances\":"+std::to_string(indexedGroupLogicalInstances)+",\"grouped_hardware_instances\":"+std::to_string(indexedGroupHardwareInstances)+",\"batches\":"+entries+",\"equivalence\":\"byte-exact attributes and original batch/instance/triangle order; unchanged normal arithmetic\"}";
     }
     std::string instanceGroupsJson()const {
-        size_t eligible=0,bytes=0;for(const auto& b:batches){eligible+=b.groupPlan.eligible;bytes+=b.groupedVertices.size()*sizeof(V);}
+        size_t eligible=0,bytes=0,gpuBytes=0;for(const auto& b:batches){eligible+=b.groupPlan.eligible;bytes+=b.groupedVertices.size()*sizeof(V);gpuBytes+=b.groupedVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex));}
         std::string reasons="[";for(size_t i=0;i<batches.size();++i){if(i)reasons+=",";reasons+='"';reasons+=batches[i].groupPlan.reason;reasons+='"';}reasons+="]";
         return "{\"requested\":"+std::string(groupsRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+groupsSelectionSource+"\",\"program_available\":"+(groupsAvailable()?"true":"false")+",\"program_reason\":\""+groupsProgramReason+"\",\"group_size\":8,\"eligible_batches\":"+std::to_string(eligible)+
             ",\"total_batches\":"+std::to_string(batches.size())+",\"texture_texel_limit\":"+std::to_string(groupLimits.textureTexels)+
-            ",\"expanded_cpu_bytes\":"+std::to_string(bytes)+",\"expanded_gpu_bytes\":"+std::to_string(bytes)+
+            ",\"expanded_cpu_bytes\":"+std::to_string(bytes)+",\"expanded_gpu_bytes\":"+std::to_string(gpuBytes)+
             ",\"grouped_batch_draws\":"+std::to_string(groupedBatchDraws)+",\"legacy_batch_draws\":"+std::to_string(legacyBatchDraws)+
             ",\"grouped_logical_instances\":"+std::to_string(groupedLogicalInstances)+",\"grouped_hardware_instances\":"+std::to_string(groupedHardwareInstances)+
             ",\"batch_eligibility_reasons\":"+reasons+",\"primitive_order\":\"original batch then instance then triangle\",\"shadow_batches\":\"legacy shader; eligible large meshes indexed\",\"indexed_meshes\":"+indexedMeshesJson()+"}";
@@ -86,6 +87,7 @@ class VRViewTools {
     bool inspectionLayout() const {return overrideScene() && !(flags&256);}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
+        compactRequested=nadoc_vr::view_compact::requestedFromEnvironment();
         opaqueRequested=nadoc_vr::view_opaque::requestedFromEnvironment();
         groupsRequested=nadoc_vr::view_groups::requestedFromEnvironment();
         indexedRequested=nadoc_vr::view_indexed::requestedFromEnvironment();
@@ -245,6 +247,13 @@ class VRViewTools {
                 glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,color));
                 glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,uv));
                 glVertexAttribPointer(8,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,normal));
+                glEnableVertexAttribArray(1);glEnableVertexAttribArray(2);
+                if(grouped && !b.compactGroup.empty()){
+                    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(nadoc_vr::view_compact::Vertex),(void*)offsetof(nadoc_vr::view_compact::Vertex,p));
+                    glVertexAttribPointer(8,3,GL_FLOAT,GL_FALSE,sizeof(nadoc_vr::view_compact::Vertex),(void*)offsetof(nadoc_vr::view_compact::Vertex,normal));
+                    glDisableVertexAttribArray(1);glDisableVertexAttribArray(2);
+                    glVertexAttrib4fv(1,&b.vertices.front().color[0]);glVertexAttrib2fv(2,&b.vertices.front().uv[0]);
+                }
                 if(grouped){
                     for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
                     glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);glBindTexture(GL_TEXTURE_BUFFER,b.instanceTexture);glActiveTexture(GL_TEXTURE1);
@@ -265,7 +274,7 @@ class VRViewTools {
                 }
             }
             for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);
+            glEnableVertexAttribArray(1);glEnableVertexAttribArray(2);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);
         }
         if(shadow){glUseProgram(program);glUniform1i(glGetUniformLocation(program,"shadowPass"),0);glUseProgram(0);return;}
         const float scale=glm::length(glm::vec3(model[0]));std::vector<V> billboards;billboards.reserve(sprites.size()*6);

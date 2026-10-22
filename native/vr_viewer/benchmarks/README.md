@@ -28,7 +28,7 @@ a constant-color fragment shader and a one-pixel viewport. The last two change
 the image intentionally; the constant fragment may also eliminate unused vertex
 outputs, so it is not a fragment-only isolation. Culling remains diagnostic.
 Three further conditions compare exact indexed groups of eight, direct normal
-matrix multiplication for sphere instances whose positive similarity transforms
+matrix multiplication for instances whose positive similarity transforms
 pass a declared relative Gram residual bound of 2e-5, and their combination.
 The direct-normal experiment changes floating arithmetic; its original-pixel
 differences are reported, without an exact-equivalence claim. No condition changes the
@@ -42,3 +42,45 @@ Captured JSON pose precision is retained. Determinant/affine checks, outward fac
 counts and conservative camera/near/far bounding-sphere checks help assess culling,
 but do not prove manifold closure or authorize culling in arbitrary views.
 Pixel equality at one saved viewpoint is not a universal visual-equivalence proof.
+
+## Indexed group-size sweep
+
+Pass `groups` after the iteration count to compare original arrays and indexed
+groups of 1, 2, 4, 8 (production), 16, 32 and 64. Each size gets a separately
+compiled constant shader, including the unchanged production eight-instance
+shader. The same vertex/index buffers preserve primitive and instance order;
+tails draw only the remaining instances. Expanded experimental mesh storage is
+bounded at 64 MiB. Small bond batches keep their production grouping.
+
+This mode fails on blank output or any color, depth or object-ID difference.
+It is an offline experiment, not authorization to change production defaults.
+Use at least two alternating-order repeats before interpreting small differences.
+
+To export a current completed production trajectory using the registered CPD
+playback workflow, set `NADOC_CPD_GPU_EXPORT=1` and
+`NADOC_VR_TRANSFORM_UPDATES=0`. The opt-in export runs after timing, seeks a
+resident frame, copies the actual browser Blob, applies the production backend camera rotation,
+and checks that the stereo capture
+has the identical native snapshot version. The wrapper owns private job copies;
+exported `<representation>.viewtools` files stay in its Archive report directory.
+Export-mode playback timings use full snapshots, not production transform updates.
+
+The sphere-culling diagnostic recognizes both historical 420-record and current
+2160-record exported spheres. This vertex-count check is only a diagnostic
+selector; it is not a closed-mesh proof and must not become production eligibility.
+Always inspect offline framing against submitted-eye pixels: matching snapshot
+versions alone does not detect a missing backend view rotation.
+
+## Vertex-fetch experiments
+
+Pass `cache` after the iteration count to compare production group-eight buffers,
+16-bit indices, deterministic triangle cache ordering, and compact vertices.
+The compact condition uses 24-byte position/normal records for eligible indexed
+groups, with their byte-identical constant color and UV supplied as GL generic
+attributes. Eligible small bond groups use the same packing. Production retains
+original fallback buffers and caps extra packed CPU storage at 1 MiB per view;
+`NADOC_VR_COMPACT_VIEW_VERTICES=0` disables packing for comparisons.
+
+Cache mode reports all color/depth/ID differences without treating experimental
+differences as a tool failure. Check the results explicitly. Triangle reordering
+and 16-bit indices remain offline experiments; neither is a production default.

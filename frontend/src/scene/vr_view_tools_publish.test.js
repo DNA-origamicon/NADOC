@@ -103,3 +103,17 @@ it('negotiates transform updates, and resets to full snapshots for new viewers o
   controller.reset();await publishSettled();expect(headers.at(-1)[0]).toBe(5)
  }finally{delete document.documentElement.dataset.vrSimulationTrajectory}
 })
+
+
+it('reports completed delivery cost for smooth pacing and clears it on reset',async()=>{
+ vi.mocked(fetch).mockImplementation(async()=>{await new Promise(resolve=>setTimeout(resolve,80));return {ok:true}})
+ await controller.publish();await vi.advanceTimersByTimeAsync(1600)
+ const pending=controller.publish()
+ await vi.advanceTimersByTimeAsync(1)
+ expect(controller.delivery.busy).toBe(true)
+ await vi.runAllTimersAsync();await pending
+ expect(controller.delivery.busy).toBe(false)
+ expect(controller.delivery.milliseconds).toBeGreaterThanOrEqual(80)
+ controller.reset()
+ expect(controller.delivery.milliseconds).toBe(0)
+})

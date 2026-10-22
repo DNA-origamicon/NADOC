@@ -4,5 +4,7 @@ export default {
  use: { ...config.use, headless: false }, globalTimeout: 0, timeout: 1_800_000,
  // Retain opt-in backend stage timings alongside the native/browser traces.
  webServer: config.webServer.map((server, index) => index === 0 && process.env.NADOC_VR_VIEW_PIPELINE === '1'
-  ? { ...server, stdout: 'pipe' } : server),
+  ? { ...server, stdout: 'pipe', command: process.env.NADOC_VR_PUBLICATION_PROBE === '1'
+    ? server.command.replace('server_bootstrap:create_app --factory', 'tools.vr_workflows.publication_probe:app')
+    : server.command } : server),
 }

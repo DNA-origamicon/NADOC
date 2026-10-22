@@ -22,6 +22,13 @@ trigger restarts. Open designs recover through the session cache. Use
 `NADOC_RELOAD=0 ./start.sh` to disable backend reload. Frontend edits continue to
 reload through Vite.
 
+The launchers use `uvicorn server_bootstrap:create_app --factory`. This dedicated
+process factory collects import temporaries and freezes the permanent startup
+object graph before lifespan or requests begin, reducing full-GC publication
+pauses. Later session and job objects remain normally collectible. Direct app
+imports remain inert; use this factory for manually started servers too. Changes
+to `server_bootstrap.py` take effect on the next normal server start.
+
 ## Use NADOC across the two Tailscale computers
 
 Run this on each computer whose workspace should be available:

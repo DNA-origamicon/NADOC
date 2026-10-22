@@ -822,3 +822,34 @@ changed in this popup fix; frontend main.js task delta remains zero.
 2026-10-21 — ISSUE-101: negotiated absolute transform streaming retains native mesh resources and reuses fenced instance buffers. Exact CPU/GPU/pixel parity regressions and resident CPD/24HB app measurements are recorded in `docs/audits/vr_transform_stream_20261021.json`. Full snapshots remain the compatibility/structural-change path. Main.js task delta: zero. Physical review: MV-50.
 
 2026-10-21 — ISSUE-102: replace tiny per-vector transform reads with bounded 48 KiB blocks. Exact scalar-oracle, malformed-packet and production GL byte/pixel checks pass. Native preparation improves on 24HB but median playback cadence does not; retain as CPU headroom and prioritize broader rendering/publication work over more decoder tuning. Evidence: `docs/audits/vr_final_pass_20261021.json`. Main.js task delta: zero.
+
+
+2026-10-21 — ISSUE-103 investigation: added bounded GPU group-size sweeps and
+post-timing snapshot exports. Fixed diagnostic replay to apply backend camera
+rotation and include current dense sphere meshes in probes. App captures, exact
+pixel group checks, offscreen negative control and 50 tour tests pass. No measured
+case justifies changing production defaults; analytic sphere rendering remains
+the substantial next task. Main.js task delta: zero.
+
+
+2026-10-21 — ISSUE-104: Smooth prepares each pair before a slower, delivery-aware
+presentation clock, retaining seven intermediate fractions and exact endpoints.
+Eligible sphere/bond groups halve vertex records without geometry/shader changes;
+final same-scene repeats improve GPU time by 2.5–4.7% with exact color/depth/ID
+parity. Sphere-only packing, smaller indices and reordered triangles did not
+establish a consistent gain. Full frontend and smoke pass; production GL tests
+cover packed/full buffers, transform reuse and shadow transitions. App measurements
+and cleanup are in `docs/audits/vr_gpu_iterations_20261021.json`. Physical review:
+MV-51. Main.js task delta: zero.
+
+2026-10-21 — ISSUE-104 publication follow-up: GC callbacks and event-loop sampling
+tie a 148 ms pre-handler delay to a 149.6 ms generation-2 collection. A dedicated
+server startup factory collects import temporaries and freezes the permanent
+startup graph once; later cycles stay collectible. Controlled 60-second upload
+maxima improve 160.8→31.8 ms raw and 58.8→26.7 ms Smooth. All four isomers pass
+24 atomistic windows; remaining browser request/encoding outliers are separately
+recorded. A startup race now waits for the actual SteamVR server pipe. Existing
+sessions were not restarted; the factory activates on the next normal start.
+100 focused checks and 16 targeted rechecks pass. FAST suite retains documented
+chemistry/provenance debt; no guards or fidelity were weakened. Evidence and
+cleanup: `docs/audits/vr_publication_20261021.json`. Main.js task delta: zero.

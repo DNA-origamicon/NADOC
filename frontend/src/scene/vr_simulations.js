@@ -6,11 +6,11 @@ import { createVRSimulationTrajectory } from './vr_simulation_trajectory.js'
 export { simulationControls } from './vr_simulation_controls.js'
 
 export function createVRSimulations({ jobs, engineSelector, doc = document, request = fetch, onError = console.error,
-  api, controller = () => null, companion = () => null, ensureFull = async () => {}, prepareFrame = async () => {}, onFrame = () => {}, scale = () => null }) {
+  api, controller = () => null, companion = () => null, ensureFull = async () => {}, prepareFrame = async () => {}, delivery = () => ({}), onFrame = () => {}, scale = () => null }) {
   let version = Math.floor(Math.random() * 1e9), acknowledged = 0, signature = '', published = null, sending = false, epoch = 0
   let trajectoryMode = '', owner = '', pendingMessage = '', actionBusy = false
   let trajectoryRadio = null, lastFrame = ''
-  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, prepareFrame, request, changed: geometry => {
+  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, prepareFrame, delivery, request, changed: geometry => {
     if (geometry) {
       doc.documentElement.dataset.vrSimulationTrajectory = 'true'
       if (!trajectoryRadio?.isConnected || trajectoryRadio.value !== trajectoryMode) trajectoryRadio = simulationControls(doc, engineSelector.getSelected()).find(c => c.kind === 'mode' && c.group === trajectoryMode)?.element

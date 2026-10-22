@@ -15,7 +15,7 @@ start *ARGS:
 # in "Waiting for connections to close" — freezing every job (prep heartbeat dies,
 # HTTP hangs). Cap the wait so a reload always force-closes within a few seconds.
 dev:
-    uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 127.0.0.1 --port 8000
+    uv run uvicorn server_bootstrap:create_app --factory --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 127.0.0.1 --port 8000
 
 # ── TEST POLICY ───────────────────────────────────────────────────────────────
 # A user-opened test session gates FULL/broad sweeps, not test duration.

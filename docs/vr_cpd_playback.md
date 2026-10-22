@@ -1,5 +1,143 @@
 # CPD production trajectory playback
 
+## Publication stall isolation — 2026-10-21
+
+An opt-in event-loop sampler and GC callbacks reproduced the pre-handler delay:
+generation-2 collection began at epoch 1792626635560.766 ms and took 149.625 ms,
+reclaiming only 560 objects. Publication version 656269838 started at
+1792626635563.2 ms; the handler entered at 1792626635711.328 ms, immediately
+after collection ended. Its validation/delivery finished in 10.006 ms. This
+establishes full-heap collection as a cause of publication stalls; it does not
+retrospectively prove the cause of every older uninstrumented outlier.
+
+The dedicated `server_bootstrap:create_app --factory` startup path collects import
+temporaries once and freezes the permanent imported object graph before lifespan
+or requests begin. Dynamic session, job and request objects stay collectible;
+automatic collection and its thresholds are unchanged. Ordinary app imports do
+not change the embedding process's GC policy, and repeated factory calls never
+freeze later objects. `start.sh`, `just dev` and isolated smoke/VR servers use it.
+The existing live backend was preserved: deployment takes effect on its next
+normal start, without an automatic reload during this change.
+
+Sequential 60-second raw and Smooth ball-and-stick comparisons reduced maximum
+browser upload time from 160.8 to 31.8 ms and 58.8 to 26.7 ms respectively.
+The patched raw run separately recorded a 273 ms browser long task in encoding;
+Smooth loop wrap retains its intentional 250 ms hold. Thus this fixes the
+identified backend pause, not every source of discontinuity or physical comfort.
+Coordinates, interpolation, mesh fidelity and GPU code are unchanged in this pass.
+
+The final four-isomer check passed all 24 raw/Smooth atomistic windows and
+captured visible submitted eyes. Full collections measured 12.5–31.6 ms, and
+native frame-time p95 ranged 11.35–11.45 ms. Two raw publication outliers remained
+(129.5/169.7 ms): resource timing placed 113/134 ms before request sending, with
+responses taking 15.9/8.4 ms and no overlapping backend GC. Final Smooth upload
+maxima were at most 49.3 ms. Individual native frame and browser encoding outliers
+also remain; these results do not establish perfectly continuous playback.
+
+Use the existing CPD production benchmark with `NADOC_VR_PUBLICATION_PROBE=1`
+for event-loop stacks and generation-2 durations. Add
+`NADOC_VR_PUBLICATION_FREEZE=0` only to that isolated diagnostic server for a
+pre-fix control. Long windows now have a duration-scaled, bounded trace buffer;
+the zero-dropped-record assertion remains. Two launch failures exposed a separate
+race: process presence preceded the server socket, so the compositor received
+`VRInitError_Init_NoServerForBackgroundApp`. The established launcher now waits
+for the matching server pipe, without changing SteamVR settings or stopping an
+existing runtime. Evidence and exclusions: [publication audit](audits/vr_publication_20261021.json).
+
+Validation: 100 focused startup/launch/tour tests passed, plus 16 targeted
+environment/timing rechecks. `just test-smart` chose FAST: 14,659 passed,
+92 skipped, 9 failed and 4 errors. Three socket failures cleared with a short
+Archive TMPDIR; the additional native-capture timing failure cleared alone.
+The remaining five failures/four errors match prior chemistry/provenance debt.
+Slow-test triage found the flagged small/mocked cases below budget individually;
+no thresholds or markers changed. FULL remains deferred. After retaining the
+audit and two review PNGs, 2,861,310,864 bytes of task-owned captures and scratch
+were removed; private workspaces and runtime directories are gone, with no
+active file/map/environment references. Existing backend/frontend/Alpine PIDs
+and all source-job fingerprints were preserved. Main.js task delta: zero.
+
+
+## Follow-up: slower Smooth playback and compact GPU vertices — 2026-10-21
+
+Smooth now uses the delivery-aware presentation policy below. All four CPD
+isomers pass raw and Smooth checks in ball-and-stick, stick and VDW. In the
+initial 12-second Smooth windows, 45–46 exact endpoints and 317–322 intermediate samples
+were presented by the browser. Submitted scene gaps were at most 78.5 ms;
+headset frame p95 stayed near 11.4 ms. These are short workload measurements,
+not a guarantee of continuous motion or a physical comfort assessment.
+The final repeat retained approximately 33.6 ms p95 scene-update gaps in Smooth,
+but caught individual publication pauses of 436 ms (ball-and-stick) and 201 ms
+(VDW), with browser upload maxima of 361/147 ms and stable headset frames.
+It also caught one raw ball-and-stick publication stall: a 1.005 s
+scene gap, with 929 ms browser upload time and approximately 914 ms before backend
+handler entry. Handler write completed within 12 ms; GPU peaked at 2.54 ms and
+headset frames remained below 12.75 ms. This unresolved upstream/queue delay is
+separate from GPU rendering and prevents a hitch-free claim.
+
+Eligible sphere and small bond groups use 24-byte position/normal records instead of
+48-byte repeated vertex records. Byte-identical constant color and UV are GL
+generic attributes. The original shaders, geometry, triangle order and fallback
+buffers remain; extra packed CPU storage is capped at 1 MiB per full snapshot.
+Transform-only updates reuse those buffers. Varying colors, textured/transparent views and shadow passes retain their
+existing layouts.
+`NADOC_VR_COMPACT_VIEW_VERTICES=0` provides a diagnostic fallback.
+
+Two final 24-sample alternating-order ball-and-stick replays measured
+25.51 → 24.30 ms and 25.72 → 25.08 ms (4.7% and 2.5% improvement), with zero
+color, depth or object-ID differences. These mesh-only measurements exclude
+OpenXR, menus, mirror and canonical shadow rendering. Sphere-only packing gave
+no consistent benefit; the retained path includes eligible bond groups too.
+
+Same-workload sequential 24HB P1 app runs measured Stick GPU medians of
+5.12 ms before bond packing and 3.94 ms after, while ball-and-stick changed
+27.07 → 26.64 ms and VDW 22.63 → 22.48 ms. These are sequential observations,
+not randomized controls; dense sphere styles still submitted at about 30 Hz,
+while Stick stayed near 90 Hz. Four-frame resident loops deliberately include a
+non-interpolated loop hold. No faster end-to-end cold-load claim is established.
+
+One optional P1 repeat failed before viewer launch with SteamVR HmdNotFound;
+the diagnostic retry passed through the normal launcher without settings changes.
+Launch responses are now retained by the reusable test for failure diagnosis.
+
+16-bit indices and triangle cache ordering remain offline: repeated trials did
+not establish a consistent benefit. See the [follow-up audit](audits/vr_gpu_iterations_20261021.json)
+for exact-pixel checks, repeat timings, app results and exclusions. Validation
+passed 8,394 frontend tests (one skip), 23 smoke tests, 50 tour tests and the
+focused native checks. Raw captures/logs were pruned after analysis (1.65 GB);
+three review PNGs and the compact audit remain. Existing backend/Alpine workers
+and source-job fingerprints were preserved.
+
+## Initial GPU investigation — 2026-10-21
+
+The trajectory sphere fallback exports 720 triangles per atom. 24HB P1 contains
+137,493 such spheres: 98,994,960 sphere triangles per eye, before ball-and-stick
+bonds. Corrected offline replay matches submitted-eye silhouettes (native also
+draws three design lines), using production backend launch-camera rotation and
+verified native snapshot identity.
+
+Two 24-sample alternating-order sweeps per style found no repeatable reason to
+change groups of eight. Current grouped mesh GPU medians were approximately
+24.6–25.5 ms for ball-and-stick and 22.3–22.7 ms for VDW. Groups 1/2/4/16/32/64
+preserved exact color/depth/ID output but provided no consistent benefit.
+Sphere backface culling saved about 5–6 ms in the isolation run, but changed
+one depth pixel per style; it remains diagnostic. Normal simplification and
+blend/shadow-sampler tuning did not provide a useful alternative. No production
+renderer/default changed in this pass.
+
+The next substantial target is explicit sphere primitives with perspective-correct
+analytic GPU rendering, preserving simulated centers, radii, colors and bond
+endpoints. This requires asymmetric stereo, clipping, camera-inside, bond
+occlusion, depth/ID semantics and fallback validation; the existing native
+billboard shader alone does not establish that contract. Do not reduce sphere
+tessellation silently or trade saved-coordinate fidelity for speed.
+
+The registered playback workflow supports NADOC_CPD_GPU_EXPORT=1 together
+with NADOC_VR_TRANSFORM_UPDATES=0. Exports occur after timing in the guarded
+Archive report directory. See the [offline benchmark instructions](../native/vr_viewer/benchmarks/README.md)
+and [GPU audit](audits/vr_gpu_20261021.json), including excluded attempts,
+nonblank negative control, pixel parity and cleanup. These are offline GPU
+measurements, not new headset-rate or CPD continuity claims.
+
 The October 20, 2026 benchmark uses the four completed October 19 CPD isomer
 NAMD production jobs: cis-syn-I `d6bcdef3d59f`, cis-anti-I `972af34aa9c5`,
 trans-syn-I `37d39cc6b88f`, and trans-syn-II `9b08bed08561`.
@@ -21,9 +159,14 @@ heavy display atoms. No production job is launched, resumed, or modified.
   state only. It does not change saved trajectories, topology, bonds, or geometry
   authorities. There is no interpolation across the loop boundary.
 - Enable Smooth by default for fitting atomistic selections; honor an explicit
-  user choice on subsequent loads. Saved endpoints remain paced at 12 Hz, with
-  three intermediate display samples targeting 48 Hz. Late interpolation samples
-  are skipped rather than queued.
+  user choice on subsequent loads. Raw saved-frame playback remains paced at 12 Hz. Smooth playback now prepares
+  the next pair first, then presents seven interpolated samples over at least
+  250 ms before the exact endpoint (nominally four saved endpoints/second).
+  Each interval is at least 31.25 ms or 1.25 times the last successful browser
+  publication cost. A busy publication delays the next sample instead of causing
+  catch-up bursts. This is presentation pacing, not a change to simulation time
+  or coordinates. Page boundaries and loop wraps hold for 250 ms without
+  interpolation. Native receipt/rendering can still lag browser delivery.
 - Prepare ions and periodic-cell companions on load/page changes or explicit
   control refresh, then advance them with the DNA. Cached playback avoids loading
   toasts and repeated companion preparation.

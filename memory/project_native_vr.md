@@ -7,6 +7,50 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Publication GC isolation — 2026-10-21
+
+A measured 149.6 ms generation-2 collection blocked a publication before handler
+entry; validation/delivery then took 10 ms. The dedicated server factory in
+`server_bootstrap.py` freezes only the startup heap before serving requests,
+leaving later cycles collectible and GC thresholds unchanged. `start.sh` and
+`just dev` use it on the next normal start; the existing backend was not reloaded.
+60-second ball-and-stick upload maxima improved 160.8→31.8 ms raw and
+58.8→26.7 ms Smooth. A separate browser encoding long task remains, and this does
+not prove every historical stall was GC. CPD benchmark diagnostics and the
+server-pipe startup race fix are documented in
+[playback notes](../docs/vr_cpd_playback.md#publication-stall-isolation--2026-10-21).
+
+## Smooth pacing and compact grouped vertices — 2026-10-21
+
+Smooth is now a slower presentation clock: prepare first, then seven interpolation
+samples plus the exact endpoint over at least 250 ms. Per-sample pacing follows
+browser publication cost and waits for busy delivery, without catch-up skipping.
+Raw saved-frame playback remains 12 Hz. Four-isomer checks pass; 24HB dense
+sphere GPU cost remains above the headset budget. No change to saved coordinates,
+trajectory selection, topology, tessellation or normal arithmetic.
+
+Opaque constant-color/UV sphere and small bond groups can use 24-byte GPU vertex
+records with generic color/UV attributes; original fallback buffers remain.
+Packing is bounded to 1 MiB extra CPU storage per full view and reused by transform
+updates. NADOC_VR_COMPACT_VIEW_VERTICES=0 is the diagnostic fallback. Narrow
+sphere-only packing did not reproduce the earlier whole-group gain; benchmark
+scope must be preserved when interpreting small differences. Evidence:
+[follow-up audit](../docs/audits/vr_gpu_iterations_20261021.json). Physical review:
+MV-51. Main.js task delta remains zero.
+
+## Initial GPU investigation — 2026-10-21
+
+Trajectory sphere export uses 24×16 tessellation (720 triangles/atom); 24HB P1
+draws ~99 million sphere triangles per eye. Corrected offline exact-pixel group
+sweeps show no repeatable gain over eight. Culling saves ~5–6 ms but changes
+depth/color pixels, so production is unchanged. Next target: explicit sphere
+primitives with perspective-correct analytic GPU rendering, retaining centers,
+radii, bond endpoints and stereo/depth/occlusion semantics. Do not substitute the
+existing approximate billboard shader without those checks. Registered playback
+GPU export must apply backend launch-camera rotation before replay; version
+identity alone missed this in the first experiment. Evidence and exclusions:
+[GPU audit](../docs/audits/vr_gpu_20261021.json).
+
 ## Decoder tuning and diminishing returns — 2026-10-21
 
 Transform reads now use bounded 1,024-instance blocks (48 KiB scratch), preserving

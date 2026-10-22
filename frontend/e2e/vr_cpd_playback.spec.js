@@ -28,6 +28,10 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
  test.skip(!process.env.NADOC_CPD_BENCHMARK_JOB,'Use the isolated CPD benchmark launcher')
  const errors=[],frames=[],requests=[];let snapshot,seq=0
  page.on('pageerror',e=>errors.push(e.message))
+ page.on('response',async response=>{
+  if(!response.url().endsWith('/api/vr/launch'))return
+  try {fs.writeFileSync(info.outputPath('launch-response.json'),JSON.stringify({status:response.status(),body:await response.text()}))} catch {}
+ })
  page.on('request',r=>{
   if(r.url().endsWith('/api/vr/simulations')){snapshot=r.postDataJSON();if(snapshot.trajectory?.phase==='ready')frames.push({at:Date.now(),...snapshot.trajectory})}
   if(/trajectory-bin|frames-atomistic|frames-solvent|view-tools/.test(r.url()))requests.push({at:Date.now(),url:r.url()})
@@ -35,16 +39,20 @@ test('CPD default atomistic playback cadence and submitted stereo',async({page,r
  if(process.env.NADOC_CPD_BASELINE)for(const file of ['scene/vr_simulation_trajectory.js','ui/oxdna_display.js'])await page.route(`**/src/${file}*`,r=>r.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(process.env.NADOC_CPD_BASELINE,path.basename(file)),'utf8')}))
  const fixture=process.env.NADOC_CPD_BENCHMARK_FIXTURE
  await page.route('**/api/library/files',async route=>{const r=await route.fetch();await route.fulfill({response:r,json:[...await r.json(),{path:fixture,name:fixture.slice(0,-6),type:'part',size_bytes:0,mtime_iso:new Date().toISOString()}]})})
- await page.route('**/api/vr/launch',route=>route.continue({postData:JSON.stringify({...route.request().postDataJSON(),scrywrite_place_scene_in_view:true})}))
- await page.addInitScript(()=>{
+ await page.route('**/api/vr/launch',route=>{
+  const body=route.request().postDataJSON()
+  if(process.env.NADOC_CPD_GPU_EXPORT==='1')fs.writeFileSync(info.outputPath('launch-camera.json'),JSON.stringify(body.camera??null))
+  return route.continue({postData:JSON.stringify({...body,scrywrite_place_scene_in_view:true})})
+ })
+ await page.addInitScript(({traceLimit})=>{
   performance.setResourceTimingBufferSize(10000)
   if(!window.__nadocVRPlaybackTrace){
    window.__nadocVRPlaybackEvents=[];window.__nadocVRPlaybackTraceDropped=0
    let source=null
-   window.__nadocVRPlaybackTrace=e=>{if(e.stage==='companions_end')source=e.source;if(window.__nadocVRPlaybackEvents.length<20000)window.__nadocVRPlaybackEvents.push({source,...e});else window.__nadocVRPlaybackTraceDropped++}
+   window.__nadocVRPlaybackTrace=e=>{if(e.stage==='companions_end')source=e.source;if(window.__nadocVRPlaybackEvents.length<traceLimit)window.__nadocVRPlaybackEvents.push({source,...e});else window.__nadocVRPlaybackTraceDropped++}
    new PerformanceObserver(list=>{for(const e of list.getEntries())window.__nadocVRPlaybackTrace({stage:'longtask',epoch_ms:performance.timeOrigin+e.startTime,duration_ms:e.duration})}).observe({type:'longtask',buffered:true})
   }
- })
+ },{traceLimit:Math.min(250000,20000+Math.ceil((Number(process.env.NADOC_PLAYBACK_WINDOW_MS)||12000)/1000)*500)})
  // Match headset-only use through the existing desktop drawing preference.
  if(process.env.NADOC_CPD_DESKTOP_RENDERING !== 'on')await page.addInitScript(()=>localStorage.setItem('nadoc:vr-desktop-3d','off'))
  await page.goto('/?doc=__e2e__cpd-playback&scrywrite=transactions')
@@ -152,17 +160,64 @@ else: raise RuntimeError('Native style did not settle: '+str(s.get('representati
    const unique=selected.filter((f,i)=>i===0||f.index!==selected[i-1].index)
    const gaps=unique.slice(1).map((f,i)=>f.at-unique[i].at).sort((a,b)=>a-b)
    const io=requests.filter(r=>r.at>=start&&r.at<=end&&!r.url.endsWith('view-tools'))
-   windows.push({name:'play',representation,smooth,loop:snapshot.trajectory.loop,count:snapshot.trajectory.count,start,end,pauseAcknowledged,playedThrough,desktopBefore,desktopAfter,frames:unique.length,gap_p50:gaps[Math.floor(gaps.length*.5)],gap_p95:gaps[Math.floor(gaps.length*.95)],gap_max:gaps.at(-1),coordinateRequests:io.length,viewUploads:requests.filter(r=>r.at>=start&&r.at<=end&&r.url.endsWith('view-tools')).length})
+   windows.push({name:'play',representation,smooth,loop:snapshot.trajectory.loop,count:snapshot.trajectory.count,start,end,pauseAcknowledged,playedThrough,desktopBefore,desktopAfter,frames:unique.length,interpolatedSamples:pipeline.events.filter(e=>e.stage==='interpolation_applied').length,gap_p50:gaps[Math.floor(gaps.length*.5)],gap_p95:gaps[Math.floor(gaps.length*.95)],gap_max:gaps.at(-1),coordinateRequests:io.length,viewUploads:requests.filter(r=>r.at>=start&&r.at<=end&&r.url.endsWith('view-tools')).length})
    fs.writeFileSync(info.outputPath('windows.json'),JSON.stringify(windows,null,2))
    if(!process.env.NADOC_CPD_BASELINE){
     if(process.env.NADOC_PLAYBACK_EXPECT_RESIDENT !== '0')expect(io).toHaveLength(0)
     expect.soft(playedThrough,'Playback must not pause after a delayed native style acknowledgement').toBe(true)
-    expect.soft(unique.length).toBeGreaterThan(80)
+    if(smooth){
+     // Smooth deliberately spends >=250 ms between saved endpoints and waits
+     // for publication; test visible intermediate progress, not raw-frame speed.
+     expect.soft(unique.length).toBeGreaterThan(4)
+     expect.soft(pipeline.events.filter(e=>e.stage==='interpolation_applied').length).toBeGreaterThan(16)
+    }else expect.soft(unique.length).toBeGreaterThan(80)
    }
+  }
+  // Optional offline GPU inputs live only in the guarded report directory.
+  // Capture a full packet after timing, then require the same native version.
+  let gpuPacket
+  if(process.env.NADOC_CPD_GPU_EXPORT==='1'){
+   expect(process.env.NADOC_VR_TRANSFORM_UPDATES).toBe('0')
+   await action('t:seek',{value:0})
+   await page.waitForTimeout(2000)
+   await page.evaluate(()=>{
+    const original=window.fetch
+    window.__gpuPacket=null
+    window.fetch=function(url,options){
+     if(String(url).endsWith('/api/vr/view-tools')&&options?.body instanceof Blob){
+      window.fetch=original
+      options.body.arrayBuffer().then(buffer=>{
+       const bytes=new Uint8Array(buffer),parts=[]
+       for(let i=0;i<bytes.length;i+=32768)parts.push(String.fromCharCode(...bytes.subarray(i,i+32768)))
+       window.__gpuPacket=btoa(parts.join(''))
+      })
+     }
+     return original.apply(this,arguments)
+    }
+   })
+   await action('t:seek',{value:1})
+   await page.waitForFunction(()=>!!window.__gpuPacket,{},{timeout:30000})
+   gpuPacket=Buffer.from(await page.evaluate(()=>{const p=window.__gpuPacket;delete window.__gpuPacket;return p}),'base64')
+   expect([5,6]).toContain(gpuPacket.readUInt32LE(8))
+   const raw=info.outputPath(representation+'.browser-viewtools')
+   fs.writeFileSync(raw,gpuPacket)
+   execFileSync('../.venv/bin/python',['-c',`import json,sys
+from pathlib import Path
+from backend.api.routes_vr import VRCamera,_view_rotation
+from backend.api.vr_view_tools import validate_and_rotate
+camera=json.loads(Path(sys.argv[2]).read_text())
+rotation=_view_rotation(VRCamera.model_validate(camera) if camera else None)
+Path(sys.argv[3]).write_bytes(validate_and_rotate(Path(sys.argv[1]).read_bytes(),rotation))
+`,raw,info.outputPath('launch-camera.json'),info.outputPath(representation+'.viewtools')],{env:{...process.env,PYTHONPATH:path.resolve('..')},timeout:30000})
+   await page.waitForTimeout(3000)
   }
   // Capture only after timing. Real submitted eyes and identifiable model pixels.
   const capture=info.outputPath('stereo-'+representation)
   execFileSync('../.venv/bin/python',['-c',`from frontend.scrywrite.mcp_bridge import Bridge\nfrom tools.vr_motion.session import LiveSession\nimport sys,numpy as np\nfrom pathlib import Path\nl=LiveSession(Bridge(sys.argv[1]),physical=True,allow_transactions=True)\ne,_=l.capture_to(Path(sys.argv[2]),files=['evidence.json','left.png','right.png','left.classes.u8','right.classes.u8'],discard_source=True)\nassert e['state']['representation']==sys.argv[3], e['state']['representation']\nassert all(np.count_nonzero(np.fromfile(Path(sys.argv[2])/(eye['eye']+'.classes.u8'),dtype=np.uint8)==1)>100 for eye in e['eyes'])`,status.scrywrite_socket,capture,representation],{cwd:process.cwd(),env:{...process.env,PYTHONPATH:path.resolve('..')},timeout:30000})
+  if(gpuPacket){
+   const e=JSON.parse(fs.readFileSync(path.join(capture,'evidence.json'),'utf8'))
+   expect(Number(e.state.view_tools.version)).toBe(gpuPacket.readUInt32LE(12))
+  }
  }
  fs.writeFileSync(info.outputPath('requests.json'),JSON.stringify(requests))
  expect(errors).toEqual([])

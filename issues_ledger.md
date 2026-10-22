@@ -2200,3 +2200,41 @@ Main.js task delta: zero. No topology, source-coordinate or geometry-authority c
 - [x] Validate block boundaries, truncation/nonfinite late blocks and production GL pixel/buffer parity.
 - [x] Measure 24HB P1 end-to-end: native preparation improves ~12%; scene medians unchanged. Decoder-only tuning has diminishing returns.
 - Long CPD repeat and cleanup: `docs/audits/vr_final_pass_20261021.json`. Physical review remains MV-50. Main.js task delta: zero.
+
+
+## ISSUE-103 — Dense trajectory sphere meshes dominate large-model GPU work (2026-10-21)
+
+- [x] Reproduce 24HB P1 ball-and-stick/VDW and preserve source-job fingerprints.
+- [x] Add guarded, version-matched native-oriented offline inputs and exact-pixel
+  group sweeps to the registered playback workflow. Reject blank comparisons.
+- [x] Exclude the initial unrotated export; actual-eye inspection detected wrong
+  framing. Correct export with the production backend camera rotation.
+- [x] Evaluate 1/2/4/8/16/32/64 groups twice per style; no consistent improvement.
+  Culling is faster but fails exact depth/color equivalence, so it remains offline.
+- [ ] Implement and qualify explicit analytic sphere rendering with unchanged
+  simulated centers/radii and correct stereo, clipping, depth and bond occlusion.
+
+This initial investigation made no production GPU change or new through-lens claim.
+The compact-buffer follow-up is ISSUE-104. Initial audit:
+docs/audits/vr_gpu_20261021.json. Main.js task LOC delta: 0.
+
+
+## ISSUE-104 — Burst-prone Smooth playback and repeated GPU attributes (2026-10-21)
+
+- [x] Start Smooth pacing after pair preparation, stretch transitions to at least
+  250 ms, and wait for busy publication without catch-up skipping.
+- [x] Keep raw saved-frame 12 Hz and source coordinates unchanged.
+- [x] Add bounded exact compact sphere/bond-group vertices with original-buffer
+  fallback; leave index-size/order experiments offline.
+- [x] Exercise all four CPD isomers in three atomistic representations.
+- [x] Isolate a pre-handler publication stall to 149.6 ms full-heap GC and add a
+  dedicated startup factory that excludes the permanent import graph from later
+  collections. Dynamic cycles remain collectible. Long-window upload maxima
+  improve 160.8→31.8 ms raw and 58.8→26.7 ms Smooth.
+- [ ] Resolve remaining browser encoding/scheduling outliers and physically
+  assess continuity. Older 929/361/147 ms uploads lacked GC instrumentation;
+  do not attribute every historical outlier retrospectively.
+- [ ] Physical headset continuity/comfort: MV-51. Large sphere meshes remain a
+  substantial GPU workload; this does not claim perfectly seamless rendering.
+
+Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta: 0.

@@ -98,6 +98,7 @@
 #include "view_opaque_shader.hpp"
 #include "view_instance_groups.hpp"
 #include "view_indexed_mesh.hpp"
+#include "view_compact_vertices.hpp"
 #include "view_programs.hpp"
 #include "gpu_pass_timing.hpp"
 #include "live_visual_measure.hpp"
