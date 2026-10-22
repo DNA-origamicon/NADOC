@@ -149,7 +149,7 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         membership = {"helix_ids", "domain_ids"}.intersection(fields)
         mixed_pose = AUTHORED_FIELDS.intersection(fields) and {"translation", "rotation", "pivot"}.intersection(fields)
         if membership or mixed_pose or (updated.feature_log and
-                getattr(updated.feature_log[-1], "params", {}).get("reclassify_unpaired")):
+                getattr(updated.feature_log[-1], "op_kind", None) == 'placement-poses'):
             from backend.api.crud import _design_response_with_geometry
 
             # Use this exact accepted candidate and request revision outside the
@@ -167,7 +167,11 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if idx is None:
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
     cts[idx] = cts[idx].model_copy(update=fields)
-    updated = design.copy_with(cluster_transforms=cts)
+    from backend.core.cluster_member_poses import carry_member_poses
+    try:
+        updated = carry_member_poses(design, design.copy_with(cluster_transforms=cts))
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

@@ -168,7 +168,8 @@ def build(kind, design, params):
     )
     check_members(cluster.helix_ids, cluster.domain_ids)
     clusters[index] = cluster
-    return design.copy_with(cluster_transforms=clusters)
+    from backend.core.cluster_member_poses import carry_member_poses
+    return carry_member_poses(design, design.copy_with(cluster_transforms=clusters))
 
 
 def edit_entry(entry, patch, *, prefix=None):

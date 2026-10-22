@@ -1,4 +1,4 @@
-"""Record a cluster Move/Rotate that separates pairing as a topology-bearing move."""
+"""Record cluster Move/Rotate with carried member poses and pairing changes."""
 from uuid import uuid4
 from backend.core.models import SnapshotLogEntry
 from backend.core.sequences import domain_bp_range
@@ -23,7 +23,11 @@ def reclassify(before, posed, params):
 
 
 def record_if_separated(source, posed, entry):
-    if not separated_keys(source, posed, {entry.cluster_id}):
+    separated = separated_keys(source, posed, {entry.cluster_id})
+    # A compatibility drag may already have installed its preview pose before
+    # commit. Still record a complete state when residue poses exist, so seek
+    # does not recover them from an older snapshot and reverse the move order.
+    if not separated and not source.nucleotide_transforms:
         return posed, entry
     from backend.api.state import encode_design_snapshot
     from backend.api.part_placement_pose_commands import build
@@ -33,8 +37,9 @@ def record_if_separated(source, posed, entry):
         'poses': [owner.model_dump(mode='json', include={'translation', 'rotation', 'pivot',
             'parent_cluster_id', 'overhang_duplex_driver_id'}) | {'cluster_id': owner.id}],
         'authoring': {'mode': 'free', 'joint_id': None, 'fixed_cluster_ids': [], 'pivot_id': 'centroid'},
-        'primary_authored_fields': entry.authored_fields, 'legacy_source': entry.source,
-        'reclassify_unpaired': True, 'history_seed': str(uuid4())}
+        'primary_authored_fields': entry.authored_fields, 'legacy_source': entry.source}
+    if separated:
+        params.update(reclassify_unpaired=True, history_seed=str(uuid4()))
     result = build(source, params)
     pre, pre_size = encode_design_snapshot(source)
     post, post_size = encode_design_snapshot(result)

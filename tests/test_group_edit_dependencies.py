@@ -13,10 +13,11 @@ def command(**fields):
             "rotation": [0, 0, 0, 1], "pivot": [0, 0, 0], **fields}
 
 
-def test_pose_only_keeps_existing_narrow_cluster_dependency():
+def test_pose_only_keeps_member_pose_replay_barrier():
     contract = commands.dependencies("cluster_op", command(name="Moved", opacity=0.5))
     group = Resource("cluster", "group")
-    assert contract == Dependencies(frozenset({group}), frozenset({group}))
+    resources = frozenset({group, commands.PART_TOPOLOGY})
+    assert contract == Dependencies(resources, resources, barrier=True)
 
 
 def test_membership_reads_typed_helices_and_owning_strands_without_domain_identity():
@@ -29,7 +30,7 @@ def test_membership_reads_typed_helices_and_owning_strands_without_domain_identi
     assert contract.known and contract.barrier
     assert contract.reads == frozenset({commands.PART_TOPOLOGY, Resource("cluster", "group"),
         Resource("helix", "same"), Resource("helix", "other"), Resource("strand", "same")})
-    assert contract.writes == frozenset({Resource("cluster", "group")})
+    assert contract.writes == frozenset({Resource("cluster", "group"), commands.PART_TOPOLOGY})
     assert params == before
 
 

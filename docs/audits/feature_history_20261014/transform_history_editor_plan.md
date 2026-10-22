@@ -779,3 +779,15 @@ No milestone split, exclusion or new completion credit.
 - Re-ran native ordering counterexamples:2pass (FORWARD6.935091655nm, REVERSE6.336679237nm); these assert the defect remains, not successful chronological motion. No production fix claimed.
 - User authorized old example cleanup: deleted `move_rotate_ordering_example.nadoc`, `move_rotate_cluster_steps.nadoc`, `move_rotate_axes_overhang.nadoc` from workspace (288073 bytes). Historical links to these files are pruned.
 - Checked workspace NADOC references (only self identity paths) and open file handles (none); verified all three absent. Retained five-step focused and six-step reset examples, generator sources and regression tests.
+
+## Chronological cluster/member moves — October 22, 2026
+- User authorized chronological Move/Rotate: later cluster movement carries existing member poses. Native overlay transports saved residue deltas through the authored before/after cluster frames; no geometry/physical coordinates baked into topology.
+- F3→F5 independent Full/atom oracle now passes at1e-10nm; subsequent base delta and cluster movement, reset, no-op repeat, source immutability and cold proof covered.
+- Carried pose identities survive: ordinary Apply uses complete snapshots even after installed live preview; commit geometry refresh and conservative topology dependencies retain replay order. Pivot-only changes use the same recording path.
+- Selected ordinary/loop-copy sites and posed terminal tails follow native membership. Posed crossover inserts follow a common rigid end motion; differential-end rigid-pose movement refuses explicitly. General new-material/constraint integration remains outside this fix.
+- Focused71pass plus final dependency/chronology38pass; includes ordinary API undo/redo, save/reopen, private history editor, repeated scrub, tail endpoints and all atoms of a posed crossover insert. Ruff passed.
+- Browser2pass43.1s: Move history scrubbing/animation and six-step reset; F5 screenshot inspected, scratch `/tmp/__e2e__history-dshjlerf` independently absent.
+- Rebuilt both existing focused examples from their authored operations, preserving feature IDs/animations; verified native proof. No extra workspace examples created; three previously pruned examples remain absent.
+- Guarded FAST19381pass/19skip/85fail:83 identical baseline failures plus2 obsolete narrow-dependency assertions, updated and passing in final38. FULL deferred; no claim of broad green.
+- Timing triage: aggregate398s, zero per-test violators, below prior437s; final focused15s/6s. No new shared-delay evidence, marker changes or guard changes; broad report later overwritten by focused timing report.
+- Durable chronology rule updated; original five-step movement-order defect fixed. No Move/Rotate gate promotion or claim that the entire remaining revamp is complete.

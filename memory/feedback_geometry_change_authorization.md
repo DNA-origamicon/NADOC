@@ -68,3 +68,9 @@ portion independently and exclude individually moved bases. Exposed staple
 segments become named overhangs with the standard toggles. Classify at the first
 separation (F3 in the example), then expand the same OH1 when F5 exposes adjacent
 bases; do not postpone classification or give the extension a new OH identity.
+
+Move chronology (2026-10-22): rebuild Move/Rotate operations in feature-log order.
+A later cluster move carries every selected member from its current posed state,
+including earlier individual moves. Reset removes the individual pose component
+while retaining the cluster movement; replay consistency alone does not prove
+chronological correctness—compare against the move applied to prior displayed positions.

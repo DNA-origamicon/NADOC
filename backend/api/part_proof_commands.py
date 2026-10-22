@@ -56,7 +56,7 @@ PART_TOPOLOGY = Resource("part", "topology")
 
 
 def _cluster_op_dependencies(params):
-    """Read only bounded command metadata; the saved v1 builder stays unchanged.
+    """Read bounded command metadata and retain the carried member-pose barrier.
 
     Domains have ordinal addresses within a strand, not stable identities. The
     owning strand plus the topology barrier covers reordering and changes to its
@@ -98,7 +98,8 @@ def _cluster_op_dependencies(params):
         reads.add(PART_TOPOLOGY)
         reads.update(Resource("helix", hid) for hid in selected.helix_ids)
         reads.update(Resource("strand", ref.strand_id) for ref in selected.domain_ids)
-    return Dependencies(frozenset(reads), frozenset({cluster}), barrier=membership)
+    reads.add(PART_TOPOLOGY)
+    return Dependencies(frozenset(reads), frozenset({cluster, PART_TOPOLOGY}), barrier=True)
 
 
 def capabilities():

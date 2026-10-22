@@ -2,7 +2,7 @@
 
 This command never reruns a constraint solver or infers linked history rows.
 All selected and auxiliary owners are recorded, frame-bound and checked before
-the unchanged single-owner overlay is applied in native placement-list order.
+the single-owner overlay carries member poses in native placement-list order.
 """
 
 from copy import deepcopy
@@ -180,6 +180,10 @@ def dependencies(params):
         return Dependencies(known=False)
     writes = frozenset(Resource("cluster", pose["cluster_id"]) for pose in parsed["poses"])
     reads = set(writes)
+    # A later cluster move carries earlier member poses, so replay cannot skip
+    # those dependencies even when the cluster's membership is unchanged.
+    reads.add(Resource('part', 'topology'))
+    writes = writes | {Resource('part', 'topology')}
     for pose in parsed["poses"]:
         if pose["parent_cluster_id"] is not None:
             reads.add(Resource("cluster", pose["parent_cluster_id"]))
@@ -200,7 +204,7 @@ def dependencies(params):
         reads.add(Resource("part", "topology"))
         writes = writes | {Resource("part", "topology")}
         membership = True
-    return Dependencies(frozenset(reads), writes, barrier=membership)
+    return Dependencies(frozenset(reads), writes, barrier=True)
 
 
 def _definition(entry):

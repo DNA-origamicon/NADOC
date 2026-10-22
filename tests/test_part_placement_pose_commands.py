@@ -159,7 +159,7 @@ def test_dependencies_keep_selected_auxiliary_frame_fixed_and_authored_membershi
     params["primary_authored_fields"] = {"helix_ids": [design.helices[0].id]}
     deps = service().dependencies(params)
     assert deps.known and deps.barrier
-    assert deps.writes == frozenset(Resource("cluster", p["cluster_id"]) for p in params["poses"])
+    assert deps.writes == frozenset(Resource("cluster", p["cluster_id"]) for p in params["poses"]) | {Resource('part', 'topology')}
     assert Resource("cluster", "fixed-owner") in deps.reads - deps.writes
     assert Resource("helix", design.helices[0].id) in deps.reads
     assert Resource("part", "topology") in deps.reads
