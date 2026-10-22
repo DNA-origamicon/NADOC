@@ -3465,6 +3465,8 @@ export const listMdJobs          = (opts)        => _backgroundJobList('/md/jobs
 export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)
 export const mdArchiveStatus     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/archive-status`)
+export const previewThinMdJob = (id) => _oxdnaJSON('POST', `/md/jobs/${encodeURIComponent(id)}/thin/preview`)
+export const applyThinMdJob = (id, body) => _oxdnaJSON('POST', `/md/jobs/${encodeURIComponent(id)}/thin`, body)
 
 // ── Host filesystem browse (archive folder picker, routes_fs.py) ────────────────
 /** Subdirectories of an absolute host path (default: home). {path, parent, entries}. */

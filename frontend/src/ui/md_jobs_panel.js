@@ -33,6 +33,7 @@ import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdV
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
+import { nadocBroadcast } from '../shared/broadcast.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { openPegQualification } from './namd_peg_review.js'
@@ -5796,6 +5797,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   _paintRunControl()
   if (_isDynamicsTabVisible()) _startMdPrewarm()
 
+  async function invalidateTrajectory(jobId, { broadcast = false } = {}) {
+    // Source frame indices changed; discard prepared/downloaded MD pages too.
+    _setTrajOff()
+    getMdViz?.()?.stopAndRestore?.()
+    getMdViz?.()?.retainPreparedTrajectories?.([])
+    getMdViz?.()?.retainTrajectoryDownloads?.([])
+    _trajRawCounts.clear()
+    _trajCountRequests.clear()
+    if (broadcast) nadocBroadcast.emit('md-trajectory-thinned', { jobId })
+    await _fetchJobs()
+  }
+  nadocBroadcast.onMessage(message => {
+    if (message.type === 'md-trajectory-thinned' && _jobs.some(job => job.job_id === message.jobId)) {
+      void invalidateTrajectory(message.jobId)
+    }
+  })
+
   // The panel's external surface: the currently-selected job (consumed by the shared
   // comparison card's getSources and by the Plan-Run overlay's default root, P4).
   return {
@@ -5822,6 +5840,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // than this panel). A single fetch populates the list AND re-arms the poll once the
     // new job reads active.
     refresh: _fetchJobs,
+    invalidateTrajectory,
     restoreSubmittedDesign: async (jobId) => {
       const job = _jobs.find(j => j.job_id === jobId)
       return job ? restoreSubmittedDesign({ job, rollFn: rollMdJobDesign, refetch: _fetchJobs }) : false

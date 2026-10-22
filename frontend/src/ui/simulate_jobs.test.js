@@ -439,6 +439,32 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it('offers Thin job with an explanatory tooltip for completed NAMD jobs', async () => {
+    mount()
+    const { sim } = make([mdNode()])
+    await sim.refresh()
+    sim.setActiveEngine('namd')
+    document.querySelector('[data-job-id="md1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const item = [...document.querySelectorAll('.context-menu__item')].find(e => e.textContent === 'Thin job')
+    expect(item).toBeTruthy()
+    expect(item.title).toContain('Retained frame coordinates stay unchanged')
+    expect(item.classList.contains('context-menu__item--disabled')).toBe(false)
+  })
+
+  it('disables Thin job for an active NAMD job', async () => {
+    mount()
+    const { sim } = make([mdNode({ status: 'running' })])
+    await sim.refresh()
+    sim.setActiveEngine('namd')
+    document.querySelector('[data-job-id="md1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const item = [...document.querySelectorAll('.context-menu__item')].find(e => e.textContent === 'Thin job')
+    expect(item.classList.contains('context-menu__item--disabled')).toBe(true)
+  })
+
   it('refreshes a loaded job list without pulsing the loading spinner', async () => {
     mount()
     const { sim, api } = make([mdNode({ status: 'running' })])

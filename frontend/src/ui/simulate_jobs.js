@@ -43,6 +43,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { showToast } from './toast.js'
+import { openThinJob, THIN_JOB_TOOLTIP } from './md_thin_job.js'
 
 const POLL_MS = 1500
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8a8a8a' }
@@ -741,6 +742,21 @@ export function initSimulateJobs({
         label: 'Copy job (new seed)',
         disabled: node.engine === 'namd' && mdPanel.hasJobSettings?.(jobId) === false,
         onClick: () => { void panel.copyJob(jobId) },
+      })
+    }
+    if (!node.remote_only && node.engine === 'namd') {
+      items.push({
+        label: 'Thin job',
+        title: node.status === 'completed' ? THIN_JOB_TOOLTIP : 'Thinning is available after the job completes.',
+        disabled: node.status !== 'completed',
+        onClick: () => openThinJob({ jobId, api,
+          onApplying: () => mdPanel?.invalidateTrajectory?.(jobId),
+          onApplied: async result => {
+            await mdPanel?.invalidateTrajectory?.(jobId, { broadcast: true })
+            await _fetch()
+            showToast(`Job thinned: ${formatBytes(result.saved_bytes)} saved.`, { severity: 'success' })
+          },
+        }),
       })
     }
     createContextMenu({
