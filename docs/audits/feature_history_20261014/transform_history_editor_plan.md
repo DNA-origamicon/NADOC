@@ -759,3 +759,9 @@ No milestone split, exclusion or new completion credit.
 - Browser verified actual rendered segment midpoints, OH1 identity/length/unpaired metadata, name/selection toggles, scrubbing and animation. F5 screenshot inspected; evidence under `feature-history-focus/axis-overhang-*`.
 - Guarded FAST19376pass/19skip/83fail: failure-node set exactly matches baseline. FULL deferred. Final focused checks cover the subsequent small pose-precedence/common-frame refinements; no second broad sweep.
 - Slow-test triage: native display workers twist5.42s/bend5.17s broad,3.56s/3.76s isolated; classified these two parameters slow/headless, with focused coverage retained. Tests/conftest.py has unrelated dirty hunks, so that registry change remains uncommitted.
+
+## Focused manual example — October 22, 2026
+- User requested fewer operations: new `workspace/move_rotate_axes_overhang_focused.nadoc` stops at F5, with five matching animation stages. Earlier files preserved.
+- F1 Extrude provides duplexes and a stationary reference; F2 Nick defines scaffold bases0–3; F3 Move/Rotate exposes OH1; F4 Make Cluster defines selection; F5 Move/Rotate splits axes and expands OH1.
+- F6–F11 belong to separate pose composition/reset/replacement and repeated-cluster regression coverage; keep them in the engineering fixture, exclude them from this manual review.
+- Artifact-only change: validate native proof/save-reopen, all five prefix geometries against the original, scrubbing, animation indices and stable OH1 growth. No application behavior changed.

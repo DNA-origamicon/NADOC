@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: separate per-domain axes survive scrubbing/animation; F3 creates OH1 and F5 expands it through ordinary Move/Rotate.
+October 22, 2026: manual axes/OH1 example shortened to five features; F3 creates OH1 and F5 expands it.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -52,7 +52,7 @@ History now retains reclassification and follows stable pose IDs in the private 
 Native6pass covers prior poses, either partner, later edits, undo/cold proof and downstream refusal; frontend9454pass/1skip.
 Browser1pass: native gizmo edit through a later nick, exact Cancel, stable IDs, Apply/save/reopen/cold proof.
 Guarded FAST19369pass/19skip/83 identical baseline failures;412.91s. Display-worker timing5.14s, focused rerun3.55s/pass; debt retained.
-Primary manual example: `workspace/move_rotate_axes_overhang.nadoc`, 11 features and a saved animation; earlier example/user edits preserved.
+Primary manual example: `workspace/move_rotate_axes_overhang_focused.nadoc`, five features/animation stages; earlier examples preserved.
 User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native examples precede engineering phase sweeps.
 Axes/OH1: native36+cluster122+final65 pass; frontend9458/1skip; browser verifies actual axes, OH toggles, scrubbing and animation.
 Ordinary cluster separation now reclassifies; linked/deformed/loop-skip, independent residue-owner and named-member integration remain unsupported.
