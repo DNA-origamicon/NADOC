@@ -716,3 +716,10 @@ No milestone split, exclusion or new completion credit.
 - Browser check passes: default, prior-pose toggle, reverse350° case, no page errors; screenshot visually inspected. Temporary browser directory verified removed; page and screenshot retained in existing evidence. Ruff/diff checks pass.
 - View at `http://localhost:8766/guided-review.html` while the local review server is running. Restart: `python3 -m http.server 8766 --bind 127.0.0.1 --directory /home/joshua/NADOC/.development-artifacts/member-motion-completion-review`.
 - Prior bare-artifact authorization request is superseded by this guided comparison; no approval inferred and no production placement changed.
+
+## Native inspection example — October 21, 2026
+- User prefers one/two real NADOC examples and chronological animation over phase-case review pages; memory updated accordingly.
+- Created `workspace/move_rotate_ordering_example.nadoc` (58035 bytes): native bundle, recorded nick, base pose, group move, base translation/reset/replacement, second group move, final base translation. Nine readable feature names, genuine before/after snapshots, one saved animation pausing at every feature.
+- Reproducer: `uv run --no-sync python -m tools.member_motion_native_example` (exclusive creation; preserves existing file). All nine prefixes and saved/reloaded tip pass native editable proof. Final atom/bond JSON exactly matches the earlier phase0 forward prior-pose current case; candidate evaluator is not serialized.
+- Browser passed12.6s: load, all nine feature seeks, saved animation Play/Pause. Earlier harness attempts used an unsupported seed and hidden sidebar selectors/insufficient sidebar width; final2200px check passes. Logs retained under `.development-artifacts/feature-history-focus/native-ordering-example-browser*`; all five temporary roots verified absent, temporary browser spec removed.
+- Ready to open through NADOC's workspace; download copy in existing completion-review directory. Native operations only; no production placement or gate change. This file replaces the external geometry page as the primary user inspection artifact.

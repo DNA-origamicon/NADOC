@@ -47,3 +47,9 @@ from a diagnostic candidate program and identify the limits of the requested app
 Provide a verified one-click viewing link or an exact copyable bash command that opens
 the review. Restate the comparison and decision in the request itself. Do not infer
 physical validity from an ordering demonstration or seek broader approval than shown.
+
+User refinement (2026-10-21): prefer NADOC itself for explaining construction and
+ordering. Supply one or two representative real `.nadoc` files with readable,
+replayable feature logs and saved step-by-step animations, so the user can inspect
+and experiment. Keep phase sweeps as engineering validation, not a long menu of
+review cases. Clearly distinguish native behavior from an unsupported candidate.
