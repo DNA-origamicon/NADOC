@@ -5,6 +5,75 @@ import { stat } from 'node:fs/promises'
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
 const previewPath = '/api/design/features/transform-preview'
 
+test('Move history edits reclassified staple addresses with exact Cancel and cold replay', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    await page.evaluate(async () => {
+      const api = await import('/src/api/client.js')
+      const { store } = await import('/src/state/store.js')
+      const d = store.getState().currentDesign.strands.find(s => s.strand_type === 'staple').domains[0]
+      const transforms = [{ kind: 'base', helix_id: d.helix_id, bp_index: d.end_bp,
+        direction: d.direction, copy_k: 0, compose: true, pivot: [0, 0, 0],
+        translation: [2, 0, 0], rotation: [0, 0, 0, 1] }]
+      const check = await api.previewNucleotideReclassification(transforms)
+      if (!await api.putNucleotideTransforms(transforms, check.confirmation_token)) throw new Error('Fixture Move failed')
+      if (!await api.addNick({ helixId: d.helix_id, bpIndex: Math.floor((d.start_bp + d.end_bp) / 2),
+        direction: d.direction })) throw new Error('Downstream nick failed')
+    })
+    const source = await f.checkpoint(), before = await f.browser()
+    const row = before.design.feature_log.find(r => r.op_kind === 'nucleotide-transform-batch')
+    const originalTarget = row.params.transforms[0].helix_id
+    const relocated = before.design.nucleotide_transforms[0].helix_id
+    expect(relocated).not.toBe(originalTarget)
+    const panel = page.locator('#move-rotate-panel')
+    const open = async () => {
+      await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
+      await page.getByTitle(`Edit ${row.label} parameters`, { exact: true }).click()
+      const response = await pending
+      expect(response.ok(), await response.text()).toBe(true)
+      await expect(panel).toBeVisible()
+      await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    }
+    const drag = async () => {
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/evaluate`)
+      await page.evaluate(() => {
+        const active = window.__nadocTest.scene.children.filter(node => node.controls?.object)
+        if (active.length !== 1) throw new Error('Expected one historical residue gizmo')
+        const tc = active[0].controls
+        tc.dispatchEvent({ type: 'dragging-changed', value: true })
+        tc.object.position.x += 1
+        tc.dispatchEvent({ type: 'change' })
+        tc.dispatchEvent({ type: 'dragging-changed', value: false })
+      })
+      const response = await pending
+      expect(response.ok(), await response.text()).toBe(true)
+      expect(response.request().postDataJSON().params.transforms[0].helix_id).toBe(originalTarget)
+      await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    }
+    await open(); await drag()
+    expect(await f.checkpoint()).toEqual(source)
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).not.toBeVisible()
+    expect(await f.checkpoint()).toEqual(source)
+    expect((await f.browser()).design).toEqual(before.design)
+    await open(); await drag()
+    await page.locator('#mr-apply-btn').click()
+    await expect(panel).not.toBeVisible()
+    const after = await f.browser()
+    expect(after.design.feature_log.map(r => r.id)).toEqual(before.design.feature_log.map(r => r.id))
+    expect(after.design.feature_log.find(r => r.id === row.id).params.reclassify_unpaired).toBe(true)
+    expect(after.design.nucleotide_transforms[0].helix_id).toBe(relocated)
+    expect(after.design.nucleotide_transforms[0].translation[0]).toBeCloseTo(3, 8)
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      await api.saveDesign(file); await api.loadDesign(file)
+    }, f.file)
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect((await proof.json()).status).toBe('verified')
+    expect((await f.browser()).design.strands).toEqual(after.design.strands)
+  }, 'unpair')
+})
+
 for (const size of ['small', 'large'])
 test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, request }) => {
   test.setTimeout(240_000)

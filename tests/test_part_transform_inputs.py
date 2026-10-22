@@ -35,6 +35,18 @@ def inputs(kind):
             **({"transforms": [pose()]} if kind.endswith("-batch") else pose())}
 
 
+@pytest.mark.parametrize("kind", ["nucleotide-transform", "nucleotide-transform-batch"])
+def test_reclassification_is_retained_and_cannot_be_changed_by_pose_edit(kind):
+    previous = {**inputs(kind), "reclassify_unpaired": True}
+    assert service().normalize(kind, previous, {}) == previous
+    with pytest.raises(CommandContractError):
+        service().normalize(kind, previous, {"reclassify_unpaired": False})
+    with pytest.raises(CommandContractError):
+        service().normalize(kind, inputs(kind), {"reclassify_unpaired": True})
+    with pytest.raises(CommandContractError):
+        service().normalize(kind, {**previous, "reclassify_unpaired": 1}, {})
+
+
 @pytest.mark.parametrize("kind", ["cluster_op", "nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete"])
 def test_untouched_complete_inputs_are_independently_owned(kind):
     previous = inputs(kind)

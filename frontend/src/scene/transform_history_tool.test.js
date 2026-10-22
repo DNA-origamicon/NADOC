@@ -317,6 +317,27 @@ it('drives nucleotide history through exact saved targets, not current selection
     compose: false, translation: [3, 0, 0] })
   expect(f.packet).toEqual(f.source)
 })
+it('binds a relocated residue gizmo by native pose identity and sends the original replay address', async () => {
+  const p = transformPacket(); p.command_kind = 'nucleotide-transform-batch'
+  const body = { kind: 'base', helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy_k: 0,
+    compose: true, pivot: [0, 0, 0], translation: [1, 0, 0], rotation: [0, 0, 0, 1] }
+  p.control_state.inputs = { _proof_version: 1, history_seed: '11111111-1111-4111-8111-111111111111',
+    reclassify_unpaired: true, transforms: [body] }
+  p.control_context.inputs = structuredClone(p.control_state.inputs)
+  p.control_state.residue_pose_ids = ['saved-pose']
+  p.control_state.nucleotide_transforms = [{ ...body, id: 'saved-pose', helix_id: 'relocated' }]
+  let session
+  const f = fixture(p, { createNucleotideTool: args => {
+    session = args.historySession
+    return { activate: () => true, detach: vi.fn() }
+  } })
+  expect(session.targets[0].helix_id).toBe('relocated')
+  session.onChange([{ ...body, helix_id: 'relocated', translation: [2, 0, 0] }])
+  expect(f.onChange.mock.lastCall[0].transforms[0]).toMatchObject({ helix_id: 'h', translation: [3, 0, 0], compose: true })
+  session.onChange([{ ...body, helix_id: 'foreign' }])
+  expect(f.onError).toHaveBeenCalled()
+  expect(f.onChange).toHaveBeenCalledTimes(1)
+})
 it('retains every auxiliary native pending owner only after explicit upgrade, and blocks premature Apply', async () => {
   const packet = transformPacket(), primary = packet.control_state.cluster_transforms[0]
   packet.control_state.cluster_transforms.push({ ...structuredClone(primary), id: 'link', name: 'Link', parent_cluster_id: 'placement' })

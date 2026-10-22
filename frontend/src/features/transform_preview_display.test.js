@@ -31,6 +31,25 @@ function rolePacket(kind) {
   }
   return packet
 }
+
+it('requires exact native pose identities for reclassified history display targets', () => {
+  const packet = rolePacket('nucleotide-transform-batch')
+  packet.control_context.inputs.reclassify_unpaired = true
+  packet.control_state.inputs.reclassify_unpaired = true
+  const pose = { ...residue(), id: 'relocated-pose', copy_k: 0, crossover_id: null, extra_base_k: null }
+  packet.control_state.nucleotide_transforms.push(structuredClone(pose))
+  packet.candidate.display_topology.nucleotide_transforms.push(structuredClone(pose))
+  packet.control_state.residue_pose_ids = [pose.id]
+  expect(() => validateTransformPreviewDisplay(packet, { prepare: true })).not.toThrow()
+  for (const ids of [[], ['missing'], [pose.id, pose.id]]) {
+    const bad = structuredClone(packet)
+    bad.control_state.residue_pose_ids = ids
+    expect(() => validateTransformPreviewDisplay(bad, { prepare: true })).toThrow()
+  }
+  const bad = structuredClone(packet)
+  delete bad.control_state.residue_pose_ids
+  expect(() => validateTransformPreviewDisplay(bad, { prepare: true })).toThrow()
+})
 const linker = length_value => ({ id: 'link', name: null, overhang_a_id: 'a', overhang_a_attach: 'root',
   overhang_b_id: 'b', overhang_b_attach: 'free_end', linker_type: 'ss', length_value, length_unit: 'bp',
   bridge_relaxed: false, bridge_bin_index: 0, bridge_r_ee_min_nm: null, bridge_r_ee_max_nm: null,

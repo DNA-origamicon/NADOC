@@ -444,7 +444,7 @@ function resetTarget(v) {
   return v
 }
 const authored = { name: v => text(v, 512, true), helix_ids: array(id), domain_ids: array(ref), color: nullable(v => text(v, 512, true)), opacity: num }
-function input(v, kind, indices, live) {
+function input(v, kind, indices, live, residuePoseIds) {
   const protectedFields = { _proof_version: literal(1), history_seed: id, expected_design_id: id, expected_revision: uint, expected_feature_id: id }
   const body = { kind: literal('base', 'extra_base'), ...pose }
   const extra = { helix_id: nid, bp_index: nullable(int), direction: nullable(dir), copy_k: uint, crossover_id: nid, extra_base_k: nullable(uint), compose: bool }
@@ -489,7 +489,7 @@ function input(v, kind, indices, live) {
   let targets
   const checkedBody = b => { optional(b, body, extra); nonzeroPose(b); return residueTarget(b) }
   if (kind === 'nucleotide-transform-batch') {
-    optional(v, { _proof_version: literal(1), history_seed: id, transforms: array(json, 1024) }, protectedFields)
+    optional(v, { _proof_version: literal(1), history_seed: id, transforms: array(json, 1024) }, { ...protectedFields, reclassify_unpaired: bool })
     if (!v.transforms.length) fail('empty transform batch')
     targets = v.transforms.map(checkedBody)
     if (new Set(targets.map(t => JSON.stringify(t))).size !== targets.length) fail('duplicate residue target')
@@ -501,8 +501,20 @@ function input(v, kind, indices, live) {
     }
     targets = v.target ? [v.target] : []
   } else {
-    optional(v, { _proof_version: literal(1), history_seed: id, ...body }, { ...extra, ...protectedFields })
+    optional(v, { _proof_version: literal(1), history_seed: id, ...body }, { ...extra, ...protectedFields, reclassify_unpaired: bool })
     nonzeroPose(v); targets = [residueTarget(v)]
+  }
+  if (live && v.reclassify_unpaired) {
+    array(id, 1024)(residuePoseIds)
+    if (residuePoseIds.length !== targets.length || new Set(residuePoseIds).size !== targets.length) fail('invalid relocated pose identities')
+    targets = targets.map((target, i) => {
+      requireRef(indices.nucleotide_transforms, residuePoseIds[i])
+      const resolved = residueTarget(indices.nucleotide_transforms.get(residuePoseIds[i]))
+      // Reclassification can change only the base's helix address.
+      equal(resolved[0], target[0])
+      equal(resolved.slice(target[0] === 'base' ? 2 : 1), target.slice(target[0] === 'base' ? 2 : 1))
+      return resolved
+    })
   }
   // Build a bounded directional site inventory once, including native loop
   // copies. A target is never rebound by proximity or a current strand ordinal.
@@ -526,10 +538,10 @@ function input(v, kind, indices, live) {
   }
 }
 function controls(v, topology, kind, live) {
-  shape(v, [...CONTROL_KEYS, 'group_organization', 'inputs', 'lattice_type', ...(live ? ['flexible_gates', 'placement_constraints', 'frame_provenance'] : ['placement_upgrade'])])
+  shape(v, [...CONTROL_KEYS, 'group_organization', 'inputs', 'lattice_type', ...(live ? ['flexible_gates', 'placement_constraints', 'frame_provenance', ...(v.inputs?.reclassify_unpaired ? ['residue_pose_ids'] : [])] : ['placement_upgrade'])])
   literal('SQUARE', 'HONEYCOMB')(v.lattice_type)
   const indices = inventories(v, true, live)
-  input(v.inputs, kind, indices, live)
+  input(v.inputs, kind, indices, live, v.residue_pose_ids)
   if (topology) for (const field of [...CONTROL_KEYS, 'group_organization']) {
     const counterpart = topology[field]
     if (field === 'photoproduct_junctions') {

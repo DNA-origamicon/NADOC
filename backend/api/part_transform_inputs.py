@@ -139,13 +139,18 @@ def normalize(kind, previous, patch):
               {"transforms"} if kind.endswith("-batch") else
               {"transform_id", "target"} if kind.endswith("-delete") else _BODY_FIELDS)
     protected = frozenset({"_proof_version"}) if kind == "cluster_op" else _PROTECTED
+    if kind in {"nucleotide-transform", "nucleotide-transform-batch"}:
+        # Consent is part of the recorded operation, not an editable pose knob.
+        protected = protected | {"reclassify_unpaired"}
     if set(previous) - (fields | protected) or set(patch) - (fields | protected):
         _reject("Transform editing requires known ordinary, non-generated fields", "unsupported_transform_scope")
     if type(previous.get("_proof_version")) is not int or previous["_proof_version"] != 1:
         _reject("Transform editing requires native proof version 1", "missing_proof_contract")
-    for key in _PROTECTED & patch.keys():
+    for key in protected & patch.keys():
         if key not in previous or type(patch[key]) is not type(previous[key]) or patch[key] != previous[key]:
             _reject(f"Transform identity and transport cannot be edited: {key}")
+    if "reclassify_unpaired" in previous and type(previous["reclassify_unpaired"]) is not bool:
+        _reject("reclassify_unpaired requires a boolean")
     for key in ("expected_design_id", "expected_feature_id"):
         if key in previous:
             _identity(previous[key], key)
@@ -161,7 +166,7 @@ def normalize(kind, previous, patch):
             _reject(f"Transform history requires its stable UUID: {error}")
     values = {**previous, **patch}
     _bounded(values)
-    authored = {key: value for key, value in values.items() if key not in _PROTECTED}
+    authored = {key: value for key, value in values.items() if key not in protected}
     if kind == "cluster_op":
         _placement(authored)
     elif kind.endswith("-delete"):

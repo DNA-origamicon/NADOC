@@ -199,13 +199,24 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
   }
   function attachResidues() {
     if (locked || currentKind().endsWith('-delete')) return
+    const displayedBodies = packet.control_state.residue_pose_ids
+      ? packet.control_state.residue_pose_ids.map(id => {
+        const resolved = packet.control_state.nucleotide_transforms.find(p => p.id === id)
+        if (!resolved) throw new Error('The historical residue pose is unavailable')
+        return resolved
+      }) : baselineBodies
     const designRenderer = { residueTransformInfo: target => geometry?.native.residueTransformInfo(target), xoverResidueInfo: extraInfo }
     residues = createNucleotideTool({ store: privateStore, scene, camera, canvas, controls, designRenderer,
-      historySession: { targets: baselineBodies.map(parsedTarget), displayLayer: DEFORMATION_PREVIEW_LAYER, onCancel,
+      historySession: { targets: displayedBodies.map(parsedTarget), displayLayer: DEFORMATION_PREVIEW_LAYER, onCancel,
         onChange: deltas => {
           if (!editable()) return
           try {
-            const bodies = composeHistoricalResidueDraft(baselineBodies, deltas)
+            // Gizmos use evaluated display addresses; replay retains authored
+            // prefix addresses. Bind by the pose identities supplied by native evaluation.
+            if (deltas.length !== displayedBodies.length || deltas.some((d, i) => bodyKey(d) !== bodyKey(displayedBodies[i])))
+              throw new Error('Historical residue targets changed')
+            const authoredDeltas = deltas.map((d, i) => ({ ...baselineBodies[i], ...pose(d) }))
+            const bodies = composeHistoricalResidueDraft(baselineBodies, authoredDeltas)
             residueDraft = currentKind() === 'nucleotide-transform-batch' ? { transforms: bodies } : bodies[0]
             motionError = null; onChange(residueDraft)
           } catch (failure) { error(failure) }

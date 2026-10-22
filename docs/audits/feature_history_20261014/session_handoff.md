@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: handoff checked against HEAD; ordinary Move unpairing committed; current tool inventory checked.
+October 21, 2026: recorded unpair Move history repaired; named-motion ordering review is pending user authorization.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -47,17 +47,17 @@ or diagnostic candidate was promoted. Native/HTTP22pass; existing Sweep39pass; b
 message visible, Next disabled, exact Cancel, no commit. Earlier Move history edit attributes
 failure to the later Sweep and preserves source. Scratch s4kantpm independently absent.
 C7 ordinary mid-log refusal/Cancel and C5 dependent deletion dialog already pass; do not repeat.
-Unpair Move: ordinary nucleotide/domain/strand Apply offers Cancel/Continue; only separated
-staple segments get new cadnano rows at matching bp indices. Scaffold stays; moved 3D is exact.
-Whole detached staples use free-ssDNA endpoints. Same-command undo/redo/reopen/cold proof pass.
-Backend implementation20 +probe21 pass; frontend9452pass/1skip; browser1pass with reviewed views; smoke23pass.
-FAST19358pass/19skip/83 unchanged baseline failures; aggregate405s, no individual violators; FULL deferred.
-Linked/deformed/loop-skip/independently posed owners refuse; cluster/named-member Move remains unwired.
-See investigation for current evidence and remaining reference/export/reattachment qualifications.
-The attached-Sweep decision does not authorize the complete named-motion candidate matrix.
-Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
-Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
-placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
+Unpair Move preserves scaffold/3D and assigns separated staple segments new cadnano rows; ordinary Apply confirms.
+History now retains reclassification and follows stable pose IDs in the private display while keeping prefix targets.
+Native6pass covers prior poses, either partner, later edits, undo/cold proof and downstream refusal; frontend9454pass/1skip.
+Browser1pass: native gizmo edit through a later nick, exact Cancel, stable IDs, Apply/save/reopen/cold proof.
+Guarded FAST19369pass/19skip/83 identical baseline failures;412.91s. Display-worker timing5.14s, focused rerun3.55s/pass; debt retained.
+New isolated review: `.development-artifacts/member-motion-completion-review/index.html`;144cases,36 real phases per variant.
+All no-motion/unselected-material invariants pass. Candidate bonds remain stretched, up to5.73581nm; no physical-validity claim.
+Explicit approval of demonstrated chronological ordering requested; no answer yet. Birth/constraints/full matrix remain open.
+Linked/deformed/loop-skip/independently posed unpairing and cluster/named-member integration remain unsupported.
+Fixed C8/ordinary workflows pass; gates remain OFF. Next is the pending molecular-ordering decision, not more C8 or sealed work.
+Logs: `feature-history-focus/transform-unpair-*`; three browser roots and review scratch absent; details in the transform plan.
 Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
 Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
 Core open: group/member motion, transform history, ordinary connections, complete reference repair,
@@ -133,7 +133,7 @@ DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
 ## Commit and shared-worktree boundaries
-Latest implementation checkpoint: **8fc9ad96** (Move unpairing); prior Sweep refusal: **57b1f613**.
+Prior checkpoint: **8fc9ad96** (Move unpairing); current recorded-unpair history repair follows it. Sweep refusal: **57b1f613**.
 
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.

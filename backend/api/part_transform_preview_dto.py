@@ -78,6 +78,17 @@ def _context(prefix, params):
     return result
 
 
+def _residue_pose_ids(prefix, params, kind):
+    """Follow native pose identities across cadnano-only staple relocation."""
+    from uuid import UUID, uuid5
+    from backend.core.models import NucleotideTransform
+
+    existing = {pose.target_key(): pose.id for pose in prefix.nucleotide_transforms}
+    bodies = params["transforms"] if kind.endswith("-batch") else [params]
+    keys = [NucleotideTransform.model_validate({**body, "id": "display-reference"}).target_key() for body in bodies]
+    return [existing.get(key) or str(uuid5(UUID(params["history_seed"]), repr(key))) for key in keys]
+
+
 def _control_cost(design, admitted):
     # Flexible gates build one graph, then visit it for each owner. Native
     # connection helpers revisit topology per owner/driver; each duplex pivot
@@ -181,6 +192,8 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         "downstream_evaluated": False, "physical_validity": False,
         "control_state": _controls(evaluated.design, evaluated.params, check, gate_cache if cache_owned else None),
         "candidate": project_admitted(evaluated.design, after, check, compact=True) if include_geometry else None}
+    if evaluated.params.get("reclassify_unpaired"):
+        result["control_state"]["residue_pose_ids"] = _residue_pose_ids(prefix, evaluated.params, kind)
     if prepare:
         result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check, compact=True))
         from backend.api.part_placement_pose_commands import upgrade_descriptor

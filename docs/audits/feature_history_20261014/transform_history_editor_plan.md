@@ -696,3 +696,15 @@ No milestone split, exclusion or new completion credit.
 - Guarded test-smart decision FAST:19320pass/19skip/83fail; exact failure-set match to stop-backend-final.log (no new failures). Ruff passes. FULL deferred to .nadoc-slow-pending.
 - Timing triage:402s aggregate, zero >5s violators; slowest tests span existing native worker/geometry files, no Sweep offender. Aggregate debt retained; no markers or budgets changed.
 - Next, user-directed October21: fully explore explicit unpair-to-ssDNA, covering free/one-anchor/two-anchor strands, identity/sequence/backbone preservation, subsequent editing, reattachment, history and export. Prepare native A/B evidence before molecular implementation; do not infer automatic conversion from movement.
+
+## Recorded unpair Move history — October 21, 2026
+- History normalization now retains the saved boolean reclassification contract and refuses attempts to change it through pose editing.
+- Private controls follow native pose IDs across staple address relocation; gizmos use evaluated addresses while replay retains original prefix targets. No placement algorithm, manifest, model schema or canonical preview write changed.
+- Native6pass: both moved partners, prior pose identity, real Python→JS display/rendering, edited suffix, undo/redo/cold replay, and downstream missing-reference refusal with zero publication.
+- Browser1pass through native gizmo events: exact Cancel, Apply through a later nick, stable feature/output IDs, save/reopen and independent cold proof. The initial harness used the wrong edit-button title; corrected final run passes.
+- Full frontend786files/9454pass/1skip. Focused pre-final UI123pass; Ruff and changed-file whitespace checks pass.
+- Refreshed isolated ordering evidence:144cases,36 distinct native axial-roll geometries per direction/prior-pose combination; every no-motion control and unselected-material invariant passes. Existing sequence compiler/viewer reused; no production promotion.
+- Review: `.development-artifacts/member-motion-completion-review/index.html` (296files/154925739bytes); two representative comparison images inspected, Full controls exercised, no page errors. Candidate bonds remain stretched (maximum5.73581nm); approval covers ordering only, not physical validity or unresolved birth/constraint semantics.
+- Explicit user review of chronological ordering requested under the molecular-geometry authorization rule; production transform gates remain unchanged pending the complete named-motion exit.
+- Logs: `.development-artifacts/feature-history-focus/transform-unpair-*` and `member-motion-completion.log`; all three browser fixture roots and review browser scratch verified absent. Six completed temporary logs moved into retained evidence.
+- Guarded backend decision FAST:19369pass/19skip/83fail, exact baseline failure-set match;412.91s pytest/440s guard. FULL deferred to `.nadoc-slow-pending`. Timing triage: unrelated combined native display worker5.14s under broad load, focused rerun1pass/3.55s call; no source/test-marker/budget changes, aggregate/per-test warning retained.
