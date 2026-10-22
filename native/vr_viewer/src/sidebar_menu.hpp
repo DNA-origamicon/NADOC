@@ -280,10 +280,15 @@ class SidebarMenu {
         std::vector<SidebarControl> out;
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=toolFooter()?0.F:hand==0 ? .058F : -.058F;
-        float tabTop=.647F;
+        const auto panel=bounds();
+        constexpr float tabInset=.088F;
+        float tabTop=panel.maximum.y-tabInset;
+        std::vector<size_t> tabLetters;
+        for(auto index:tabs)tabLetters.push_back(kSidebarTabs[index].label.size());
+        const auto tabLengths=compactTabs.lengths(tabLetters,panel.maximum.y-panel.minimum.y-2*tabInset);
         for(size_t i=0;!customTab && i<tabs.size();++i) {
             const auto& t=kSidebarTabs[tabs[i]];
-            const float length=compactTabs.length(i,t.label.size());
+            const float length=tabLengths[i];
             const float width=.09F;
             const float left=hand==0?tx+.05F-width:tx-.05F;
             const float right=hand==0?tx+.05F:left+width;

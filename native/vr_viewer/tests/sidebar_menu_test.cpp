@@ -23,7 +23,7 @@ int main() {
         for (const auto& row : tab.rows)
             require(!row.id.starts_with("photo-") && !row.id.starts_with("plates-"), "Desktop-only control exposed in VR");
     }
-    // All selected/hover pairs must reveal full names without widening tabs or enlarging the panel.
+    // Full-height rails retain full hover labels, fixed endpoints and matching ray geometry.
     for(int side=0;side<2;++side){
         nadoc_vr::SidebarMenu m(side,true);m.open=true;m.placement.openDocked({0,0,0},{1,0,0,0});
         for(size_t selected=0;selected<m.tabs.size();++selected)for(size_t hover=0;hover<m.tabs.size();++hover){
@@ -35,8 +35,9 @@ int main() {
                 for(size_t i=0;i<m.tabs.size();++i){
                     require(before[i].bounds.minimum.x==after[i].bounds.minimum.x && before[i].bounds.maximum.x==after[i].bounds.maximum.x,"Tab animation changes thickness or column position");
                     require(std::abs(after[i].bounds.maximum.x-after[i].bounds.minimum.x-.09F)<1e-6F,"Tab thickness changed");
-                    require(std::abs(after[i].bounds.maximum.y-(i?after[i-1].bounds.minimum.y-nadoc_vr::CompactTabs::gap:.647F))<1e-6F,"Tab expansion must flow downward with fixed gaps");
+                    require(std::abs(after[i].bounds.maximum.y-(i?after[i-1].bounds.minimum.y-nadoc_vr::CompactTabs::gap:.647F))<1e-6F,"Tab rail must retain fixed gaps");
                 }
+                require(std::abs(after[m.tabs.size()-1].bounds.minimum.y+.647F)<1e-6F,"Tab rail leaves unused space or escapes the menu");
                 m.draw([](auto,auto,auto){},[](auto,auto){});
                 require(m.audit.valid(),m.audit.summary().c_str());
             }

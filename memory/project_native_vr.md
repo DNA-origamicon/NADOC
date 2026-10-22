@@ -7,6 +7,37 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Full-height sidebar tabs — 2026-10-22
+
+Per user request, normal sidebar tabs now share spare space across the entire
+available menu height. The existing border inset, column width, gaps, font sizes
+and 200 ms hover/focus animation remain. Hover expansion redistributes spare space
+with fixed rail endpoints instead of pushing the remaining column downward.
+Drawing, exported targets and ray hits use the same actual bounds; no hidden hit
+padding or relaxed motion/dwell thresholds were introduced.
+
+The native sidebar test covers both sides and Assembly context, all selected/hover
+pairs, fixed endpoints throughout animation, full expanded labels, glyph visibility
+and matching ray geometry. In matched Tools-entry reaches (seed 4200), variable-fast
+target movement fell from 80.7 to 3.0 mm and acquired on its first attempt. Variable-
+deliberate movement fell from 115.6 to 7.1 mm; its first attempt retained hover for
+200 ms rather than the required 300 ms, then the second attempt acquired. Previously
+both profiles failed all three attempts. Steady profiles now acquire on the first
+attempt as well. This reduces movement; it does not make every noisy reach succeed.
+
+All four complete Twist/Undo workflows pass. The separate no-retry all-tab tour
+acquires 11/11 tabs in each steady profile, 0/11 in variable-fast and 2/11 in
+variable-deliberate (24/44 strict acquisitions total; 36/44 correct selections
+when counting brief contact). Stereo pixel checks and blank-image negatives pass
+for both menus in all profiles. Thus the targeted failure improves, while variable
+motion still exposes unreliable single-attempt acquisition.
+
+Detailed final workflow and all-tab outcomes are retained in
+`.development-artifacts/full-height-tabs-20261022/report.json`; review images are
+under `review/`. Debug → VR Tours & Tests → Full-height tabs · controller hit/miss
+comparison remains the reusable direct tab test. The separate export/mirror latency
+limitations below are unaffected by this UI change.
+
 ## View tablet glow and atlas reuse — 2026-10-21
 
 Loop/skip annotations now use camera-facing analytic ring/X glyphs with shared

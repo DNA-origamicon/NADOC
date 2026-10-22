@@ -53,11 +53,12 @@ attached tool panels inherit their sidebar pose. Both touchpad wheels use the
 same 30° tilt while following their controllers. Menus have opaque dark backgrounds that obscure the scene
 behind them, with sharp text and blue active styling. Tabs preserve desktop order
 and labels; their text is rotated clockwise, reading from top to bottom in the outside column. Tabs use the
-approved compact expanding design: idle labels fade at the clipped end, and hover,
+full-height tab rail: unused vertical space is shared across all tabs. Idle labels
+fade at the clipped end, and hover,
 trackpad focus or selection expands the surface and font over 200 ms. The selected
-tab stays expanded while another is hovered. Expansion follows the rotated text from top to bottom only;
-tab thickness and column position stay fixed. Following tabs shift down with fixed
-gaps, within the original panel bounds. Drawing, ray hits and inspector targets all
+tab stays expanded while another is hovered. Tab thickness, column position, gaps,
+and the top and bottom of the rail stay fixed. Expansion redistributes spare space
+across the rail, reducing movement of the following targets. Drawing, ray hits and inspector targets all
 use the animated geometry.
 There is no invisible hit padding or added hover delay. Trigger activation retains
 the existing VR press behavior. Controls are
@@ -845,3 +846,24 @@ and simulation/presenter-control IPC channels; set
 `NADOC_CPD_SAVED_ONLY=1` for exact saved-frame diagnosis without Smooth. No
 production job is launched or changed. See [playback policy](vr_cpd_playback.md)
 and `tools/vr_workflows/cpd_playback_check.py`.
+
+### Full-height rail follow-up (2026-10-22)
+
+Tabs now share unused menu height with fixed rail endpoints. Hover expansion and
+full expanded labels remain; neighboring tabs give up spare space as needed.
+The native layout checks pass. In the Twist fixture, both formerly failing
+variable profiles now acquire Tools within the existing three-attempt policy:
+variable-fast on attempt one, variable-deliberate on attempt two. Their matched
+first-reach target displacement falls from 80.7/115.6 mm to 3.0/7.1 mm. All four
+Twist/Undo workflows pass without relaxing motion or hover requirements.
+
+A separate 44-reach all-tab stress test (one attempt per tab/profile) records
+11/11 stable acquisitions in each steady profile, 0/11 variable-fast and 2/11
+variable-deliberate. Correct selections including brief contact total 36/44;
+strict acquisition plus selection totals 24/44. Both menus pass stereo-pixel and
+blank-image negative checks in all four profiles. This small synthetic sample
+supports the targeted improvement, not universal variable-motion reliability.
+The historical tables above use different catalog sizes and trial counts.
+
+Evidence: `.development-artifacts/full-height-tabs-20261022/report.json`, with
+retained real-eye and desktop-mirror review images under `review/`.

@@ -31,8 +31,8 @@ def catalog():
         'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
-    add('compact-tabs', 'interaction', 'Compact tabs · controller hit/miss comparison',
-        'Production expanding sidebar tabs. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
+    add('compact-tabs', 'interaction', 'Full-height tabs · controller hit/miss comparison',
+        'Production full-height sidebar tabs with shared spare space and bounded hover expansion. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
     add('tab-gallery', 'components', 'Long-label tabs A/B',
         'Desktop-only comparison: fixed tabs with larger fading and scrolling labels, and compact tabs that expand on hover or selection.',
         ['--component', 'tabs'], module='component_gallery_tour')

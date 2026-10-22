@@ -19,5 +19,16 @@ struct CompactTabs {
     float length(size_t i,size_t letters) const {
         return idleLength+amount(i)*(std::max(idleLength,strokeTextWidth(letters,expandedFont)+.020F)-idleLength);
     }
+    std::vector<float> lengths(const std::vector<size_t>& letters,float span) const {
+        if(letters.empty())return {};
+        std::vector<float> result;float used=0;
+        for(size_t i=0;i<letters.size();++i){result.push_back(length(i,letters[i]));used+=result.back();}
+        const float available=std::max(0.F,span-gap*float(letters.size()-1));
+        // Share unused rail space instead of leaving a tail below compact tabs.
+        // Hover labels still grow, but the rail's endpoints remain stationary.
+        for(auto& value:result)value=used<=available
+            ? value+(available-used)/float(letters.size()) : value*available/used;
+        return result;
+    }
 };
 }
