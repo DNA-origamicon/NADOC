@@ -57,7 +57,7 @@ User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native 
 Axes/OH1: native36+cluster122+final65 pass; frontend9458/1skip; browser verifies actual axes, OH toggles, scrubbing and animation.
 Ordinary cluster separation now reclassifies; linked/deformed/loop-skip, independent residue-owner and named-member integration remain unsupported.
 F3→F5 chronology, later base/cluster moves, resets, tails and cold replay tested; snapshot recovery retains carried poses. Gates OFF.
-Latest FAST19381pass/19skip/85fail:83 baseline +2 dependency assertions fixed (final38pass); focused71/browser2pass. FULL deferred; shared conftest uncommitted.
+Latest FAST19381pass/19skip/85fail:83 baseline +2 dependency assertions fixed (final38pass); focused71/browser2pass. FULL deferred; display-worker slow classification committed separately, unrelated conftest edits retained.
 Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
 Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
 Core open: group/member motion, transform history, ordinary connections, complete reference repair,
