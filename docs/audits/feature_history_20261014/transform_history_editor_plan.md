@@ -746,3 +746,16 @@ No milestone split, exclusion or new completion credit.
 - Guarded test-smart FAST19372pass/19skip/84fail:83 identical baseline failures plus comparison capture-budget failure; focused rerun passes. FULL deferred to `.nadoc-slow-pending`.
 - Slow-test triage: existing native display worker twist5.05s broad,3.65s isolated; comparison0.04s isolated. Both reruns pass; no budgets/markers changed. Broad run442s remains non-green.
 - Durable naming/workflow rule updated; no geometry candidate approval inferred, no production Move/Rotate gate change.
+
+## Partial axes and exposed staple overhangs — October 21, 2026
+- Axis sticks preserve per-domain endpoints during redraw, deform/unfold and saved animation; independently moved residues are excluded from their original scaffold axis. F5 has separate0–2 and4–7 scaffold segments.
+- User confirmed first-separation classification: F3 creates OH1; F5 expands the same ID/subdomain to4 bases. Native separation compares authored poses, not simulation geometry or a distance threshold.
+- Ordinary cluster Move/Rotate records topology-bearing separation using the existing snapshot-backed Move/Rotate command; metadata-only cluster edits remain unchanged. Native dependencies include the topology barrier, and the existing history editor accepts the recorded move.
+- Reclassification preserves rest axes and remaps ownership; adjacent unedited runs from the same source merge into the existing OH identity. Linked/deformed/loop-skip and independently authored overhang-growth cases still refuse explicitly.
+- Scrub restores snapshot-owned cluster poses/membership, respects later Move/Rotate snapshots over earlier deltas, and replays Make Cluster's default-membership transfer. Common whole-cluster poses remain valid for residue unpairing.
+- Compact/general/native-array/binary transport retains the unpaired flag. Overhang provenance is classified in reference/display/preparation schemas; names and selection use existing UI controls.
+- New example `workspace/move_rotate_axes_overhang.nadoc`:11 verified features, one updated animation, original examples preserved. All11 corresponding states retain exact base/backbone coordinates; atom preservation verified through ordinary cluster API Apply.
+- Focused native36 and cluster/transport122 passed; final65 passed including atom preservation, undo/redo/cold proof, private history editor and earlier-row precedence. Full frontend788files/9458pass/1skip.
+- Browser verified actual rendered segment midpoints, OH1 identity/length/unpaired metadata, name/selection toggles, scrubbing and animation. F5 screenshot inspected; evidence under `feature-history-focus/axis-overhang-*`.
+- Guarded FAST19376pass/19skip/83fail: failure-node set exactly matches baseline. FULL deferred. Final focused checks cover the subsequent small pose-precedence/common-frame refinements; no second broad sweep.
+- Slow-test triage: native display workers twist5.42s/bend5.17s broad,3.56s/3.76s isolated; classified these two parameters slow/headless, with focused coverage retained. Tests/conftest.py has unrelated dirty hunks, so that registry change remains uncommitted.

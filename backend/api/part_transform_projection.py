@@ -161,14 +161,20 @@ def _axes(values, expected, design):
         limit(count, MAX_AXIS_POINTS, "axis points")
     if seen != helices:
         reject("Native transform display omitted helix axes", "invalid_preview_geometry")
-    # Native axes intentionally carve out marked flexible sites. Preserve that
-    # exact exclusion authority while still detecting omitted rigid segments.
-    flexible = {hid: _flexible_bps_on_helix(design, hid) for hid in helices}
-    for strand in expected.indices["strands"].values():
-        for ordinal, domain in enumerate(strand.domains):
-            if domain.helix_id in helices and covered.get((strand.id, ordinal), set()) != set(range(
-                    min(domain.start_bp, domain.end_bp), max(domain.start_bp, domain.end_bp) + 1)) - flexible[domain.helix_id]:
-                reject("Native transform display omitted domain axes", "invalid_preview_geometry")
+    # Use the native range authority: flexible and independently moved sites
+    # intentionally have no domain-axis stick, but other sites must be covered.
+    from backend.core.deformation import _segments_for_helix
+    required = {}
+    for helix in design.helices:
+        if helix.id not in helices:
+            continue
+        for segment in _segments_for_helix(design, helix):
+            refs = segment.get("domain_ids", [])
+            for ref in refs:
+                required.setdefault((ref["strand_id"], ref["domain_index"]), set()).update(
+                    range(segment["bp_lo"], segment["bp_hi"] + 1))
+    if covered != required:
+        reject("Native transform display omitted domain axes", "invalid_preview_geometry")
 
 
 def topology(design):

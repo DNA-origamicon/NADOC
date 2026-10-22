@@ -6941,6 +6941,11 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     from backend.core.feature_history_clusters import restore_dissolve_fields
     design = restore_dissolve_fields(design, snap_design)
     design = restore_authored_fields(design, snap_design)
+    if any(getattr(e, "op_kind", None) == "placement-poses"
+           or getattr(e, "params", {}).get("reclassify_unpaired") for e in design.feature_log):
+        # These snapshots own cluster poses or membership remapped by unpairing.
+        # Later ordinary pose deltas are reapplied by the seek overlay pass.
+        design = design.copy_with(cluster_transforms=snap_design.cluster_transforms)
     return design.copy_with(
         cluster_transforms=restore_follow_poses(design, snap_design),
         # Individual-base moves/reset are snapshot-backed, not cluster deltas.
@@ -7376,6 +7381,16 @@ def _seek_feature_log(
 
     cluster_last, clusters_with_ops, pattern_baselines = filter_group_pose_overlays(
         log, pose_windows, cluster_last, clusters_with_ops, pattern_baselines)
+    # A snapshot-backed Move/Rotate supersedes earlier pose deltas for its
+    # owners. Its exact pose is already present in the restored snapshot.
+    snapshot_pose_owners = set()
+    for entry in active:
+        if entry.feature_type == "cluster_op":
+            snapshot_pose_owners.discard(entry.cluster_id)
+        elif getattr(entry, "op_kind", None) == "placement-poses":
+            snapshot_pose_owners.update(p["cluster_id"] for p in entry.params.get("poses", []))
+    cluster_last = {cid: op for cid, op in cluster_last.items() if cid not in snapshot_pose_owners}
+    clusters_with_ops = clusters_with_ops - snapshot_pose_owners
     from backend.core.part_overlay_recovery import after_payload
     authored_after_payload = after_payload(active, cluster_last)
     # Make Cluster records the original pose before the first Move/Rotate.

@@ -264,6 +264,12 @@ def prepare_group_update(source, cluster_id, fields, *, entry_source=None):
     # legacy membership/name data. No source fields outside grouping change.
     _check_operation(params)
     grouped = build(kind, source, params)
+    from backend.api.part_cluster_unpair import record_if_separated
+    if {"translation", "rotation"}.intersection(fields):
+        try:
+            grouped, entry = record_if_separated(source, grouped, entry)
+        except ValueError as error:
+            raise HTTPException(422, detail=str(error)) from error
     return grouped.copy_with(feature_log=[*source.feature_log, entry]), entry
 
 

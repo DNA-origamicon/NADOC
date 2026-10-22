@@ -22,6 +22,7 @@ MAX_OWNERS = 64
 UPGRADE = "placement-poses-v1"
 _FIELDS = frozenset({"_proof_version", "primary_cluster_id", "selected_cluster_ids", "poses",
                      "authoring", "primary_authored_fields", "legacy_source"})
+_UNPAIR_FIELDS = frozenset({"reclassify_unpaired", "history_seed"})
 _POSE_FIELDS = frozenset({"cluster_id", "translation", "rotation", "pivot",
                           "parent_cluster_id", "overhang_duplex_driver_id"})
 _HOST_FIELDS = frozenset({"primary_authored_fields", "legacy_source"})
@@ -48,10 +49,18 @@ def parse_command(params):
     from backend.api.part_transform_inputs import AUTHORED_FIELDS, _bounded, _identity, _placement
 
     _bounded(params)
-    if type(params) is not dict or set(params) != _FIELDS:
+    if type(params) is not dict or set(params) not in (_FIELDS, _FIELDS | _UNPAIR_FIELDS):
         _reject("Complete placement poses require the exact versioned fields")
     if type(params["_proof_version"]) is not int or params["_proof_version"] != 1:
         _reject("Complete placement poses require proof version 1", "missing_proof_contract")
+    if _UNPAIR_FIELDS.intersection(params):
+        from uuid import UUID
+        if params.get("reclassify_unpaired") is not True or type(params.get("history_seed")) is not str:
+            _reject("Unpairing requires recorded consent and a stable history seed")
+        try:
+            UUID(params["history_seed"])
+        except ValueError:
+            _reject("Unpairing requires a UUID history seed")
     _identity(params["primary_cluster_id"], "primary_cluster_id")
     selected = _ids(params["selected_cluster_ids"], "selected_cluster_ids", nonempty=True)
     poses = params["poses"]
@@ -158,6 +167,9 @@ def build(design, params):
             result = overlay("cluster_op", result, {"_proof_version": 1,
                 "cluster_id": owner.id, **authored,
                 **{key: pose[key] for key in ("translation", "rotation", "pivot")}})
+    if parsed.get("reclassify_unpaired"):
+        from backend.api.part_cluster_unpair import reclassify
+        result = reclassify(design, result, parsed)
     return result
 
 
@@ -184,6 +196,10 @@ def dependencies(params):
         reads.add(Resource("part", "topology"))
         reads.update(Resource("helix", identity) for identity in authored.get("helix_ids", ()))
         reads.update(Resource("strand", ref["strand_id"]) for ref in authored.get("domain_ids", ()))
+    if parsed.get("reclassify_unpaired"):
+        reads.add(Resource("part", "topology"))
+        writes = writes | {Resource("part", "topology")}
+        membership = True
     return Dependencies(frozenset(reads), writes, barrier=membership)
 
 
@@ -253,9 +269,9 @@ def normalize(previous, patch):
 
     parsed = parse_command(previous)
     _bounded(patch)
-    if type(patch) is not dict or set(patch) - _FIELDS:
+    if type(patch) is not dict or set(patch) - (_FIELDS | _UNPAIR_FIELDS):
         _reject("Complete placement editing requires known fields")
-    for key in _HOST_FIELDS | {"_proof_version", "primary_cluster_id"}:
-        if key in patch and (type(patch[key]) is not type(parsed[key]) or patch[key] != parsed[key]):
+    for key in _HOST_FIELDS | _UNPAIR_FIELDS | {"_proof_version", "primary_cluster_id"}:
+        if key in patch and (type(patch[key]) is not type(parsed.get(key)) or patch[key] != parsed.get(key)):
             _reject(f"Inherited placement definition cannot be replaced: {key}")
     return parse_command({**parsed, **patch})

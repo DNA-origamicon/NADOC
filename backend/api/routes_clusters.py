@@ -5,7 +5,8 @@ This module hosts the ``/design/cluster`` CRUD endpoints: create a named cluster
 of helices/domains, patch its pose (the live gizmo-drag path — silent until a
 drag-end ``commit``), record ordinary membership/name/style edits, and delete it. Clusters are the
 rigid-body grouping that bend/twist/relax operate on; the transform they carry
-(translation/rotation/pivot) is a DISPLAY-layer pose — it never mutates topology.
+(translation/rotation/pivot) is a DISPLAY-layer pose. A committed move that
+separates pairing additionally records staple overhang reclassification.
 
 Factored out of ``crud.py`` following the same template as the camera-poses
 (13-B), loop-skip (10-F), animations, extensions, deformation, and
@@ -147,7 +148,8 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         updated, report = update_group(cluster_id, fields)
         membership = {"helix_ids", "domain_ids"}.intersection(fields)
         mixed_pose = AUTHORED_FIELDS.intersection(fields) and {"translation", "rotation", "pivot"}.intersection(fields)
-        if membership or mixed_pose:
+        if membership or mixed_pose or (updated.feature_log and
+                getattr(updated.feature_log[-1], "params", {}).get("reclassify_unpaired")):
             from backend.api.crud import _design_response_with_geometry
 
             # Use this exact accepted candidate and request revision outside the

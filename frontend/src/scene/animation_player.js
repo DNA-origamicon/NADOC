@@ -400,6 +400,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       axesMap.set(ax.helix_id, {
         start: new THREE.Vector3(...ax.start),
         end:   new THREE.Vector3(...ax.end),
+        segments: ax.segments ?? null,
       })
       helixSet.add(ax.helix_id)
     }

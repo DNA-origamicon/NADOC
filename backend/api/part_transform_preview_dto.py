@@ -192,7 +192,7 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         "downstream_evaluated": False, "physical_validity": False,
         "control_state": _controls(evaluated.design, evaluated.params, check, gate_cache if cache_owned else None),
         "candidate": project_admitted(evaluated.design, after, check, compact=True) if include_geometry else None}
-    if evaluated.params.get("reclassify_unpaired"):
+    if evaluated.params.get("reclassify_unpaired") and kind.startswith("nucleotide-transform"):
         result["control_state"]["residue_pose_ids"] = _residue_pose_ids(prefix, evaluated.params, kind)
     if prepare:
         result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check, compact=True))

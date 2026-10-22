@@ -310,6 +310,12 @@ def _restore_legacy_creations(design, position):
     helix_ids = {h.id for h in design.helices}
     for cid, entry in active.items():
         if cid not in existing and any(h in helix_ids for h in entry.helix_ids):
+            # Recreating Make Cluster after an earlier snapshot must also replay
+            # its transfer out of the default cluster's helix membership.
+            clusters = [c.model_copy(update={"helix_ids": [h for h in c.helix_ids if h not in entry.helix_ids]})
+                        if c.is_default else c for c in clusters]
+            if entry.proof_version != 2:
+                clusters = [c for c in clusters if not c.is_default or c.helix_ids]
             clusters.append(
                 entry.cluster_snapshot
                 or ClusterRigidTransform(

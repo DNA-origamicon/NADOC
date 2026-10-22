@@ -880,6 +880,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
                 "is3": [],
                 "did": [],
                 "ohid": [],
+                "unpaired": [],
                 # Sparse fields: appended lazily, so empty arrays don't ship.
                 "extid": None,
                 "ismod": None,
@@ -901,6 +902,7 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
         b["is3"].append(bool(n.get("is_three_prime")))
         b["did"].append(n.get("domain_index", 0))
         b["ohid"].append(n.get("overhang_id"))
+        b["unpaired"].append(bool(n.get("is_unpaired")))
         # Sparse fields — only allocate the array when first non-default appears.
         ext_id = n.get("extension_id")
         if ext_id is not None:

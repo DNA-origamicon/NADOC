@@ -12,34 +12,35 @@ from backend.core.models import OverhangSpec, SubDomain, DomainRef, StrandType
 from backend.core.sequences import domain_bp_range
 
 
-def separated_staple_keys(design, posed, targets):
+def separated_staple_keys(design, posed, targets, *, allow_cluster_poses=False):
     """Identify ordinary scaffold/staple pairs with different authored poses.
 
     Compare rigid affine maps, not physical distance or simulation coordinates.
     A common move of both partners keeps the duplex paired.
     """
     occupancy = {}
-    independently_posed = set()
-    for owner in design.cluster_transforms:
-        if not owner.domain_ids:
-            continue
-        rotation = Rotation.from_quat(owner.rotation).as_matrix()
+    from backend.core.deformation import _cluster_moving_segment_keys
+    domain_poses = {}
+    for owner in sorted(posed.cluster_transforms, key=lambda c: 0 if c.parent_cluster_id else 1):
+        matrix = np.eye(4)
+        matrix[:3, :3] = Rotation.from_quat(owner.rotation).as_matrix()
         pivot = np.asarray(owner.pivot)
-        offset = pivot - rotation @ pivot + np.asarray(owner.translation)
-        if not (np.allclose(rotation, np.eye(3), rtol=0, atol=1e-10)
-                and np.allclose(offset, 0, rtol=0, atol=1e-10)):
-            independently_posed.update(owner.helix_ids)
+        matrix[:3, 3] = pivot - matrix[:3, :3] @ pivot + np.asarray(owner.translation)
+        for domain in _cluster_moving_segment_keys(owner, posed):
+            domain_poses[domain] = matrix @ domain_poses.get(domain, np.eye(4))
+    owners = {}
     loop_skips = {(h.id, ls.bp_index): ls.delta for h in design.helices for ls in h.loop_skips}
     for strand in design.strands:
         if strand.is_reference:
             continue
-        for domain in strand.domains:
+        for di, domain in enumerate(strand.domains):
             for bp in domain_bp_range(domain):
                 for copy in range(max(0, 1 + loop_skips.get((domain.helix_id, bp), 0))):
                     key = (domain.helix_id, bp, domain.direction.value, copy)
                     if key in occupancy:
                         raise ValueError("Ambiguous occupied nucleotide slot")
                     occupancy[key] = strand.strand_type
+                    owners[key] = (strand.id, di)
     poses = {}
     for pose in posed.nucleotide_transforms:
         if pose.kind != "base":
@@ -51,6 +52,7 @@ def separated_staple_keys(design, posed, targets):
         matrix[:3, 3] = pivot - rotation @ pivot + np.asarray(pose.translation)
         poses[pose.helix_id, pose.bp_index, pose.direction.value, pose.copy_k] = matrix
     separated = set()
+    equal_pairs = {}
     for key in map(tuple, targets):
         if key not in occupancy:
             continue
@@ -58,9 +60,17 @@ def separated_staple_keys(design, posed, targets):
         other = (hid, bp, "REVERSE" if direction == "FORWARD" else "FORWARD", copy)
         if other not in occupancy:
             continue
-        if hid in independently_posed:
-            raise ValueError("Unpairing independently posed domain owners is not yet supported")
-        if np.allclose(poses.get(key, np.eye(4)), poses.get(other, np.eye(4)), rtol=0, atol=1e-10):
+        pair = (owners[key], owners[other], key if key in poses else None, other if other in poses else None)
+        equal = equal_pairs.get(pair)
+        if equal is None:
+            if not allow_cluster_poses and not np.allclose(
+                    domain_poses.get(owners[key], np.eye(4)), domain_poses.get(owners[other], np.eye(4)),
+                    rtol=0, atol=1e-10):
+                raise ValueError("Unpairing independently posed domain owners is not yet supported")
+            own_pose = poses.get(key, np.eye(4)) @ domain_poses.get(owners[key], np.eye(4))
+            other_pose = poses.get(other, np.eye(4)) @ domain_poses.get(owners[other], np.eye(4))
+            equal = equal_pairs[pair] = np.allclose(own_pose, other_pose, rtol=0, atol=1e-10)
+        if equal:
             continue
         if {occupancy[key], occupancy[other]} != {StrandType.SCAFFOLD, StrandType.STAPLE}:
             raise ValueError("Separating this pair requires a scaffold and a staple")
@@ -135,7 +145,12 @@ def relocate_segments(design, selected_keys, *, identity_seed):
                     })
                     helices.append(helix)
                     by_id[hid] = helix
+                    labels = {o.label for o in overhangs}
+                    number = 1
+                    while f"OH{number}" in labels:
+                        number += 1
                     overhangs.append(OverhangSpec(id=oid, helix_id=hid, strand_id=strand.id,
+                        label=f"OH{number}", unpaired_source_helix_id=domain.helix_id,
                         sub_domains=[SubDomain(id=identifier("unpair-subdomain", members),
                             name="a", start_bp_offset=0, length_bp=offset-start)]))
                     updates.update(helix_id=hid, overhang_id=oid)
@@ -161,7 +176,7 @@ def relocate_segments(design, selected_keys, *, identity_seed):
         (d.helix_id, bp, "REVERSE" if d.direction.value == "FORWARD" else "FORWARD") in occupied
         for d in s.domains for bp in domain_bp_range(d)
         if (d.helix_id, bp) not in skipped)}
-    overhangs = [o.model_copy(update={"auxiliary_endpoint": True, "label": o.label or "Free ssDNA"})
+    overhangs = [o.model_copy(update={"auxiliary_endpoint": True, "label": "Free ssDNA" if o.id not in existing_overhangs else o.label})
                 if o.strand_id in free_strands else o
                 for o in overhangs]
 
@@ -189,5 +204,6 @@ def relocate_segments(design, selected_keys, *, identity_seed):
         key = (pose.helix_id, pose.bp_index, pose.direction.value if pose.direction else None, pose.copy_k)
         transforms.append(pose.model_copy(update={"helix_id": remap[key][0]})
                           if pose.kind == "base" and key in remap else pose)
-    return design.copy_with(helices=helices, strands=strands, overhangs=overhangs,
-                            cluster_transforms=clusters, nucleotide_transforms=transforms)
+    from backend.core.unpair_overhang_growth import merge_adjacent
+    return merge_adjacent(design.copy_with(helices=helices, strands=strands, overhangs=overhangs,
+                            cluster_transforms=clusters, nucleotide_transforms=transforms), existing_overhangs)

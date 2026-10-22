@@ -1,4 +1,4 @@
-import { segmentAxisSamples } from './native_axis_samples.js'
+import { segmentAxisSamples, segmentAxisEndpoints } from './native_axis_samples.js'
 import { animationNativePosition } from './animation_native_position.js'
 import { revealSweepTube } from './sweep_animation_reveal.js'
 import { positionUpdateLookup } from '../viewer/geometry_codec.js'
@@ -908,8 +908,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   buildAxes(helixAxes)
 
-  // Per-segment lerp helper for multi-segment curved helices (e.g. compliant
-  // joints). For each segment we have:
+  // Per-segment lerp for independently moving domains, straight or curved.
+  // For each segment we have:
   //   wsStart/wsEnd     — stored deformed endpoints (from currentHelixAxes
   //                        segments at build time)
   //   straightSegs[i]   — straight endpoints passed in at lerp time (from
@@ -2422,7 +2422,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart = sa ? sa.start : arrow.aStart
       const baseEnd   = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.useSegments && arrow.isCurved) {
+      if (arrow.useSegments) {
         // Multi-segment curved helix: per-segment positioning. Pass t=0
         // when reverting to straight (sa.segments are the destination), t=1
         // when reverting to deformed (stored wsStart/wsEnd are deformed).
@@ -2644,7 +2644,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart  = sa ? sa.start : arrow.aStart
       const baseEnd    = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.useSegments && arrow.isCurved) {
+      if (arrow.useSegments) {
         // Multi-segment curved helix: position each segment at its per-segment
         // straight endpoint + the unfold offset. Same rule as _lerpPerSegment
         // but with a uniform per-helix offset instead of an interpolation.
@@ -4620,11 +4620,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const arrow of axisArrows) {
         const sa  = straightAxesMap?.get(arrow.helixId)
 
-        // Multi-segment curved helices: per-segment endpoint lerp so each
-        // domain stays at its own position and the bp gaps stay empty.
-        // Non-curved helices use the legacy single-line _layStraightSegments
-        // (correct because the entire helix is rigid).
-        if (arrow.useSegments && arrow.isCurved) {
+        // Preserve each domain's endpoints, including straight helices whose
+        // domains move independently. A whole-helix chord loses that ownership.
+        if (arrow.useSegments) {
           _lerpPerSegment(arrow, sa?.segments, t)
           continue
         }
@@ -5059,7 +5057,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
                 arrow.straightShaft.scale.set(fadeLone, sLen * fadeLone, fadeLone)
               }
             } else {
-              _layStraightSegments(arrow, lone.start, lone.end)
+              if (!arrow.useSegments) _layStraightSegments(arrow, lone.start, lone.end)
             }
           } else {
             const sx0 = fa.start.x + (ta.start.x - fa.start.x) * t
@@ -5090,7 +5088,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             } else {
               _physDir.set(sx0, sy0, sz0)
               _physDir2.set(sx1, sy1, sz1)
-              _layStraightSegments(arrow, _physDir, _physDir2)
+              if (!arrow.useSegments) _layStraightSegments(arrow, _physDir, _physDir2)
             }
           }
         }
@@ -5137,12 +5135,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             // World endpoints of covered subrange on each side (when available).
             let haveFrom = false, haveTo = false
             if (fa && fromRange) {
-              _projectBpRange(fa.start, fa.end, fromRange[0], fromRange[1], _segS_from, _segE_from)
-              haveFrom = true
+              const own = segmentAxisEndpoints(fa, seg, fromRange[0], fromRange[1])
+              if (own) { _segS_from.set(...own[0]); _segE_from.set(...own[1]); haveFrom = true }
+              else if (!fa.segments) {
+                _projectBpRange(fa.start, fa.end, fromRange[0], fromRange[1], _segS_from, _segE_from)
+                haveFrom = true
+              }
             }
             if (ta && toRange) {
-              _projectBpRange(ta.start, ta.end, toRange[0], toRange[1], _segS_to, _segE_to)
-              haveTo = true
+              const own = segmentAxisEndpoints(ta, seg, toRange[0], toRange[1])
+              if (own) { _segS_to.set(...own[0]); _segE_to.set(...own[1]); haveTo = true }
+              else if (!ta.segments) {
+                _projectBpRange(ta.start, ta.end, toRange[0], toRange[1], _segS_to, _segE_to)
+                haveTo = true
+              }
             }
 
             let segStart, segEnd, fadeXZ
@@ -6016,7 +6022,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (!ax) continue
           arrow.aStart.set(ax.start[0], ax.start[1], ax.start[2])
           arrow.aEnd.set(ax.end[0],   ax.end[1],   ax.end[2])
-          if (!arrow.isCurved) {
+          if (arrow.useSegments && ax.segments) {
+            for (const seg of arrow.segments) {
+              const own = segmentAxisEndpoints(ax, seg)
+              if (own) { seg.wsStart.set(...own[0]); seg.wsEnd.set(...own[1]) }
+            }
+            _lerpPerSegment(arrow, null, 1)
+          } else if (!arrow.isCurved) {
             _layStraightSegments(arrow, arrow.aStart, arrow.aEnd)
           }
           // Curved tubes: positions/quaternions are computed on the fly by

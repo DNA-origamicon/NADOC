@@ -62,3 +62,9 @@ helices]`. Internal recipe identifiers are implementation details, not tool name
 Make Cluster (2026-10-21): show membership creation as its own `F<x>: Make
 Cluster <n>` entry, without moving geometry, followed by a regular Move/Rotate
 entry. Do not hide a move inside creation or call the feature Create Placement.
+
+Separation display (2026-10-21): axis sticks follow each contiguous scaffold
+portion independently and exclude individually moved bases. Exposed staple
+segments become named overhangs with the standard toggles. Classify at the first
+separation (F3 in the example), then expand the same OH1 when F5 exposes adjacent
+bases; do not postpone classification or give the extension a new OH identity.

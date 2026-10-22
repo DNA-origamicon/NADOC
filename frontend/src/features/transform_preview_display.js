@@ -81,8 +81,8 @@ const schemas = {
   lattice_frames: object({ id, plane: literal('XY', 'XZ', 'YZ'), placement_cluster_id: id }), helices: helix, strands: strand,
   cluster_transforms: object(placementFields), deformations: deformation, nucleotide_transforms: object(transformFields),
   cluster_joints: object(jointFields), cluster_join_constraints: object({ id, first: joinAttachment, second: joinAttachment, reach_nm: num }),
-  overhangs: object({ id, helix_id: id, strand_id: id, sequence: nstr, label: nstr, ...pose, sub_domains: array(subdomain),
-    parent_overhang_id: nid, auxiliary_endpoint: bool, strand_anim_setup: nullable(json) }),
+  overhangs: v => optional(v, { id, helix_id: id, strand_id: id, sequence: nstr, label: nstr, ...pose, sub_domains: array(subdomain),
+    parent_overhang_id: nid, auxiliary_endpoint: bool, strand_anim_setup: nullable(json) }, { unpaired_source_helix_id: nid }),
   overhang_connections: object({ id, name: nstr, overhang_a_id: id, overhang_a_attach: literal('root', 'free_end'),
     overhang_b_id: id, overhang_b_attach: literal('root', 'free_end'), linker_type: literal('ss', 'ds'), length_value: num,
     length_unit: literal('bp', 'nm'), bridge_relaxed: bool, bridge_bin_index: int, bridge_r_ee_min_nm: nnum, bridge_r_ee_max_nm: nnum,
@@ -410,6 +410,19 @@ function axes(values, topology, indices) {
     const hid = member(mark, indices.strands).helix_id
     if (!flexible.has(hid)) flexible.set(hid, new Set()); flexible.get(hid).add(mark.bp_index)
   }
+  const primaryDirections = new Map()
+  const ordered = [...topology.strands].sort((a, b) => (a.strand_type !== 'scaffold') - (b.strand_type !== 'scaffold') || a.id.localeCompare(b.id))
+  for (const strand of ordered) for (const d of strand.domains)
+    for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
+      const key = `${d.helix_id}:${bp}`
+      if (!primaryDirections.has(key)) primaryDirections.set(key, d.direction)
+    }
+  for (const p of topology.nucleotide_transforms) {
+    const moved = p.translation.some(x => Math.abs(x) > 1e-10) || p.rotation.slice(0, 3).some(x => Math.abs(x) > 1e-10)
+    if (p.kind !== 'base' || p.copy_k !== 0 || !moved || primaryDirections.get(`${p.helix_id}:${p.bp_index}`) !== p.direction) continue
+    if (!flexible.has(p.helix_id)) flexible.set(p.helix_id, new Set())
+    flexible.get(p.helix_id).add(p.bp_index)
+  }
   for (const s of topology.strands) s.domains.forEach((d, ordinal) => {
     if (d.helix_id.startsWith('__lnk__')) return
     const covered = coverage.get(domainKey(s.id, ordinal)) ?? new Set(), omitted = flexible.get(d.helix_id)
@@ -458,10 +471,10 @@ function input(v, kind, indices, live, residuePoseIds) {
     return
   }
   if (kind === 'placement-poses') {
-    object({ _proof_version: literal(1), primary_cluster_id: id, selected_cluster_ids: array(id, 32),
+    optional(v, { _proof_version: literal(1), primary_cluster_id: id, selected_cluster_ids: array(id, 32),
       poses: array(object({ cluster_id: id, ...pose, parent_cluster_id: nid, overhang_duplex_driver_id: nid }), 32),
       authoring: object({ mode: literal('free', 'joint', 'tethers'), joint_id: nid, fixed_cluster_ids: array(id, 32), pivot_id: id }),
-      primary_authored_fields: values => optional(values, {}, authored), legacy_source: nullable(v => text(v, 512, true)) })(v)
+      primary_authored_fields: values => optional(values, {}, authored), legacy_source: nullable(v => text(v, 512, true)) }, { reclassify_unpaired: literal(true), history_seed: id })
     uniqueIds(v.selected_cluster_ids, 32, true)
     const owners = v.poses.map(p => p.cluster_id); uniqueIds(owners, 32, true)
     if (!v.selected_cluster_ids.includes(v.primary_cluster_id) || v.selected_cluster_ids.some(i => !owners.includes(i))) fail('incomplete placement poses')
@@ -538,7 +551,7 @@ function input(v, kind, indices, live, residuePoseIds) {
   }
 }
 function controls(v, topology, kind, live) {
-  shape(v, [...CONTROL_KEYS, 'group_organization', 'inputs', 'lattice_type', ...(live ? ['flexible_gates', 'placement_constraints', 'frame_provenance', ...(v.inputs?.reclassify_unpaired ? ['residue_pose_ids'] : [])] : ['placement_upgrade'])])
+  shape(v, [...CONTROL_KEYS, 'group_organization', 'inputs', 'lattice_type', ...(live ? ['flexible_gates', 'placement_constraints', 'frame_provenance', ...(v.inputs?.reclassify_unpaired && !v.inputs?.poses ? ['residue_pose_ids'] : [])] : ['placement_upgrade'])])
   literal('SQUARE', 'HONEYCOMB')(v.lattice_type)
   const indices = inventories(v, true, live)
   input(v.inputs, kind, indices, live, v.residue_pose_ids)

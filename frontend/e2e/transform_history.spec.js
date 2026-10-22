@@ -664,6 +664,40 @@ Path(sys.argv[2]).write_text(json.dumps(states))
             expect(row[field][axis]).toBeCloseTo(reference[field][axis], 8)
       }
     }
+    const overhang = await page.evaluate(async () => {
+      const api = await import('/src/api/client.js')
+      await api.seekFeatures(2)
+      const { store } = await import('/src/state/store.js')
+      const first = store.getState().currentDesign.overhangs[0]
+      await api.seekFeatures(4)
+      const state = store.getState()
+      const grown = state.currentDesign.overhangs[0]
+      return { first: { id: first.id, label: first.label, length: first.sub_domains[0].length_bp },
+        grown: { id: grown.id, label: grown.label, length: grown.sub_domains[0].length_bp },
+        exposed: state.currentGeometry.filter(n => n.overhang_id === grown.id).map(n => ({ bp: n.bp_index, unpaired: n.is_unpaired })) }
+    })
+    expect(overhang.first.label).toBe('OH1')
+    expect(overhang.first.length).toBe(1)
+    expect(overhang.grown).toEqual({ ...overhang.first, length: 4 })
+    expect(overhang.exposed.map(n => n.bp).sort()).toEqual([0, 1, 2, 3])
+    expect(overhang.exposed.every(n => n.unpaired)).toBe(true)
+    await page.locator('[data-vt="overhangNames"]').click()
+    expect(await page.evaluate(() => window.__nadocTest.store.getState().showOverhangNames)).toBe(true)
+    await page.locator('#select-filter-trigger').click()
+    await page.locator('#select-filter-menu [data-key="ovhangs"]').click()
+    expect(await page.evaluate(() => window.__nadocTest.store.getState().selectableTypes.overhangs)).toBe(true)
+    await page.locator('#select-filter-trigger').click()
+    await expect.poll(() => page.evaluate(() => {
+      const { currentHelixAxes } = window.__nadocTest.store.getState()
+      const expected = Object.values(currentHelixAxes).flatMap(a => a.segments ?? [])
+        .map(s => s.start.map((v, i) => (v + s.end[i]) / 2))
+      const actual = []
+      window.__nadocTest.scene.traverseVisible(o => {
+        if (o.name === 'axisLine') actual.push(o.getWorldPosition(o.position.clone()).toArray())
+      })
+      return expected.length > 0 && expected.every(p => actual.some(q => Math.hypot(...p.map((v, i) => v - q[i])) < 1e-6))
+    })).toBe(true)
+    await page.screenshot({ path: '../.development-artifacts/feature-history-focus/move-axis-overhang-f5.png' })
     const batch = await page.evaluate(async () =>
       (await import('/src/api/client.js')).getGeometryBatch([0, 2, 3, 4, 6, 8, 9, 10]))
     for (const position of [0, 2, 3, 4, 6, 8, 9, 10])

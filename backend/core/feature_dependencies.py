@@ -130,6 +130,7 @@ def _object_refs(item, design=None) -> set:
         _add(item.three_prime_helix_id, out)
         _add(item.five_prime_helix_id, out)
     elif name == "OverhangSpec":
+        _add(item.unpaired_source_helix_id, out)
         _add(item.helix_id, out)
         _add(item.strand_id, out)
         _add(item.parent_overhang_id, out)

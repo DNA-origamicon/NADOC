@@ -56,6 +56,7 @@ def native_compact_geometry(design: Design) -> dict | None:
         bps, directions = arrays["bp_indices"], arrays["directions"]
         count = len(bps)
         occupied = np.zeros(count, dtype=bool)
+        opposite_occupied = np.zeros(count, dtype=bool)
         sid, stype, ohid = (np.full(count, None, dtype=object) for _ in range(3))
         did = np.zeros(count, dtype=np.int32)
         is5, is3 = (np.zeros(count, dtype=bool) for _ in range(2))
@@ -63,6 +64,7 @@ def native_compact_geometry(design: Design) -> dict | None:
             direction = int(domain.direction == Direction.REVERSE)
             mask = (directions == direction) & (bps >= lo) & (bps <= hi)
             occupied[mask] = True
+            opposite_occupied |= (directions != direction) & (bps >= lo) & (bps <= hi)
             sid[mask], stype[mask], ohid[mask] = strand.id, strand.strand_type.value, domain.overhang_id
             did[mask] = index
             is5[mask] = ((bps[mask] == five[1]) if (helix.id, domain.direction) == (five[0], five[2]) else False)
@@ -87,6 +89,7 @@ def native_compact_geometry(design: Design) -> dict | None:
                 "sq": quaternions[slab_mask], "pv": [SOURCE] * int(mask.sum()),
                 "sid": sid[mask].tolist(), "stype": stype[mask].tolist(),
                 "is5": is5[mask], "is3": is3[mask], "did": did[mask], "ohid": ohid[mask].tolist(),
+                "unpaired": ~opposite_occupied[mask],
             }
         compact[arrays["helix_id"]] = buckets
     return compact

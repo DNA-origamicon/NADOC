@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 from backend.api import crud, part_proof_commands as commands
 from backend.api.state import encode_design_snapshot
 from backend.core.models import (
-    AnimationKeyframe, ClusterCreateLogEntry, ClusterOpLogEntry, ClusterRigidTransform, Design,
+    AnimationKeyframe, ClusterCreateLogEntry, ClusterRigidTransform, Design,
     DesignAnimation, Direction, DomainRef, SnapshotLogEntry,
 )
 from backend.core.part_history_contract import assess_part_history, create_empty_part
@@ -50,7 +50,11 @@ def build():
         delta(ClusterCreateLogEntry(proof_version=2, cluster_id=identity, name=name,
             helix_ids=cluster.helix_ids, domain_ids=cluster.domain_ids, cluster_snapshot=cluster),
             f'Make Cluster — {name}; select bases 0–3 without moving them')
-        delta(ClusterOpLogEntry(proof_version=1, cluster_id=identity, **pose), label)
+        nonlocal design
+        from backend.api.part_group_recording import prepare_group_update
+        design, _ = prepare_group_update(design, identity, pose)
+        stages.append(label)
+        verify(design)
 
     append('bundle-create', crud.BundleRequest(cells=[[0, 0], [0, 1]], length_bp=8,
         ligate_adjacent=False, history_seed=UUID(int=26001)).model_dump(mode='json'),
@@ -61,13 +65,13 @@ def build():
     target = dict(kind='base', helix_id=helix, bp_index=3, direction='FORWARD', copy_k=0)
     def base(pose, compose, label):
         append('nucleotide-transform', dict(**target, **pose, compose=compose,
-            history_seed=str(UUID(int=26002))), label)
+            history_seed=str(UUID(int=26002)), reclassify_unpaired=True), label)
 
-    base(N, False, '03 Rotate base 3 about X by 90 degrees, then translate')
+    base(N, False, '03 Rotate base 3 about X by 90 degrees, then translate — expose OH1')
     strand = next(s for s in design.strands if any(d.helix_id == helix
         and d.direction == Direction.FORWARD and min(d.start_bp, d.end_bp) <= 3 <= max(d.start_bp, d.end_bp)
         for d in s.domains))
-    owner('first-group-move', 'Bases 0–3, first cluster', '05 Move bases 0–3 together: Z rotation 90 degrees + translation', M, strand.id)
+    owner('first-group-move', 'Bases 0–3, first cluster', '05 Move bases 0–3 together: Z rotation 90 degrees + translation — extend OH1', M, strand.id)
     base(D, True, '06 Move base 3 by (3, -2, 1) nm')
     saved = next(p for p in design.nucleotide_transforms if p.helix_id == helix and p.bp_index == 3)
     append('nucleotide-transform-delete', dict(transform_id=saved.id),
@@ -94,7 +98,7 @@ def verify(design):
 
 
 if __name__ == '__main__':
-    destination = Path('workspace/move_rotate_cluster_steps.nadoc')
+    destination = Path('workspace/move_rotate_axes_overhang.nadoc')
     result = build()
     with destination.open('x') as stream:
         stream.write(result.to_json())

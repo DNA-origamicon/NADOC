@@ -2700,6 +2700,17 @@ def _segments_for_helix(design: "Design", h: "Helix", candidates=None) -> list[d
                 ],
             }
         )
+    # An independently moved residue no longer lies on its domain's helix axis.
+    # Keep sticks only over the remaining contiguous residues, rather than
+    # extending a domain axis through a base displayed elsewhere.
+    posed = {(p.bp_index, p.direction) for p in design.nucleotide_transforms
+             if p.kind == "base" and p.helix_id == h.id and p.copy_k == 0
+             and (not np.allclose(p.translation, 0, rtol=0, atol=1e-10)
+                  or not np.allclose(_rot_from_quaternion(*p.rotation), np.eye(3), rtol=0, atol=1e-10))}
+    if posed:
+        directions = {(strand.id, di): dom.direction for strand, di, dom in cands}
+        deduped = [sub for seg in deduped for sub in _split_segment_by_bps(seg,
+            {bp for bp, direction in posed if direction == directions.get((seg["strand_id"], seg["domain_index"]))})]
     # Carve out flexible ssDNA bp ranges — no axis stick over a flexible segment.
     flex_bps = _flexible_bps_on_helix(design, h.id)
     if flex_bps:

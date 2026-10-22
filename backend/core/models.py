@@ -319,6 +319,8 @@ class OverhangSpec(BaseModel):
     strand_id: str  # the parent staple strand ID
     sequence: Optional[str] = None
     label: Optional[str] = None
+    # Authored separation provenance, used to extend the same overhang on later moves.
+    unpaired_source_helix_id: Optional[str] = None
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     # translation (nm) is a rigid displacement of the overhang duplex, applied

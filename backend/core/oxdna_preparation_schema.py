@@ -34,7 +34,7 @@ _fields = {
     m.SubDomain: """id name color start_bp_offset length_bp sequence_override rotation_theta_deg
         rotation_phi_deg notes tm_celsius gc_percent hairpin_warning dimer_warning""",
     m.OverhangSpec: """id helix_id strand_id sequence label rotation pivot translation sub_domains
-        parent_overhang_id auxiliary_endpoint strand_anim_setup""",
+        parent_overhang_id auxiliary_endpoint strand_anim_setup unpaired_source_helix_id""",
     m.HalfCrossover: "helix_id index strand",
     m.Crossover: "id half_a half_b extra_bases process_id",
     m.CrossoverConstraint: "id helix_ids_a helix_ids_b allowed_bp_intervals",

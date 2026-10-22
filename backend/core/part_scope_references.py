@@ -51,7 +51,7 @@ _schema("Domain", refs={"helix_id": "helix", "overhang_id": "overhang", "binds_o
         plain="start_bp end_bp direction")
 _schema("SubDomain", "sub_domain", plain="name color start_bp_offset length_bp sequence_override rotation_theta_deg rotation_phi_deg notes tm_celsius gc_percent hairpin_warning dimer_warning")
 _schema("OverhangSpec", "overhang", children="sub_domains",
-        refs={"helix_id": "helix", "strand_id": "strand", "parent_overhang_id": "overhang"},
+        refs={"helix_id": "helix", "strand_id": "strand", "parent_overhang_id": "overhang", "unpaired_source_helix_id": "helix"},
         plain="sequence label rotation pivot translation auxiliary_endpoint", blocked="strand_anim_setup")
 _schema("OverhangConnection", "overhang_connection",
         refs={"overhang_a_id": "overhang", "overhang_b_id": "overhang", "target_joint_id": "joint"},

@@ -36,6 +36,7 @@ export function expandCompactNucleotides(compact) {
           is_three_prime:    !!b.is3?.[i],
           domain_index:      b.did?.[i] ?? 0,
           overhang_id:       b.ohid?.[i] ?? null,
+          is_unpaired:       b.unpaired?.[i] ?? false,
           extension_id:      b.extid?.[i] ?? null,
           is_modification:   !!b.ismod?.[i],
           modification:      b.mod?.[i] ?? null,
