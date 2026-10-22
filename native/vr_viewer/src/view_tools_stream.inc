@@ -4,7 +4,7 @@ struct TransformTemplate {std::vector<Instance> instances;glm::vec3 lo,hi;};
 struct TransformBase {uint32_t version=0,flags=0;std::vector<TransformTemplate> batches;nadoc_vr::view_opaque::Eligibility opaqueEligibility;};
 std::shared_ptr<const TransformBase> transformBase;
 uint64_t transformUpdateCount=0,fullSnapshotCount=0;
-struct IncomingView {bool transformsOnly=false;std::shared_ptr<const TransformBase> transformBase;std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0,readEpochMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false,indexedAny=false,indexedGroupedAny=false;};
+struct IncomingView {bool transformsOnly=false,panelOnly=false,panelPatch=false;std::shared_ptr<const TransformBase> transformBase;std::array<uint32_t,10> header{};std::vector<V> triangles,lines;std::vector<Sprite> sprites;std::vector<Batch> batches;std::vector<unsigned char> pixels;double parseMs=0,readEpochMs=0;std::optional<nadoc_vr::BoundsSummary> bounds;nadoc_vr::view_opaque::Eligibility opaqueEligibility;bool groupedAny=false,indexedAny=false,indexedGroupedAny=false;};
 struct StagedView {IncomingView view;GLuint triangles=0,lines=0,texture=0;size_t buffer=0,offset=0,textureRow=0;double uploadMs=0;};
 std::unique_ptr<nadoc_vr::ViewSnapshotInbox> inbox;
 std::future<std::optional<IncomingView>> reading;
@@ -14,13 +14,18 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
  const auto start=std::chrono::steady_clock::now();std::ifstream file;std::istringstream memory;
  if(packet)memory.str(std::move(*packet));else file.open(path,std::ios::binary);
  std::istream& in=packet?static_cast<std::istream&>(memory):static_cast<std::istream&>(file);char magic[8];IncomingView out;auto& h=out.header;
- if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]!=4&&h[0]!=5&&h[0]!=6&&h[0]!=7)||h[1]==current)return {};
- const bool atlas=h[0]<6;out.transformsOnly=h[0]==7;
+ if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]<4||h[0]>9)||h[1]==current)return {};
+ const bool atlas=h[0]<6;out.transformsOnly=h[0]==7;out.panelOnly=h[0]==9;out.panelPatch=h[0]>=8;
  std::shared_ptr<TransformBase> fresh;
- if(out.transformsOnly){uint32_t baseVersion=0;if(!in.read((char*)&baseVersion,4)||!base||baseVersion!=base->version||h[2]!=base->flags||h[8]!=base->batches.size())return {};out.transformBase=base;}
- else {fresh=std::make_shared<TransformBase>();fresh->version=h[1];fresh->flags=h[2];out.transformBase=fresh;}
- if(h[2]>=4096||(h[2]&(128|512|1024))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[8]>10000||h[6]!=(atlas?2048U:0U)||h[7]!=(atlas?2048U:0U))return {};
- out.triangles.resize(h[3]);out.lines.resize(h[4]);out.sprites.resize(h[5]);if(atlas)out.pixels.resize(2048*2048*4);
+ if(h[0]>=7){uint32_t baseVersion=0;if(!in.read((char*)&baseVersion,4)||!base||baseVersion!=base->version||baseVersion>=h[1])return {};
+  if((out.transformsOnly || out.panelOnly) && h[2]!=base->flags)return {};
+  if(out.transformsOnly && h[8]!=base->batches.size())return {};
+  if(out.panelOnly && (h[3]||h[4]||h[5]||h[8]))return {};
+  out.transformBase=base;
+ }
+ if(!out.transformsOnly && !out.panelOnly){fresh=std::make_shared<TransformBase>();fresh->version=h[1];fresh->flags=h[2];out.transformBase=fresh;}
+ if(h[2]>=4096||(h[2]&(128|512|1024))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[8]>10000||h[6]!=(out.panelPatch?768U:atlas?2048U:0U)||h[7]!=(out.panelPatch?768U:atlas?2048U:0U))return {};
+ out.triangles.resize(h[3]);out.lines.resize(h[4]);out.sprites.resize(h[5]);if(atlas || out.panelPatch)out.pixels.resize(size_t(h[6])*h[7]*4);
  const auto vertices=[&](auto& values){if(h[0]>=5)return bool(in.read((char*)values.data(),values.size()*sizeof(V)));for(auto& v:values)if(!in.read((char*)&v,36))return false;return true;};
  if(!vertices(out.triangles)||!vertices(out.lines)||!in.read((char*)out.sprites.data(),out.sprites.size()*sizeof(Sprite)))return {};
  uint64_t totalVertices=h[3]+h[4],totalInstances=0;
@@ -33,8 +38,10 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
   TransformTemplate retained;retained.instances=b.instances;retained.lo=glm::vec3(1e30F);retained.hi=glm::vec3(-1e30F);
   for(const auto& v:b.vertices){retained.lo=glm::min(retained.lo,v.p);retained.hi=glm::max(retained.hi,v.p);}fresh->batches.push_back(std::move(retained));
   for(auto& instance:b.instances)instance.matrix=normalization*instance.matrix;
+  b.annotation=nadoc_vr::view_opaque::annotation(b.vertices);
   out.batches.push_back(std::move(b));}
  if(!in.read((char*)out.pixels.data(),out.pixels.size())||in.peek()!=std::char_traits<char>::eof())return {};
+ if(out.panelOnly){out.readEpochMs=epoch;out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;}
  for(auto* list:{&out.triangles,&out.lines})for(auto& v:*list)v.p=(v.p-center)*scale+origin;
  for(auto& s:out.sprites){s.p=(s.p-center)*scale+origin;s.size*=scale;}
  nadoc_vr::BoundsAccumulator bounds;
@@ -87,7 +94,7 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
  if(!inbox)inbox=std::make_unique<nadoc_vr::ViewSnapshotInbox>(path);
  bool applied=false;
  if(reading.valid()&&reading.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{auto next=reading.get();if(next){staging.emplace();staging->view=std::move(*next);}}catch(const std::exception&){} }
- if(staging){auto& s=*staging;const double start=glfwGetTime();const size_t indexKind=s.view.groupedAny?3:2;const size_t indexedGroupKind=indexKind+(s.view.indexedAny?2:0);const size_t stride=indexedGroupKind+(s.view.indexedGroupedAny?2:0);const size_t count=2+s.view.batches.size()*(s.view.transformsOnly?1:stride);
+ if(staging){auto& s=*staging;const double start=glfwGetTime();const size_t indexKind=s.view.groupedAny?3:2;const size_t indexedGroupKind=indexKind+(s.view.indexedAny?2:0);const size_t stride=indexedGroupKind+(s.view.indexedGroupedAny?2:0);const size_t count=s.view.panelOnly?0:2+s.view.batches.size()*(s.view.transformsOnly?1:stride);
   while(s.buffer<count&&glfwGetTime()-start<.001){GLuint* buffer;const void* data;size_t bytes;Batch* optionalIndexed=nullptr;bool optionalGroup=false;
    if(s.buffer<2){auto& list=s.buffer==0?s.view.triangles:s.view.lines;buffer=s.buffer==0?&s.triangles:&s.lines;data=list.data();bytes=list.size()*sizeof(V);}
    else if(s.view.transformsOnly){auto& b=s.view.batches[s.buffer-2];auto& active=batches[s.buffer-2];
@@ -119,15 +126,20 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
    if(s.offset==bytes){++s.buffer;s.offset=0;}
   }
   if(s.buffer==count&&!s.view.pixels.empty()&&glfwGetTime()-start<.001){
-   if(!s.texture){glGenTextures(1,&s.texture);glBindTexture(GL_TEXTURE_2D,s.texture);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,2048,2048,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);}
+   if(!s.texture){glGenTextures(1,&s.texture);glBindTexture(GL_TEXTURE_2D,s.texture);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,s.view.header[6],s.view.header[7],0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);}
    glBindTexture(GL_TEXTURE_2D,s.texture);glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-   while(s.textureRow<2048&&glfwGetTime()-start<.001){const size_t rows=std::min(size_t(16),2048-s.textureRow);glTexSubImage2D(GL_TEXTURE_2D,0,0,s.textureRow,2048,rows,GL_RGBA,GL_UNSIGNED_BYTE,s.view.pixels.data()+s.textureRow*2048*4);s.textureRow+=rows;}
+   while(s.textureRow<s.view.header[7]&&glfwGetTime()-start<.001){const size_t rows=std::min(size_t(16),s.view.header[7]-s.textureRow);glTexSubImage2D(GL_TEXTURE_2D,0,0,s.textureRow,s.view.header[6],rows,GL_RGBA,GL_UNSIGNED_BYTE,s.view.pixels.data()+s.textureRow*s.view.header[6]*4);s.textureRow+=rows;}
   }
   s.uploadMs+=(glfwGetTime()-start)*1000;
-  if(s.buffer==count&&(s.view.pixels.empty()||s.textureRow==2048)){
+  if(s.buffer==count&&(s.view.pixels.empty()||s.textureRow==s.view.header[7])){
+   if(s.view.panelOnly){
+    glDeleteTextures(1,&panelTexture);panelTexture=s.texture;
+    version=s.view.header[1];acknowledged=s.view.header[9];if(acknowledged>=sequence)waiting=false;
+    parseMs=s.view.parseMs;uploadMs=s.uploadMs;staging.reset();if(!continuous)return true;applied=true;
+   }else{
    if(!s.view.transformsOnly){clearBatches();}
    glDeleteBuffers(1,&triangleVbo);glDeleteBuffers(1,&lineVbo);triangleVbo=s.triangles;lineVbo=s.lines;
-   if(s.texture){glDeleteTextures(1,&texture);texture=s.texture;}
+   if(s.texture){if(s.view.panelPatch){glDeleteTextures(1,&panelTexture);panelTexture=s.texture;}else{glDeleteTextures(1,&texture);texture=s.texture;glDeleteTextures(1,&panelTexture);panelTexture=0;}}
    if(s.view.groupedAny || s.view.indexedGroupedAny){GLint active=0;glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);
     for(auto& b:s.view.batches)if((b.groupPlan.eligible && b.groupedVertexBuffer) || (b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer)){glGenTextures(1,&b.instanceTexture);GLint width=0,format=0,vertexBytes=0;
      if(b.groupPlan.eligible){glBindBuffer(GL_ARRAY_BUFFER,b.groupedVertexBuffer);glGetBufferParameteriv(GL_ARRAY_BUFFER,GL_BUFFER_SIZE,&vertexBytes);}
@@ -157,6 +169,7 @@ bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin,
    static const bool pipelineTrace=[] {const char* v=std::getenv("NADOC_VR_VIEW_PIPELINE");return v&&std::string_view(v)=="1";}();
    if(pipelineTrace)nadoc_vr::TraceRecord()<<std::fixed<<std::setprecision(6)<<"VR_VIEW_PIPELINE_NATIVE epoch_ms="<<std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count()<<" version="<<s.view.header[1]<<" transforms="<<s.view.transformsOnly<<" full_snapshots="<<fullSnapshotCount<<" transform_updates="<<transformUpdateCount<<" read_epoch_ms="<<s.view.readEpochMs<<" read_parse_ms="<<s.view.parseMs<<" upload_ms="<<s.uploadMs<<'\n';
    cachedSceneBounds=s.view.bounds;version=s.view.header[1];flags=s.view.header[2];acknowledged=s.view.header[9];if(acknowledged>=sequence)waiting=false;parseMs=s.view.parseMs;uploadMs=s.uploadMs;staging.reset();if(!continuous)return true;applied=true;
+   }
   }
  }
  if(!reading.valid()&&!staging&&(continuous||++frames%3==0)){

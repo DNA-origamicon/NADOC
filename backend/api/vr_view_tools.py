@@ -16,12 +16,13 @@ def validate_and_rotate(data, rotation):
     if len(data)<48 or data[:8]!=b'NADOCVT1':
         raise HTTPException(422,detail='Invalid VR display header')
     schema,version,flags,triangles,lines,sprites,width,height,batches,ack=struct.unpack_from('<10I',data,8)
-    if schema not in (4,5,6,7) or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=(0 if schema>=6 else 2048) or height!=(0 if schema>=6 else 2048) or len(data)>MAX_BYTES:
+    if schema not in (4,5,6,7,8,9) or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=(768 if schema>=8 else 0 if schema>=6 else 2048) or height!=(768 if schema>=8 else 0 if schema>=6 else 2048) or len(data)>MAX_BYTES:
         raise HTTPException(422,detail='Invalid VR display dimensions')
+    if schema==9 and (triangles or lines or sprites or batches):raise HTTPException(422,detail='Panel-only update contains geometry')
     r=np.asarray(rotation,dtype=float)
     if r.shape!=(3,3) or not np.isfinite(r).all():raise HTTPException(422,detail='Invalid VR view rotation')
     result=bytearray(data);offset=48
-    if schema==7:
+    if schema in (7,8,9):
         if len(data)<52 or not 0<struct.unpack_from('<I',data,48)[0]<version:
             raise HTTPException(422,detail='Invalid VR transform base')
         offset=52
@@ -98,7 +99,7 @@ async def publish(request:Request):
         if send_snapshot(state['event_path'], result, capabilities=capabilities):
             mark('write_end_ms')
             return 'ipc'
-        if struct.unpack_from('<I',result,8)[0]==7:
+        if struct.unpack_from('<I',result,8)[0]>=7:
             raise HTTPException(409,detail='VR transform stream unavailable; resend full snapshot')
         # Compatibility for already-running older viewers. Disk I/O runs in the
         # worker, never directly in the async request handler.
@@ -120,7 +121,7 @@ async def publish(request:Request):
         raise HTTPException(503, detail='VR display transport unavailable') from exc
     if tracing:
         print('VR_VIEW_PIPELINE_BACKEND ' + json.dumps({'epoch_ms':epoch_ms,'version':struct.unpack_from('<I',result,12)[0],'bytes':len(result),'transport':transport,**marks}), flush=True)
-    return {'published':True,'bytes':len(result),'transform_updates':capabilities.get('transform_updates',False) and os.environ.get('NADOC_VR_TRANSFORM_UPDATES')!='0'}
+    return {'published':True,'bytes':len(result),'atlas_patches':capabilities.get('atlas_patches',False),'transform_updates':capabilities.get('transform_updates',False) and os.environ.get('NADOC_VR_TRANSFORM_UPDATES')!='0'}
 
 
 def parse_event(value):

@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three'
+import { loopSkipGlyphMaterial, configureLoopSkipGlyph, GLYPH_SIZE } from './loop_skip_glyph.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 
 /**
@@ -40,26 +41,9 @@ function _samplePolyline(samples, frac) {
   ]
 }
 
-// Match helix_renderer.js BEAD_RADIUS = 0.10 nm
-const LOOP_RING_R   = 0.20   // torus tube radius (nm)
-const LOOP_TORUS_R  = 0.16   // torus major radius — wraps around the two beads
-const SKIP_ARM      = 0.36   // half-length of each X arm (nm)
-const SKIP_TUBE     = 0.08   // cylinder radius for X arms
-
-const COL_LOOP = 0xff8800   // bright orange
-const COL_SKIP = 0xff2222   // bright red
-
-// Reusable geometries
-const _GEO_TORUS  = new THREE.TorusGeometry(LOOP_TORUS_R, LOOP_RING_R, 8, 24)
-
-// Skip X = two thin cylinders rotated ±45°
-const _GEO_ARM = new THREE.CylinderGeometry(SKIP_TUBE, SKIP_TUBE, SKIP_ARM * 2, 6)
-// 3D/unfold view: arms in XY plane (rotation around Z)
-const _Q45A    = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0,  Math.PI / 4))
-const _Q45B    = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -Math.PI / 4))
-function _makeMat(color) {
-  return new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.85 })
-}
+const COL_LOOP = 0xff8800
+const COL_SKIP = 0xff2222
+const _GEO_GLYPH = new THREE.PlaneGeometry(GLYPH_SIZE, GLYPH_SIZE)
 
 export function initLoopSkipHighlight(scene) {
   const _group = new THREE.Group()
@@ -73,16 +57,17 @@ export function initLoopSkipHighlight(scene) {
    * move them without a full rebuild.
    *
    * Loop entry:  { type:'loop', helixId, bpIndex, frac, pos3D, mesh }
-   * Skip entry:  { type:'skip', helixId, frac, pos3D, arm1, arm2 }
+   * Skip entry:  { type:'skip', helixId, frac, pos3D, mesh }
    *
    * pos3D is the DEFORMED position at the time of rebuild.
    * frac  is bpIndex / helix.length_bp — used to interpolate along the axis.
    */
   let _entries = []
 
-  const _loopMat      = _makeMat(COL_LOOP)
-  const _skipMat      = _makeMat(COL_SKIP)
-  const _highlightMat = _makeMat(0xffffff)
+  const _loopMat      = loopSkipGlyphMaterial('loop',COL_LOOP)
+  const _skipMat      = loopSkipGlyphMaterial('skip',COL_SKIP)
+  const _highlightLoop = loopSkipGlyphMaterial('loop',0xffffff)
+  const _highlightSkip = loopSkipGlyphMaterial('skip',0xffffff)
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -143,7 +128,7 @@ export function initLoopSkipHighlight(scene) {
           } else {
             continue
           }
-          const mesh = new THREE.Mesh(_GEO_TORUS, _loopMat)
+          const mesh = configureLoopSkipGlyph(new THREE.Mesh(_GEO_GLYPH, _loopMat),'loop')
           mesh.position.set(cx, cy, cz)
           _group.add(mesh)
           _entries.push({
@@ -175,16 +160,12 @@ export function initLoopSkipHighlight(scene) {
             continue
           }
 
-          const arm1 = new THREE.Mesh(_GEO_ARM, _skipMat)
-          arm1.position.set(px, py, pz)
-          arm1.quaternion.copy(_Q45A)
-          const arm2 = new THREE.Mesh(_GEO_ARM, _skipMat)
-          arm2.position.set(px, py, pz)
-          arm2.quaternion.copy(_Q45B)
-          _group.add(arm1, arm2)
+          const mesh = configureLoopSkipGlyph(new THREE.Mesh(_GEO_GLYPH, _skipMat),'skip')
+          mesh.position.set(px, py, pz)
+          _group.add(mesh)
           _entries.push({
             type: 'skip', helixId: helix.id, bpIndex: ls.bp_index, frac,
-            pos3D: new THREE.Vector3(px, py, pz), arm1, arm2,
+            pos3D: new THREE.Vector3(px, py, pz), mesh,
           })
         }
       }
@@ -237,8 +218,7 @@ export function initLoopSkipHighlight(scene) {
         lx = sx + (e.pos3D.x - sx) * t
         ly = sy + (e.pos3D.y - sy) * t
         lz = sz + (e.pos3D.z - sz) * t
-        e.arm1.position.set(lx, ly, lz)
-        e.arm2.position.set(lx, ly, lz)
+        e.mesh.position.set(lx, ly, lz)
       }
     }
   }
@@ -271,16 +251,7 @@ export function initLoopSkipHighlight(scene) {
       }
 
       const fx = bx + ox, fy = by + oy, fz = bz + oz
-      if (e.type === 'loop') {
-        e.mesh.position.set(fx, fy, fz)
-      } else {
-        e.arm1.position.set(fx, fy, fz)
-        e.arm2.position.set(fx, fy, fz)
-        // Restore marker orientation.
-        // with YZ-plane rotations; here we revert to XY-plane rotations.
-        e.arm1.quaternion.copy(_Q45A)
-        e.arm2.quaternion.copy(_Q45B)
-      }
+      e.mesh.position.set(fx, fy, fz)
     }
   }
 
@@ -290,12 +261,7 @@ export function initLoopSkipHighlight(scene) {
    */
   function revertPhysics() {
     for (const e of _entries) {
-      if (e.type === 'loop') {
-        e.mesh.position.copy(e.pos3D)
-      } else {
-        e.arm1.position.copy(e.pos3D)
-        e.arm2.position.copy(e.pos3D)
-      }
+      e.mesh.position.copy(e.pos3D)
     }
   }
 
@@ -309,6 +275,7 @@ export function initLoopSkipHighlight(scene) {
   function dispose() {
     for (const child of [..._group.children]) _group.remove(child)
     scene.remove(_group)
+    for (const material of [_loopMat,_skipMat,_highlightLoop,_highlightSkip]) material.dispose()
   }
 
   /**
@@ -323,16 +290,14 @@ export function initLoopSkipHighlight(scene) {
       bpIndex: e.bpIndex,
       // Current rendered position (updated by applyDeformLerp / applyUnfoldOffsets).
       getPosition() {
-        return e.type === 'loop' ? e.mesh.position : e.arm1.position
+        return e.mesh.position
       },
       // Highlight/restore helpers.
       setHighlight(on) {
-        const col = on ? 0xffffff : (e.type === 'loop' ? COL_LOOP : COL_SKIP)
         if (e.type === 'loop') {
-          e.mesh.material = on ? _highlightMat : _loopMat
+          e.mesh.material = on ? _highlightLoop : _loopMat
         } else {
-          e.arm1.material = on ? _highlightMat : _skipMat
-          e.arm2.material = on ? _highlightMat : _skipMat
+          e.mesh.material = on ? _highlightSkip : _skipMat
         }
       },
     }))

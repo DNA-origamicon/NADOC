@@ -15,7 +15,7 @@ class VRViewTools {
     struct Instance {glm::mat4 matrix;glm::vec4 color;};
     static_assert(sizeof(glm::mat4)==64 && sizeof(Instance)==80 && offsetof(Instance,color)==64,"Grouped texture view requires exact matrix+color wire layout");
     static_assert(sizeof(V)==48 && offsetof(V,p)==0 && offsetof(V,color)==12 && offsetof(V,uv)==28 && offsetof(V,normal)==36,"Exact indexing requires the complete padding-free wire vertex");
-    struct Batch {std::vector<nadoc_vr::view_compact::Vertex> compactGroup;std::vector<V> vertices,groupedVertices,indexedVertices,indexedGroupVertices;std::vector<uint32_t> indices,indexedGroupIndices;std::vector<Instance> instances;GLsync spareInstanceFence=nullptr;GLuint spareInstanceBuffer=0;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0,indexedVertexBuffer=0,indexBuffer=0,indexedGroupVertexBuffer=0,indexedGroupIndexBuffer=0;nadoc_vr::view_groups::Plan groupPlan;nadoc_vr::view_indexed::Plan indexPlan;nadoc_vr::view_indexed::GroupPlan indexedGroupPlan;uint32_t indexUploadGlError=0,indexedGroupUploadGlError=0;};
+    struct Batch {bool annotation=false;std::vector<nadoc_vr::view_compact::Vertex> compactGroup;std::vector<V> vertices,groupedVertices,indexedVertices,indexedGroupVertices;std::vector<uint32_t> indices,indexedGroupIndices;std::vector<Instance> instances;GLsync spareInstanceFence=nullptr;GLuint spareInstanceBuffer=0;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0,indexedVertexBuffer=0,indexBuffer=0,indexedGroupVertexBuffer=0,indexedGroupIndexBuffer=0;nadoc_vr::view_groups::Plan groupPlan;nadoc_vr::view_indexed::Plan indexPlan;nadoc_vr::view_indexed::GroupPlan indexedGroupPlan;uint32_t indexUploadGlError=0,indexedGroupUploadGlError=0;};
     std::vector<Batch> batches;
     bool open=false,waiting=false;
     uint32_t version=0,flags=256,acknowledged=0;
@@ -33,7 +33,7 @@ class VRViewTools {
     glm::vec3 position{};glm::quat orientation{1,0,0,0};
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
     static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
-    GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
+    GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0,panelTexture=0;unsigned frames=0;
     std::optional<nadoc_vr::BoundsSummary> cachedSceneBounds;
     bool opaqueRequested=false;
     nadoc_vr::view_opaque::Eligibility opaqueEligibility;
@@ -129,7 +129,7 @@ class VRViewTools {
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     }
     void clearBatches(){for(auto& b:batches){if(b.spareInstanceFence)glDeleteSync(b.spareInstanceFence);if(b.spareInstanceBuffer)glDeleteBuffers(1,&b.spareInstanceBuffer);if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);if(b.indexedVertexBuffer)glDeleteBuffers(1,&b.indexedVertexBuffer);if(b.indexBuffer)glDeleteBuffers(1,&b.indexBuffer);if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
-    void shutdown(){cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(legacyProgram)glDeleteProgram(legacyProgram);if(opaqueProgram)glDeleteProgram(opaqueProgram);if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);program=legacyProgram=opaqueProgram=groupedLegacyProgram=groupedOpaqueProgram=0;}
+    void shutdown(){glDeleteTextures(1,&panelTexture);panelTexture=0;cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(legacyProgram)glDeleteProgram(legacyProgram);if(opaqueProgram)glDeleteProgram(opaqueProgram);if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);program=legacyProgram=opaqueProgram=groupedLegacyProgram=groupedOpaqueProgram=0;}
     void close() {
         open=false;hover={-1,-1};closeHover={};
         placement.openDocked(placement.position(),placement.orientation());
@@ -185,11 +185,11 @@ class VRViewTools {
         }
     }
 #include "view_tools_stream.inc"
-    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1),bool opaqueScene=false){
+    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1),bool opaqueScene=false,GLuint textureOverride=0){
         if(data.empty()||!version)return;
         program=opaqueScene?opaqueProgram:legacyProgram;glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
         glUniform1i(glGetUniformLocation(program,"instanced"),0);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&worldModel[0][0]);
-        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
+        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,textureOverride?textureOverride:texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
         glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
         glBindVertexArray(vao);
         const GLuint buffer=&data==&triangles?triangleVbo:&data==&lines?lineVbo:vbo;
@@ -205,7 +205,15 @@ class VRViewTools {
         for(int i:{0,1,2,2,1,3})out.push_back({p[i],color,u[i]});
     }
     void renderPanel(const glm::mat4& vp){if(!open)return;std::vector<V> v;
-        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,768.F/2048,768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES,true);
+        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,panelTexture?1.F:768.F/2048,panelTexture?1.F:768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES,true,glm::mat4(1),false,panelTexture);
+        if(waiting && requested>=0 && requested<int(keys.size())) {
+            // Native pending feedback appears on the click frame, before upload.
+            const auto c=cell(requested);const float y=c.y+44.F/768;
+            std::vector<V> pending;
+            quad(pending,{{world({c.x-170.F/768,y}),world({c.x-170.F/768,y+4.F/768}),world({c.x+170.F/768,y}),world({c.x+170.F/768,y+4.F/768})}},{-1,-1,-1,-1},{1,.7F,.1F,1});
+            for(auto& vertex:pending)vertex.p+=orientation*glm::vec3(0,0,.001F);
+            draw(vp,pending,GL_TRIANGLES);
+        }
         std::vector<V> border;
         for(int i:hover)if(i>=0){const auto c=cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
@@ -233,14 +241,30 @@ class VRViewTools {
             glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
             glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
             glBindVertexArray(vao);
-            bool boundGrouped=false;
+            for(int annotationPass=0;annotationPass<2;++annotationPass) {
+            if(annotationPass && shadow)break;
+            if(annotationPass){glDisable(GL_DEPTH_TEST);glDepthMask(GL_FALSE);}
+            auto selectBatchProgram=[&](bool grouped=false){
+                if(annotationPass)program=grouped?groupedLegacyProgram:legacyProgram;
+                else selectSceneProgram(shadow,grouped);
+            };
+            bool boundGrouped=false,firstBatch=true;
             for(const auto& b:batches) {
+                if(b.annotation!=bool(annotationPass))continue;
                 const bool indexed=indexedRequested && b.indexPlan.eligible && b.indexedVertexBuffer && b.indexBuffer;
                 const bool indexedGroup=!shadow && indexed && indexedGroupsRequested && groupsAvailable() && b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer && b.instanceTexture;
                 const bool grouped=indexedGroup || (!shadow && groupsAvailable() && b.groupPlan.eligible && b.groupedVertexBuffer && b.instanceTexture);
-                if(grouped!=boundGrouped){selectSceneProgram(shadow,grouped);glUseProgram(program);FrostedGlass::bind(program,false);
+                if(firstBatch || grouped!=boundGrouped){firstBatch=false;selectBatchProgram(grouped);glUseProgram(program);FrostedGlass::bind(program,false);
                     glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&matrix[0][0]);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&model[0][0]);
-                    glUniform1i(glGetUniformLocation(program,"instanced"),1);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);glUniform1i(glGetUniformLocation(program,"atlas"),1);boundGrouped=grouped;}
+                    glUniform1i(glGetUniformLocation(program,"instanced"),1);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);
+                    if(annotationPass){
+                        const auto basis=glm::inverse(glm::mat3(model))*glm::mat3_cast(camera)*glm::length(glm::vec3(model[0]));
+                        GLint viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);
+                        glUniform3fv(glGetUniformLocation(program,"annotationRight"),1,&basis[0][0]);
+                        glUniform3fv(glGetUniformLocation(program,"annotationUp"),1,&basis[1][0]);
+                        glUniform2f(glGetUniformLocation(program,"annotationViewport"),float(viewport[2]),float(viewport[3]));
+                    }
+                    glUniform1i(glGetUniformLocation(program,"atlas"),1);boundGrouped=grouped;}
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,indexedGroup?b.indexedGroupIndexBuffer:indexed?b.indexBuffer:0);
                 glBindBuffer(GL_ARRAY_BUFFER,indexedGroup?b.indexedGroupVertexBuffer:grouped?b.groupedVertexBuffer:indexed?b.indexedVertexBuffer:b.vertexBuffer);
                 glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,p));
@@ -273,6 +297,8 @@ class VRViewTools {
                     ++legacyBatchDraws;
                 }
             }
+            }
+            glDepthMask(GL_TRUE);glEnable(GL_DEPTH_TEST);
             for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
             glEnableVertexAttribArray(1);glEnableVertexAttribArray(2);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);
         }

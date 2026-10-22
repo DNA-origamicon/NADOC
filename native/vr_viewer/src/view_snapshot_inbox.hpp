@@ -52,7 +52,7 @@ class ViewSnapshotInbox {
             if(display_ && !available_.wait_for(lock,std::chrono::seconds(2),[this]{return !pending_ || stopping_;}))return;
             if(stopping_)return;
             pending_=std::move(packet);received_=true;}
-        const char ack[2]={1,7};::send(fd,ack,display_?2:1,MSG_NOSIGNAL);
+        const char ack[2]={1,8};::send(fd,ack,display_?2:1,MSG_NOSIGNAL);
     }
 public:
     explicit ViewSnapshotInbox(const std::string& path,bool display=true):display_(display) {

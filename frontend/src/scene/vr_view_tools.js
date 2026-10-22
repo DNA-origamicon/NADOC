@@ -12,7 +12,7 @@ export const VR_VIEW_LABELS = ['Length','Sequence','Undefined','Loop / skip','Gr
 // Retain wire flag positions for the remaining view tools. Bits 7, 9 and 10 are retired.
 const viewBit = i => 1 << (i < 7 ? i : i + 1)
 const MAX_VERTICES = 4000000
-const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
+const nextTask = () => new Promise(resolve => setTimeout(resolve, 0))
 
 function displayFlags(doc) {
   const desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
@@ -21,29 +21,18 @@ function displayFlags(doc) {
 
 // Snapshot the actual displayed Three.js geometry, including instance colours,
 // alpha, posed meshes and canvas labels. Native VR retains its own stereo camera.
-export async function captureVRView(scene, doc = document, message = '', panelOnly = false, reuseAtlas = null) {
-  scene.updateMatrixWorld(true)
-  if (reuseAtlas) {
-    const revision = reuseAtlas.revision
-    const view = await captureVRGeometry(scene, doc, reuseAtlas)
-    return revision === reuseAtlas.revision ? view : { ...view, schema:5, pixels:reuseAtlas.pixels(), width:2048, height:2048 }
-  }
-  const atlas = doc.createElement('canvas');atlas.width=2048;atlas.height=2048
-  const ctx=atlas.getContext('2d'), textures=new Map()
-  let x=0,y=0,row=0
-  const allocate=(image,w=image.width,h=image.height)=>{
-    if(w>2048||h>2048)throw new Error('View texture exceeds VR atlas size')
-    if(x+w>2048){x=0;y+=row;row=0}
-    if(y+h>2048)throw new Error('View labels exceed VR atlas capacity')
-    ctx.drawImage(image,x,y,w,h);const r=[x/2048,y/2048,(x+w)/2048,(y+h)/2048]
-    x+=w+2;row=Math.max(row,h+2);return r
-  }
+function panelFingerprint(doc,message) {
+  return JSON.stringify([displayFlags(doc),message,...VR_VIEW_KEYS.map(key=>{
+    const b=doc.querySelector(`[data-vt="${key}"]`),style=b?(doc.defaultView??document.defaultView).getComputedStyle(b):null
+    return [b?.querySelector('svg')?.outerHTML,style?.color,style?.backgroundColor,style?.borderColor]
+  })])
+}
+async function capturePanel(doc,message,icons) {
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
   c.strokeStyle='#6e7681';c.strokeRect(620,8,124,44)
   c.fillStyle='#e0eaff';c.font='bold 20px sans-serif';c.fillText('CLOSE',647,37)
-  const desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const flags=displayFlags(doc)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
@@ -56,8 +45,10 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     const svg=b?.querySelector('svg')?.outerHTML
     if(svg) {
       const icon=b.querySelector('svg').cloneNode(true);icon.setAttribute('xmlns','http://www.w3.org/2000/svg');icon.style.color=desktopStyle?.color||'#e6edf3'
-      const im=new Image();im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(icon))
-      await im.decode();c.drawImage(im,px+18,py+16,64,40)
+      const source=new XMLSerializer().serializeToString(icon)
+      let im=icons.get(source)
+      if(!im){im=new Image();im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(source);await im.decode();if(icons.size>=32)icons.clear();icons.set(source,im)}
+      c.drawImage(im,px+18,py+16,64,40)
     }
     c.fillStyle='#e0eaff';c.font='21px sans-serif';c.fillText(VR_VIEW_LABELS[i],px+18,py+82)
     c.fillStyle=flags&viewBit(i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&viewBit(i)?'ON':'OFF',px+304,py+35)
@@ -66,21 +57,59 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   drawViewToolMessage(c,message || (!(flags&256)?'Layout inspection. Restore Deform to edit.':'Left quiver: show / hide. Right quiver: scissors.'))
   c.strokeStyle='#6e7681';c.strokeRect(24,620,320,64)
   c.fillStyle='#e0eaff';c.font='bold 22px sans-serif';c.fillText('DOCK / FOLLOW',48,661)
-  const menu=allocate(panel)
+  return panel
+}
+
+export async function captureVRView(scene, doc = document, message = '', panelOnly = false, reuseAtlas = null) {
+  scene.updateMatrixWorld(true)
+  const key=panelFingerprint(doc,message)
+  if(reuseAtlas) {
+    try {
+      const revision=reuseAtlas.revision
+      const changed=key!==reuseAtlas.panelKey
+      let panel
+      if(changed){panel=await capturePanel(doc,message,reuseAtlas.icons);reuseAtlas.updatePanel(panel,key)}
+      const view=await captureVRGeometry(scene,doc,reuseAtlas,panelOnly)
+      if(revision!==reuseAtlas.revision)return {...view,schema:5,pixels:reuseAtlas.pixels(),width:2048,height:2048}
+      if(changed || panelOnly)return {...view,schema:panelOnly?9:8,pixels:reuseAtlas.panelPixels(),width:768,height:768}
+      return view
+    } catch(error) {
+      if(error.message!=='View labels exceed VR atlas capacity' && error.message!=='View texture changed dimensions')throw error
+      // Reclaim retired label slots by rebuilding from the current visible scene.
+    }
+  }
+  const atlas=doc.createElement('canvas');atlas.width=2048;atlas.height=2048
+  const ctx=atlas.getContext('2d'),textures=new Map(),icons=reuseAtlas?.icons??new Map()
+  let x=0,y=0,row=0
+  const allocate=(image)=>{
+    const w=image.width,h=image.height
+    if(w>2048||h>2048)throw new Error('View texture exceeds VR atlas size')
+    if(x+w>2048){x=0;y+=row;row=0}
+    if(y+h>2048)throw new Error('View labels exceed VR atlas capacity')
+    ctx.drawImage(image,x,y,w,h);const r=[x/2048,y/2048,(x+w)/2048,(y+h)/2048]
+    x+=w+2;row=Math.max(row,h+2);return r
+  }
+  const panel=await capturePanel(doc,message,icons),menu=allocate(panel)
   const mapUV=map=>{
     if(!map?.image)return null
-    if(!textures.has(map.uuid)){textures.set(map.uuid,allocate(map.image));atlasState.revision++}
-    return textures.get(map.uuid)
+    const old=textures.get(map.uuid),image=map.image
+    if(old && (old.width!==image.width || old.height!==image.height))throw new Error('View texture changed dimensions')
+    if(!old){textures.set(map.uuid,{uv:allocate(image),version:map.version,image,width:image.width,height:image.height});atlasState.revision++}
+    else if(old.version!==map.version || old.image!==image){ctx.clearRect(old.uv[0]*2048,old.uv[1]*2048,image.width,image.height);ctx.drawImage(image,old.uv[0]*2048,old.uv[1]*2048);old.version=map.version;old.image=image;atlasState.revision++}
+    return textures.get(map.uuid).uv
   }
-  const atlasState = { mapUV, menu, batchEncoder:createVRBatchEncoder(), revision:0, pixels:()=>ctx.getImageData(0,0,2048,2048).data }
-  const geometry = await captureVRGeometry(scene, doc, atlasState, panelOnly)
-  return { ...geometry, schema:5, pixels:ctx.getImageData(0,0,2048,2048).data, width:2048, height:2048, atlasState }
+  const atlasState={mapUV,menu,icons,panelKey:key,batchEncoder:createVRBatchEncoder(),revision:0,
+    updatePanel(panel,key){ctx.clearRect(0,0,768,768);ctx.drawImage(panel,0,0);this.panelKey=key},
+    panelPixels:()=>ctx.getImageData(0,0,768,768).data,
+    pixels:()=>ctx.getImageData(0,0,2048,2048).data}
+  const geometry=await captureVRGeometry(scene,doc,atlasState,panelOnly)
+  return {...geometry,schema:5,pixels:atlasState.pixels(),width:2048,height:2048}
 }
 
 async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
   const { mapUV, menu } = atlasState
   const flags=displayFlags(doc), desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
-  const triangles=[],lines=[],sprites=[],batches=[]
+  const triangles=[],lines=[],sprites=[],batches=[],annotations=new Map()
   const pos=new THREE.Vector3(),m=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
   const encoder=atlasState.batchEncoder ??= createVRBatchEncoder()
   const sphere=()=>atlasState.sphere ??= new THREE.SphereGeometry(1,24,16)
@@ -99,6 +128,21 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
           col.copy(mat.color)
           if(mat.vertexColors&&colors)col.multiply(new THREE.Color(colors.getX(i),colors.getY(i),colors.getZ(i)))
           add(lines,pos.fromBufferAttribute(attr,i).applyMatrix4(o.matrixWorld),col,mat.opacity)
+        }
+      } else if(o.isMesh && o.userData.vrAnnotation === true) {
+        // Reserved UV (-2,-2): unlit, depth-independent annotation batch. Keep
+        // the desktop meshes editable; share their templates only on the wire.
+        if(o.matrixWorld.elements.every(Number.isFinite) && Math.abs(o.matrixWorld.determinant())>=1e-14) {
+          const p=original.attributes.position
+          for(const group of (original.groups.length?original.groups:[{start:0,count:original.index?.count??p?.count??0,materialIndex:0}])) {
+            const mat=materials[group.materialIndex??0]??materials[0]
+            if(!mat || mat.visible===false || mat.opacity<=0)continue
+            const vertices=encoder.vertices(original,mat,group,null,original.groups.indexOf(group),o.userData.vrGlyph??true)
+            if(!vertices.length)continue
+            let batch=annotations.get(vertices)
+            if(!batch){batch={name:'annotation',type:'InstancedMesh',vertices,instances:[]};annotations.set(vertices,batch)}
+            batch.instances.push(...o.matrixWorld.elements,1,1,1,1)
+          }
         }
       } else if(o.isInstancedMesh) {
         const spec=preparedImpostorSpec(materials[0]),g=spec?sphere():original,p=g.attributes.position
@@ -144,6 +188,7 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
     for(const child of o.children)visit(child)
   }
   if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene)
+  for(const batch of annotations.values())batches.push({...batch,instances:new Float32Array(batch.instances)})
   return {schema:6,flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:new Uint8Array(),width:0,height:0,atlasState}
 }
 
@@ -151,18 +196,24 @@ export function encodeVRView(view,version,requestSequence=0) {
   const batches=view.batches??[]
   const schema=view.schema??4,stride=schema>=5?12:9
   const header=new Uint32Array([schema,version,view.flags,view.triangles.length/stride,view.lines.length/stride,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
-  const parts=[new TextEncoder().encode('NADOCVT1'),header,view.triangles,view.lines,view.sprites]
+  const parts=[new TextEncoder().encode('NADOCVT1'),header]
+  if(schema>=8)parts.push(new Uint32Array([view.baseVersion]))
+  parts.push(view.triangles,view.lines,view.sprites)
   for(const b of batches)parts.push(new Uint32Array([b.vertices.length/stride,b.instances.length/20]),b.vertices,b.instances)
   return new Blob([...parts,view.pixels])
 }
-export function createVRViewTools({scene,getState,onError=console.error,doc=document,capture=captureVRView}) {
+export function createVRViewTools({scene,getState,onError=console.error,doc=document,capture=captureVRView,activateDeform=null,waitForTool=()=>{},subscribe=null}) {
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
-  const refresh = () => { dirty=true; settle=0 }
+  const refresh = () => { dirty=true; settle=0;if(started)queueMicrotask(()=>void publish()) }
+  subscribe?.((next,previous)=>{
+    if(displayFlags(doc)!==256 && (next.currentGeometry!==previous.currentGeometry || next.currentDesign!==previous.currentDesign || next.currentHelixAxes!==previous.currentHelixAxes))refresh()
+  })
   for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
-  let deliveryMilliseconds=0
+  let deliveryMilliseconds=0,controlPending=false,activating=false,started=false,atlasPatches=false,atlasInvalid=false
   let geometry,design,transformBase=null,transformBaseVersion=0,transformUpdates=false
   async function publish() {
+    started=true
     const s=getState(),now=performance.now()
     // The canonical scene already handles edits in normal Deform mode. Its
     // view-tools stream contains only an unchanged tablet atlas (16 MiB), so
@@ -170,24 +221,25 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
     // Actual overlay/layout streams still follow every geometry/design change.
     const carriesScene=displayFlags(doc)!==256
     if(!carriesScene)stamp=''
-    else if(doc.documentElement?.dataset.vrSimulationTrajectory !== 'true' && now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
+    else if(doc.documentElement?.dataset.vrSimulationTrajectory !== 'true' && (dirty || now-lastStampAt>700)){stamp=broadcastFingerprint({scene});lastStampAt=now}
     const key=fingerprint()+simulationViewActive(doc)+stamp
-    if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){if(!dirty||!last)settle=now+1200;last=key;dirty=true}
+    if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){last=key;dirty=true}
     geometry=s.currentGeometry;design=s.currentDesign
-    if(busy||!dirty||performance.now()<settle){
+    if(activating||busy||!dirty||performance.now()<settle){
       if(dirty)doc.defaultView?.__nadocVRPlaybackTrace?.({stage:'publish_wait',epoch_ms:performance.timeOrigin+performance.now(),reason:busy?'busy':'settle',wait_ms:Math.max(0,settle-performance.now())})
       return
     }
     busy=true;dirty=false;const publicationStart=performance.now(),generation=epoch,requestSequence=appliedSequence
     try {
-      // The browser canvas is intentionally frozen/occluded during native VR.
-      // Its animation-frame throttling must not pace headset trajectory delivery.
-      if(doc.documentElement?.dataset.vrSimulationTrajectory==='true')await new Promise(resolve=>setTimeout(resolve,0))
-      else await nextFrame()
+      // Control delivery must not depend on a visible browser animation frame.
+      await nextTask()
       const tracing=typeof doc.defaultView?.__nadocVRPlaybackTrace==='function'
       const stamp=(stage,extra={})=>{if(tracing)doc.defaultView.__nadocVRPlaybackTrace({stage,epoch_ms:performance.timeOrigin+performance.now(),version:version+1,...extra})}
       stamp('capture_start')
-      const view=await capture(scene,doc,message,false,doc.documentElement?.dataset.vrSimulationTrajectory === 'true' ? lastGood?.atlasState : null)
+      const panelOnly=!!(atlasPatches && lastGood && displayFlags(doc)===256 && lastGood.flags===256)
+      let view=await capture(scene,doc,message,panelOnly,!atlasInvalid&&(atlasPatches||doc.documentElement?.dataset.vrSimulationTrajectory==='true')?lastGood?.atlasState:null)
+      if(view.schema>=8 && !atlasPatches)view={...view,schema:5,pixels:view.atlasState.pixels(),width:2048,height:2048}
+      if(view.schema>=8)view.baseVersion=transformBaseVersion
       if(generation!==epoch)return
       stamp('capture_end')
       stamp('encode_start')
@@ -202,11 +254,12 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       const receipt=await response.json?.()
       if(generation!==epoch)return
       transformUpdates=receipt?.transform_updates===true
-      if(!update){transformBase=view;transformBaseVersion=version}
+      atlasPatches=receipt?.atlas_patches===true;atlasInvalid=false
+      if(!update && view.schema!==9){transformBase=view;transformBaseVersion=version}
       deliveryMilliseconds=performance.now()-publicationStart
-      lastGood=view;lastError=''
+      lastGood=view.schema===9?{...lastGood,atlasState:view.atlasState}:view;lastError='';if(requestSequence===appliedSequence)controlPending=false
     }catch(error){
-      transformBase=null;transformUpdates=false
+      transformBase=null;transformUpdates=false;atlasInvalid=true
       dirty=true;settle=performance.now()+2000
       if(generation!==epoch)return
       if(error.message!==lastError)onError(error.message)
@@ -217,25 +270,33 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
         const panel=await capture(scene,doc,'View unavailable: '+error.message+'. Previous view retained.',true)
         let fallback={...panel,flags:256}
         if(lastGood) {
-          const pixels=new Uint8Array(lastGood.pixels.length ? lastGood.pixels : lastGood.atlasState.pixels())
+          const pixels=new Uint8Array(lastGood.pixels.length===2048*2048*4 ? lastGood.pixels : lastGood.atlasState.pixels())
           for(let y=0;y<768;y++)pixels.set(panel.pixels.subarray(y*2048*4,(y*2048+768)*4),y*2048*4)
           fallback={...lastGood,pixels,schema:5,width:2048,height:2048}
         }
         if(generation===epoch)await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(fallback,++version,requestSequence)})
       }catch{/* Retry after reconnect; the quiver can still stow the panel. */}
-    }finally{busy=false;if(generation===epoch && dirty && performance.now()>=settle && doc.documentElement?.dataset.vrSimulationTrajectory==='true')void publish()}
+    }finally{busy=false;if(generation===epoch && dirty && performance.now()>=settle && (controlPending || doc.documentElement?.dataset.vrSimulationTrajectory==='true'))void publish()}
   }
-  return {publish,refresh(){dirty=true;settle=0;if(doc.documentElement?.dataset.vrSimulationTrajectory==='true')void publish()},async activate(index,sequence=0){
-    appliedSequence=sequence
+  return {publish,refresh,async activate(index,sequence=0){
     const key=VR_VIEW_KEYS[index];if(!key)return
-    message=viewToolUnavailable(key,getState())
-    if(!message) {
-      const prior=new Set(doc.querySelectorAll('.toast--visible'))
-      doc.querySelector(`[data-vt="${key}"]`)?.click()
-      message=[...doc.querySelectorAll('.toast--visible')].filter(el=>!prior.has(el)).at(-1)?.querySelector('.toast-message')?.textContent??''
+    appliedSequence=sequence;controlPending=true;activating=true
+    const generation=epoch
+    try {
+      message=viewToolUnavailable(key,getState())
+      if(!message) {
+        const prior=new Set(doc.querySelectorAll('.toast--visible'))
+        if(key==='deform' && activateDeform)await activateDeform()
+        else doc.querySelector(`[data-vt="${key}"]`)?.click()
+        await waitForTool(key)
+        message=[...doc.querySelectorAll('.toast--visible')].filter(el=>!prior.has(el)).at(-1)?.querySelector('.toast-message')?.textContent??''
+      }
+    } catch(error) {message='View unavailable: '+error.message;onError(error.message)}
+    finally {
+      activating=false
+      if(generation===epoch){dirty=true;settle=0;void publish()}
     }
-    dirty=true;settle=performance.now()+1500
-  },reset(){epoch++;deliveryMilliseconds=0;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy},get delivery(){return {busy,milliseconds:deliveryMilliseconds}}}
+  },reset(){epoch++;started=false;atlasPatches=false;atlasInvalid=false;controlPending=false;activating=false;deliveryMilliseconds=0;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy},get delivery(){return {busy,milliseconds:deliveryMilliseconds}}}
 }
 
 export function viewToolUnavailable(key,state) {

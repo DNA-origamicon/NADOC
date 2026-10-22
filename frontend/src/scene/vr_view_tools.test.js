@@ -45,7 +45,6 @@ it('publishes trajectory changes without waiting for control polls and coalesces
  document.documentElement.dataset.vrSimulationTrajectory='true'
  const state={},tools=createVRViewTools({scene:new THREE.Scene(),getState:()=>state,capture})
  try {
-  await tools.publish();await vi.advanceTimersByTimeAsync(1300)
   const initial=tools.publish();await vi.advanceTimersByTimeAsync(20);await initial
   request.mockImplementationOnce(()=>new Promise(r=>{release=r}))
   tools.refresh();await vi.advanceTimersByTimeAsync(20)

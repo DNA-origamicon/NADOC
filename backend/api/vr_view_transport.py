@@ -37,5 +37,7 @@ def send_snapshot(event_path, data, *, display=True, capabilities=None):
         if client.recv(1) != b'\x01':
             raise ConnectionError('Display receiver did not acknowledge the complete packet')
         if capabilities is not None:
-            capabilities['transform_updates'] = client.recv(1) == b'\x07'
+            capability = client.recv(1)
+            capabilities['transform_updates'] = bool(capability) and capability[0] >= 7
+            capabilities['atlas_patches'] = bool(capability) and capability[0] >= 8
     return True

@@ -7,6 +7,25 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## View tablet glow and atlas reuse — 2026-10-21
+
+Loop/skip annotations now use camera-facing analytic ring/X glyphs with shared
+desktop/native glow, bright cores, dark rims, and an 18-framebuffer-pixel minimum
+plane extent. Their centres remain at the molecular annotation positions; native
+annotations remain depth independent. Two six-vertex templates replace curved
+marker meshes. Native schema 8 carries scene plus a 768-square panel patch;
+schema 9 updates only the panel without replacing the scene or transform base.
+Both validate the retained base version. Capability negotiation retains full
+snapshots for older viewers, texture changes rebuild/upload the atlas as needed,
+and failed delivery forces a full retry. Cold and document-notified overlay
+updates no longer wait 1.2 seconds; the 700 ms fingerprint fallback remains for
+changes without notifications. Normal Deform edits still use the canonical feed.
+
+Evidence and remaining ranking: `.development-artifacts/view-menu-round2-20261021/report.json`.
+The registered Left-hand view tools tour records click-to-ack timing alongside
+stereo/mirror captures. Browser and native GL evidence is not a physical headset
+measurement; this round did not restart the viewer or SteamVR.
+
 ## Publication GC isolation — 2026-10-21
 
 A measured 149.6 ms generation-2 collection blocked a publication before handler

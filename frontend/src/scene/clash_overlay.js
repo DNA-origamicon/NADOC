@@ -75,7 +75,16 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
   }
 
   /** Re-fetch the clash report and repaint (no-op while toggled off). */
-  async function refresh() {
+  let pending = Promise.resolve()
+  function refresh() {
+    pending = refreshReport()
+    return pending
+  }
+  async function whenReady() {
+    let current
+    do { current = pending; await current } while (current !== pending)
+  }
+  async function refreshReport() {
     if (!_on) return
     const design = store?.getState?.().currentDesign
     if (!design) { clear(); return }
@@ -113,5 +122,5 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
   // the standing report rather than re-fetching one per keystroke.
   window.addEventListener('nadoc:display-rebuilt', () => _repaint())
 
-  return { toggle, refresh, clear, isOn }
+  return { toggle, refresh, clear, isOn, whenReady }
 }

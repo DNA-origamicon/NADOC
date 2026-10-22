@@ -82,6 +82,22 @@ describe('initClashOverlay', () => {
       '<div id="clash-legend"><span id="clash-legend-text"></span></div>'
   })
 
+  it('exposes readiness only after the asynchronous report has painted', async () => {
+    const { designRenderer, store, api } = makeDeps()
+    let resolve
+    api.getClashes.mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    const overlay = initClashOverlay({ store, designRenderer, api })
+    overlay.toggle()
+    let ready = false
+    const pending = overlay.whenReady().then(() => { ready = true })
+    await Promise.resolve()
+    expect(ready).toBe(false)
+    expect(designRenderer.setClashHighlight).not.toHaveBeenCalled()
+    resolve(REPORT); await pending
+    expect(ready).toBe(true)
+    expect(designRenderer.setClashHighlight).toHaveBeenCalledTimes(1)
+  })
+
   it('toggle on → fetches report, highlights clashing beads, shows count badge', async () => {
     const { designRenderer, store, api } = makeDeps()
     const overlay = initClashOverlay({ store, designRenderer, api })

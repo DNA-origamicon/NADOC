@@ -2210,7 +2210,7 @@ async function main() {
   // _toggleAssembly removed — assembly mode is entered by opening/creating a .nass file,
   // not by a toggle. _enterAssemblyMode / _exitAssemblyMode are used instead.
 
-  async function _toggleDeformView() {
+  async function _toggleDeformView({ animate = true } = {}) {
     if (isDeformActive()) return
     if (unfoldView.isActive()) {
       showToast('Exit unfold view (U) before toggling deformed view')
@@ -2230,13 +2230,13 @@ async function main() {
     if (!hasDeformations && !hasEffectiveTransform) return
     if (deformView.isActive()) {
       // Turn OFF: animate to straight geometry so user can compare before/after.
-      deformView.deactivate()
+      deformView.deactivate({ animate })
       _setMenuToggle('menu-view-deform', false)
       document.getElementById('mode-indicator').textContent =
         'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
     } else {
       // Turn ON: animate back to deformed geometry.
-      await deformView.activate()
+      await deformView.activate({ animate })
       _setMenuToggle('menu-view-deform', true)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     }
@@ -6356,7 +6356,7 @@ async function main() {
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, delivery: () => vrViewTools.delivery, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
-  const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
+  const vrViewTools = createVRViewTools({scene,getState:store.getState,subscribe:fn=>store.subscribe(fn,'vr-view-tools'),activateDeform:()=>_toggleDeformView({animate:false}),waitForTool:key=>key==='clashes'?clashOverlay.whenReady():undefined,onError:message=>showToast(message,{severity:'error'})})
   const vrJoin = createVRJoin({ api, getState: store.getState, transaction: _vrToolTransaction, sendFeedback: _sendVRToolExecution,
     getDocumentToken: () => `${getDocId() ?? ''}:${store.getState().currentDesign?.id ?? ''}`,
     resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target),

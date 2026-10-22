@@ -165,8 +165,14 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // ── Animation ───────────────────────────────────────────────────────────────
 
-  function _animate(fromT, toT, onDone) {
+  function _animate(fromT, toT, onDone, animate = true) {
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null }
+    if (!animate) {
+      _applyLerp(toT)
+      _currentT = toT
+      onDone?.()
+      return
+    }
     const startTime = performance.now()
 
     function frame(now) {
@@ -189,7 +195,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  async function activate() {
+  async function activate({ animate = true } = {}) {
     // Hide ALL axis lines for the duration of the lerp; the curved deformed
     // shaft only appears at the end (onDone). Mid-lerp visibility would
     // sweep into position, which the user does not want.
@@ -201,10 +207,10 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     _animate(_currentT, 1, () => {
       _shaftMode = 'deformed'
       designRenderer.setAxisShaftMode('deformed')
-    })
+    }, animate)
   }
 
-  function deactivate() {
+  function deactivate({ animate = true } = {}) {
     // Mirror of activate: axes hidden during the lerp, straight axis
     // appears at the end.
     _active = false
@@ -216,7 +222,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       designRenderer.setAxisShaftMode('straight')
       store.setState({ deformVisuActive: false })
       // Scene stays at straight positions (t=0) — that is the intended OFF state.
-    })
+    }, animate)
   }
 
   /** Immediately snap to straight (t=0) without animation.  Used when another

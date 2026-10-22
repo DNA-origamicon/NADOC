@@ -65,7 +65,6 @@ test('old uploads cannot acknowledge a newer tablet click, and failed views rema
     const coordinator=createVRViewTools({scene,doc,getState:()=>({}),onError:message=>errors.push(message)})
     const pause=()=>new Promise(r=>setTimeout(r,1600))
     try {
-      await coordinator.publish();await pause()
       const pending=coordinator.publish();await uploading
       coordinator.activate(0,17)
       release();await pending
@@ -80,4 +79,47 @@ test('old uploads cannot acknowledge a newer tablet click, and failed views rema
   expect(report.packets.map(p=>p.ack)).toEqual([0,17,18])
   expect(report.packets.at(-1).flags).toBe(report.packets[1].flags)
   expect(report.errors).toEqual(['View texture exceeds VR atlas size'])
+})
+
+test('real view handlers export compact annotations and acknowledge simple toggles promptly',async({page})=>{
+ test.setTimeout(90000)
+ await page.goto(`/?doc=__e2e__view-responsiveness-${process.pid}`)
+ await page.waitForFunction(()=>!!window.__nadocScene)
+ await page.evaluate(async()=>{
+  const api=await import('/src/api/client.js')
+  await api.createBundle({cells:[[0,0],[0,1],[0,2]],lengthBp:42,plane:'XY',name:'__e2e__View responsiveness'})
+  const {store}=await import('/src/state/store.js'),h=store.getState().currentDesign.helices[0]
+  await api.insertLoopSkip(h.id,10,1);await api.insertLoopSkip(h.id,20,-1)
+  await api.getDesign()
+ })
+ const report=await page.evaluate(async()=>{
+  const {store}=await import('/src/state/store.js')
+  const {createVRViewTools,captureVRView}=await import('/src/scene/vr_view_tools.js')
+  const packets=[],original=window.fetch
+  window.fetch=async(url,options)=>{
+   if(url!='/api/vr/view-tools')return original(url,options)
+   const buffer=await options.body.arrayBuffer(),h=new Uint32Array(buffer,8,10)
+   packets.push({at:performance.now(),ack:h[9],bytes:buffer.byteLength})
+   return new Response('{"atlas_patches":true,"transform_updates":true}',{status:200})
+  }
+  const c=createVRViewTools({scene:window.__nadocScene,getState:store.getState})
+  const stats=[]
+  try{
+   for(const [index,key] of [[3,'loopSkips'],[4,'grid'],[0,'lengthHeatmap'],[1,'sequences'],[2,'undefinedBases'],[5,'overhangNames']]){
+    const sequence=index+1,start=performance.now();await c.activate(index,sequence)
+    while(!packets.some(p=>p.ack===sequence)){
+     if(performance.now()-start>5000)throw Error('View acknowledgement timeout: '+key)
+     await new Promise(r=>setTimeout(r,10))
+    }
+    stats.push({key,ms:packets.find(p=>p.ack===sequence).at-start,bytes:packets.find(p=>p.ack===sequence).bytes})
+   }
+   const v=await captureVRView(window.__nadocScene)
+   const annotations=v.batches.filter(b=>b.vertices[7]===-3 || b.vertices[7]===-4)
+   return {stats,annotation_batches:annotations.length,annotation_instances:annotations.reduce((n,b)=>n+b.instances.length/20,0),errors:[]}
+  }finally{window.fetch=original}
+ })
+ expect(report.annotation_batches).toBeGreaterThan(0)
+ expect(report.annotation_instances).toBeGreaterThanOrEqual(2)
+ for(const s of report.stats)expect(s.ms).toBeLessThan(1000)
+ if(process.env.NADOC_VIEW_AUDIT_OUTPUT)fs.writeFileSync(process.env.NADOC_VIEW_AUDIT_OUTPUT,JSON.stringify(report,null,2))
 })

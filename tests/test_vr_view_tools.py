@@ -92,7 +92,7 @@ def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, 
     async def stream():
         yield data
     result = asyncio.run(publish(SimpleNamespace(stream=stream)))
-    assert result == {'published':True,'bytes':len(data),'transform_updates':False}
+    assert result == {'published':True,'bytes':len(data),'transform_updates':False,'atlas_patches':False}
     assert delivered == [data]
     if ipc:
         assert not (tmp_path/'event.viewtools').exists()
@@ -130,3 +130,21 @@ def test_transport_wait_does_not_block_async_handler(tmp_path, monkeypatch):
         release.set()
         assert (await task)['published']
     asyncio.run(scenario())
+
+@pytest.mark.parametrize('schema',[8,9])
+def test_panel_updates_require_bounded_dimensions_and_earlier_base(schema):
+    data=b'NADOCVT1'+struct.pack('<10I',schema,12,256,0,0,0,768,768,0,17)+struct.pack('<I',11)+bytes(768*768*4)
+    assert validate_and_rotate(data,np.eye(3))==data
+    for offset,value in [(32,2048),(36,0),(48,0),(48,12)]:
+        broken=bytearray(data);struct.pack_into('<I',broken,offset,value)
+        with pytest.raises(HTTPException):validate_and_rotate(broken,np.eye(3))
+    with pytest.raises(HTTPException):validate_and_rotate(data[:-1],np.eye(3))
+
+
+def test_panel_only_rejects_geometry_and_panel_scene_update_rotates_it():
+    vertices=np.array([[1,2,3,1,.5,.2,1,-1,-1,1,0,0]]*3,dtype='<f4')
+    data=b'NADOCVT1'+struct.pack('<10I',8,12,264,3,0,0,768,768,0,17)+struct.pack('<I',11)+vertices.tobytes()+bytes(768*768*4)
+    result=validate_and_rotate(data,[[0,0,1],[0,1,0],[-1,0,0]])
+    assert np.allclose(np.frombuffer(result,dtype='<f4',offset=52,count=3),[3,2,-1])
+    invalid=bytearray(data);struct.pack_into('<I',invalid,8,9)
+    with pytest.raises(HTTPException):validate_and_rotate(invalid,np.eye(3))

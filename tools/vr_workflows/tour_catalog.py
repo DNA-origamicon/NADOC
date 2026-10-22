@@ -136,7 +136,7 @@ def catalog():
     add('share', 'left', 'Share presenter controls',
         'Start and end a presentation from the left menu. Isolated real local hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
     add('view-tools', 'right', 'Left-hand view tools',
-        'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the ten supported view toggles in native stereo; Quick Expand is excluded.', module='view_tools_tour')
+        'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the eight supported view toggles in native stereo, recording click-to-ack timing and stereo/mirror pixels. Loop/skip markers use glowing camera-facing glyphs; desktop-only layouts are excluded.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',
         'Equip/stow scissors with a behind-head reach, close them with analog trigger pressure, preview the glowing bond, click to nick, then use radial Undo and Redo. Check controller haptic requests and that commands and acknowledgements keep all menus closed. Validation uses all four motion profiles.', module='nick_tour')
     add('ligate', 'authoring', 'Ligate ends with the touchpad wheel',

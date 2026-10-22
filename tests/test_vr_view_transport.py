@@ -98,7 +98,7 @@ def test_native_negotiates_transform_support_without_changing_packet_bytes(recei
         assert process.stdout.readline()==b'ready\n'
         data=packet(1);capabilities={}
         assert send_snapshot(path,data,capabilities=capabilities)
-        assert capabilities=={'transform_updates':True}
+        assert capabilities=={'transform_updates':True,'atlas_patches':True}
         assert process.stdout.read(len(data))==data
         assert process.wait(timeout=5)==0
     finally:
@@ -122,6 +122,6 @@ def test_older_listener_remains_supported_without_transform_capability(tmp_path)
         try:
             capabilities={}
             assert send_snapshot(path,packet(1),capabilities=capabilities)
-            assert capabilities=={'transform_updates':False}
+            assert capabilities=={'transform_updates':False,'atlas_patches':False}
         finally:worker.join(timeout=5)
         assert not worker.is_alive()
