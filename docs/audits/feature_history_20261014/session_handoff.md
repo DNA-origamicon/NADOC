@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: handoff checked against HEAD; ordinary Move unpairing implemented; commit prepared.
+October 21, 2026: handoff checked against HEAD; ordinary Move unpairing committed; current tool inventory checked.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -58,7 +58,12 @@ The attached-Sweep decision does not authorize the complete named-motion candida
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
 placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
-
+Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
+Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
+Core open: group/member motion, transform history, ordinary connections, complete reference repair,
+integrated desktop qualification and host lifecycle closure (FH-18/23/25/26/27/28).
+Seven parked CAD milestones: NP connections/fitting, biotin, protein/scadnano/DNA-PDB imports,
+and generated-asset composition. Legacy conversion and simulation/agent provenance are outside scope.
 ## Current qualification evidence
 - Bend/Twist private guides use native sampled polylines and shared bp-range clipping,
   preserving domain gaps and every molecular instance; canonical rendering defaults unchanged.
@@ -87,7 +92,6 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
 - Evidence: axis-lines-c8.log, transform-causal-app-final.log, geometry-final-frontend.log,
   geometry-final-test-smart.log under .development-artifacts/feature-history-focus/.
   Browser roots tfn8qjbl/wg9x_zte and cancelled diagnostics mhpbkfq8/rzpelai0 independently absent.
-
 ## Completed user-facing behavior
 - Bend/Twist: isolated creation/history editing, downstream error attribution and dependency view.
   Desktop mutating-preview fallback and destructive history peeling removed; other consumers of
@@ -118,9 +122,7 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   Tracking repair callbacks cannot be skipped by the outer replay cache on repeated proposals.
 - ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
   a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
-
 ## Retained baseline debt
-
 Earlier source-repair, suppression and reorder evidence: plan and `.development-artifacts/feature-history-focus/`. Source-repair browser2, full frontend9367/1skip,
 smoke23 and focused archive28/capture45/accounting31 passed; disposable roots verified absent.
 Backend baseline `stop-backend-final.log`:83 failures (11 sealed HTTP/registration,
@@ -130,10 +132,8 @@ No manifests regenerated; legacy compatibility is excluded. Latest validation is
 DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
-
 ## Commit and shared-worktree boundaries
-
-Latest committed checkpoint: **57b1f613** (Sweep refusal); Move unpairing is the next local checkpoint.
+Latest implementation checkpoint: **8fc9ad96** (Move unpairing); prior Sweep refusal: **57b1f613**.
 
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.
