@@ -1,3 +1,4 @@
+import { featureLabels } from '../../features/feature_labels.js'
 import { createModal } from './modal.js'
 import { createButton } from './button.js'
 import { el } from './dom.js'
@@ -20,8 +21,9 @@ function showHistoryChange({ store, api, source, rowIndex, suppression = false, 
   if (!current() || loadout?.protected || (source.feature_log_cursor ?? -1) !== -1
       || source.feature_log_sub_cursor != null) throw new Error('Return to editable current history before changing a feature.')
   const select = el('select', { attrs: { 'aria-label': 'New feature position' } })
+  const labels = featureLabels(source.feature_log)
   source.feature_log.forEach((entry, index) => select.append(el('option', {
-    text: `F${index + 1}: ${entry.label || entry.feature_type}`, attrs: { value: String(index) },
+    text: labels[index], attrs: { value: String(index) },
   })))
   select.value = String(rowIndex)
   const status = el('p', { attrs: { role: 'status' } })

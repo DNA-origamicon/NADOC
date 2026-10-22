@@ -1,3 +1,4 @@
+import { featureLabels } from '../../features/feature_labels.js'
 import { createModal } from './modal.js'
 import { createButton } from './button.js'
 import { el } from './dom.js'
@@ -7,6 +8,7 @@ export function showFeatureDependencies({ graph, rowIndex, store, source }) {
   const selected = graph.features.filter(feature => feature.row_index === rowIndex)
   if (!selected.length) throw new Error('This feature has no dependency information.')
   const ids = new Set(selected.map(feature => feature.id))
+  const labels = featureLabels(source.feature_log ?? [])
   const body = el('div')
   for (const [key, title] of [['parents', 'Parents'], ['children', 'Dependents']]) {
     const related = new Set(selected.flatMap(feature => feature[key]).filter(id => !ids.has(id)))
@@ -14,7 +16,7 @@ export function showFeatureDependencies({ graph, rowIndex, store, source }) {
     section.append(el('h3', { text: title }))
     const list = el('ul')
     for (const feature of graph.features.filter(feature => related.has(feature.id)))
-      list.append(el('li', { text: `F${feature.row_index + 1}: ${feature.label}` }))
+      list.append(el('li', { text: labels[feature.row_index] ?? `F${feature.row_index + 1}: Feature [${feature.label}]` }))
     section.append(related.size ? list : el('p', { text: 'None' }))
     body.append(section)
   }

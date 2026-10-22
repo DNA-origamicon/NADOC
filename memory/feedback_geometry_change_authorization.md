@@ -53,3 +53,8 @@ ordering. Supply one or two representative real `.nadoc` files with readable,
 replayable feature logs and saved step-by-step animations, so the user can inspect
 and experiment. Keep phase sweeps as engineering validation, not a long menu of
 review cases. Clearly distinguish native behavior from an unsupported candidate.
+
+User-facing naming (2026-10-21): always call operations by their UI tool names in
+conversation and reviews. Feature-log rows must start with `F<position>: <Tool>
+<tool occurrence>` and may append explanatory text, e.g. `F1: Extrude 1 [two
+helices]`. Internal recipe identifiers are implementation details, not tool names.

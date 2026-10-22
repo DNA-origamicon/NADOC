@@ -3,11 +3,10 @@ import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import { toolSection } from './tool_sections.js'
 
-const TITLES = Object.freeze({
-  'bundle-create': 'Bundle', 'extrude-segment': 'Extrude Segment',
-  'extrude-continuation': 'Continuation', 'extrude-deformed-continuation': 'Deformed Continuation',
-  'circle-segment': 'Circle Segment', 'extrude-frame': 'Frame Extrusion', 'overhang-extrude': 'Overhang Extrusion',
-})
+const TITLES = Object.freeze(Object.fromEntries([
+  'bundle-create', 'extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation',
+  'circle-segment', 'extrude-frame', 'overhang-extrude',
+].map(kind => [kind, kind === 'circle-segment' ? 'Circle' : 'Extrude'])))
 const OWN = (object, key) => Object.prototype.hasOwnProperty.call(object, key)
 
 /** UI eligibility only; the server proves the complete recipe before editing. */

@@ -1,3 +1,4 @@
+import { featureLabels } from '../features/feature_labels.js'
 /**
  * Animation panel — sidebar UI for building and playing keyframe animations.
  *
@@ -36,32 +37,7 @@ import {
   planExportPhases, beginExportSession, endExportSession, activeExportSession,
 } from '../scene/export_progress.js'
 
-// Build a one-line label for a feature-log entry as shown in the keyframe
-// State dropdown. Mirrors the wording the user sees in the Feature Log tab.
-function _featureLogTickLabel(e, idx) {
-  let lbl = `F${idx + 1}`
-  if (e.feature_type === 'deformation' && e.op_snapshot) {
-    const op = e.op_snapshot
-    const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
-    lbl += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
-  } else if (e.feature_type === 'cluster_op') {
-    lbl += ': Cluster transform'
-  } else if (e.feature_type === 'overhang_rotation') {
-    const ids = e.overhang_ids ?? []
-    const lbls = e.labels ?? []
-    const detail = ids.length === 1 ? (lbls[0] ? `"${lbls[0]}"` : ids[0]) : `${ids.length} overhangs`
-    lbl += `: Orient ${detail}`
-  } else if (e.feature_type === 'snapshot') {
-    lbl += `: ${e.label || e.op_kind || 'Snapshot'}`
-    if (e.evicted) lbl += ' (evicted)'
-  } else if (e.feature_type === 'routing-cluster') {
-    const n = e.children?.length ?? 0
-    lbl += `: Fine routing (${n} step${n === 1 ? '' : 's'})`
-  } else if (e.label) {
-    lbl += `: ${e.label}`
-  }
-  return lbl
-}
+
 
 const _SA_MODE_WORD = { unzip: 'Unzip', displacement: 'Toehold displacement' }
 const _SA_FORM_WORD = { helical: 'Helical', straight: 'Straight' }
@@ -1569,9 +1545,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       _addOpt('',   '— not pinned —')
       _addOpt('-2', 'F0 — initial')
       _addOpt('-1', 'All features (sequential)')
-      for (let i = 0; i < featureLog.length; i++) {
-        _addOpt(i, _featureLogTickLabel(featureLog[i], i))
-      }
+      featureLabels(featureLog).forEach((label, index) => _addOpt(index, label))
 
       const cur = kf.feature_log_index
       cfgSelect.value = (cur === null || cur === undefined) ? '' : String(cur)

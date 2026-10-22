@@ -69,6 +69,7 @@ describe('feature log bottom following', () => {
       expect(bar.style.top).toBe('0px')
 
       const row = document.querySelector('#fl-list [data-fl-row="1"]')
+      expect(row.textContent).toContain('F1: Extrude 1 [Bundle]')
       expect(getComputedStyle(row).paddingTop).toBe('1px')
       expect(getComputedStyle(row).gap).toBe('6px')
       const action = row.querySelector('button')

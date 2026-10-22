@@ -609,3 +609,68 @@ test('Move Rotate upstream deletion lists the dependent transform before commit'
     await expect(page.getByTitle('Edit this move/rotate feature', { exact: true })).toBeEnabled()
   }, 'transform-owner')
 })
+
+test('Move history scrubbing and animation reproduce each construction state', async ({ page, request }) => {
+  const { execFileSync } = await import('node:child_process')
+  const { readFile } = await import('node:fs/promises')
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const file = `${f.root}/workspace/__e2e__move-scrub.nadoc`
+    const expectedPath = `${f.root}/expected-move-states.json`
+    execFileSync('.venv/bin/python', ['-c', `
+import json, sys
+from pathlib import Path
+from tools.member_motion_native_example import build
+from backend.api import part_proof_commands as commands
+from backend.core.part_history_proof import root_design
+from backend.core.part_overlay_commands import command_input
+from backend.core.design_geometry import _geometry_for_design
+design = build()
+Path(sys.argv[1]).write_text(design.to_json())
+prefix = root_design(design.recipe_root)
+states = []
+for entry in design.feature_log:
+    kind, params = command_input(entry)
+    prefix = commands.execute(kind, prefix, params)
+    states.append(dict(geometry=_geometry_for_design(prefix),
+        poses=[p.model_dump(mode='json') for p in prefix.nucleotide_transforms]))
+Path(sys.argv[2]).write_text(json.dumps(states))
+`, file, expectedPath], { cwd: '..', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } })
+    const expected = JSON.parse(await readFile(expectedPath, 'utf8'))
+    await page.evaluate(async file => {
+      if (!await (await import('/src/api/client.js')).loadDesign(file)) throw Error('Load failed')
+    }, file)
+    await page.setViewportSize({ width: 2200, height: 1200 })
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await expect(page.locator('#fl-list [data-fl-row="1"]')).toContainText('F1: Extrude 1 [01 Build two helices')
+    await expect(page.locator('#fl-list [data-fl-row="3"]')).toContainText('F3: Move/Rotate 1')
+    for (const position of [0, 8, 2, 5, 6, 4, 1, 7, 3, 0, 8]) {
+      const actual = await page.evaluate(async position => {
+        const api = await import('/src/api/client.js')
+        if (!await api.seekFeatures(position)) throw Error(`Seek ${position} failed`)
+        return (await import('/src/state/store.js')).store.getState().currentGeometry
+      }, position)
+      if (position === 0) await page.screenshot({ path: '../.development-artifacts/feature-history-focus/history-scrub-first-step.png' })
+      expect(actual).toHaveLength(expected[position].geometry.length)
+      const key = row => JSON.stringify([row.helix_id, row.bp_index, row.direction, row.copy_k ?? 0])
+      const expectedByKey = new Map(expected[position].geometry.map(row => [key(row), row]))
+      for (const row of actual) {
+        const reference = expectedByKey.get(key(row))
+        expect(reference).toBeDefined()
+        for (const field of ['backbone_position', 'base_position'])
+          for (let axis = 0; axis < 3; axis++)
+            expect(row[field][axis]).toBeCloseTo(reference[field][axis], 8)
+      }
+    }
+    const batch = await page.evaluate(async () =>
+      (await import('/src/api/client.js')).getGeometryBatch([0, 2, 5, 8]))
+    for (const position of [0, 2, 5, 8])
+      expect(batch[position].display_design.nucleotide_transforms).toEqual(expected[position].poses)
+    await page.locator('.left-tab-btn[data-tab="scene"]').click()
+    if (!await page.locator('#animation-panel-body').isVisible()) await page.locator('#animation-panel-heading').click()
+    await page.locator('#anim-playpause-btn').click()
+    await expect(page.locator('#anim-playpause-btn')).toHaveAttribute('title', 'Pause', { timeout: 20000 })
+    await page.waitForTimeout(1000)
+    await page.locator('#anim-playpause-btn').click()
+    await expect(page.locator('#anim-playpause-btn')).toHaveAttribute('title', 'Play')
+  }, 'unpair')
+})

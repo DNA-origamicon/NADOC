@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: recorded unpair Move history repaired; named-motion ordering review is pending user authorization.
+October 21, 2026: history scrubbing restores recorded base poses; tool-name prefixes standardize the log and animation selectors.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -52,12 +52,12 @@ History now retains reclassification and follows stable pose IDs in the private 
 Native6pass covers prior poses, either partner, later edits, undo/cold proof and downstream refusal; frontend9454pass/1skip.
 Browser1pass: native gizmo edit through a later nick, exact Cancel, stable IDs, Apply/save/reopen/cold proof.
 Guarded FAST19369pass/19skip/83 identical baseline failures;412.91s. Display-worker timing5.14s, focused rerun3.55s/pass; debt retained.
-New isolated review: `.development-artifacts/member-motion-completion-review/index.html`;144cases,36 real phases per variant.
-All no-motion/unselected-material invariants pass. Candidate bonds remain stretched, up to5.73581nm; no physical-validity claim.
-Explicit approval of demonstrated chronological ordering requested; no answer yet. Birth/constraints/full matrix remain open.
+Primary manual example: `workspace/move_rotate_ordering_example.nadoc`, nine features and a saved animation; preserve user edits.
+User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native examples precede engineering phase sweeps.
+Scrub/animation fix: recorded poses restored per snapshot; native3, UI57, browser1 pass exact stage-coordinate checks. No candidate approval.
 Linked/deformed/loop-skip/independently posed unpairing and cluster/named-member integration remain unsupported.
-Fixed C8/ordinary workflows pass; gates remain OFF. Next is the pending molecular-ordering decision, not more C8 or sealed work.
-Logs: `feature-history-focus/transform-unpair-*`; three browser roots and review scratch absent; details in the transform plan.
+Fixed C8/ordinary workflows pass; gates remain OFF. Next is user inspection of the corrected native example; birth/constraints remain open.
+Latest FAST19372pass/19skip/83 identical baseline failures; FULL deferred. Logs: `feature-history-focus/history-scrub-*`; scratch absent.
 Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
 Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
 Core open: group/member motion, transform history, ordinary connections, complete reference repair,

@@ -6943,6 +6943,9 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     design = restore_authored_fields(design, snap_design)
     return design.copy_with(
         cluster_transforms=restore_follow_poses(design, snap_design),
+        # Individual-base moves/reset are snapshot-backed, not cluster deltas.
+        # Keeping the live list leaks later poses into earlier history/animation.
+        nucleotide_transforms=snap_design.nucleotide_transforms,
         group_organization=snap_design.group_organization,
         deformations=[d for d in design.deformations if d.type != "sweep"]
             + [d for d in snap_design.deformations if d.type == "sweep"],

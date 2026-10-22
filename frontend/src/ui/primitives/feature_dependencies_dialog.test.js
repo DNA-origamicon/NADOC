@@ -9,27 +9,36 @@ const graph = { complete: true, features: [
   { id: 'nick', row_index: 2, label: 'Output nick', parents: ['bend'], children: [] },
 ] }
 it('shows parents and downstream routing children without changing the part', () => {
-  const source = { id: 'part' }, store = createMockStore({ currentDesign: source })
+  const source = { id: 'part', feature_log: [
+    { op_kind: 'bundle-create' }, { feature_type: 'deformation', op_snapshot: { type: 'bend' } },
+    { op_kind: 'nick', label: 'Output nick' },
+  ] }, store = createMockStore({ currentDesign: source })
   const modal = showFeatureDependencies({ graph, rowIndex: 1, store, source })
-  expect(document.querySelector('[aria-label="Parents"]').textContent).toContain('F1: Extrude')
-  expect(document.querySelector('[aria-label="Dependents"]').textContent).toContain('F3: Output nick')
+  expect(document.querySelector('[aria-label="Parents"]').textContent).toContain('F1: Extrude 1')
+  expect(document.querySelector('[aria-label="Dependents"]').textContent).toContain('F3: Nick 1 [Output nick]')
   expect(document.body.textContent).toContain('conservative ordering dependencies')
   expect(store.getState().currentDesign).toBe(source)
   modal.close()
 })
 it('closes the graph when its source is replaced even with the same design ID', () => {
-  const source = { id: 'part' }, store = createMockStore({ currentDesign: source })
+  const source = { id: 'part', feature_log: [
+    { op_kind: 'bundle-create' }, { feature_type: 'deformation', op_snapshot: { type: 'bend' } },
+    { op_kind: 'nick', label: 'Output nick' },
+  ] }, store = createMockStore({ currentDesign: source })
   showFeatureDependencies({ graph, rowIndex: 1, store, source })
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   store.setState({ currentDesign: { id: 'part' } })
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 })
 it('aggregates routing children without showing their internal edges as external parents', () => {
-  const source = { id: 'part' }, store = createMockStore({ currentDesign: source })
+  const source = { id: 'part', feature_log: [
+    { op_kind: 'bundle-create' }, { feature_type: 'deformation', op_snapshot: { type: 'bend' } },
+    { op_kind: 'nick', label: 'Output nick' },
+  ] }, store = createMockStore({ currentDesign: source })
   const grouped = { ...graph, features: graph.features.map(row => ({ ...row,
     row_index: row.id === 'nick' ? 1 : row.row_index })) }
   const modal = showFeatureDependencies({ graph: grouped, rowIndex: 1, store, source })
-  expect(document.querySelector('[aria-label="Parents"]').textContent).toBe('ParentsF1: Extrude')
+  expect(document.querySelector('[aria-label="Parents"]').textContent).toBe('ParentsF1: Extrude 1')
   expect(document.querySelector('[aria-label="Dependents"]').textContent).toBe('DependentsNone')
   modal.close()
 })
