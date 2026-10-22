@@ -1,5 +1,28 @@
 # CPD production trajectory playback
 
+## Full slab mapping — October 22
+
+Full NAMD frames now derive their in-plane direction from named ring atoms
+(N1→C4 for pyrimidines; N9→C6 for purines), with a chemical atom order for the
+plane sign. The former P→C1′ sugar vector can point almost along a CPD ring's
+plane normal, making its in-plane projection unstable. Ring centroids and
+trajectory atom coordinates are unchanged.
+
+Crossover inserts retain the measured center and plane through update partitioning,
+use an orthonormal rotation, and export their actual slab matrices to the native
+VR visualization feed. The previous insert path discarded the measured fields
+and converted a sheared basis to a quaternion. Old trajectories without measured
+centers keep their offset fallback. The static playback table cache version is
+bumped for chemical ring ordering; reload trajectory data after updating the backend.
+
+Across 1,000 saved cis-syn-I P2 frames (`d6bcdef3d59f`), the isolated insert
+comparison reduced axis steps above 45° from 142/11 to zero for both residues.
+Maximum centroid error fell from 0.394/0.440 nm to zero. Frames 212–213 retain a
+regression fixture: the earlier 69.3° display jump becomes a 6.5° measured-ring
+turn. This is saved-frame and desktop-render evidence, not a physical headset
+verification. See the [audit](audits/cpd_slab_playback_20261022.json) and the
+[isolated visual comparison](../.development-artifacts/cpd-slab-review.png).
+
 ## Publication stall isolation — 2026-10-21
 
 An opt-in event-loop sampler and GC callbacks reproduced the pre-handler delay:

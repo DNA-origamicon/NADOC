@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
 import { buildCrossoverConnections, updateExtraBaseInstances, partitionExtraBaseUpdates, setExtraBaseConnectors, setExtraBaseSlabConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, domainEndKeys, extraBaseOrderReversed, simBeadIndex, simSlabQuaternion, setExtraBaseInstanceFromSim, SLAB_OFFSET, SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK, CONN_RADIUS } from './crossover_connections.js'
 import { SLAB_CONNECTOR_RADIUS } from './helix_renderer.js'
+import cpdPlayback from '../../../tests/fixtures/cpd_slab_playback.json'
 
 function mockMesh(n) {
   const mats = Array.from({ length: n }, () => new THREE.Matrix4())
@@ -333,6 +334,13 @@ describe('simBeadIndex', () => {
 describe('simSlabQuaternion', () => {
   const V = (x, y, z) => new THREE.Vector3(x, y, z)
 
+  it('makes a rigid frame from non-perpendicular measured directions', () => {
+    const q = simSlabQuaternion(V(1, 0, 2), V(0, 0, 3), new THREE.Quaternion())
+    expect(q.length()).toBeCloseTo(1, 12)
+    expect(V(0, 1, 0).applyQuaternion(q).distanceTo(V(0, 0, 1))).toBeLessThan(1e-12)
+    expect(V(0, 0, 1).applyQuaternion(q).distanceTo(V(1, 0, 0))).toBeLessThan(1e-12)
+  })
+
   it('puts the long axis on the base normal and the thin axis on the helix axis', () => {
     // helix_renderer's convention: basis(tangential, axis, baseNormal), so local +Z
     // (the SLAB_THICK 0.70 axis) must land on the base normal and local +Y (the
@@ -356,6 +364,41 @@ describe('simSlabQuaternion', () => {
 })
 
 describe('setExtraBaseInstanceFromSim', () => {
+  it('keeps the P2 cis-syn-I frames 212–213 on their measured rings', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1), directions = []
+    for (const f of cpdPlayback.frames) {
+      const { simXb } = partitionExtraBaseUpdates([{
+        helix_id: '__xb__', bp_index: 'cpd', direction: 0,
+        backbone_position: f.slice(0, 3), nx: f[3], ny: f[4], nz: f[5],
+        tx: f[6], ty: f[7], tz: f[8], base_position: f.slice(9), measured_base: true,
+      }])
+      const s = simXb.get('cpd').get(0)
+      setExtraBaseInstanceFromSim(beads, slabs, 0, s.pos, s.normal, new THREE.Vector3(0, 0, 1), s)
+      const rendered = decompose(slabs, 0)
+      expect(rendered.pos.distanceTo(new THREE.Vector3(...f.slice(9)))).toBeLessThan(1e-7)
+      const direction = new THREE.Vector3(0, 0, 1).applyQuaternion(rendered.quat)
+      expect(direction.distanceTo(new THREE.Vector3(...f.slice(3, 6)))).toBeLessThan(1e-6)
+      directions.push(direction)
+    }
+    expect(directions[0].angleTo(directions[1]) * 180 / Math.PI).toBeLessThan(7)
+  })
+  it('carries a measured CPD insert center and plane through partitioning to the mesh', () => {
+    const { simXb } = partitionExtraBaseUpdates([{
+      helix_id: '__xb__', bp_index: 'cpd', direction: 0,
+      backbone_position: [2, 3, 4], nx: 1, ny: 0, nz: 2,
+      tx: 0, ty: 0, tz: 1, measured_base: true, base_position: [2.2, 3.1, 4.3],
+    }])
+    const frame = simXb.get('cpd').get(0)
+    const beads = mockMesh(1), slabs = mockMesh(1)
+    setExtraBaseInstanceFromSim(beads, slabs, 0, frame.pos, frame.normal,
+      new THREE.Vector3(0, 1, 0), frame)
+    const s = decompose(slabs, 0)
+    expect(decompose(beads, 0).pos.toArray()).toEqual([2, 3, 4])
+    expect(s.pos.toArray()).toEqual([2.2, 3.1, 4.3])
+    expect(s.scl.toArray()).toEqual([SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK])
+    expect(new THREE.Vector3(0, 1, 0).applyQuaternion(s.quat)
+      .distanceTo(new THREE.Vector3(0, 0, 1))).toBeLessThan(1e-12)
+  })
   it('puts the bead on the raw simulated position and the slab one SLAB_OFFSET along the base normal', () => {
     const beads = mockMesh(1), slabs = mockMesh(1)
     const axis = new THREE.Vector3(0, 0, 1)

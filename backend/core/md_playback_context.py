@@ -36,7 +36,7 @@ def playback_context(topology, paths, coordinate, design):
     if root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
         raise ValueError('playback cache directory must be private')
     key = hashlib.sha256(repr((
-        5, _identity(topology), _identity(coordinate),
+        6, _identity(topology), _identity(coordinate),
         tuple(_identity(p) if p.exists() else (str(p.resolve()), None)
               for p in (Path(topology).parent / 'charge_audit.json',
                         Path(topology).parent / 'manifest.json')),
@@ -84,7 +84,7 @@ def _build_tables(topology, coordinate, design):
         build_namd_coarse_reference, load_segid_chain_map,
         md_rigid_reference_from_map, md_snap_mask,
     )
-    from backend.core.md_base_frames import _RING_NAMES
+    from backend.core.md_base_frames import ordered_ring_indices
 
     if design.extensions or any(getattr(x, 'extra_bases', None) for x in design.crossovers):
         raise ValueError('synthetic residues require the full mapping')
@@ -173,8 +173,7 @@ def _build_tables(topology, coordinate, design):
         if 'P' not in a and "O5'" in a and "C1'" in a and ni is not None:
             terms.append((res['key'], a["O5'"], a["C1'"], ni))
             trows.append(res)
-    rings = [np.asarray([i for name, i in r['atoms'].items() if name in _RING_NAMES], dtype=np.int64)
-             for r in prows + trows]
+    rings = [ordered_ring_indices(r['atoms']) for r in prows + trows]
     groups = []
     for size in sorted({len(r) for r in rings if len(r) >= 5}):
         indices = np.asarray([i for i, r in enumerate(rings) if len(r) == size])

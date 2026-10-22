@@ -983,6 +983,7 @@ def _extract_md_full_frame(ctx: dict, frame_idx: int) -> np.ndarray:
     box = np.asarray(dims[:3]) / 10 if dims is not None and dims[0] > 0 else None
     centers, tangents = measured_base_frames(
         raw, anchors, groups, frame[:, :3], affine.get("R_align"), box,
+        inward_out=frame[:, 3:6],
     )
     frame[:, 6:9] = tangents
     frame[:, 9:12] = centers

@@ -1,0 +1,59 @@
+{
+  "job_id": "d6bcdef3d59f",
+  "frames": 1000,
+  "condition": "Saved frames, isolated insert meshes, static +Z legacy helix axis. No interpolation or physical headset run.",
+  "results": [
+    {
+      "key": [
+        "__xb__",
+        "54c5689d-127b-4693-bc11-f51121719fad",
+        0
+      ],
+      "max_axis_step_degrees_before_after": [
+        69.30191567875302,
+        27.2655987453023
+      ],
+      "axis_steps_over_45_degrees_before_after": [
+        142,
+        0
+      ],
+      "max_center_error_nm_before_after": [
+        0.39412956258169424,
+        0
+      ],
+      "max_centroid_change_nm": 0
+    },
+    {
+      "key": [
+        "__xb__",
+        "4a12dd44-bce2-46be-8296-093ce52d2ec9",
+        0
+      ],
+      "max_axis_step_degrees_before_after": [
+        60.34748239142442,
+        31.955052634371373
+      ],
+      "axis_steps_over_45_degrees_before_after": [
+        11,
+        0
+      ],
+      "max_center_error_nm_before_after": [
+        0.43985102620117744,
+        0
+      ],
+      "max_centroid_change_nm": 0
+    }
+  ],
+  "tests": {
+    "frontend": 272,
+    "python_base_playback_exp": 11,
+    "python_trajectory_overlap": 16
+  },
+  "visual": ".development-artifacts/cpd-slab-review.png",
+  "limitations": [
+    "Desktop diagnostic render, not submitted VR eyes or through-lens verification.",
+    "Initial screenshot script failed from duplicated frontend directory prefix; corrected and rerun.",
+    "Initial visual labels lacked UTF-8 metadata; corrected and recaptured.",
+    "Early sign-of-plane hypothesis did not explain the CPD insert path; no temporal sign smoothing added."
+  ]
+}

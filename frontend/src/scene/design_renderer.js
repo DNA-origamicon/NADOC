@@ -1533,7 +1533,26 @@ export function initDesignRenderer(scene, storeRef) {
 
     /** Exact live Full-representation slab transforms for native VR parity. */
     getFemSlabFrames() {
-      return _activeFemUpdates ? (_helixCtrl?.getSlabFrames?.() ?? []) : null
+      if (!_activeFemUpdates) return null
+      const frames = _helixCtrl?.getSlabFrames?.() ?? []
+      if (!_xoverSlabsMesh || !_simXbByCrossover) return frames
+      const matrix = new THREE.Matrix4(), vector = new THREE.Vector3()
+      for (const ad of _xoverArcData ?? []) {
+        const sim = _simXbByCrossover.get(ad.xoId)
+        for (let k = 0; k < ad.beadCount; k++) {
+          if (!sim?.has(k)) continue
+          const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
+          _xoverSlabsMesh.getMatrixAt(ad.beadStartIdx + bi, matrix)
+          frames.push({
+            base_key: `__xb__:${ad.xoId}:${k}`,
+            center: vector.setFromMatrixPosition(matrix).toArray(),
+            axis_x: vector.setFromMatrixColumn(matrix, 0).toArray(),
+            axis_y: vector.setFromMatrixColumn(matrix, 1).toArray(),
+            axis_z: vector.setFromMatrixColumn(matrix, 2).toArray(),
+          })
+        }
+      }
+      return frames
     },
 
     /** Snapshot of active scalar colors for the native VR display bridge. */
@@ -2025,7 +2044,7 @@ export function initDesignRenderer(scene, storeRef) {
             // Simulated k is 5′→3′ from the strand's exit half; beads run A→B.
             const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
             setExtraBaseInstanceFromSim(
-              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
+              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
             for (const g of _xoverGlowLive) {
               if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
             }
@@ -2094,7 +2113,7 @@ export function initDesignRenderer(scene, storeRef) {
           if (!s) continue
           const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
           setExtraBaseInstanceFromSim(
-            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
+            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
           for (const g of _xoverGlowLive) {
             if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
           }
