@@ -7378,6 +7378,13 @@ def _seek_feature_log(
         log, pose_windows, cluster_last, clusters_with_ops, pattern_baselines)
     from backend.core.part_overlay_recovery import after_payload
     authored_after_payload = after_payload(active, cluster_last)
+    # Make Cluster records the original pose before the first Move/Rotate.
+    # Restore that pose (including its pivot), rather than a later live pivot.
+    creation_baselines = {
+        entry.cluster_id: entry.cluster_snapshot for entry in active
+        if entry.feature_type == "cluster_create" and entry.cluster_snapshot is not None
+    }
+    pose_baselines = {**creation_baselines, **pattern_baselines}
     new_cts = []
     for ct in design.cluster_transforms:
         if ct.id in cluster_last:
@@ -7388,9 +7395,9 @@ def _seek_feature_log(
             # Before a later move, generated copies retain their pattern pose.
             ct = ct.model_copy(
                 update={
-                    "translation": pattern_baselines[ct.id].translation if ct.id in pattern_baselines else [0.0, 0.0, 0.0],
-                    "rotation": pattern_baselines[ct.id].rotation if ct.id in pattern_baselines else [0.0, 0.0, 0.0, 1.0],
-                    "pivot": pattern_baselines[ct.id].pivot if ct.id in pattern_baselines else ct.pivot,
+                    "translation": pose_baselines[ct.id].translation if ct.id in pose_baselines else [0.0, 0.0, 0.0],
+                    "rotation": pose_baselines[ct.id].rotation if ct.id in pose_baselines else [0.0, 0.0, 0.0, 1.0],
+                    "pivot": pose_baselines[ct.id].pivot if ct.id in pose_baselines else ct.pivot,
                 }
             )
         new_cts.append(ct)

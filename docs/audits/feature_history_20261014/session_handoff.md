@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: history scrubbing restores recorded base poses; tool-name prefixes standardize the log and animation selectors.
+October 21, 2026: Make Cluster is a distinct membership step followed by regular Move/Rotate; scrub restores its original pivot.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -52,12 +52,12 @@ History now retains reclassification and follows stable pose IDs in the private 
 Native6pass covers prior poses, either partner, later edits, undo/cold proof and downstream refusal; frontend9454pass/1skip.
 Browser1pass: native gizmo edit through a later nick, exact Cancel, stable IDs, Apply/save/reopen/cold proof.
 Guarded FAST19369pass/19skip/83 identical baseline failures;412.91s. Display-worker timing5.14s, focused rerun3.55s/pass; debt retained.
-Primary manual example: `workspace/move_rotate_ordering_example.nadoc`, nine features and a saved animation; preserve user edits.
+Primary manual example: `workspace/move_rotate_cluster_steps.nadoc`, 11 features and a saved animation; earlier example/user edits preserved.
 User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native examples precede engineering phase sweeps.
-Scrub/animation fix: recorded poses restored per snapshot; native3, UI57, browser1 pass exact stage-coordinate checks. No candidate approval.
+Make Cluster split: native4, frontend9457/1skip, browser1 pass; all9 corresponding states preserve exact geometry/atoms. No candidate approval.
 Linked/deformed/loop-skip/independently posed unpairing and cluster/named-member integration remain unsupported.
 Fixed C8/ordinary workflows pass; gates remain OFF. Next is user inspection of the corrected native example; birth/constraints remain open.
-Latest FAST19372pass/19skip/83 identical baseline failures; FULL deferred. Logs: `feature-history-focus/history-scrub-*`; scratch absent.
+Latest FAST19372pass/19skip/84fail:83 baseline +capture-budget failure (isolated pass); worker5.05s→3.65s. FULL deferred; make-cluster-* logs.
 Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
 Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
 Core open: group/member motion, transform history, ordinary connections, complete reference repair,

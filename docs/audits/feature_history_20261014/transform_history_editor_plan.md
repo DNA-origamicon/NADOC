@@ -735,3 +735,14 @@ No milestone split, exclusion or new completion credit.
 - Guarded test-smart FAST:19372pass/19skip/83fail,413.28s pytest/445s guard. Failure-node set exactly matches transform-unpair-test-smart.log; no new or resolved failures. FULL deferred to `.nadoc-slow-pending`.
 - Applied triage-slow-tests: zero per-test violators; slowest4.87s is existing native preview worker coverage, aggregate time comparable to prior440s. Broad19k-test growth remains timing debt; no markers or budgets changed and no redundant broad rerun.
 - Refresh NADOC and select the first Extrude step again to replace any already-loaded stale display. User's working example is not rewritten; chronological named-motion candidate still awaits separate manual review.
+
+## Make Cluster before Move/Rotate — October 21, 2026
+- Replaced user-facing Create Placement with Make Cluster; membership creation and regular Move/Rotate have distinct rows and tool counts.
+- Native example now creates each cluster at identity, then records its pose in a regular editable Move/Rotate feature. Saved animation visits all11 steps; F4/F9 create, F5/F10 move.
+- Saved `workspace/move_rotate_cluster_steps.nadoc`; original user example preserved. All9 corresponding construction states retain exact base and atom geometry.
+- Split exposed a stale later pivot before the first move. Seek now restores the recorded creation pose; generated-pattern baselines retain precedence.
+- Native4pass covers unchanged geometry/atoms at Make Cluster, following movement, all seek prefixes and animation. Full frontend787files/9457pass/1skip; browser1pass20.2s including labels,13 seeks, animation batch and Play/Pause.
+- Browser root `/tmp/__e2e__history-abukkx1x` independently verified absent; screenshot inspected. Evidence: `.development-artifacts/feature-history-focus/make-cluster-*`.
+- Guarded test-smart FAST19372pass/19skip/84fail:83 identical baseline failures plus comparison capture-budget failure; focused rerun passes. FULL deferred to `.nadoc-slow-pending`.
+- Slow-test triage: existing native display worker twist5.05s broad,3.65s isolated; comparison0.04s isolated. Both reruns pass; no budgets/markers changed. Broad run442s remains non-green.
+- Durable naming/workflow rule updated; no geometry candidate approval inferred, no production Move/Rotate gate change.

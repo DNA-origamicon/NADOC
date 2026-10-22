@@ -29,7 +29,7 @@ def test_scrub_back_forward_and_reset_match_independent_prefixes(construction, o
     tip, stages = construction
     live = tip
     # Include a repeated tip/reset/initial visit: seeking itself replaces live state.
-    for position in [0, 8, 2, 5, 6, -2, -1, 4, 1, 7, 3, 0, -1]:
+    for position in [0, 10, 2, 6, 7, -2, -1, 5, 1, 9, 3, 8, 4, 0, -1]:
         live = crud._seek_feature_log(live, position, optimized=optimized)
         expected = stages[position]
         assert live.nucleotide_transforms == expected.nucleotide_transforms
@@ -42,11 +42,22 @@ def test_animation_batch_uses_historical_base_poses_without_mutating_live_state(
     state.load_design(tip)
     before = state.get_or_404().model_dump_json()
     try:
-        samples = geometry_batch(GeometryBatchBody(positions=list(range(9))))
-        for position in range(9):
+        samples = geometry_batch(GeometryBatchBody(positions=list(range(len(tip.feature_log)))))
+        for position in range(len(tip.feature_log)):
             historical = Design.model_validate(samples[str(position)]['display_design'])
             assert historical.nucleotide_transforms == stages[position].nucleotide_transforms
             assert _geometry_for_design(historical) == _geometry_for_design(stages[position])
         assert state.get_or_404().model_dump_json() == before
     finally:
         state.close_session()
+
+
+def test_make_cluster_does_not_move_geometry_and_next_feature_moves_it(construction):
+    tip, stages = construction
+    for index in (3, 8):
+        assert tip.feature_log[index].feature_type == 'cluster_create'
+        assert tip.feature_log[index + 1].feature_type == 'cluster_op'
+        assert _geometry_for_design(stages[index]) == _geometry_for_design(stages[index - 1])
+        assert build_atomistic_model(stages[index], fast_bridges=True) == build_atomistic_model(stages[index - 1], fast_bridges=True)
+        assert _geometry_for_design(stages[index + 1]) != _geometry_for_design(stages[index])
+    assert [k.feature_log_index for k in tip.animations[0].keyframes] == list(range(11))

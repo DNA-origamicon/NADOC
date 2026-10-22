@@ -58,3 +58,7 @@ User-facing naming (2026-10-21): always call operations by their UI tool names i
 conversation and reviews. Feature-log rows must start with `F<position>: <Tool>
 <tool occurrence>` and may append explanatory text, e.g. `F1: Extrude 1 [two
 helices]`. Internal recipe identifiers are implementation details, not tool names.
+
+Make Cluster (2026-10-21): show membership creation as its own `F<x>: Make
+Cluster <n>` entry, without moving geometry, followed by a regular Move/Rotate
+entry. Do not hide a move inside creation or call the feature Create Placement.

@@ -45,9 +45,9 @@ it('keeps new role entry points gated with the corresponding editor', () => {
   expect(render(entryFor('placement-poses'), { enabled: false }).edit).toBeUndefined()
 })
 
-it('labels placement creation without offering a pose editor', () => {
+it('labels Make Cluster without offering a pose editor', () => {
   const f = render({ id: 'birth', feature_type: 'cluster_create', cluster_id: 'c', name: 'Arm' })
-  expect(f.row.textContent).toContain('F1: Create Placement 1 [Arm]')
+  expect(f.row.textContent).toContain('F1: Make Cluster 1 [Arm]')
   expect(f.row.textContent).not.toContain('Move/Rotate')
   expect(f.edit).toBeUndefined()
 })

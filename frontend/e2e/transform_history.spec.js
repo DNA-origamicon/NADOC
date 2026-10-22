@@ -643,7 +643,10 @@ Path(sys.argv[2]).write_text(json.dumps(states))
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
     await expect(page.locator('#fl-list [data-fl-row="1"]')).toContainText('F1: Extrude 1 [01 Build two helices')
     await expect(page.locator('#fl-list [data-fl-row="3"]')).toContainText('F3: Move/Rotate 1')
-    for (const position of [0, 8, 2, 5, 6, 4, 1, 7, 3, 0, 8]) {
+    await expect(page.locator('#fl-list [data-fl-row="4"]')).toContainText('F4: Make Cluster 1')
+    await expect(page.locator('#fl-list [data-fl-row="5"]')).toContainText('F5: Move/Rotate 2')
+    await expect(page.locator('#fl-list [data-fl-row="9"]')).toContainText('F9: Make Cluster 2')
+    for (const position of [0, 10, 2, 3, 4, 6, 7, 5, 1, 8, 9, 0, 10]) {
       const actual = await page.evaluate(async position => {
         const api = await import('/src/api/client.js')
         if (!await api.seekFeatures(position)) throw Error(`Seek ${position} failed`)
@@ -662,8 +665,8 @@ Path(sys.argv[2]).write_text(json.dumps(states))
       }
     }
     const batch = await page.evaluate(async () =>
-      (await import('/src/api/client.js')).getGeometryBatch([0, 2, 5, 8]))
-    for (const position of [0, 2, 5, 8])
+      (await import('/src/api/client.js')).getGeometryBatch([0, 2, 3, 4, 6, 8, 9, 10]))
+    for (const position of [0, 2, 3, 4, 6, 8, 9, 10])
       expect(batch[position].display_design.nucleotide_transforms).toEqual(expected[position].poses)
     await page.locator('.left-tab-btn[data-tab="scene"]').click()
     if (!await page.locator('#animation-panel-body').isVisible()) await page.locator('#animation-panel-heading').click()
