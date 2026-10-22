@@ -1,3 +1,5 @@
+#include "scene_input.hpp"
+#include "pick_index.hpp"
 #include "sweep_edit.hpp"
 #include "scrollable_set.hpp"
 #include "placement_integrity.hpp"
@@ -90,6 +92,8 @@
 #include "scrywrite_visual.hpp"
 #include "spectator_mirror.hpp"
 #include "live_mirror_capture.hpp"
+#include "mirror_readback.hpp"
+#include "stencil_color_readback.hpp"
 #include "stereo_recording.hpp"
 #include "compositor_recording.hpp"
 #include "pose_journal.hpp"
@@ -999,11 +1003,12 @@ class GzipInputStream : public std::istream {
 SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, float>> fixedNormalization = std::nullopt,
                     const std::function<void(size_t)>& readProgress = {}) {
     const auto started = std::chrono::steady_clock::now();
-    std::cout << "VR_METRIC event=process_progress phase=scene_load_start rss_mib="
+    nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=scene_load_start rss_mib="
               << currentResidentMiB() << std::endl;
     // zlib's transparent read mode accepts both gzip and ordinary scene files,
     // retaining legacy fixtures while production snapshots stay compact.
-    GzipInputStream input(path);
+    GzipInputStream stream(path);
+    nadoc_vr::SceneInput input(stream);
     if (!input) throw std::runtime_error("Could not open scene snapshot: " + path);
 
     std::string magic;
@@ -1059,13 +1064,13 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         if (recordsRead % 250000U == 0U) {
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
-            std::cout << "VR_METRIC event=process_progress phase=scene_load"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=scene_load"
                       << " records=" << recordsRead
                       << " elapsed_ms=" << milliseconds
                       << " rss_mib=" << currentResidentMiB() << std::endl;
         }
         if (type == '#') {
-            std::string comment;std::getline(input,comment);std::istringstream fields(comment);
+            std::string comment;std::getline(stream,comment);std::istringstream fields(comment);
             std::string name;glm::vec3 position;
             if(fields>>name && name=="SWEEP_WARNING" && fields>>position.x>>position.y>>position.z &&
                 std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z))scene.sweepWarnings.push_back(position);
@@ -1082,13 +1087,13 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                 throw std::runtime_error("Invalid source frame handedness");
         } else if (type == 'F' && version >= 13) {
             if (active) throw std::runtime_error("Extrude metadata must precede geometry");
-            scene.extrudePlane.read(input);
+            scene.extrudePlane.read(stream);
         } else if (type == 'L' && version >= 16) {
             if (active) throw std::runtime_error("Lattice context must precede geometry");
-            scene.latticeContext.read(input);
+            scene.latticeContext.read(stream);
         } else if (type == 'G' && version >= 16) {
             if(active)throw std::runtime_error("Lattice occupancy must precede geometry");
-            scene.latticeContext.readOccupancy(input);
+            scene.latticeContext.readOccupancy(stream);
         } else if (type == 'Q' && version >= 14) {
             std::string purpose;
             input >> purpose;
@@ -1318,7 +1323,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         }
         if (!input) throw std::runtime_error("Malformed NADOC VR scene snapshot");
     }
-    if (input.compressionError()) {
+    if (stream.compressionError()) {
         throw std::runtime_error("Corrupt compressed NADOC VR scene snapshot");
     }
     const auto noPrimitives = [](const RepresentationData& rep) {
@@ -1331,7 +1336,7 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         if (!empty) throw std::runtime_error("Empty authoring scene contains geometry");
         scene.normalizationCenter = fixedNormalization ? fixedNormalization->first : glm::vec3(0.0F);
         scene.normalizationScale = fixedNormalization ? fixedNormalization->second : kViewSizeMeters / 100.0F; // 100 nm initial working extent.
-        std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
+        nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=scene_load_end"
                   << " records=" << recordsRead << " empty_authoring=true"
                   << " elapsed_ms=" << std::chrono::duration<double, std::milli>(
                       std::chrono::steady_clock::now() - started).count()
@@ -1439,12 +1444,12 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
         const auto source=representationSourceIndex(static_cast<Representation>(i));
         if(!indices[source]){indices[source]=std::make_shared<SourceIndex>();indices[source]->rebuild(scene.representations[source]);}
         scene.prepared[i]=prepareStaticRepresentation(scene.representations[source],static_cast<Representation>(i),indices[source]);
-        scene.cpuBytes[source]+=scene.prepared[i]->bytes()+scene.prepared[i]->highlightIndexBytes()+16*(scene.prepared[i]->records[0].size()+scene.prepared[i]->records[1].size()+scene.prepared[i]->records[2].size()+scene.prepared[i]->records[3].size());
+        scene.cpuBytes[source]+=scene.prepared[i]->bytes()+scene.prepared[i]->highlightIndexBytes()+(sizeof(PreparedRepresentation::Record)+sizeof(uint32_t)+sizeof(glm::vec3))*(scene.prepared[i]->records[0].size()+scene.prepared[i]->records[1].size()+scene.prepared[i]->records[2].size()+scene.prepared[i]->records[3].size());
     }
     scene.preparedAtomisticSharedGeometry = atomisticCylindersEquivalent(scene);
     const double milliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
-    std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
+    nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=scene_load_end"
               << " records=" << recordsRead
               << " elapsed_ms=" << milliseconds
               << " rss_mib=" << currentResidentMiB() << std::endl;
@@ -1729,6 +1734,11 @@ class GlScene {
                 token = candidate;
                 break;
             }
+            if(activeResident_ && activeResident_->prepared==scene_.prepared[static_cast<size_t>(representation_)] &&
+                activeResident_->prepared->highlightOwners.contains(candidate)) {
+                token=candidate;
+                break;
+            }
             const auto& ownershipRecords = source.toolScopeOwnership.empty()
                 ? source.transformOwnership : source.toolScopeOwnership;
             const bool explicitOwner = std::any_of(
@@ -1776,7 +1786,7 @@ class GlScene {
         if (!toolPreviewToken_.empty() && previewTiming_.add(milliseconds)) {
             const auto summary = previewTiming_.takeSummary();
             if (summary) {
-                std::cout << "VR preview upload ms (" << summary->samples
+                nadoc_vr::TraceRecord{} << "VR preview upload ms (" << summary->samples
                           << " samples): p50=" << summary->p50Milliseconds
                           << " p95=" << summary->p95Milliseconds
                           << " p99=" << summary->p99Milliseconds
@@ -1803,7 +1813,7 @@ class GlScene {
         // The displayed packed instances already are the accepted pose. Retain
         // their identity, colors and GPU buffers, plus exact pre-commit values
         // for Undo (fractional endpoint weights are not generally invertible).
-        if (retainPacked) previewGeometry_.commit();
+        if (retainPacked) { nadoc_vr::CalculationScope scope("previewCommit"); previewGeometry_.commit(); }
         else setStyle(representation_, coloring_);
         return true;
     }
@@ -1815,6 +1825,8 @@ class GlScene {
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         committedHandleOffsets_.clear();
+        committedHandleDeltas_.clear();
+        committedHandleIndex_.reset();
         if (retainPacked) {
             previewGeometry_.undoCommit();
             applyPackedPreview(toolPreviewToken_.empty() ? glm::mat4(1.0F) : toolPreviewTransform_);
@@ -1903,6 +1915,7 @@ class GlScene {
         return scene_.available.at(static_cast<size_t>(representation));
     }
     void applyPackedPreview(const glm::mat4& transform) {
+        ++shadowGeometryRevision_;
         nadoc_vr::CalculationScope auditScope("applyPackedPreview");
         { nadoc_vr::CalculationScope scope("previewTransform");
           previewGeometry_.apply(transform); }
@@ -1926,6 +1939,7 @@ class GlScene {
     size_t styleApplicationsForTest=0,volumeUploadsForTest=0;
 #endif
     void setStyle(Representation representation, Coloring coloring) {
+        ++shadowGeometryRevision_;
         nadoc_vr::CalculationScope auditScope("setStyle");
 #ifdef NADOC_SCRYWRITE_TESTING
         ++styleApplicationsForTest;
@@ -1962,7 +1976,7 @@ class GlScene {
             atomisticBuffersResident_=false; // Static cache does not carry trajectory indices.
             uploadedVisualizationRevision_=visualizationRevision_;
             const double elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-styleStarted).count();
-            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply representation="
+            if(!renderingVolumes_) nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=style_apply representation="
                 << representationName(representation_) << " coloring=" << coloringName(coloring_)
                 << " total_ms=" << elapsed << " fast_path=static_gpu_buffers" << std::endl;
             return;
@@ -1983,7 +1997,7 @@ class GlScene {
                 ? ballstickSphereCount_ : 0;
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - styleStarted).count();
-            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
+            if(!renderingVolumes_) nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=style_apply"
                       << " representation=" << representationName(representation_)
                       << " coloring=" << coloringName(coloring_)
                       << " points=" << sphereCount_
@@ -2034,7 +2048,7 @@ class GlScene {
                 uploadedAt - preparedAt).count();
             const double milliseconds = std::chrono::duration<double, std::milli>(
                 uploadedAt - styleStarted).count();
-            if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
+            if(!renderingVolumes_) nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=style_apply"
                       << " representation=" << representationName(representation_)
                       << " coloring=" << coloringName(coloring_)
                       << " points=" << sphereCount_
@@ -2395,7 +2409,7 @@ class GlScene {
             preparedAt - styleStarted).count();
         const double uploadMilliseconds = std::chrono::duration<double, std::milli>(
             completedAt - preparedAt).count();
-        if(!renderingVolumes_) std::cout << "VR_METRIC event=process_progress phase=style_apply"
+        if(!renderingVolumes_) nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=style_apply"
                   << " representation=" << representationName(representation_)
                   << " coloring=" << coloringName(coloring_)
                   << " points=" << sphereCount_
@@ -2435,6 +2449,25 @@ class GlScene {
                 nearest = nadoc_vr::PickHit{identity, worldDistance, worldPosition};
             }
         };
+        // The immutable resident is exactly the displayed static pose. Changed
+        // coordinates, pending/committed edits and nonresident styles retain the
+        // general path below; stale bounds must never hide an editable target.
+        if ((representation_ == Representation::stick || representation_ == Representation::ballstick) &&
+            activeResident_ && activeResident_->prepared == scene_.prepared[static_cast<size_t>(representation_)] &&
+            activeResident_->prepared->halves.empty() && activeResident_->prepared->boxes.empty() &&
+            toolPreviewToken_.empty() && toolCommittedToken_.empty() && visualizationPositions_.empty() &&
+            visualizationSlabFrames_.empty()) {
+            const auto& prepared=*activeResident_->prepared;
+            for(const auto& entry:prepared.pickIndex.candidates(ray.origin,ray.direction)) {
+                std::optional<float> distance;
+                if(entry.channel==0){const auto& v=prepared.points[entry.row];distance=nadoc_vr::raySphere(ray,v.position,v.size);}
+                else if(entry.channel==1){const auto& v=prepared.cylinders[entry.row];distance=nadoc_vr::rayCapsule(ray,v.start,v.end,v.radius);}
+                else if(entry.channel==2){const auto& v=prepared.halves[entry.row];distance=nadoc_vr::rayHalfCylinder(ray,v.start,v.end,v.radius);}
+                else {const auto& v=prepared.boxes[entry.row];distance=nadoc_vr::rayRepresentationMesh(representation_,ray,v.center,v.axisX,v.axisY,v.axisZ);}
+                consider(*prepared.records[entry.channel][entry.row].identity,distance);
+            }
+            return nearest;
+        }
         for (const StyledPoint& point : source.points) {
             consider(point.identity, nadoc_vr::raySphere(
                 ray, displayedPoint(source, point.position, point.identity), representationPointRadius(representation_, point)));
@@ -2472,6 +2505,7 @@ class GlScene {
         nadoc_vr::CalculationScope auditScope("pickSelected");
         // Remaining tokens are parent-domain/strand aliases, not extra selections.
         if(owners.empty())return std::nullopt;
+        warmResidentPreview(owners.front());
         if(!previewGeometry_.active() || previewGeometry_.token!=owners.front()) {
             const auto hit=pick(worldRay,model);
             if(!hit)return std::nullopt;
@@ -2858,6 +2892,8 @@ class GlScene {
     const void* motionCylinderOffset() const { return reinterpret_cast<const void*>(motionDetail_.coarse()?cylinderIndexCount_*sizeof(GLushort):0); }
     bool motionDetailReduced() const { return motionDetail_.reduced; }
 
+#include "prepared_shadow.inc"
+
     void renderShadowMap(const glm::mat4& modelTransform, const nadoc_vr::ShadowLightFrame& light,
                          const nadoc_vr::ShadowLightFrame* stabilized = nullptr,
                          const std::function<void(const glm::mat4&)>& displayShadow = {},
@@ -2880,9 +2916,21 @@ class GlScene {
             -radius, radius, -radius, radius, radius * 0.05F, radius * 4.0F)
             * glm::lookAt(eye, worldCenter, projectionLight.up);
 
-        // Every representation, including atomistic views, casts into the same
-        // soft self-shadow map shared by both eyes.
-
+        // Reuse precisely the same depth image until a draw input changes.
+        // A layout callback can replace its contents, so it invalidates reuse.
+        if(reusePreparedShadow(modelTransform,!displayShadow && !displayBounds)) {
+            // Preserve the draw path's GL postconditions for subsequent eyes,
+            // including calls after a witness/capture framebuffer.
+            glViewport(0,0,kShadowMapSize,kShadowMapSize);
+            glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+            glPolygonOffset(1.5F,2.0F);glDisable(GL_POLYGON_OFFSET_FILL);
+            glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,0);
+            glBindVertexArray(0);glBindFramebuffer(GL_FRAMEBUFFER,0);
+            return;
+        }
+#ifdef NADOC_SCRYWRITE_TESTING
+        ++shadowDrawsForTest;
+#endif
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glViewport(0, 0, kShadowMapSize, kShadowMapSize);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -3401,11 +3449,22 @@ class GlScene {
     // complete scene: moving a cluster moves its Base/Overhang handles; moving
     // one base shifts its parent's centroid by that base's contribution.
     void updateCommittedHandleOffsets() {
+        nadoc_vr::CalculationScope scope("committedHandleOffsets");
         {
             auto& offsets=committedHandleOffsets_;offsets.clear();
             const auto& full=scene_.representations
                 [static_cast<size_t>(Representation::full)];
-            SourceIndex index;index.rebuild(full);
+            std::optional<SourceIndex> fallback;
+            const auto& prepared=scene_.prepared[static_cast<size_t>(Representation::full)];
+            if(prepared) {
+                committedHandleIndex_=prepared;
+                committedHandleDeltas_=prepared->handleOffsets.offsets(toolCommittedTransform_,toolCommittedToken_);
+                return;
+            }
+            committedHandleDeltas_.clear();
+            committedHandleIndex_.reset();
+            fallback.emplace();fallback->rebuild(full);
+            const auto& index=*fallback;
             std::unordered_map<std::string,size_t> counts;
             for(const auto& point:full.points) {
                 if(!point.identity.ends_with(":backbone"))continue;
@@ -3425,6 +3484,13 @@ class GlScene {
     glm::vec3 committedHandleCenter(const std::string& token,const glm::vec3& center) const {
         if(token==toolCommittedToken_)
             return glm::vec3(toolCommittedTransform_*glm::vec4(center,1));
+        if(!committedHandleDeltas_.empty()) {
+            const auto& prepared=committedHandleIndex_;
+            if(prepared) {
+                const auto found=prepared->handleOffsets.tokens.find(token);
+                if(found!=prepared->handleOffsets.tokens.end())return center+committedHandleDeltas_.at(found->second);
+            }
+        }
         const auto found=committedHandleOffsets_.find(token);
         return center+(found==committedHandleOffsets_.end()?glm::vec3(0):found->second);
     }
@@ -3484,6 +3550,8 @@ class GlScene {
         }
 
         committedHandleOffsets_.clear();
+        committedHandleDeltas_.clear();
+        committedHandleIndex_.reset();
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         displayedSourceValid_ = false;
@@ -4227,6 +4295,8 @@ class GlScene {
     Coloring coloring_ = Coloring::strand;
     std::string toolCommittedToken_;
     std::unordered_map<std::string,glm::vec3> committedHandleOffsets_;
+    std::vector<glm::vec3> committedHandleDeltas_;
+    std::shared_ptr<PreparedRepresentation> committedHandleIndex_;
     glm::mat4 toolCommittedTransform_{1.0F};
     RigidPreviewGeometry previewGeometry_;
     bool packedPreviewEnabled_ = true;
@@ -4370,7 +4440,7 @@ struct DesktopVertex {
 int benchmarkAtomisticStyles(
     const std::string& scenePath, const std::string& visualizationPath) {
     const auto started = std::chrono::steady_clock::now();
-    std::cout << "VR_METRIC event=process_start mode=benchmark_atomistic_styles"
+    nadoc_vr::TraceRecord{} << "VR_METRIC event=process_start mode=benchmark_atomistic_styles"
               << " rss_mib=" << currentResidentMiB() << std::endl;
     SceneData scene = loadScene(scenePath);
     nadoc_vr::VisualizationSnapshot visualization;
@@ -4396,7 +4466,7 @@ int benchmarkAtomisticStyles(
                 handle.token, sourcePosition});
         }
     }
-    std::cout << "VR_METRIC event=process_progress phase=visualization_ready"
+    nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=visualization_ready"
               << " points=" << visualization.points.size()
               << " rss_mib=" << currentResidentMiB() << std::endl;
 
@@ -4451,7 +4521,7 @@ int benchmarkAtomisticStyles(
                     quantile * static_cast<double>(values.size() - 1U)));
                 return values[index];
             };
-            std::cout << "VR_METRIC event=process_end phase=coordinate_benchmark"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_end phase=coordinate_benchmark"
                       << " frames=" << frameMilliseconds.size()
                       << " atoms=" << coordinates.size()
                       << " payload_bytes=" << coordinates.size() * 12U
@@ -4481,7 +4551,7 @@ int benchmarkAtomisticStyles(
     }
     const double milliseconds = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
-    std::cout << "VR_METRIC event=process_end mode=benchmark_atomistic_styles"
+    nadoc_vr::TraceRecord{} << "VR_METRIC event=process_end mode=benchmark_atomistic_styles"
               << " status=ok elapsed_ms=" << milliseconds
               << " rss_mib=" << currentResidentMiB() << std::endl;
     return 0;
@@ -5196,7 +5266,7 @@ class Viewer {
                                          witnessPath);
             }
             witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(input));
-            std::cout << "ScryWrite Witness Mode: " << witnessPath << '\n';
+            nadoc_vr::TraceRecord{} << "ScryWrite Witness Mode: " << witnessPath << '\n';
         }
         extrudePlane_ = sceneData_.extrudePlane;
         latticeContext_ = sceneData_.latticeContext;
@@ -5363,9 +5433,11 @@ class Viewer {
         }
         if (liveObjectIdTexture_) glDeleteTextures(1, &liveObjectIdTexture_);
         if (framebuffer_) glDeleteFramebuffers(1, &framebuffer_);
+        mirrorReadback_.shutdown();
+        mirrorStencilReadback_.shutdown();
         if (mirrorDiagnosticsTexture_) glDeleteTextures(1, &mirrorDiagnosticsTexture_);
         if (mirrorDiagnosticsDepthStencil_) {
-            glDeleteRenderbuffers(1, &mirrorDiagnosticsDepthStencil_);
+            glDeleteTextures(1, &mirrorDiagnosticsDepthStencil_);
         }
         if (mirrorDiagnosticsFramebuffer_) {
             glDeleteFramebuffers(1, &mirrorDiagnosticsFramebuffer_);
@@ -5692,18 +5764,20 @@ class Viewer {
             glFramebufferTexture2D(
                 GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                 mirrorDiagnosticsTexture_, 0);
-            glGenRenderbuffers(1, &mirrorDiagnosticsDepthStencil_);
-            glBindRenderbuffer(GL_RENDERBUFFER, mirrorDiagnosticsDepthStencil_);
-            glRenderbufferStorage(
-                GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-                kMirrorDiagnosticSize, kMirrorDiagnosticSize);
-            glFramebufferRenderbuffer(
-                GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
-                mirrorDiagnosticsDepthStencil_);
+            glGenTextures(1, &mirrorDiagnosticsDepthStencil_);
+            glBindTexture(GL_TEXTURE_2D, mirrorDiagnosticsDepthStencil_);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_DEPTH_STENCIL_TEXTURE_MODE,GL_STENCIL_INDEX);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH24_STENCIL8,kMirrorDiagnosticSize,kMirrorDiagnosticSize,
+                0,GL_DEPTH_STENCIL,GL_UNSIGNED_INT_24_8,nullptr);
+            glFramebufferTexture2D(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_TEXTURE_2D,
+                mirrorDiagnosticsDepthStencil_,0);
             if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                 throw std::runtime_error("Mirror diagnostic framebuffer is incomplete");
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            mirrorStencilReadback_.initialize(kMirrorDiagnosticSize);
         }
         glScene_ = std::make_unique<GlScene>(std::move(sceneData_), liveSocket_.enabled());
         glScene_->setVisualization(visualizationSnapshot_);
@@ -7478,7 +7552,7 @@ class Viewer {
         const std::string current = sceneHover_ ? sceneHover_->identity : "";
         if (current != previous) {
             publishHover(current);
-            if (!current.empty()) std::cout << "VR Selection Volume snap: " << current << '\n';
+            if (!current.empty()) nadoc_vr::TraceRecord{} << "VR Selection Volume snap: " << current << '\n';
         }
     }
 
@@ -7586,7 +7660,7 @@ class Viewer {
             desktopColoring_ = coloringName(coloring);
             requestedRepresentation_ = desktopRepresentation_;
             requestedColoring_ = desktopColoring_;
-            std::cout << "VR_METRIC event=process_progress phase=witness_style_applied"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=witness_style_applied"
                       << " representation=" << requestedRepresentation_
                       << " coloring=" << requestedColoring_ << std::endl;
             return;
@@ -7607,7 +7681,7 @@ class Viewer {
 
     void publishTrajectoryRequest(const std::string& action, uint32_t frameIndex) {
         if (witness_ && eventPath_.empty()) {
-            std::cout << "VR_METRIC event=process_progress phase=witness_trajectory_request"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=witness_trajectory_request"
                       << " action=" << action << " frame_idx=" << frameIndex << std::endl;
             return;
         }
@@ -8134,7 +8208,7 @@ class Viewer {
         toolPreflightFeedback_ = std::move(feedback);
         preflightFeedbackSequence_ = toolPreflightFeedback_->preflightSequence;
         if (changed) {
-            std::cout << "VR PREFLIGHT " << toolPreflightFeedback_->status
+            nadoc_vr::TraceRecord{} << "VR PREFLIGHT " << toolPreflightFeedback_->status
                       << " " << toolPreflightFeedback_->reason << '\n';
         }
     }
@@ -8198,7 +8272,7 @@ class Viewer {
                 std::to_string(feedback->planeBp) + (bendPanel_.active?" BP":" FRAMED - READ ONLY")
             : std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
                 (retainedGuide ? "RETAINED: " : "NOT SET: ") + reasonLabel();
-        std::cout << "VR " << planePickStatus_ << '\n';
+        nadoc_vr::TraceRecord{} << "VR " << planePickStatus_ << '\n';
         clearPlanePick(true);
         if (changed) publishToolConfiguration();
         else publishEventState();
@@ -9004,10 +9078,10 @@ class Viewer {
             nadoc_vr::scrywrite::resolveWitnessMenuTouch(
                 *witness_, menu.placement, bounds.minimum, bounds.maximum, menu.open);
             if (witness_->failed() && !witnessFailureReported_) {
-                std::cerr << "ScryWrite Witness " << witness_->status() << '\n';
+                nadoc_vr::TraceRecord{} << "ScryWrite Witness " << witness_->status() << '\n';
                 witnessFailureReported_ = true;
             } else if (witness_->finished() && !witnessCompletionReported_) {
-                std::cout << "ScryWrite Witness PASSED at frame "
+                nadoc_vr::TraceRecord{} << "ScryWrite Witness PASSED at frame "
                           << witness_->frame() << '\n';
                 witnessCompletionReported_ = true;
                 if (exitOnWitnessComplete_) exitLoop_ = true;
@@ -9972,7 +10046,7 @@ class Viewer {
             manipulator_.restorePresentation(initialPresentationRestore_->forNormalization(
                 normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters}));
             initialPresentationRestoreApplied_=true;
-            std::cout << "NADOC presentation state restored (physical input unchanged)" << std::endl;
+            nadoc_vr::TraceRecord{} << "NADOC presentation state restored (physical input unchanged)" << std::endl;
         }
         initialRoomPlacementRequested_=false;
         shadowLight_.anchor(headOrientation);
@@ -9980,7 +10054,7 @@ class Viewer {
         initialScenePlacementApplied_ = true;
         initialScenePlacementRequested_ = false;
         updateControllerGuides();
-        std::cout << "ScryWrite placement applied: view="
+        nadoc_vr::TraceRecord{} << "ScryWrite placement applied: view="
                   << nadoc_vr::scenePlacementViewName(sceneViewPlacement_.view)
                   << " orientation="
                   << nadoc_vr::scenePlacementOrientationName(
@@ -10178,11 +10252,15 @@ class Viewer {
         traceRender("mirror");
         finishSpectatorClassification();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glFlush();
+        // The OpenXR OpenGL binding uses this same context for image release
+        // and frame submission. An extra flush per eye is not required and can
+        // serialize the driver before the other eye has even been queued.
+        // Explicit upload/readback fences retain their own required flushes.
 
         XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-        checkXr(instance_, xrReleaseSwapchainImage(
-            swapchain.handle, &releaseInfo), "xrReleaseSwapchainImage");
+        { nadoc_vr::CalculationScope phase("eyeRelease");
+          checkXr(instance_, xrReleaseSwapchainImage(
+            swapchain.handle, &releaseInfo), "xrReleaseSwapchainImage"); }
 
         layerView = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
         layerView.pose = view.pose;
@@ -10209,7 +10287,7 @@ class Viewer {
         if (!mirrorSourceInitialized_ || submittedEye != lastMirrorSubmittedEye_) {
             mirrorSourceInitialized_ = true;
             lastMirrorSubmittedEye_ = submittedEye;
-            std::cout << "NADOC VR mirror source: "
+            nadoc_vr::TraceRecord{} << "NADOC VR mirror source: "
                       << (submittedEye
                               ? "SUBMITTED EYE (runtime accepted HMD rendering)"
                               : "SPECTATOR FALLBACK (runtime suppressed HMD rendering)")
@@ -10220,7 +10298,7 @@ class Viewer {
             lastMirrorMotionPosition_ = position;
             lastMirrorMotionOrientation_ = orientation;
             lastMirrorPoseTracked_ = poseTracked;
-            std::cout << "NADOC VR mirror pose: "
+            nadoc_vr::TraceRecord{} << "NADOC VR mirror pose: "
                       << (poseTracked ? "TRACKED" : "VALID BUT NOT TRACKED")
                       << " XYZ=" << position.x << ',' << position.y << ',' << position.z
                       << '\n';
@@ -10239,7 +10317,7 @@ class Viewer {
                 lastMirrorMotionPosition_ = position;
                 lastMirrorMotionOrientation_ = orientation;
                 lastMirrorPoseTracked_ = poseTracked;
-                std::cout << "NADOC VR mirror motion M" << mirrorMotionSequence_
+                nadoc_vr::TraceRecord{} << "NADOC VR mirror motion M" << mirrorMotionSequence_
                           << ": " << (poseTracked ? "TRACKED" : "NOT TRACKED")
                           << " d=" << positionDelta << " m, a="
                           << angleDeltaDegrees << " deg, XYZ="
@@ -10285,48 +10363,67 @@ class Viewer {
     }
 
     void sampleSpectatorPixels(
-        const XrView& view, bool submittedEye,
+        const XrView& captureView, bool captureSubmittedEye,
         const nadoc_vr::SpectatorMirrorViewport& viewport,
         GLuint classificationFramebuffer,
         const nadoc_vr::SpectatorMirrorViewport& classificationViewport) {
-        if (!mirrorDiagnosticsFramebuffer_ ||
-            mirrorFrameSequence_ % kMirrorDiagnosticIntervalFrames != 0U) {
-            return;
+        if(!mirrorDiagnosticsFramebuffer_) return;
+        const auto sampleStarted=std::chrono::steady_clock::now();
+        auto completed=mirrorReadback_.poll();
+        // The metadata belongs to the frame read back, not this polling frame.
+        const auto view=mirrorSampleView_;
+        const bool submittedEye=mirrorSampleSubmittedEye_;
+        const auto sampleFrame=mirrorSampleFrame_;
+        const auto sampleDisplayTime=mirrorSampleDisplayTime_;
+        const auto timestampMilliseconds=mirrorSampleTimestampMs_;
+        constexpr size_t pixelBytes=size_t(kMirrorDiagnosticSize)*kMirrorDiagnosticSize*4;
+        constexpr size_t classBytes=size_t(kMirrorDiagnosticSize)*kMirrorDiagnosticSize;
+        if(mirrorFrameSequence_%kMirrorDiagnosticIntervalFrames==0 && !mirrorReadback_.pending()) {
+            mirrorReadback_.begin(pixelBytes+classBytes);
+            { nadoc_vr::CalculationScope scope("mirrorColorBlit");
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadBuffer(GL_BACK);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+            glBlitFramebuffer(
+                viewport.x, viewport.y,
+                viewport.x + viewport.width, viewport.y + viewport.height,
+                0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+                GL_COLOR_BUFFER_BIT, GL_LINEAR);
+            }
+            { nadoc_vr::CalculationScope scope("mirrorColorRead");
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
+            glReadPixels(
+                0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+                GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+            }
+            { nadoc_vr::CalculationScope scope("mirrorStencilBlit");
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, classificationFramebuffer);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+            glBlitFramebuffer(
+                classificationViewport.x, classificationViewport.y,
+                classificationViewport.x + classificationViewport.width,
+                classificationViewport.y + classificationViewport.height,
+                0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+                GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+            }
+            { nadoc_vr::CalculationScope scope("mirrorStencilRead");
+            mirrorStencilReadback_.read(mirrorDiagnosticsDepthStencil_,reinterpret_cast<void*>(pixelBytes));
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glReadBuffer(GL_BACK);
+
+            }
+            mirrorReadback_.finish();
+            mirrorSampleView_=captureView; mirrorSampleSubmittedEye_=captureSubmittedEye;
+            mirrorSampleFrame_=mirrorFrameSequence_;
+            mirrorSampleDisplayTime_=currentPredictedDisplayTime_;
+            mirrorSampleTimestampMs_=std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
         }
-        const auto sampleStarted = std::chrono::steady_clock::now();
-
-        std::vector<uint8_t> pixels(
-            static_cast<size_t>(kMirrorDiagnosticSize) * kMirrorDiagnosticSize * 4U);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-        glReadBuffer(GL_BACK);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
-        glBlitFramebuffer(
-            viewport.x, viewport.y,
-            viewport.x + viewport.width, viewport.y + viewport.height,
-            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
-            GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
-        glReadBuffer(GL_COLOR_ATTACHMENT0);
-        glReadPixels(
-            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
-            GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-        std::vector<uint8_t> renderClasses(
-            static_cast<size_t>(kMirrorDiagnosticSize) * kMirrorDiagnosticSize);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, classificationFramebuffer);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
-        glBlitFramebuffer(
-            classificationViewport.x, classificationViewport.y,
-            classificationViewport.x + classificationViewport.width,
-            classificationViewport.y + classificationViewport.height,
-            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
-            GL_STENCIL_BUFFER_BIT, GL_NEAREST);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
-        glReadPixels(
-            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
-            GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, renderClasses.data());
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glReadBuffer(GL_BACK);
+        if(!completed) return;
+        std::vector<uint8_t> pixels(completed->begin(),completed->begin()+pixelBytes);
+        std::vector<uint8_t> renderClasses(completed->begin()+pixelBytes,completed->end());
 
         const glm::vec3 position(
             view.pose.position.x, view.pose.position.y, view.pose.position.z);
@@ -10372,11 +10469,11 @@ class Viewer {
             if (unhealthy) lastMirrorPixelWarningFrame_ = mirrorFrameSequence_;
             lastLoggedMirrorPixelStatus_ = mirrorPixelAssessment_.status;
             lastLoggedMirrorCoverageStatus_ = mirrorCoverageAssessment_.status;
-            std::cout << "NADOC VR mirror pixels P" << mirrorPixelSampleSequence_
+            nadoc_vr::TraceRecord{} << "NADOC VR mirror pixels P" << mirrorPixelSampleSequence_
                       << ": " << nadoc_vr::spectatorPixelStatusName(
                              mirrorPixelAssessment_.status)
                       << " source=" << (submittedEye ? "SUBMITTED" : "FALLBACK")
-                      << " F=" << mirrorFrameSequence_
+                      << " F=" << sampleFrame
                       << " nonblack=" << mirrorPixelAssessment_.nonBlackFraction
                       << " changed=" << mirrorPixelAssessment_.changedFraction
                       << " coverage=" << nadoc_vr::spectatorCoverageStatusName(
@@ -10390,15 +10487,12 @@ class Viewer {
         }
 
         if (mirrorDiagnosticsOutput_) {
-            const auto timestampMilliseconds =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
             mirrorDiagnosticsOutput_
                 << "{\"sample\":" << mirrorPixelSampleSequence_
-                << ",\"frame\":" << mirrorFrameSequence_
+                << ",\"frame\":" << sampleFrame
                 << ",\"timestamp_ms\":" << timestampMilliseconds
                 << ",\"openxr_predicted_display_time\":"
-                << currentPredictedDisplayTime_
+                << sampleDisplayTime
                 << ",\"source\":\""
                 << (submittedEye ? "submitted" : "spectator_fallback")
                 << "\",\"status\":\""
@@ -10647,7 +10741,7 @@ class Viewer {
                               << result.comparison->changedCellFraction;
                         witness_->rejectSnapshot(error.str());
                     } else {
-                        std::cout << "ScryWrite actor-eye snapshot "
+                        nadoc_vr::TraceRecord{} << "ScryWrite actor-eye snapshot "
                                   << result.pngPath << '\n';
                         witness_->resolveSnapshot();
                     }
@@ -11000,7 +11094,7 @@ class Viewer {
                 std::chrono::duration<double, std::milli>(parsedAt - started).count();
             const double applyMilliseconds =
                 std::chrono::duration<double, std::milli>(appliedAt - parsedAt).count();
-            std::cout << "VR_METRIC event=process_progress phase=visualization_update"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=visualization_update"
                       << " sequence=" << visualizationSequence_
                       << " updates=" << visualizationUpdateCount_
                       << " sequence_gap=" << sequenceGap
@@ -11012,7 +11106,7 @@ class Viewer {
                       << " total_ms=" << (parseMilliseconds + applyMilliseconds)
                       << " hmd_poll_frame=" << visualizationSnapshotPollFrame_
                       << " rss_mib=" << currentResidentMiB() << std::endl;
-            std::cout << "VR desktop visualization: "
+            nadoc_vr::TraceRecord{} << "VR desktop visualization: "
                       << visualizationSnapshot_.mode << " ("
                       << visualizationSnapshot_.points.size() << " positions)\n";
         } catch (const std::exception&) {
@@ -11067,7 +11161,7 @@ class Viewer {
                 // atomistic mode does not report an intentional Full hold as loss.
                 coordinateSequence_ = frame.sequence;
                 coordinatePlayback_.clear();
-                std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+                nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=coordinate_update"
                           << " status=skipped_incompatible_representation"
                           << " sequence=" << frame.sequence
                           << " frame_idx=" << frame.frameIndex
@@ -11085,7 +11179,7 @@ class Viewer {
             if (!glScene_->updateAtomCoordinates(
                     coordinatePlayback_.positions(), &cpuMilliseconds, &uploadMilliseconds)) {
                 coordinatePlayback_.clear();
-                std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+                nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=coordinate_update"
                           << " status=rejected sequence=" << frame.sequence
                           << " frame_idx=" << frame.frameIndex
                           << " atoms=" << frame.positions.size() << std::endl;
@@ -11100,7 +11194,7 @@ class Viewer {
             coordinateSequenceGaps_ += sequenceGap;
             const double parseMilliseconds =
                 std::chrono::duration<double, std::milli>(parsed - started).count();
-            std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+            nadoc_vr::TraceRecord{} << "VR_METRIC event=process_progress phase=coordinate_update"
                       << " status=applied sequence=" << coordinateSequence_
                       << " updates=" << coordinateUpdateCount_
                       << " sequence_gap=" << sequenceGap
@@ -11135,24 +11229,24 @@ class Viewer {
     }
 
     void eventLoop() {
-        std::cout << "NADOC VR viewer ready. Grip: move; both grips: resize; "
+        nadoc_vr::TraceRecord{} << "NADOC VR viewer ready. Grip: move; both grips: resize; "
                      "grip a menu border or Desktop surface: move panel; "
                      "both grips at a border: resize panel; "
                      "trigger: Selection Volume snap/select; hold right trackpad: Ligate/Nick/Undo/Redo wheel; "
                      "hold left trackpad: selection wheel; "
                      "menu: sidebar; Escape: exit.\n";
         if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
-            std::cout << "NADOC VR desktop spectator: physical HMD "
+            nadoc_vr::TraceRecord{} << "NADOC VR desktop spectator: physical HMD "
                       << nadoc_vr::spectatorMirrorEyeName(mirrorEye_)
                       << " eye; submitted-eye copy when accepted, labeled live-pose "
                          "fallback when suppressed. Closing the mirror window ends VR.\n";
         }
         if (referenceGrid_) {
-            std::cout << "NADOC VR room grid: 5 m cage centered on LOCAL origin; "
+            nadoc_vr::TraceRecord{} << "NADOC VR room grid: 5 m cage centered on LOCAL origin; "
                          "+X red, -X cyan, +Y green, -Y magenta, +Z blue, -Z yellow.\n";
         }
         if (witness_) {
-            std::cout << "ScryWrite Witness controls: physical left menu pauses/resumes; "
+            nadoc_vr::TraceRecord{} << "ScryWrite Witness controls: physical left menu pauses/resumes; "
                          "physical right menu single-steps while paused. Scripted input "
                          "cannot publish design events.\n";
         }
@@ -11331,6 +11425,13 @@ class Viewer {
     bool lastMirrorPoseTracked_ = false;
     bool mirrorSourceInitialized_ = false;
     bool lastMirrorSubmittedEye_ = false;
+    MirrorReadback mirrorReadback_;
+    StencilColorReadback mirrorStencilReadback_;
+    XrView mirrorSampleView_{XR_TYPE_VIEW};
+    bool mirrorSampleSubmittedEye_=false;
+    uint64_t mirrorSampleFrame_=0;
+    XrTime mirrorSampleDisplayTime_=0;
+    int64_t mirrorSampleTimestampMs_=0;
     GLuint mirrorDiagnosticsFramebuffer_ = 0;
     GLuint mirrorDiagnosticsTexture_ = 0;
     GLuint mirrorDiagnosticsDepthStencil_ = 0;

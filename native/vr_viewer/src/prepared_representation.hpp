@@ -31,9 +31,12 @@ struct SourceIndex {
         }
     };
 
+#include "handle_offset_index.hpp"
 
 struct PreparedRepresentation {
-    struct Record { const std::string* identity; const ColorSet* colors; };
+    HandleOffsetIndex handleOffsets;
+    nadoc_vr::PickIndex pickIndex;
+    struct Record { const std::string* identity; const ColorSet* colors; const TransformOwnership* ownership=nullptr; };
     std::vector<Vertex> points;
     std::vector<Cylinder> cylinders, halves;
     std::vector<Box> boxes;
@@ -41,7 +44,7 @@ struct PreparedRepresentation {
     using PrimitiveRef = std::pair<size_t,size_t>;
     std::unordered_map<std::string_view,std::vector<PrimitiveRef>> highlightOwners, highlightIdentities;
     size_t highlightIndexBytes() const {
-        size_t bytes=0;
+        size_t bytes=pickIndex.bytes()+handleOffsets.bytes();
         for(const auto* map:{&highlightOwners,&highlightIdentities}) {
             bytes+=map->bucket_count()*sizeof(void*)+map->size()*80;
             for(const auto& [key,refs]:*map)bytes+=refs.capacity()*sizeof(PrimitiveRef);
@@ -54,9 +57,17 @@ struct PreparedRepresentation {
             const PrimitiveRef ref{channel,row};highlightIdentities[identity].push_back(ref);
             if(const auto alias=index->aliases.find(identity);alias!=index->aliases.end())
                 for(const auto& token:alias->second->tokens)highlightOwners[token].push_back(ref);
-            if(const auto owners=index->ownership.find(identity);owners!=index->ownership.end())
+            if(const auto owners=index->ownership.find(identity);owners!=index->ownership.end()) {
+                records[channel][row].ownership=owners->second;
                 for(const auto& owner:owners->second->owners)
                     if(owner.startWeight>0 || owner.endWeight>0)highlightOwners[owner.token].push_back(ref);
+            }
+        }
+        // Aliases and explicit ownership may name the same primitive. Resolve
+        // duplicate rows on the preparation worker, not on the first commit.
+        for(auto& [owner,refs]:highlightOwners) {
+            std::sort(refs.begin(),refs.end());
+            refs.erase(std::unique(refs.begin(),refs.end()),refs.end());
         }
     }
     std::shared_ptr<SourceIndex> index;
@@ -89,6 +100,18 @@ inline std::shared_ptr<PreparedRepresentation> prepareStaticRepresentation(
     if(p->bytes()){p->center=(lo+hi)*.5F;p->radius=std::max(glm::length(hi-lo)*.5F,.01F);}
     else p->center={0,0,-kViewDistanceMeters};
     p->indexHighlights();
+    if(rep==Representation::full)p->handleOffsets.rebuild(source,*p->index);
+    if((rep==Representation::stick || rep==Representation::ballstick) && p->halves.empty() && p->boxes.empty()) {
+    std::vector<nadoc_vr::PickIndex::Entry> bounds;
+    bounds.reserve(p->points.size()+p->cylinders.size()+p->halves.size()+p->boxes.size());
+    for(size_t i=0;i<p->points.size();++i){const auto& v=p->points[i];bounds.push_back({v.position-glm::vec3(v.size),v.position+glm::vec3(v.size),0,uint32_t(i)});}
+    for(uint32_t channel=1;channel<=2;++channel){const auto& values=channel==1?p->cylinders:p->halves;
+        for(size_t i=0;i<values.size();++i){const auto& v=values[i];bounds.push_back({glm::min(v.start,v.end)-glm::vec3(v.radius),glm::max(v.start,v.end)+glm::vec3(v.radius),channel,uint32_t(i)});}}
+    for(size_t i=0;i<p->boxes.size();++i){glm::vec3 low(std::numeric_limits<float>::max()),high=-low;
+        nadoc_vr::includeMeshBounds(p->boxes[i],[&](glm::vec3 v){low=glm::min(low,v);high=glm::max(high,v);});
+        bounds.push_back({low,high,3,uint32_t(i)});}
+    p->pickIndex.reset(std::move(bounds));
+    }
     return p;
 }
 

@@ -73,14 +73,16 @@ SceneData previewFixture() {
     source.cylinders.push_back({"boundary",{-.18F,.1F,-1.3F},{.25F,.1F,-1.3F},.025F,colors});
     source.halfCylinders.push_back({"half",{-.2F,-.15F,-1.3F},{.2F,-.15F,-1.3F},.035F,colors});
     source.boxes.push_back({"box",{0,0,-1.3F},{.15F,0,0},{0,.08F,0},{0,0,.08F},colors});
+    source.points.push_back({"weighted:backbone",{-.12F,-.05F,-1.3F},colors,.02F});
     source.ownerHandles.push_back({"moving",{0,0,-1.3F}});
     source.ownerHandles.push_back({"other",{.25F,.1F,-1.3F}});
     source.toolScopeOwnership = {
+        {"weighted:backbone",{{"moving",.25F,.25F},{"other",.75F,.75F}}},
         {"point",{{"moving",1,1}}}, {"fixed",{{"other",1,1}}},
         {"zero",{{"moving",0,0}}},
         {"boundary",{{"moving",1,0},{"other",0,1}}},
         {"half",{{"moving",.25F,.75F}}}, {"box",{{"moving",1,1}}}};
-    source.ownerAliases={{"point",{"moving"}},{"boundary",{"moving"}},
+    source.ownerAliases={{"weighted:backbone",{"moving","other","other"}},{"point",{"moving"}},{"boundary",{"moving"}},
         {"half",{"moving"}},{"zero",{"moving"}}};
     for (size_t i=0;i<kRepresentationCount;++i) {
         data.representations[i]=source;
@@ -102,18 +104,30 @@ int parity() {
     fast.enablePreparedStyles();
     fast.setStyle(Representation::full,Coloring::strand);
     while(fast.stylePending())fast.pollPreparedStyle();
-    GlScene reference(previewFixture(),true,{}, {},false);
+    auto referenceData=previewFixture();
+    for(auto& prepared:referenceData.prepared)prepared.reset();
+    GlScene reference(std::move(referenceData),true,{}, {},false);
     reference.staticSnapHighlightsForTest=false;
+    reference.shadowCacheEnabledForTest=false;
     reference.disablePackedPreviewForTest();
     reference.volumeGuardsEnabledForTest=false;
     std::vector<nadoc_vr::ViewVolumeRecord> volumes;
     const auto vp=glm::perspective(glm::radians(70.F),1.F,.02F,100.F);
     std::vector<unsigned char> expected(512*512*4),actual(expected.size());
     std::vector<float> expectedDepth(512*512),actualDepth(expectedDepth.size());
+    bool challengeShadowState=false;
+    glm::mat4 shadowModel{1};
+    nadoc_vr::ShadowLightFrame shadowLight{{-.577F,.577F,.577F},{0,1,0}};
     auto capture=[&](GlScene& scene,auto& pixels,auto& depth){
-        scene.renderShadowMap(glm::mat4(1),{{-.577F,.577F,.577F},{0,1,0}});
+        if(challengeShadowState && &scene==&fast){glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE);glEnable(GL_POLYGON_OFFSET_FILL);}
+        scene.renderShadowMap(shadowModel,shadowLight);
+        if(challengeShadowState && &scene==&fast) {
+            GLboolean mask[4];glGetBooleanv(GL_COLOR_WRITEMASK,mask);
+            assert(mask[0] && mask[1] && mask[2] && mask[3]);
+            assert(!glIsEnabled(GL_POLYGON_OFFSET_FILL));
+        }
         glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,512,512);glDrawBuffer(GL_BACK);
-        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);scene.renderVolumes(vp,glm::mat4(1),{},false,volumes);
+        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);scene.renderVolumes(vp,shadowModel,{},false,volumes);
         glReadPixels(0,0,512,512,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
         glReadPixels(0,0,512,512,GL_DEPTH_COMPONENT,GL_FLOAT,depth.data());
     };
@@ -133,6 +147,11 @@ int parity() {
             assert(a.has_value()==b.has_value());
             if(a){assert(a->identity==b->identity);assert(std::abs(a->distance-b->distance)<1e-6F);}
         }
+        for(const auto* token:{"moving","other"}) {
+            const auto a=fast.ownerHandle({token},glm::mat4(1)),b=reference.ownerHandle({token},glm::mat4(1));
+            assert(a.has_value()==b.has_value());
+            if(a)assert(glm::distance(*a,*b)<1e-6F);
+        }
         assert(glGetError()==GL_NO_ERROR);
         std::cout<<"PREVIEW_PARITY stage="<<stage<<" differing_bytes_gt1="<<changed<<" max_delta="<<maxDelta<<std::endl;
     };
@@ -142,11 +161,31 @@ int parity() {
         for(auto color:{Coloring::strand,Coloring::cpk}) {
             for(auto* scene:{&fast,&reference})scene->setStyle(rep,color);
             compare("resident-before-grab");
+            const auto shadowDraws=fast.shadowDrawsForTest;
+            challengeShadowState=true;
+            compare("resident-shadow-reused");
+            challengeShadowState=false;
+            assert(fast.shadowDrawsForTest==shadowDraws && fast.shadowReusesForTest>0);
+            shadowModel=glm::translate(glm::mat4(1),glm::vec3(.02F,0,0));
+            compare("shadow-model-changed");assert(fast.shadowDrawsForTest==shadowDraws+1);
+            shadowLight.direction={.4F,.6F,.5F};
+            compare("shadow-light-changed");assert(fast.shadowDrawsForTest==shadowDraws+2);
+            shadowModel=glm::mat4(1);shadowLight.direction={-.577F,.577F,.577F};
+            compare("shadow-inputs-restored");assert(fast.shadowDrawsForTest==shadowDraws+3);
+            // Exercise background preparation through the production picking
+            // entry point; fixed deadline is a failure, never a timing exemption.
+            (void)fast.pickSelected({{0,0,0},{0,0,-1}},glm::mat4(1),{"moving"});
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+            while(!fast.warmPreviewReadyForTest() && std::chrono::steady_clock::now()<deadline)
+                std::this_thread::yield();
+            assert(fast.warmPreviewReadyForTest());
+            fast.usedWarmPreviewForTest=false;
             const auto initialPixels=actual;
             const auto styles=fast.styleApplicationsForTest;
             for(auto* scene:{&fast,&reference})scene->setToolPreview({"moving"},
                 glm::translate(glm::mat4(1),glm::vec3(.03F,.02F,0)));
             assert(fast.hasPackedPreviewForTest() && fast.styleApplicationsForTest==styles);
+            assert(fast.usedWarmPreviewForTest);
             compare("resident-first-grab");assert(actual!=initialPixels);
             for(auto* scene:{&fast,&reference})scene->setToolPreview({},glm::mat4(1));
             compare("resident-cancel");assert(actual==initialPixels);

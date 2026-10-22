@@ -18,18 +18,21 @@ class TraceSink {
     std::deque<std::string> queue_;
     bool stopping_=false;
     size_t dropped_=0;
+    std::ostream& output_;
     std::thread worker_;
 public:
-    TraceSink():worker_([this]{for(;;){
+    explicit TraceSink(std::ostream& output=std::cout):output_(output),worker_([this]{for(;;){
         std::string line;size_t dropped=0;
         {std::unique_lock lock(mutex_);changed_.wait(lock,[this]{return stopping_ || !queue_.empty();});
             if(queue_.empty() && stopping_)return;
             line=std::move(queue_.front());queue_.pop_front();dropped=std::exchange(dropped_,0);}
-        if(dropped)std::cout<<"VR_TRACE_DROPPED epoch_ms="<<std::fixed
+        if(dropped)output_<<"VR_TRACE_DROPPED epoch_ms="<<std::fixed
             <<std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count()<<" count="<<dropped<<'\n';
-        std::cout<<line;
+        // Ready/scene acknowledgements must reach observers even when profiling
+        // is off and no later record arrives. Flush only on this worker.
+        output_<<line;output_.flush();
     }}){}
-    ~TraceSink(){ {std::lock_guard lock(mutex_);stopping_=true;}changed_.notify_one();worker_.join();std::cout.flush(); }
+    ~TraceSink(){ {std::lock_guard lock(mutex_);stopping_=true;}changed_.notify_one();worker_.join();output_.flush(); }
     void push(std::string line){
         {std::lock_guard lock(mutex_);if(queue_.size()>=16384){++dropped_;return;}queue_.push_back(std::move(line));}
         changed_.notify_one();

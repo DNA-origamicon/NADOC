@@ -42,12 +42,13 @@ int main(){
             assert(model.representation()==before);
         }
         RepresentationData source;
-        for(int i=0;i<20000;++i){StyledPoint p;p.identity="atom:"+std::to_string(i);p.position={float(i),2,3};p.size=.25F;p.vdwSize=.75F;p.colors.values[3]={.1F,.2F,.3F};source.points.push_back(p);}
+        for(int i=0;i<80000;++i){StyledPoint p;p.identity="atom:"+std::to_string(i);p.position={float(i),2,3};p.size=.25F;p.vdwSize=.75F;p.colors.values[3]={.1F,.2F,.3F};source.points.push_back(p);}
         auto index=std::make_shared<SourceIndex>();index->rebuild(source);
         auto prepared=prepareStaticRepresentation(source,Representation::vdw,index);
         assert(prepared->points.front().size==.75F);
         StagedRepresentation stage;stage.start(prepared,Coloring::cpk);
         auto ids=[](const std::string& id){return uint32_t(std::stoi(id.substr(5))+1);};
+        assert(!stage.poll(ids,0));assert(stage.progress()==0);
         assert(!stage.poll(ids));assert(stage.pending());assert(stage.progress()<1);
         stage.cancel();assert(!stage.pending());
         stage.start(prepared,Coloring::cpk);
@@ -55,9 +56,12 @@ int main(){
         const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(5);
         while(!ready && std::chrono::steady_clock::now()<end){
             const double before=stage.progress();ready=stage.poll(ids);
-            if(!ready)assert((stage.progress()-before)*prepared->bytes()<=256*1024+1);
+            if(!ready)assert((stage.progress()-before)*prepared->bytes()<=1024*1024+1);
         }
-        assert(ready && ready->counts[0]==20000 && !stage.pending());
+        assert(ready && ready->counts[0]==80000 && !stage.pending());
+        assert(ready->objectIds[0].size()==80000);
+        for(size_t i=0;i<ready->objectIds[0].size();++i)assert(ready->objectIds[0][i]==i+1);
+        assert(ready->objectIds[1].empty() && ready->objectIds[2].empty() && ready->objectIds[3].empty());
         std::array<Vertex,2> actual{};glBindBuffer(GL_ARRAY_BUFFER,ready->buffers[0]);
         glGetBufferSubData(GL_ARRAY_BUFFER,0,sizeof(actual),actual.data());
         assert(actual[0].position==glm::vec3(0,2,3) && actual[1].objectId==2);
@@ -70,7 +74,7 @@ int main(){
         scene.prepared[size_t(Representation::full)]=prepareStaticRepresentation(natural,Representation::full,fullIndex);
         scene.prepared[size_t(Representation::beads)]=prepareStaticRepresentation(natural,Representation::beads,fullIndex);
         SceneData copy=scene;assert(!copy.prepared[size_t(Representation::full)]);
-        assert(copy.representations[representationSourceIndex(Representation::full)].points.size()==20000);
+        assert(copy.representations[representationSourceIndex(Representation::full)].points.size()==80000);
         GlScene display(std::move(scene),false,{}, {},false);display.enablePreparedStyles();
         display.setStyle(Representation::beads,Coloring::cpk);
         assert(display.stylePending() && display.representation()==Representation::full);
@@ -84,7 +88,7 @@ int main(){
         display.installInitialScene(std::move(initial));
         assert(!display.supportsRepresentation(Representation::surface));
         SceneData cached;cached.available[size_t(Representation::full)]=true;cached.available[size_t(Representation::surface)]=true;
-        cached.representations[size_t(Representation::surface)].points.resize(20000);
+        cached.representations[size_t(Representation::surface)].points.resize(80000);
         cached.cpuBytes[size_t(Representation::surface)]=representationCpuBytes(cached.representations[size_t(Representation::surface)]);
         GlScene limited(std::move(cached),false,{}, {},false);
         SceneRetirement retired;limited.trimPreparedCache(retired,0);

@@ -1,8 +1,13 @@
 #include "scene_refresh.hpp"
 #include <cassert>
+#include <cerrno>
 #include <filesystem>
 #include <thread>
 #include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 int main() {
     namespace fs = std::filesystem;
@@ -11,6 +16,35 @@ int main() {
     struct Cleanup { fs::path path; ~Cleanup(){fs::remove_all(path);} } cleanup{root};
     const auto path=(root/"events").string();
     auto publish=[&](int rev){std::ofstream(path+".scene")<<"NADOCVR_SCENE 1 "<<rev<<" "<<path<<".scene-"<<rev;};
+    // Integration regression: a full stdout pipe must not block scene activation
+    // on the context thread. The former std::endl acknowledgement blocked here.
+    publish(1);
+    int output[2],ack[2];assert(pipe(output)==0 && pipe(ack)==0);
+    assert(fcntl(output[1],F_SETFL,O_NONBLOCK)==0);
+    const char padding[4096]={};
+    while(write(output[1],padding,sizeof(padding))>0){}
+    assert(errno==EAGAIN);
+    assert(fcntl(output[1],F_SETFL,0)==0);
+    const auto child=fork();assert(child>=0);
+    if(child==0) {
+        close(output[0]);close(ack[0]);
+        if(dup2(output[1],STDOUT_FILENO)<0)_exit(2);
+        nadoc_vr::SceneRefreshInbox<int> blockedOutputInbox;
+        while(blockedOutputInbox.revision()!=1) {
+            blockedOutputInbox.poll(path,[](const std::string&){return 42;},[](int scene){assert(scene==42);});
+            std::this_thread::yield();
+        }
+        const char ready=1;
+        if(write(ack[1],&ready,1)!=1)_exit(3);
+        _exit(0); // The intentionally blocked writer cannot drain on shutdown.
+    }
+    close(output[1]);close(ack[1]);
+    pollfd readiness{ack[0],POLLIN,0};
+    const bool responsive=poll(&readiness,1,2000)>0 && (readiness.revents&POLLIN);
+    if(!responsive)kill(child,SIGKILL);
+    int status=0;assert(waitpid(child,&status,0)==child);
+    close(output[0]);close(ack[0]);
+    assert(responsive && WIFEXITED(status) && WEXITSTATUS(status)==0);
     nadoc_vr::SceneRefreshInbox<int> inbox;
     const auto caller=std::this_thread::get_id();
     std::promise<void> release;

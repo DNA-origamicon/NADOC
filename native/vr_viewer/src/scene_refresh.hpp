@@ -3,7 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <iostream>
+#include "async_trace.hpp"
 #include <future>
 #include <chrono>
 
@@ -24,9 +24,9 @@ template<class Scene> class SceneRefreshInbox {
             try {
                 if (!advance()) return;
                 revision_ = pendingRevision_;
-                std::cout << "VR_SCENE_APPLIED revision=" << revision_ << std::endl;
+                TraceRecord{} << "VR_SCENE_APPLIED revision=" << revision_ << std::endl;
             } catch (const std::exception& error) {
-                std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
+                TraceRecord{} << "VR scene refresh retained previous scene: " << error.what() << std::endl;
             }
             applying_ = false;
         };
@@ -38,7 +38,7 @@ template<class Scene> class SceneRefreshInbox {
                 applying_ = true;
                 progress();
             } catch (const std::exception& error) {
-                std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
+                TraceRecord{} << "VR scene refresh retained previous scene: " << error.what() << std::endl;
             }
             return;
         }
@@ -54,7 +54,7 @@ template<class Scene> class SceneRefreshInbox {
         pendingRevision_ = revision;
         try { pending_ = std::async(std::launch::async, [load, path] { return load(path); }); }
         catch (const std::exception& error) {
-            std::cerr << "VR scene refresh retained previous scene: " << error.what() << std::endl;
+            TraceRecord{} << "VR scene refresh retained previous scene: " << error.what() << std::endl;
         }
     }
  private:

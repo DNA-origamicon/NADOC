@@ -7,6 +7,220 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Standard 24HB representation latency recheck — 2026-10-22
+
+Current work: standard saved `24hb_0xT` and `24hb_2xT` designs (24 helices,
+76 strands, 6720 nt), rather than the earlier 12000-nt audit fixture. Before/after
+private 0xT fixtures have identical canonical geometry and scientific-field hashes,
+even though saved-document metadata changed. Final evidence and workflow
+results: `.development-artifacts/24hb-90fps-20261022/`.
+
+The earlier trace-loss verdict was a parser bug: the GPU diagnostic description
+contained the words `VR_TRACE_DROPPED`. Only an actual line beginning with that
+marker invalidates coverage. Regression tests retain the genuine-loss failure.
+Selective offline audits now export requested styles plus Full, avoiding an
+unrequested Surface export. This does not change production export behavior.
+
+Static selected Stick was CPU-picking limited (~6.5 ms p95, ~44.8 submissions/s).
+A prepared immutable spatial index preserves primitive ordering, exact narrow
+phase intersections and closest-unselected occlusion. A first insufficiently
+conservative bound was rejected by GL parity; corrected bounds pass 360 rays
+across both styles, scales and rotations. Dynamic layouts/poses retain fallback.
+Prepared IDs/colors, unique owner rows and background preview copies remove
+first-commit molecular hashing/copying. Dense prepared handle aliases/ownership
+remove commit-time string hashing while retaining exact accumulation order,
+fractional/zero weights, related pivots and Undo. A consecutive-commit lifetime
+failure was caught and fixed; pixel/depth/picking/handle parity passes.
+
+Periodic mirror health sampling was another real tail-latency cost. Pixel-buffer
+readback alone, including native packed depth/stencil, still stalled ~6.4 ms in
+the stencil call. A GPU stencil-to-R8UI conversion reduces that median to ~0.028
+ms; all 256 classification values pass exact-byte validation. Sampling keeps the
+captured frame/pose/time, uses a zero-wait fence, and leaves the visible mirror,
+heartbeat and health diagnostics enabled. No molecular shaders/geometry changed.
+
+Final render-path matrices on both designs pass 48 idle/grip intervals across
+Stick/Ballstick and all four profiles, with zero compositor repeated/dropped
+frames. Idle mirror p99 is ~0.15–0.17 ms (formerly ~7.8 ms). Nominal headset
+refresh is 90 Hz; measured application cadence is ~89.53/s on this runtime.
+These are instrumented OpenXR/compositor checks, not through-lens comfort proof.
+
+Exact unchanged-shadow reuse removes another ~2.2–2.3 ms GPU timeline cost per
+frame. Resident identity, packed geometry revision, model/light projection and
+detail inputs key the cache; layout callbacks and visualization updates bypass
+it. Pixel/depth parity checks cover reuse, model/light changes and GL state.
+Median steady-fast drag GPU timeline: Stick 6.30 → 4.29 ms, Ballstick 6.82 → 4.43 ms.
+
+Final `shadow-*` validation: both-design matrices pass all 48 idle/grip intervals
+with zero compositor repeated/dropped frames. All eight Move/Undo/save/reopen
+workflows pass behavioral assertions across both representations and four
+profiles. Only 16/24 measured drag/hold/commit intervals are entirely free of
+compositor repeats/drops. Both variable Ballstick profiles are clean; do not
+cherry-pick these to claim universal 90 FPS. One Ballstick steady-fast outer frame
+was 67.61 ms, including 59.36 ms in `xrEndFrame`, despite that drag's application
+CPU max 3.27 ms and GPU timeline max 6.61 ms. Runtime submission is localized;
+its underlying cause is unresolved. Some other commit misses correlate with
+MemoryHigh events in the unchanged 6 GiB validation scope. Capture/warmup and
+menu-acquisition stalls are reported separately. Strict no-drop editing is not
+achieved, despite clean nominal-90-Hz baseline rendering.
+
+Two harness corrections:
+expected remote translation follows the fixed-depth controller ray, including
+wrist rotation (unchanged 2 mm tolerance); large molecular captures determine the
+pointing-hand clearance (old fixed 45 cm approach could be inside the origami).
+Optional `--setup-trackpad` uses production focus/trigger only for recenter setup;
+noisy recenter acquisition is not claimed. Seeds, profiles and deadlines remain.
+Move audits now support `--playwright-trace off|retain-on-failure` (off default),
+while explicit captures, browser-frame instrumentation and native/compositor
+records remain enabled. A trace-on browser grew ~700 MB during one 30 s drag;
+that campaign eventually hit the unchanged 6 GiB MemoryHigh limit. Controlled
+trace-off replays are complete; the remaining misses above persist. No timing
+thresholds, profiles, seeds or deadlines were relaxed.
+
+18 focused Python tests and the native picking, mirror readback, staged-upload
+and rigid-preview parity checks pass. The verified binary is deployed at the
+configured normal `vr-clipboard-all-20261016/native-build/nadoc-vr-viewer` path;
+SHA-256 `fb5b7c394f0c3fa22abed21245829c73347518d07227649f0a5e8c6d39e624c5`.
+The performance fixes are tracked separately from preserved unrelated edits.
+Task `report.json`, `interval-summary.json`, `workflow-results.json`, final GPU
+and pressure summaries, deployment/source manifests, and two mirror PNGs remain.
+Cleanup removed 53.7 GB of this task's raw captures, ID/depth buffers, copied
+fixtures, traces and build outputs after active-reference checks. Raw paths in
+historical records are now provenance only. Test workspace/scratch is clean and
+owned VR runtime was restored to stopped; unrelated artifacts were preserved.
+
+
+## Shared edit-ready upload pacing — 2026-10-22
+
+Tab changes were committed/pushed as `8d52817f`. The subsequent native-only
+latency change batches 1024 records per upload call (previously 256) and permits
+up to 1 MiB per frame (previously 256 KiB). The 1 ms time check between batches,
+separate allocation work unit, zero-timeout GPU fences, old-scene visibility and
+atomic scene-ready acknowledgement remain. An individual driver call is not
+preemptible; the time check is not a hard 1 ms maximum.
+
+On the same 12000-nt Full fixture and steady-fast Twist reach, staging decreased
+from 18 frames / 189.9 ms to 14 frames / 145.3 ms. Confirm-to-ready measured
+2285 ms before and 2139 ms after (6.4% lower). This is one matched replay per
+candidate; only about 45 ms is directly localized to shorter staging. The rest
+can include export/runtime variation. Increasing only the byte ceiling measured
+2083 ms overall but 167.5 ms staging, illustrating that total timing varies.
+
+All four final Twist/Undo workflows pass, at 2096–2162 ms input-to-ready.
+Measured application work peaks at 6.67 ms, with zero compositor drops/repeats
+inside the named interaction intervals. Strict 90 FPS still fails: maximum
+submission gap is 15.07 ms and measured cadence remains below 90. Do not infer
+through-lens latency or a universal no-drop guarantee. Failed controller reaches
+and normal retries remain in `review/acquisition.json`; presets/seeds/dwell and
+performance thresholds were not relaxed.
+
+Focused native staged-upload and scene-activation tests pass, covering 80000
+records, byte/zero-time budgets, GPU contents, cancellation/reuse, atomic swaps,
+exact pixels/depth/picking, stable IDs, style restart and repeated edit/Undo.
+Final eye/mirror captures are retained and the mirror was visually inspected.
+Serializer experiments were rejected: uncompressed transport saved ~51 ms but
+expanded storage ~8x; format caching saved ~19 ms; cross-export immutable-string
+caches saved ~59 ms with inconsistent pairs. No backend/frontend behavior or
+molecular math changed in this task. Canonical serialization (~1 s on this
+fixture) remains the main shared latency cost.
+
+Evidence: `.development-artifacts/edit-ready-20261022/report.json`, `stages.json`,
+benchmark JSON and native check logs. Debug → VR Tours & Tests → Tools across
+representations · frame audit remains the reusable workflow. Disposable captures,
+builds and owned scratch were removed; runtime returned to stopped. The upload
+change remains uncommitted for review.
+
+
+## Scene refresh parsing and per-eye submission — 2026-10-22
+
+The residual rendering hitch was directly localized: one diagnostic replay spent
+433.40 ms inside the per-eye `glFlush` (437.05 ms non-runtime-wait frame wall time).
+The explicit per-eye flush is removed; required upload/readback fence flushes
+remain. `calc_eyeRelease` separately measures OpenXR release, and acceptance also
+checks `xrEndFrame`, full submission gaps and compositor counters so waits cannot
+be hidden by phase accounting. Khronos hello_xr's OpenGL RenderView likewise does
+not explicitly flush each eye. This does not establish universal no-drop operation.
+
+`SceneInput` replaces locale-aware numeric extraction of scene coordinates/colors
+with ASCII `from_chars`, retaining legacy metadata readers, gzip validation and
+canonical geometry. A 12000-nt Full snapshot takes a median 220 ms to load versus
+283 ms in five final alternating before/after pairs (22% less; first series 25%). All 16 focused native
+checks pass, including float bit parity, malformed input, legacy scene versions,
+compressed/corrupt input and asynchronous logging/refresh. Threaded gzip writing
+and owner-metadata caching experiments showed no repeatable benefit and were removed.
+Canonical Python scene export still costs about one second; total edit-to-ready
+remains seconds. Do not describe this as an instant edit path or a 90-FPS guarantee.
+
+Sidebar reach diagnostics now retain failed attempts, initial and per-sample live
+rectangles, actual controller poses and hover IDs. Compact tab hover expansion
+moves later tabs (`SidebarMenu::layoutControls` stacks animated lengths); the
+synthetic approach aims at the rectangle captured at the start of each reach.
+This can invalidate the target during motion, independently of deformation math
+or frame latency. Motion presets, seeds, hit geometry and dwell thresholds remain
+unchanged. See the final campaign and detailed acquisition report for current
+pass/fail counts; successful diagnostic entry is not an unchanged variable-profile
+workflow pass.
+
+Evidence: `.development-artifacts/visibility-hitch-20261022/report.json`,
+`parser-benchmark.json`, `twist-acquisition.json`, and `check-final-clean-env.log`.
+Final focused campaign: Nick 4/4 and Twist steady 2/2 pass; both variable Twist
+profiles fail Tools acquisition before trigger. Variable-fast's longest hover is
+50 ms versus the required 120 ms (up to 88 mm target drift); variable-deliberate
+reaches 200 ms versus 300 ms (up to 116 mm drift). These failures have no measured
+frame stall. Steady runs also need acquisition retries. Fix moving tab targets,
+not the profile thresholds, in a separate interaction change.
+
+Across 18008 measured final frames, most cases peak at 3.18–7.37 ms non-runtime-wait
+wall time. One Nick variable-fast frame still reaches 49.90 ms, with 49.52 ms in
+mirror presentation. This is unresolved; the precise driver call was not isolated.
+Nick edit/Undo/Redo ready times range 1.75–3.94 s, Twist 2.20–2.27 s. Submission gaps
+and compositor misses remain. Strict 90 FPS fails. Two intermediate variable runs
+failed viewer startup during an unintended rebuild; prebuilt retries are retained
+separately. A standalone build attempt also failed due to Conda's linker path;
+the clean-environment build and all 16 tests subsequently passed.
+
+Reusable entry: Debug → VR Tours & Tests → Tools across representations · frame audit.
+
+
+## Render-thread logging stall fix — 2026-10-21
+
+Runtime console diagnostics bypassed `TraceSink` and wrote directly to stdout,
+including hover snaps and the flushed `VR_SCENE_APPLIED` acknowledgement. They
+could wait on blocked output or on the stream lock held by the frame-audit writer.
+All runtime console records now use the existing bounded background queue; the
+worker flushes quiet acknowledgements, and overflow remains explicit (invalidates
+frame audits). Geometry, motion seeds, hit thresholds and refresh settings are unchanged.
+
+The new blocked-stdout scene-activation regression fails against the original
+header and passes with this fix. Both native CTest targets pass, covering blocked
+output, bounded overflow, quiet acknowledgement delivery and scene refresh/retry.
+Final-code Full/12000-nt headset checks: Nick 4/4 profiles; Twist 2/4. Both variable
+Twist profiles still miss the Tools tab three times, with <5 ms measured frame
+work; those are retained failures. A separately labelled diagnostic used steady
+motion only for Tools/Twist entry, then the original variable-deliberate selection
+and edit motion. It completed commit and Undo without the prior playback timeout:
+selection-update peak 2.71 ms versus the historical 537.48 ms; total non-runtime-wait
+wall peak 6.15 ms. Its temporary probe adjustment was restored and it does not clear
+the two normal menu-validation failures. Nick variable-fast peak fell from 264.22
+to 4.35 ms; final steady-fast Nick/Twist peaks were 4.01/5.65 ms. No trace loss.
+
+**Strict 90-FPS/no-drop acceptance still fails.** One Nick steady-deliberate frame
+had 37.55 ms non-runtime-wait wall time, mainly the `eye_setup` interval (which also
+contains the previous eye's GL flush/swapchain release tail). Compositor misses and
+submission gaps persist; edit-to-visible remains roughly 2–3.4 s. Do not interpret
+non-runtime-wait wall time as pure CPU execution or the diagnostic as an unchanged
+end-to-end variable-profile pass. Original stall stack traces were not retained;
+the diagnosis combines phase evidence, a negative-control regression and replays.
+
+Evidence: `.development-artifacts/headset-stall-fix-20261021/report.json` plus
+`check.log` and `legacy-blocking-regression.json`. Normal replay remains registered
+under Debug → VR Tours & Tests → Tools across representations · frame audit.
+Disposable captures/builds and private workspaces are cleaned after analysis;
+owned SteamVR/viewers return to the initially stopped state. Historical audit below
+is retained as the before measurement, not the current implementation verdict.
+
+
+
 ## Full-height sidebar tabs — 2026-10-22
 
 Per user request, normal sidebar tabs now share spare space across the entire

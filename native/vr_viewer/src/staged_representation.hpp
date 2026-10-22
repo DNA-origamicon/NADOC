@@ -4,11 +4,16 @@
 struct ResidentRepresentation {
     std::array<GLuint,4> buffers{};
     std::array<GLsizei,4> counts{};
+    // Keep the exact IDs assigned during bounded upload. Preview preparation
+    // can reuse these without hashing every molecular identity on the XR thread.
+    std::array<std::vector<uint32_t>,4> objectIds;
+    std::array<std::vector<glm::vec3>,4> colors;
     std::shared_ptr<PreparedRepresentation> prepared;
     Coloring color=Coloring::strand;
     ~ResidentRepresentation(){glDeleteBuffers(4,buffers.data());}
 };
 class StagedRepresentation {
+    static constexpr size_t batchRecords_=1024;
     std::shared_ptr<ResidentRepresentation> result_;
     size_t channel_=0,offset_=0,done_=0,total_=0;
     bool allocated_=false;
@@ -20,17 +25,21 @@ class StagedRepresentation {
         glBindBuffer(GL_ARRAY_BUFFER,result_->buffers[channel_]);
         const auto begin=std::chrono::steady_clock::now();
         if(!allocated_){
+            result_->objectIds[channel_].resize(values.size());
+            result_->colors[channel_].resize(values.size());
             glBufferData(GL_ARRAY_BUFFER,values.size()*sizeof(V),nullptr,GL_STATIC_DRAW);
             driverMs_+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
             if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("Insufficient GPU storage for representation");
             allocated_=true;
             return; // Allocation is a separate work unit; check time before copying.
         }
-        const size_t count=std::min(size_t(256),values.size()-offset_);
-        std::array<V,256> chunk;
+        const size_t count=std::min(batchRecords_,values.size()-offset_);
+        std::array<V,batchRecords_> chunk;
         for(size_t i=0;i<count;++i){chunk[i]=values[offset_+i];
             chunk[i].objectId=id(*records[offset_+i].identity);
+            result_->objectIds[channel_][offset_+i]=chunk[i].objectId;
             chunk[i].color=records[offset_+i].colors->get(result_->color);
+            result_->colors[channel_][offset_+i]=chunk[i].color;
         }
         const auto prepared=std::chrono::steady_clock::now();
         idsMs_+=std::chrono::duration<double,std::milli>(prepared-begin).count();
@@ -60,8 +69,11 @@ class StagedRepresentation {
         }
         const auto start=std::chrono::steady_clock::now();size_t bytes=0;idsMs_=driverMs_=0;
         auto& p=*result_->prepared;
-        constexpr size_t maxBatchBytes=256*std::max({sizeof(Vertex),sizeof(Cylinder),sizeof(Box)});
-        while(channel_<4 && bytes+maxBatchBytes<=256*1024 && std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<budgetMs){
+        constexpr size_t maxBatchBytes=batchRecords_*std::max({sizeof(Vertex),sizeof(Cylinder),sizeof(Box)});
+        // Keep the time budget and small driver calls, but allow spare frame
+        // time to carry up to 1 MiB. The old 256 KiB ceiling spread even cheap
+        // uploads over many frames after their CPU budget was left unused.
+        while(channel_<4 && bytes+maxBatchBytes<=1024*1024 && std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<budgetMs){
             switch(channel_){case 0:batch(p.points,id,bytes);break;case 1:batch(p.cylinders,id,bytes);break;
                 case 2:batch(p.halves,id,bytes);break;case 3:batch(p.boxes,id,bytes);break;}
         }

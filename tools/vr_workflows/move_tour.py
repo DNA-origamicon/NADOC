@@ -70,6 +70,9 @@ def main():
             # Physical VR validation needs real window focus so the desktop
             # renderer yields the GPU when the native viewer takes focus.
             command.append('--headed')
+            if trace_mode:=env.get('NADOC_VR_PLAYWRIGHT_TRACE'):
+                if trace_mode not in ('off','retain-on-failure'):raise ValueError('Invalid Move audit trace mode')
+                command.extend(['--trace',trace_mode])
             result=subprocess.run(command,cwd=ROOT/'frontend',env=env)
             results.append({'target':target,'profile':profile,'passed':result.returncode==0})
             (output/'result.json').write_text(json.dumps({'results':results,'workspace':'temporary, removed on exit','design':str(args.design.resolve()) if args.design else 'generated 6HB','direct_activation':args.direct_activation},indent=2))
