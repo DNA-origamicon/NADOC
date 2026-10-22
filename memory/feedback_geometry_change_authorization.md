@@ -34,3 +34,16 @@ The preferred review surface is the implemented Help-menu Molecular Placement Au
 independent ring-piercing/clash close-up, each switchable between Full and Ball and Stick. If that
 surface cannot represent a future candidate, extend its isolated evidence schema or generate the
 same artifact bundle offline; do not substitute prose.
+
+## Review presentation (user correction, 2026-10-21)
+
+Never ask the user to open a bare HTML file and infer a decision from unexplained 3D
+geometry. Every authorization request must explain what Current and Candidate mean,
+what construction and feature-log actions produced each state (including selections,
+resets, replacements and ordering), and the specific difference to focus on in plain
+language. Keep a readable feature sequence visible alongside the comparison; raw JSON
+is supplementary evidence, not the explanation. Distinguish authored native history
+from a diagnostic candidate program and identify the limits of the requested approval.
+Provide a verified one-click viewing link or an exact copyable bash command that opens
+the review. Restate the comparison and decision in the request itself. Do not infer
+physical validity from an ordering demonstration or seek broader approval than shown.
