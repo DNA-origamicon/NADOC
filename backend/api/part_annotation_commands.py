@@ -62,7 +62,17 @@ def build(kind, design, params):
             _apply_transform_body(
                 transforms, body, identity_seed=params["history_seed"]
             )
-        return design.copy_with(nucleotide_transforms=transforms)
+        posed = design.copy_with(nucleotide_transforms=transforms)
+        if params.get("reclassify_unpaired"):
+            from backend.core.unpair_reclassification import separated_staple_keys, relocate_segments
+            targets = [(t.helix_id, t.bp_index, t.direction.value, t.copy_k)
+                       for t in requested if t.kind == "base"]
+            try:
+                keys = separated_staple_keys(design, posed, targets)
+                posed = relocate_segments(posed, keys, identity_seed=params["history_seed"])
+            except ValueError as error:
+                raise HTTPException(422, detail=str(error)) from error
+        return posed
 
     from backend.core.flexible_segments import apply_marks, unpaired_bead_keys
     from backend.api.routes_flexible_segments import (

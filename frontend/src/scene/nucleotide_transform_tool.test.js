@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 vi.mock('../api/client.js', () => ({
   putNucleotideTransform: vi.fn(),
   putNucleotideTransforms: vi.fn(),
+  previewNucleotideReclassification: vi.fn(async () => ({ overhang_count: 0, confirmation_token: 'test' })),
 }))
 
 import { putNucleotideTransform, putNucleotideTransforms } from '../api/client.js'

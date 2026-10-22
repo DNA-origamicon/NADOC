@@ -3805,8 +3805,14 @@ export async function putNucleotideTransform(body) {
 
 /** Persist an exact Base/End/Domain/Strand transform scope atomically. Every
  * residue pose is committed under one feature-log entry and one undo step. */
-export async function putNucleotideTransforms(transforms) {
-  const json = await _request('PUT', '/design/nucleotide-transforms', { transforms })
+export function previewNucleotideReclassification(transforms) {
+  return _request('POST', '/design/nucleotide-transforms/reclassification', { transforms })
+}
+
+export async function putNucleotideTransforms(transforms, unpairConfirmation = null) {
+  const json = await _request('PUT', '/design/nucleotide-transforms', {
+    transforms, ...(unpairConfirmation ? { unpair_confirmation: unpairConfirmation } : {}),
+  })
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 

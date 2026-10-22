@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 TRANSFORM_FIXTURES = {"transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
@@ -24,6 +24,13 @@ def fixture(kind):
     from backend.core.models import DeformationLogEntry, DeformationOp, MinorMutationLogEntry, RoutingClusterLogEntry, SnapshotLogEntry
     from backend.core.part_history_contract import create_empty_part
     from tests.test_part_deformation_preview import _append
+
+    if kind == "unpair":
+        from tests.test_part_transform_preview import snapshot
+        return snapshot(create_empty_part("__e2e__unpair", "HONEYCOMB"), "bundle-create",
+                        BundleRequest(cells=[[0, 0], [0, 1]], length_bp=8,
+                                      ligate_adjacent=False, history_seed=uuid4()).model_dump(mode="json"),
+                        "bundle")
 
     if kind == 'sweep-separated':
         from tests.test_sweep_separated_strands import separated_source

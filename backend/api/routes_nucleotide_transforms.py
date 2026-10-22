@@ -35,6 +35,39 @@ class NucleotideTransformBatchBody(BaseModel):
     transforms: list[NucleotideTransformBody] = Field(
         min_length=1, max_length=100_000
     )
+    unpair_confirmation: Optional[str] = None
+
+
+def _unpair_token(design, transforms):
+    import hashlib
+    import json
+    source = design.model_dump_json()
+    inputs = json.dumps([t.model_dump(mode="json") for t in transforms], sort_keys=True)
+    return hashlib.sha256((source + inputs).encode()).hexdigest()
+
+
+@router.post("/design/nucleotide-transforms/reclassification")
+def preview_nucleotide_reclassification(body: NucleotideTransformBatchBody) -> dict:
+    """Read-only source-bound check for the Move Apply confirmation dialog."""
+    from backend.api.part_annotation_commands import build
+    from backend.core.unpair_reclassification import separated_staple_keys, relocate_segments
+    design = design_state.get_or_404()
+    params = {"transforms": [t.model_dump(mode="json") for t in body.transforms],
+              "history_seed": str(uuid4())}
+    posed = build("nucleotide-transform-batch", design, params)
+    targets = [(t.helix_id, t.bp_index, t.direction.value, t.copy_k)
+               for t in body.transforms if t.kind == "base"]
+    try:
+        keys = separated_staple_keys(design, posed, targets)
+        candidate = relocate_segments(posed, keys, identity_seed=params["history_seed"])
+    except ValueError as error:
+        raise HTTPException(422, detail=str(error)) from error
+    previous_ids = {o.id for o in design.overhangs}
+    created = [o for o in candidate.overhangs if o.id not in previous_ids]
+    return {"confirmation_token": _unpair_token(design, body.transforms),
+            "separated_nucleotide_count": len(keys),
+            "overhang_count": sum(not o.auxiliary_endpoint for o in created),
+            "free_strand_count": len({o.strand_id for o in created if o.auxiliary_endpoint})}
 
 
 def _quat_matrix(q: list[float]) -> np.ndarray:
@@ -208,9 +241,14 @@ def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
         )
 
     from backend.api.part_annotation_commands import build
-    params = {**body.model_dump(mode="json"), "history_seed": str(uuid4())}
+    params = {**body.model_dump(mode="json", exclude={"unpair_confirmation"}), "history_seed": str(uuid4())}
+
+    if body.unpair_confirmation is not None:
+        params["reclassify_unpaired"] = True
 
     def apply(current):
+        if body.unpair_confirmation is not None and body.unpair_confirmation != _unpair_token(current, body.transforms):
+            raise HTTPException(409, detail="The design or Move changed. Review the move again.")
         return build("nucleotide-transform-batch", current, params)
 
     updated, report, entry = design_state.mutate_with_feature_log(
@@ -227,7 +265,11 @@ def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
             if transform.kind == "base" and transform.helix_id is not None
         }
     )
-    if changed_helix_ids:
+    if params.get("reclassify_unpaired"):
+        # Relocated rows change native residue addresses; partial old-helix
+        # responses would leave the browser's new overhang geometry missing.
+        payload = _design_response_with_geometry(updated, report)
+    elif changed_helix_ids:
         payload = _design_response_with_geometry(
             updated, report, changed_helix_ids=changed_helix_ids
         )

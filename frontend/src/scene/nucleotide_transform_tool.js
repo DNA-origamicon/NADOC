@@ -10,6 +10,7 @@ import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
 import { expandCpdTargets } from './cpd_selection.js'
 import { selectionRefsEqual } from './selection_ref.js'
+import { confirmMoveReclassification } from './move_unpair_confirmation.js'
 
 export function transformBodyForTarget(target, pivot, translation, quaternion) {
   const pose = {
@@ -90,6 +91,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   let targetInfos = []
   let exactSessionRef = null
   let vrPreviewRef = null
+  let committing = false
 
   const identity = () => new THREE.Matrix4()
   function liveMatrix() {
@@ -182,13 +184,27 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     }
     const committed = targetInfos
     const bodies = _pendingBodies()
+    let approval
+    try {
+      approval = await confirmMoveReclassification(bodies, { vr: !!vrPreviewRef })
+    } catch (error) {
+      showToast(error.message || 'Could not check strand separation.', { severity: 'error' })
+      return { accepted: false, reason: 'reclassification_failed', result: null }
+    }
+    if (!approval.accepted) {
+      cancel()
+      return { accepted: false, reason: 'cancelled', result: null }
+    }
+    if (!tc || JSON.stringify(bodies) !== JSON.stringify(_pendingBodies())) {
+      return { accepted: false, reason: 'preview_changed', result: null }
+    }
     // Keep the post-drag matrices on screen while the mutation and atom build run.
     // Restoring the preview here produced an avoidable old-position flash; moreover,
     // the design-response subscriber already owns the one required atomistic refresh.
     detach(false)
     try {
       let result = null
-      if (atomic) result = await putNucleotideTransforms(bodies)
+      if (atomic) result = await putNucleotideTransforms(bodies, approval.token)
       else for (const body of bodies) result = await putNucleotideTransform(body)
       if (result) {
         return {
@@ -208,14 +224,17 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   async function confirm() {
-    return _persistCurrent({ atomic: true })
+    if (committing) return { accepted: false, reason: 'busy', result: null }
+    committing = true
+    try { return await _persistCurrent({ atomic: true }) }
+    finally { committing = false }
   }
 
   async function confirmVRPreview() {
     if (!vrPreviewRef) {
       return { accepted: false, reason: 'preview_required', result: null }
     }
-    return _persistCurrent({ atomic: true })
+    return confirm()
   }
 
   function cancel() {

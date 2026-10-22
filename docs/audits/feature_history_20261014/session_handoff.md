@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 21, 2026: resumed Move/Rotate; attached-Sweep refusal authorized and implemented.
+October 21, 2026: handoff checked against HEAD; ordinary Move unpairing implemented; commit prepared.
 Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 ## Scope and next work
@@ -47,18 +47,19 @@ or diagnostic candidate was promoted. Native/HTTP22pass; existing Sweep39pass; b
 message visible, Next disabled, exact Cancel, no commit. Earlier Move history edit attributes
 failure to the later Sweep and preserves source. Scratch s4kantpm independently absent.
 C7 ordinary mid-log refusal/Cancel and C5 dependent deletion dialog already pass; do not repeat.
-Next task (user-directed October21): fully explore an explicit unpair-to-ssDNA operation.
-Cover free strands, one-ended overhangs and two-ended linkers; preserve identity, sequence and
-backbone connectivity; assess selection/movement, reattachment, history/replay and export.
-Review native A/B placement evidence before implementation; no implicit conversion on Move.
-Named-member Move/Rotate integration remains open after this exploration.
+Unpair Move: ordinary nucleotide/domain/strand Apply offers Cancel/Continue; only separated
+staple segments get new cadnano rows at matching bp indices. Scaffold stays; moved 3D is exact.
+Whole detached staples use free-ssDNA endpoints. Same-command undo/redo/reopen/cold proof pass.
+Backend implementation20 +probe21 pass; frontend9452pass/1skip; browser1pass with reviewed views; smoke23pass.
+FAST19358pass/19skip/83 unchanged baseline failures; aggregate405s, no individual violators; FULL deferred.
+Linked/deformed/loop-skip/independently posed owners refuse; cluster/named-member Move remains unwired.
+See investigation for current evidence and remaining reference/export/reattachment qualifications.
 The attached-Sweep decision does not authorize the complete named-motion candidate matrix.
 Fixed C8 and ordinary owner/linked/menu/keyboard workflows pass; transform gates remain OFF.
 Named-motion scope is not waived: prepare isolated A/B evidence before any scientific
 placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/sealed work.
 
 ## Current qualification evidence
-
 - Bend/Twist private guides use native sampled polylines and shared bp-range clipping,
   preserving domain gaps and every molecular instance; canonical rendering defaults unchanged.
   Detached spare reuse remains inventory-exact and failure-atomic; resized GPU buffers dispose.
@@ -88,7 +89,6 @@ placement promotion. Do not repeat unchanged C8 benchmarks or reopen legacy/seal
   Browser roots tfn8qjbl/wg9x_zte and cancelled diagnostics mhpbkfq8/rzpelai0 independently absent.
 
 ## Completed user-facing behavior
-
 - Bend/Twist: isolated creation/history editing, downstream error attribution and dependency view.
   Desktop mutating-preview fallback and destructive history peeling removed; other consumers of
   legacy creation helpers are not claimed removed. Final C8 passes; both tools are counted done.
@@ -133,7 +133,7 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 
 ## Commit and shared-worktree boundaries
 
-Latest implementation checkpoint: **57b1f613** (Sweep refusal and native/browser tests).
+Latest committed checkpoint: **57b1f613** (Sweep refusal); Move unpairing is the next local checkpoint.
 
 - 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
 - 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.
