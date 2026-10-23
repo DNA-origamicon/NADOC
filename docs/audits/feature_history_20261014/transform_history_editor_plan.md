@@ -821,3 +821,8 @@ No milestone split, exclusion or new completion credit.
 - Reproduced ISSUE-148: sequential owner transport falsely refuses an individually posed crossover insert even when one complete Move/Rotate gives both ends the same motion (2failed/2passed before repair).
 - Stage the complete owner inputs, then transport saved member poses once through final frames. Native single-owner behavior and differential-end refusal remain; this implements the already-approved chronological contract without changing builders/constants.
 - New native4pass proves every Full position and atom, exact bonds, both input orders, source immutability and cold replay; existing compound31 and native constraint16 pass. Broad backend check remains due at the end of this continuation.
+
+## Three-iteration continuation — iteration 2, October 22, 2026
+- Added the posed-insert case to the existing native host/history lifecycle. Five tests pass: isolated preview, Apply through later Extrude, exact all-atom movement/suffix control, one undo/redo, save/reopen/cold proof, suppress/unsuppress, and producer-order refusal.
+- Differential-end Evaluate and Apply return422 with the real reason, preserve source/history/revision, retain a usable lease and accept a corrected retry before exact Cancel. No injected failure or alternate host.
+- Test-only qualification, no extra milestone credit. Initial harness referenced an absent checkpoint key; corrected to the existing history depth. Final `just test-focused tests/test_compound_member_history.py`:5pass,3.27s. Broad backend/app checks remain next.

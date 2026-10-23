@@ -1,9 +1,9 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 October 22, 2026: full original11-step sequence checked against independent chronological paths; all stages pass (maximum3.2e-15nm).
-October 22 continuation requested; handoff and active summaries reconciled with code/HEAD.
 Three iterations authorized: iteration1 fixes atomic linked-member transport (native4+compound31+constraint16pass).
-Next: qualify preview/Apply, history actions and recovery for posed inserts; then app validation. Gates stay OFF.
+Iteration2: native host/history5pass including differential refusal/retry, suffix, one undo and cold recovery.
+Next: iteration3 app qualification and guarded backend regression; gates stay OFF.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 Feature-row secondary actions now live in a right-click menu: Suppress/Unsuppress, Move…, View dependencies.
 Existing dialogs, source checks and suppressed/error badges remain; Shift+F10 opens the same menu.
