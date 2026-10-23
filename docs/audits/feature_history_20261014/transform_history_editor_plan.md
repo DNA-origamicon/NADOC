@@ -816,3 +816,8 @@ No milestone split, exclusion or new completion credit.
 
 ## Lint cleanup — October 22, 2026
 - Removed the unused `_flexible_bps_on_helix` import from `part_transform_projection._axes`; no behavior change. `just lint` and `git diff --check` pass. Earlier broad backend baseline debt is unchanged.
+
+## Three-iteration continuation — iteration 1, October 22, 2026
+- Reproduced ISSUE-148: sequential owner transport falsely refuses an individually posed crossover insert even when one complete Move/Rotate gives both ends the same motion (2failed/2passed before repair).
+- Stage the complete owner inputs, then transport saved member poses once through final frames. Native single-owner behavior and differential-end refusal remain; this implements the already-approved chronological contract without changing builders/constants.
+- New native4pass proves every Full position and atom, exact bonds, both input orders, source immutability and cold replay; existing compound31 and native constraint16 pass. Broad backend check remains due at the end of this continuation.

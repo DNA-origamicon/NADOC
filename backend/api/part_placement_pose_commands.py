@@ -2,7 +2,7 @@
 
 This command never reruns a constraint solver or infers linked history rows.
 All selected and auxiliary owners are recorded, frame-bound and checked before
-the single-owner overlay carries member poses in native placement-list order.
+member poses are carried through the complete operation's final native frames.
 """
 
 from copy import deepcopy
@@ -154,12 +154,16 @@ def validate_references(design, parsed):
 
 
 def build(design, params):
+    from backend.core.cluster_member_poses import carry_member_poses
     from backend.core.part_overlay_commands import build as overlay
 
     parsed = parse_command(params)
     validate_references(design, parsed)
     poses = {pose["cluster_id"]: pose for pose in parsed["poses"]}
-    result = design
+    # Stage only owner inputs: a compound move has no observable intermediate
+    # single-owner state. Transporting an insert after its first end moves would
+    # wrongly reject a complete operation that moves both ends together.
+    result = design.copy_with(nucleotide_transforms=[]) if design.nucleotide_transforms else design
     for owner in design.cluster_transforms:
         if owner.id in poses:
             authored = parsed["primary_authored_fields"] if owner.id == parsed["primary_cluster_id"] else {}
@@ -167,6 +171,7 @@ def build(design, params):
             result = overlay("cluster_op", result, {"_proof_version": 1,
                 "cluster_id": owner.id, **authored,
                 **{key: pose[key] for key in ("translation", "rotation", "pivot")}})
+    result = carry_member_poses(design, result)
     if parsed.get("reclassify_unpaired"):
         from backend.api.part_cluster_unpair import reclassify
         result = reclassify(design, result, parsed)
