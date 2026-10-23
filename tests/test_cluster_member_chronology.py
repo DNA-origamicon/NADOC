@@ -8,7 +8,7 @@ from backend.api.part_group_recording import prepare_group_update
 from backend.core.atomistic import build_atomistic_model
 from backend.core.design_geometry import _geometry_for_design
 from backend.core.models import Design
-from tests.test_part_member_motion_order import D, M, _rigid
+from tests.test_part_member_motion_order import D, M, N, _rigid
 from tools.member_motion_native_example import build, verify
 
 
@@ -115,3 +115,53 @@ def test_cluster_carries_posed_crossover_insert_when_both_ends_move():
     assert any(a.extra_base_k is not None for a in before.atoms)
     for old, new in zip(before.atoms, atoms.atoms, strict=True):
         np.testing.assert_allclose([new.x, new.y, new.z], _rigid([old.x, old.y, old.z], M), atol=1e-10, rtol=0)
+
+
+@pytest.mark.parametrize('index', range(2, 11), ids=[f'F{i}' for i in range(3, 12)])
+def test_original_sequence_matches_chronological_coordinates_at_every_step(example, index):
+    replacement = dict(rotation=Rotation.from_euler('y', 37, degrees=True).as_quat().tolist(),
+        pivot=[-2, 3, .7], translation=[1, 2, -.5])
+    second_move = dict(rotation=Rotation.from_euler('x', -25, degrees=True).as_quat().tolist(),
+        pivot=[1, -.5, .3], translation=[.4, -.2, .6])
+    # Explicit chronological paths, independent of the native pose evaluator.
+    # Reset drops the earlier individual edits N and D, retaining the first M.
+    base_three_paths = {2: [N], 3: [N], 4: [N, M], 5: [N, M, D],
+        6: [M], 7: [M, replacement], 8: [M, replacement],
+        9: [M, replacement, second_move], 10: [M, replacement, second_move, D]}
+    start = crud._seek_feature_log(example, 1)
+    actual = crud._seek_feature_log(example, index)
+    hid = start.helices[0].id
+    def path(h, bp, direction):
+        if h != hid or direction != 'FORWARD' or bp > 3:
+            return []
+        if bp == 3:
+            return base_three_paths[index]
+        return ([M] if index >= 4 else []) + ([second_move] if index >= 9 else [])
+    def point(value, moves):
+        for move in moves:
+            value = _rigid(value, move)
+        return value
+    key = lambda n: (n['strand_id'], n['bp_index'], n['direction'], n.get('copy_k', 0))
+    actual_rows = {key(n): n for n in _geometry_for_design(actual)}
+    largest = 0.0
+    for original in _geometry_for_design(start):
+        row = actual_rows[key(original)]
+        moves = path(original['helix_id'], original['bp_index'], original['direction'])
+        for field in ('base_position', 'backbone_position', 'slab_position'):
+            expected = point(original[field], moves)
+            largest = max(largest, float(np.linalg.norm(np.asarray(row[field]) - expected)))
+            np.testing.assert_allclose(row[field], expected, atol=1e-10, rtol=0)
+        for field in ('base_normal', 'axis_tangent'):
+            expected = original[field]
+            for move in moves:
+                expected = Rotation.from_quat(move['rotation']).apply(expected)
+            np.testing.assert_allclose(row[field], expected, atol=1e-10, rtol=0)
+    key_atom = lambda a: (a.strand_id, a.bp_index, a.direction, a.copy_k, a.name)
+    actual_atoms = {key_atom(a): a for a in build_atomistic_model(actual, fast_bridges=True).atoms}
+    for original in build_atomistic_model(start, fast_bridges=True).atoms:
+        atom = actual_atoms[key_atom(original)]
+        expected = point([original.x, original.y, original.z],
+            path(original.helix_id, original.bp_index, original.direction))
+        largest = max(largest, float(np.linalg.norm(np.asarray([atom.x, atom.y, atom.z]) - expected)))
+        np.testing.assert_allclose([atom.x, atom.y, atom.z], expected, atol=1e-10, rtol=0)
+    print(f'F{index + 1}: largest chronological position discrepancy = {largest:.3g} nm')

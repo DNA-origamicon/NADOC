@@ -791,3 +791,10 @@ No milestone split, exclusion or new completion credit.
 - Guarded FAST19381pass/19skip/85fail:83 identical baseline failures plus2 obsolete narrow-dependency assertions, updated and passing in final38. FULL deferred; no claim of broad green.
 - Timing triage: aggregate398s, zero per-test violators, below prior437s; final focused15s/6s. No new shared-delay evidence, marker changes or guard changes; broad report later overwritten by focused timing report.
 - Durable chronology rule updated; original five-step movement-order defect fixed. No Move/Rotate gate promotion or claim that the entire remaining revamp is complete.
+
+## Return to the original operation sequence — October 22, 2026
+- Traced provenance to the ordering review: earlier individual pose was applied after later cluster movement; compose/reset/replace/second-cluster/final-compose extended that same ordering question. Axis/OH1/scrubbing were inspection defects discovered along the way.
+- Replayed the complete11-feature native recipe with current fixes. Added explicit independent chronological paths for every F3–F11 state, checking every Full position/normal and every atom against the F2 construction baseline.
+- All16 focused tests pass; maximum chronological position discrepancy3.2e-15nm (F6). Reset removes individual edits while retaining cluster motion; replacement, second cluster and final individual move all pass. Ruff/diff checks pass.
+- Original ordering defect is resolved for the entire original sequence; no further failure found or new operation invented. Retained only the existing five-step and six-step manual files; no extra workspace example needed. General birth/constraint integration and rollout remain separate work.
+- Evidence: `.development-artifacts/feature-history-focus/original-sequence-after-fixes.log`. Test-only addition; no production geometry change or broad-suite rerun.
