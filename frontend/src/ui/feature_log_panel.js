@@ -30,8 +30,7 @@ import { showPersistentToast, dismissToast, showToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showConfirm } from './primitives/confirm.js'
 import { showDependentsDecision } from './primitives/dependents_dialog.js'
-import { showFeatureDependencies } from './primitives/feature_dependencies_dialog.js'
-import { showFeatureReorder, showFeatureSuppression } from './primitives/feature_reorder_dialog.js'
+import { createFeatureLogContextMenu } from './feature_log_context_menu.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 import { generatedFeatureSchema, canReplayGenerated } from './generated_feature_fields.js'
 import { canonicalSelection } from '../scene/selection_model.js'
@@ -61,6 +60,7 @@ const REPLAYABLE_SUBTYPES = new Set([
 ])
 
 export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED, transformHistoryEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED, routingHistoryEnabled = ROUTING_HISTORY_EDITOR_ENABLED }) {
+  const historyMenu = createFeatureLogContextMenu({ store, api })
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -885,6 +885,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
   // ── Rebuild list ───────────────────────────────────────────────────────────
   function _rebuild(design) {
+    historyMenu.close()
     _refreshTitle()
     if (_isAssemblyConfigMode()) {
       _rebuildAssembly(store.getState().currentAssembly)
@@ -954,51 +955,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       badge.style.cssText = `flex-shrink:0;color:${status.state === 'error' ? '#f85149' : '#d29922'}`
       row.append(badge)
     }
-    function appendDependencyButton(row, delBtn, i) {
+    function appendHistoryActions(row, i) {
       appendFailureBadge(row, log[i])
       if (log[i].suppressed) {
         const badge = document.createElement('span')
         badge.textContent = 'Suppressed'; badge.dataset.historyStatus = 'suppressed'
         row.append(badge)
       }
-      if (api.partRepairAPI && !_partInstanceId && !_isAssemblyPartMode()) {
-        const toggle = document.createElement('button')
-        toggle.textContent = log[i].suppressed ? '▶' : 'Ⅱ'
-        toggle.title = `${log[i].suppressed ? 'Unsuppress' : 'Suppress'} F${i + 1}`
-        toggle.style.cssText = _editStyle
-        toggle.addEventListener('click', event => {
-          event.stopPropagation()
-          try { showFeatureSuppression({ store, api, source: design, rowIndex: i }) }
-          catch (error) { showPersistentToast(error.message) }
-        })
-        row.insertBefore(toggle, delBtn)
-      }
-      if (api.partRepairAPI && !_partInstanceId && !_isAssemblyPartMode() && log.length > 1) {
-        const move = document.createElement('button')
-        move.textContent = '↕'; move.title = `Move F${i + 1}`; move.style.cssText = _editStyle
-        move.addEventListener('click', event => {
-          event.stopPropagation()
-          try { showFeatureReorder({ store, api, source: design, rowIndex: i }) }
-          catch (error) { showPersistentToast(error.message) }
-        })
-        row.insertBefore(move, delBtn)
-      }
-      if (api.getFeatureDependencies && !_partInstanceId && !_isAssemblyPartMode()) {
-        const dependencies = document.createElement('button')
-        dependencies.textContent = '↗'
-        dependencies.title = `View F${i + 1} dependencies`
-        dependencies.style.cssText = _editStyle
-        dependencies.addEventListener('click', async event => {
-          event.stopPropagation(); dependencies.disabled = true
-          try {
-            const graph = await api.getFeatureDependencies()
-            if (store.getState().currentDesign !== design) return
-            showFeatureDependencies({ graph, rowIndex: i, store, source: design })
-          } catch (error) { showPersistentToast(error.message) }
-          finally { dependencies.disabled = false }
-        })
-        row.insertBefore(dependencies, delBtn)
-      }
+      if (!_partInstanceId && !_isAssemblyPartMode()) historyMenu.bind(row, design, i)
     }
 
     const displayLabels = featureLabels(log)
@@ -1441,7 +1405,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           })
         }
         // Header appended LAST so it sits at the bottom of its section.
-        appendDependencyButton(row, delBtn, i)
+        appendHistoryActions(row, i)
         list.appendChild(row)
 
         // Skip the generic post-loop append + warnIcon insert (we already did them).
@@ -1694,7 +1658,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       // Insert the warning icon ahead of the type icon if the entry is broken.
       if (warnIcon) row.insertBefore(warnIcon, row.firstChild)
 
-      appendDependencyButton(row, delBtn, i)
+      appendHistoryActions(row, i)
 
       list.appendChild(row)
     })
@@ -1705,6 +1669,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
   }
 
   function _rebuildAssembly(assembly) {
+    historyMenu.close()
     _refreshTitle()
     _latestAssembly = assembly
     list.innerHTML = ''
@@ -1821,6 +1786,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
   // ── Assembly feature log (target dropdown = "Assembly") ────────────────────
   function _rebuildAssemblyFeatureLog(assembly) {
+    historyMenu.close()
     _latestAssembly = assembly
     _refreshTitle()
     list.innerHTML = ''

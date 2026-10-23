@@ -805,3 +805,11 @@ No milestone split, exclusion or new completion credit.
 - Suppressed definitions/IDs survive save/reopen; unsuppress restores exact Full/atom output. Cold proof and unchanged source are required. Producer failures identify the later Move/Rotate row.
 - `just test-focused tests/test_transform_history_actions.py`:6pass,3.62s. No production changes, gates, app qualification or milestone credit; prior broad-suite debt remains.
 - Reconciled the handoff and stale active memory/implementation summaries with current code and incoming HEAD4eb5f331. Log: `.development-artifacts/feature-history-focus/transform-history-actions.log`. Tests create no workspace files.
+
+## Feature-row context menu — October 22, 2026
+- User requested less row clutter: Suppress/Unsuppress, Move… and View dependencies now appear on right-click. Existing dialogs, publication and badges remain; Shift+F10 opens the same menu on a focused row.
+- A separate menu module handles stale-row protection, asynchronous dependency replies and closing on rebuild. `main.js` delta0; no backend or gate changes.
+- Focused menu5pass; full frontend789files/9463pass/1skip. Browser Move10.7s, Bend suppress/unsuppress57.8s, dependency viewer5.6s pass, including undo/redo/save/reopen and read-only viewing. Dependency browser assertion updated from obsolete label to current Fine Routing label; initial2pass/1fail, final affected1pass.
+- History scratch2x2e1jdv/vveshaqq independently verified absent. Logs: `.development-artifacts/feature-history-focus/context-menu-*.log`.
+- `just lint` retains one pre-existing F401 in `backend/api/part_transform_projection.py:122`; no backend files changed. Changed-file syntax/diff checks pass.
+- Isolated `just smoke`:23pass (2.5m); scratchoufojlmd independently verified absent after six test artifacts and one revision store were removed.

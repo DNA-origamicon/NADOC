@@ -4,10 +4,10 @@ October 22, 2026: full original11-step sequence checked against independent chro
 October 22 continuation requested; handoff and active summaries reconciled with code/HEAD.
 Next task: qualify remaining linked/constraint Move/Rotate history behavior and explicit refusals; keep gates OFF.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-Native history-action qualification:6pass (reorder, three suppress/unsuppress cases, two producer refusals).
-All Full positions/normals and atoms match independent chronological oracles; bonds unchanged.
-Save/reopen/cold proof and source immutability pass; no production behavior or gate changed.
-No new app run or broad-suite pass claimed. Log: `.development-artifacts/feature-history-focus/transform-history-actions.log`.
+Feature-row secondary actions now live in a right-click menu: Suppress/Unsuppress, Move…, View dependencies.
+Existing dialogs, source checks and suppressed/error badges remain; Shift+F10 opens the same menu.
+Menu: frontend9463pass/1skip; app Move, suppress/unsuppress and dependency-view pass; smoke23pass, scratch removed.
+Native history-action qualification remains6pass; see the transform plan for evidence and retained lint debt.
 ## Scope and next work
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
 tails move only when selected. Initial locality repair is committed as 8fd29efb.
