@@ -1051,7 +1051,9 @@ def _design_replace_response(
         # Tag with the rejecting field so the frontend perf log shows
         # why positions_only didn't fire (e.g. path:full_geometry_strands).
         trace._steps.append((f"path:full_geometry_{diff_field}", 0.0))
-    if diff_field == "flexible_segment_marks" or design.flexible_connections:
+    if diff_field in {"flexible_segment_marks", "nucleotide_transforms"} or design.flexible_connections:
+        # Residue-pose changes need complete site-frame and inserted-base data;
+        # compact coordinates alone would retain stale metadata after undo/seek.
         # The compact deformed arrays omit per-nuc metadata (see
         # _compact_geometry_from_nucleotides — no `is_flexible_segment` key), but
         # that per-bead flag MUST ride along so beads re-classify (rigid vs. bowed

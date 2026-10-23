@@ -1,9 +1,9 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 October 22, 2026: full original11-step sequence checked against independent chronological paths; all stages pass (maximum3.2e-15nm).
-Three iterations authorized: iteration1 fixes atomic linked-member transport (native4+compound31+constraint16pass).
-Iteration2: native host/history5pass including differential refusal/retry, suffix, one undo and cold recovery.
-Next: iteration3 app qualification and guarded backend regression; gates stay OFF.
+Three iterations completed: atomic linked-member transport repaired (native4+compound31+constraint16pass).
+Host/history6 + render-diff22 + app1 pass; stale member-pose display after undo/redo repaired.
+Next: qualify remaining named-group/companion/birth semantics and large posed-part undo latency; gates stay OFF.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
 Feature-row secondary actions now live in a right-click menu: Suppress/Unsuppress, Move…, View dependencies.
 Existing dialogs, source checks and suppressed/error badges remain; Shift+F10 opens the same menu.
@@ -22,7 +22,7 @@ native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
 Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification timeout;
 complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
 readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
-Current FAST19320pass/19skip/83same baseline failures; aggregate402s, zero per-test violators.
+Latest FAST19410pass/19skip/83same baseline failures; aggregate400s, zero per-test violators.
 The isolated compiler captures interleaved fixed-world named moves and up to16 native residue events.
 Chronological7 +program23 +reset13 +existing-tail8 pass; prior constraint-inventory4 pass.
 Every intermediate stage checks Full positions/orientations/site frames, atoms and exact no-M control.
@@ -139,7 +139,7 @@ DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
 ## Commit and shared-worktree boundaries
-Latest incoming checkpoint: **4eb5f331** (complete original chronology); production fix: **0c56fdd5**.
+Incoming checkpoint: **2e5cc12d**; iterations1/2: **3691de58**, **f155f0fb**; iteration3 adds full pose refresh.
 Mixed prior edits in `implementation.md` and `memory/project_feature_log_overhaul.md` remain uncommitted; this session corrects their stale summaries.
 
 Full required matrix/implementation sequence: [group placement plan](group_placement_migration_plan.md#required-acceptance-matrix).

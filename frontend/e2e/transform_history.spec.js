@@ -766,3 +766,81 @@ Path(sys.argv[2]).write_text(json.dumps(states))
     await expect(page.locator('#anim-playpause-btn')).toHaveAttribute('title', 'Play')
   }, 'unpair')
 })
+
+
+test('Move Rotate complete owner edit carries a prior posed insert through history', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const before = await f.checkpoint(), original = await f.browser()
+    const index = before.design.feature_log.findIndex(row => row.id === 'selected-transform')
+    const entry = before.design.feature_log[index]
+    const row = () => page.locator(`#fl-list [data-fl-row="${index + 1}"]`)
+    const panel = page.locator('#move-rotate-panel')
+    const open = async () => {
+      await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+      await row().getByTitle('Edit placement-poses parameters', { exact: true }).click()
+      await expect(panel).toBeVisible()
+      await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+    }
+    const move = async () => {
+      const input = page.locator('#mr-tx')
+      const x = Number(await input.inputValue())
+      const pending = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/evaluate`)
+      await input.fill(String(x + 1))
+      await input.press('Tab')
+      const response = await pending
+      expect(response.ok(), await response.text()).toBe(true)
+      await expect(page.locator('#mr-apply-btn')).toBeEnabled()
+      const params = response.request().postDataJSON().params
+      expect(params.poses).toHaveLength(2)
+      for (const pose of params.poses) {
+        const old = entry.params.poses.find(p => p.cluster_id === pose.cluster_id)
+        expect(pose.translation[0]).toBeCloseTo(old.translation[0] + 1, 8)
+        expect(pose.translation.slice(1)).toEqual(old.translation.slice(1))
+      }
+      return params
+    }
+    await open(); await move()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(original)
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).toBeHidden()
+    expect(await f.checkpoint()).toEqual(before)
+    expect(await f.browser()).toEqual(original)
+    await open()
+    const params = await move()
+    await page.locator('#mr-apply-btn').click()
+    await expect(panel).toBeHidden()
+    const after = await f.checkpoint(), displayed = await f.browser()
+    expect(after.history).toHaveLength(before.history.length + 1)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    expect(after.design.feature_log[index].params.poses).toEqual(params.poses)
+    const affected = new Set(before.design.helices.slice(0, 2).map(helix => helix.id))
+    const key = n => JSON.stringify([n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0])
+    const oldRows = new Map(original.geometry.map(n => [key(n), n]))
+    expect(displayed.geometry).toHaveLength(oldRows.size)
+    for (const value of displayed.geometry) {
+      const old = oldRows.get(key(value))
+      for (const field of ['base_position', 'backbone_position']) {
+        const shift = affected.has(value.helix_id) ? 1 : 0
+        expect(value[field][0]).toBeCloseTo(old[field][0] + shift, 8)
+        expect(value[field][1]).toBeCloseTo(old[field][1], 8)
+        expect(value[field][2]).toBeCloseTo(old[field][2], 8)
+      }
+    }
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file)) throw Error('Save failed')
+      await api.undo()
+    }, f.file)
+    expect((await f.browser()).geometry).toEqual(original.geometry)
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      await api.redo(); await api.loadDesign(file)
+    }, f.file)
+    expect((await f.browser()).geometry).toEqual(displayed.geometry)
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'transform-posed-insert')
+})

@@ -3139,3 +3139,22 @@ tracking executor and failed with “Repair replay diverged from planned command
 Disable only the outer result cache for these tracking callbacks; normal feature
 rebuild caching remains enabled. The regression forces cache eligibility and repeats
 both selection and repair, checking all prefix/recipe rows were accounted for.
+
+## ISSUE-148 — Complete linked Move/Rotate falsely refuses posed crossover insert (2026-10-22, FIXED)
+
+Reproduced with two native owners and an individually posed extra base: a single
+complete pose command moves both crossover ends identically but sequential
+transport checks an intermediate one-end state and refuses. Stage all owner
+inputs before carrying member poses through final frames. Native4 cases prove
+all-atom/Full rigid chronology, cold replay, input-order independence and retained
+atomic refusal for genuinely differential end motions. Host6 and actual app1 also pass.
+
+## ISSUE-149 — Undo of carried member poses leaves stale native display fields (2026-10-22, FIXED)
+
+The real multi-owner history editor passed Apply but undo selected `cluster_only`
+even though `nucleotide_transforms` also changed. The client moved beads while
+retaining edited site frames and reconstructing slabs from display matrices.
+Classify residue-pose changes as requiring the existing full per-nucleotide
+response, including inserted-base data; positions-only is also insufficient.
+Native response regression reproduces the old failure; host6/render-diff22 and
+browser1 pass after repair, with exact geometry after undo/redo/save/reopen.

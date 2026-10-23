@@ -103,3 +103,20 @@ def test_reorder_cannot_move_compound_before_an_owner_producer():
     assert caught.value.status_code == 409
     assert caught.value.detail['feature_id'] == FEATURE
     assert source.model_dump_json() == before
+
+
+def test_undo_response_refreshes_complete_native_member_poses():
+    from backend.api import crud
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.validator import validate_design
+
+    source = history_recipe()
+    params = deepcopy(next(row.params for row in source.feature_log if row.id == FEATURE))
+    for pose in params['poses']:
+        pose['translation'][0] += 1
+    moved = execute('placement-poses', source, params)
+    assert moved.nucleotide_transforms != source.nucleotide_transforms
+    for before, after in ((moved, source), (source, moved)):
+        response = crud._design_replace_response(before, after, validate_design(after))
+        assert response.get('diff_kind') not in {'cluster_only', 'positions_only'}
+        assert response['nucleotides'] == _geometry_for_design(after)

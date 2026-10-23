@@ -68,6 +68,7 @@ def _diff_is_cluster_only(prev: "Design", new: "Design") -> bool:
         "overhangs",
         "overhang_connections",
         "photoproduct_junctions",
+        "nucleotide_transforms",
     ]
     for f in structural:
         if getattr(prev, f) != getattr(new, f):
@@ -229,6 +230,10 @@ def _topology_diff_field(prev: "Design", new: "Design") -> str | None:
         return "photoproduct_junctions"
     if prev.deformations != new.deformations:
         return "deformations"
+    # Residue poses also carry site frames and inserted-base geometry. The
+    # cluster delta and positions-only payloads cannot refresh that full state.
+    if prev.nucleotide_transforms != new.nucleotide_transforms:
+        return "nucleotide_transforms"
     # Flexible-segment marks change per-bead `is_flexible_segment` (which beads
     # render rigid vs. as a bowed arc) and carve the helix axis — the
     # positions_only fast path ships neither, so force full geometry. Without

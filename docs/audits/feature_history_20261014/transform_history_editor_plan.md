@@ -826,3 +826,13 @@ No milestone split, exclusion or new completion credit.
 - Added the posed-insert case to the existing native host/history lifecycle. Five tests pass: isolated preview, Apply through later Extrude, exact all-atom movement/suffix control, one undo/redo, save/reopen/cold proof, suppress/unsuppress, and producer-order refusal.
 - Differential-end Evaluate and Apply return422 with the real reason, preserve source/history/revision, retain a usable lease and accept a corrected retry before exact Cancel. No injected failure or alternate host.
 - Test-only qualification, no extra milestone credit. Initial harness referenced an absent checkpoint key; corrected to the existing history depth. Final `just test-focused tests/test_compound_member_history.py`:5pass,3.27s. Broad backend/app checks remain next.
+
+## Three-iteration continuation — iteration 3, October 22, 2026
+- Real multi-owner controls now cover the previously posed insert: exact Cancel, Apply through later Extrude, both authored poses, fixed suffix, undo/redo/save/reopen and cold proof. Final browser1pass8.6s (14.7s total), no console errors.
+- The first browser run exposed ISSUE-149: undo selected cluster-only despite changed residue poses, retaining stale site frames and float32-derived slabs. A native response regression reproduced it. Changed residue poses now request the existing full native response, including site frames and inserted-base data; no builder or schema changes.
+- Final host6 and render-diff22 pass; earlier compound4/command31/constraint16 pass. `just lint` and whitespace checks pass; `main.js` delta0. Native geometry is compared exactly after undo/redo/reopen; no tolerance relaxation.
+- New fixture uses existing isolated servers/host. Both browser roots9xrms2y1/45bgvcnh independently verified absent. Logs: `.development-artifacts/feature-history-focus/compound-*.log`.
+- Large posed-part undo latency remains unmeasured after the complete-response fallback. Move/Rotate gates and FH-18/FH-23 exits remain open; no milestone credit.
+- Final `just test-smart` FAST:19410pass/19skip/83fail; failure IDs exactly match the retained83 baseline, no additions. Aggregate400s; slow-test triage found zero >5s tests and no new shared slowdown evidence, so no marker/budget changes. Broad suite remains non-green.
+- DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.

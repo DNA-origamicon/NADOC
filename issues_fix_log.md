@@ -1003,3 +1003,15 @@ no new repair panel or transaction owner.
 
 [x] Selection and repair tracking callbacks now run for every planned row even
 when a prefix was previously cached. Repeated-proposal regression passes.
+
+### ISSUE-148 — Atomic linked-member pose transport
+
+[x] Complete Move/Rotate stages every owner pose before carrying existing member
+poses. Common-end movement passes; differential-end movement still refuses
+without source mutation. Native4, compound31 and constraint16 regressions pass.
+
+### ISSUE-149 — Complete pose refresh on undo/redo/seek
+
+[x] Changed residue poses now use the existing full native display response,
+refreshing site frames and inserted-base geometry rather than applying a cluster
+or compact-position delta. Host6/render-diff22 and actual browser1 pass.

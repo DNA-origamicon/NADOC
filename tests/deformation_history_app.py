@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from tests.extrude_matrix_fixture import FAMILIES
 
 FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
-TRANSFORM_FIXTURES = {"transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
+TRANSFORM_FIXTURES = {"transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
 def fixture(kind):
@@ -35,6 +35,9 @@ def fixture(kind):
     if kind == 'sweep-separated':
         from tests.test_sweep_separated_strands import separated_source
         return separated_source()
+    if kind == "transform-posed-insert":
+        from tests.test_compound_member_history import history_recipe
+        return history_recipe().copy_with(name="__e2e__transform-posed-insert")
     if kind == "transform-failure":
         from tests.test_part_transform_downstream_failure import causal_transform_recipe
         return causal_transform_recipe("__e2e__transform-failure")
