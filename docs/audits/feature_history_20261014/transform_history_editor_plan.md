@@ -813,3 +813,6 @@ No milestone split, exclusion or new completion credit.
 - History scratch2x2e1jdv/vveshaqq independently verified absent. Logs: `.development-artifacts/feature-history-focus/context-menu-*.log`.
 - `just lint` retains one pre-existing F401 in `backend/api/part_transform_projection.py:122`; no backend files changed. Changed-file syntax/diff checks pass.
 - Isolated `just smoke`:23pass (2.5m); scratchoufojlmd independently verified absent after six test artifacts and one revision store were removed.
+
+## Lint cleanup — October 22, 2026
+- Removed the unused `_flexible_bps_on_helix` import from `part_transform_projection._axes`; no behavior change. `just lint` and `git diff --check` pass. Earlier broad backend baseline debt is unchanged.

@@ -7,7 +7,7 @@ Next task: qualify remaining linked/constraint Move/Rotate history behavior and 
 Feature-row secondary actions now live in a right-click menu: Suppress/Unsuppress, Move…, View dependencies.
 Existing dialogs, source checks and suppressed/error badges remain; Shift+F10 opens the same menu.
 Menu: frontend9463pass/1skip; app Move, suppress/unsuppress and dependency-view pass; smoke23pass, scratch removed.
-Native history-action qualification remains6pass; see the transform plan for evidence and retained lint debt.
+Native history-action qualification remains6pass; see the transform plan for evidence. Unused-import lint debt fixed; `just lint` passes.
 ## Scope and next work
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
 tails move only when selected. Initial locality repair is committed as 8fd29efb.

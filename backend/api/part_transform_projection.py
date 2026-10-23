@@ -119,7 +119,6 @@ def _records(records, expected):
 
 def _axes(values, expected, design):
     from backend.core.part_dna_comparison import AXIS_FIELDS, SEGMENT_FIELDS
-    from backend.core.deformation import _flexible_bps_on_helix
 
     helices = {key for key in expected.indices["helices"] if not key.startswith("__lnk__")}
     seen, covered, count = set(), {}, 0
