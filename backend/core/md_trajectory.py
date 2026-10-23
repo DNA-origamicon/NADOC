@@ -921,18 +921,26 @@ def _extract_md_nadoc_frame(
     base_centers = None
     if with_base_centers:
         base_centers = np.full((len(p_order), 3), np.nan, dtype=float)
-        for i, atom_indices in enumerate(ctx.get("base_ring_idx") or []):
-            if i >= len(p_raw) or len(atom_indices) < 5:
-                continue
-            ring_raw = u.atoms[atom_indices].positions / 10.0
-            delta = ring_raw.mean(axis=0) - p_raw[i]
+        groups = ctx.get("mean_ring_groups")
+        if groups is None:
+            by_size = {}
+            for i, indices in enumerate(ctx.get("base_ring_idx") or []):
+                if i < len(p_raw) and len(indices) >= 5:
+                    by_size.setdefault(len(indices), []).append((i, indices))
+            groups = [(np.asarray([i for i, _ in rows]), np.stack([idx for _, idx in rows]))
+                      for rows in by_size.values()]
+            ctx["mean_ring_groups"] = groups
+        for rows, atom_indices in groups:
+            ring_raw = (prefix_xyz[atom_indices] if prefix_xyz is not None else
+                        u.atoms[atom_indices.ravel()].positions.reshape(*atom_indices.shape, 3)) / 10.0
+            delta = ring_raw.mean(axis=1) - p_raw[rows]
             if dims is not None and dims[0] > 0:
                 box_nm = dims[:3] / 10.0
                 good = box_nm > 0
-                delta[good] -= np.round(delta[good] / box_nm[good]) * box_nm[good]
+                delta[:, good] -= np.round(delta[:, good] / box_nm[good]) * box_nm[good]
             if R_align is not None:
                 delta = delta @ R_align.T
-            base_centers[i] = p_nm[i] + delta
+            base_centers[rows] = p_nm[rows] + delta
 
     # 5'-terminal nucleotides via their O5' atom, placed off the aligned 3'-neighbour P.
     if with_termini:
@@ -1681,7 +1689,7 @@ def md_flex_analysis(analysis, args, progress_path):
 
 @persistent_analysis
 def md_rmsf_atomistic(
-    topology_path, segments, coordinate_path, design, max_frames: int = 150,
+    topology_path, segments, coordinate_path, design, max_frames: int = 0,
     *, include_model=False, progress=None,
 ) -> dict:
     """Average the simulation's own DNA atoms using bounded DNA-only DCD reads."""
@@ -1696,7 +1704,7 @@ def md_rmsf_atomistic(
         meta = ctx.get('atom_meta') or []
         if n <= 0 or not meta:
             return {'ready': False, 'atomistic': [], 'n_frames': 0}
-        idxs = list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+        idxs = list(range(n)) if max_frames <= 0 or n <= max_frames else _stride_pick(list(range(n)), max_frames)
         serials = np.asarray([m['serial'] for m in meta], dtype=np.int64)
         sums = np.zeros((len(meta), 3), dtype=np.float64)
         used = 0
@@ -1745,7 +1753,7 @@ def md_rmsf_surface(
     grid_spacing: float = 0.20,
     radius_inflate: float = 1.30,
     smooth: int = 15,
-    max_frames: int = 150,
+    max_frames: int = 0,
     *, average=None, rmsf=None, model=None, progress=None,
 ) -> dict:
     """Surface of the NAMD mean all-atom structure with per-vertex nucleotide RMSF."""
@@ -1819,7 +1827,7 @@ def md_rmsf_surface(
 
 @persistent_analysis
 def md_rmsf(
-    topology_path, segments, coordinate_path, design, max_frames: int = 150,
+    topology_path, segments, coordinate_path, design, max_frames: int = 0,
     include_reference_frame: bool = False, progress=None,
 ) -> dict:
     """Per-nucleotide average backbone position + RMSF over the NAMD run.
@@ -1837,8 +1845,8 @@ def md_rmsf(
     ``{ready, n_frames, positions:[{helix_id, bp_index, direction, backbone_position,
     base_position, nx, ny, nz, tx, ty, tz, rmsf}], min_rmsf, max_rmsf, mean_rmsf}``.
 
-    Frames are sampled evenly to at most ``max_frames`` to bound the per-frame Kabsch
-    cost; each sampled frame is aligned independently (the sequential rotation-flip
+    By default every frame is included. A positive ``max_frames`` explicitly opts
+    into evenly sampled preview data; each sampled frame is aligned independently (the sequential rotation-flip
     guard only fires for adjacent frames, which strided sampling never hits).
     ``include_reference_frame`` adds the first frame's display affine and backbone
     adjacency for placing this same mean beside static simulation companions."""
@@ -1848,7 +1856,11 @@ def md_rmsf(
     # with_termini: also recover each strand's 5'-terminal base (no P atom → absent from
     # p_order) so the flexibility map positions + colours every nucleotide, not only the
     # P-bearing ones.  Only md_rmsf opts in — the metrics / live-display P path is unchanged.
-    ctx = _build_md_nadoc_ctx(
+    # Use the same DNA-only reader as playback/atomistic averaging. Full-frame
+    # backfill must not load solvent coordinates or rebuild a whole PSF Universe
+    # for every job. Companion adjacency still uses the original Universe path.
+    build_ctx = _build_md_nadoc_ctx if include_reference_frame else _build_playback_ctx
+    ctx = build_ctx(
         topology_path, seg_paths, coordinate_path, design, with_termini=True
     )
     report("rmsf_setup", 1, 1)
@@ -1865,7 +1877,7 @@ def md_rmsf(
         }
 
     idxs = (
-        list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+        list(range(n)) if max_frames <= 0 or n <= max_frames else _stride_pick(list(range(n)), max_frames)
     )
 
     report("rmsf", 0, len(idxs))
@@ -2085,7 +2097,7 @@ def md_metric_series(
     analytic_reference,
     *,
     n_slices: int = 0,
-    max_frames: int | None = 64,
+    max_frames: int | None = 0,
     workers: int = 1,
     on_frame=None,
     on_stage=None,
@@ -2114,6 +2126,7 @@ def md_metric_series(
     False on no frames / fewer than two helices / an unmappable topology."""
     from backend.core.oxdna_health import (
         _filter_to_reference_core,
+        bundle_metrics_unavailable,
         base_pairing_spatial_profile,
         differential_profile,
         measure_bundle_curvature_profile,
@@ -2121,6 +2134,10 @@ def md_metric_series(
         measure_bundle_twist_profile,
         twist_series_stats,
     )
+
+    unavailable = bundle_metrics_unavailable(analytic_reference)
+    if unavailable is not None:
+        return unavailable
 
     if on_stage is not None:
         on_stage("Preparing topology and trajectory")

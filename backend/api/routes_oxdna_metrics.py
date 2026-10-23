@@ -58,7 +58,7 @@ def _job_inputs(job, ws: Path):
     prod = [
         s
         for s in job.stages
-        if s.kind in ("production", "field") and s.status in ("done", "running")
+        if s.kind in ("production", "field")
     ]
     if not prod:
         return None
@@ -87,11 +87,14 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
 
 @persistent_analysis
 def _measure(design, trajs, ref_conf, n_slices=0, on_frame=None):
-    from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.oxdna_health import production_metric_series
+    from backend.core.oxdna_health import metric_reference_geometry, production_metric_series
+
+    reference, unavailable = metric_reference_geometry(design)
+    if unavailable is not None:
+        return unavailable
 
     return production_metric_series(
-        design, trajs, ref_conf, core_reference_geometry(design),
+        design, trajs, ref_conf, reference,
         n_slices=n_slices, on_frame=on_frame,
     )
 
@@ -142,12 +145,18 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
         bp_pf: list[float] = []
         boundaries: list[dict] = []
         per_job: list[dict] = []
+        skipped_jobs: list[dict] = []
         n_designed = 0
         for j, (design, ref_conf, trajs) in inputs:
             res = _measure(
                 design, trajs, ref_conf, n_slices=req.n_slices, on_frame=_tick
             )
             if not res.get("ready"):
+                skipped_jobs.append({
+                    "job_id": j.job_id,
+                    "reason": res.get("reason", "No measurable trajectory frames."),
+                    "not_applicable": res.get("not_applicable") is True,
+                })
                 continue
             boundaries.append(
                 {
@@ -175,7 +184,10 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
                 state="done",
                 result={
                     "ready": False,
-                    "reason": "trajectory has too few helices/frames to measure",
+                    "reason": "; ".join(dict.fromkeys(p["reason"] for p in skipped_jobs))
+                              or "trajectory has too few helices/frames to measure",
+                    "not_applicable": bool(skipped_jobs) and all(p["not_applicable"] for p in skipped_jobs),
+                    "skipped_jobs": skipped_jobs,
                 },
             )
             return
@@ -183,7 +195,8 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
         result = {
             "ready": True,
             "scope": req.scope,
-            "jobs": [j.job_id for j, _ in inputs],
+            "jobs": [p["job_id"] for p in per_job],
+            "skipped_jobs": skipped_jobs,
             "twist": {
                 "temporal": {"per_frame": twist_pf, "boundaries": boundaries},
                 "spatial": [

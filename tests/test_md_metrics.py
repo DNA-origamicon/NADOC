@@ -77,23 +77,24 @@ def test_aligned_rmsd_removes_translation_and_rotation():
     assert aligned_rmsd_nm(moved, reference) > 0.1
 
 
-def test_md_metric_series_one_pass_all_metrics(monkeypatch):
+@pytest.mark.parametrize("n_frames", [4, 173])
+def test_md_metric_series_one_pass_all_metrics(monkeypatch, n_frames):
     from backend.core.md_trajectory import md_metric_series
 
     order, analytic = _paired_bundle(n_axial=12)
-    _install_fake_reader(monkeypatch, order, analytic, 4)
+    _install_fake_reader(monkeypatch, order, analytic, n_frames)
 
     seen: list[int] = []
     out = md_metric_series(
         "psf", [], "ref", object(), analytic, on_frame=lambda: seen.append(1)
     )
     assert out["ready"] is True
-    assert out["n_frames"] == 4
-    assert len(seen) == 4  # progress hook fired per frame
+    assert out["n_frames"] == n_frames
+    assert len(seen) == n_frames  # progress hook fired per frame
     for key in ("twist", "curvature", "base_pairing"):
-        assert len(out[key]["temporal"]["per_frame"]) == 4
+        assert len(out[key]["temporal"]["per_frame"]) == n_frames
         assert out[key]["spatial"]  # non-empty profile
-    assert out["rmsd"]["temporal"]["per_frame"] == [0.0] * 4
+    assert out["rmsd"]["temporal"]["per_frame"] == [0.0] * n_frames
     assert out["rmsd"]["temporal"]["reference"] == "first_trajectory_frame"
     assert out["rmsd"]["spatial"] == []
     # Frames equal the analytic reference → differential twist/curvature ≈ 0.

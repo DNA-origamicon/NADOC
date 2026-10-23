@@ -2493,10 +2493,11 @@ async def get_oxdna_rmsf(job_id: str, align: bool = True) -> dict:
 
     jd = job.job_dir(_workspace())
     # Pool the trajectories of EVERY sampling run that has written frames —
-    # done OR still running.  The map is available as soon as sampling has
+    # regardless of stage status. The map is available as soon as sampling has
     # started; short/in-progress runs are flagged via the confidence metric
     # below rather than blocked.
-    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    # Written frames remain useful after failure or while queued for resume.
+    usable = prod_stages
     trajs: list[Path] = []
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
@@ -2552,7 +2553,8 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
     if not prod_stages:
         return {"ready": False, "reason": "no production or field run yet"}
     jd = job.job_dir(_workspace())
-    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    # Written frames remain useful after failure or while queued for resume.
+    usable = prod_stages
     trajs: list[Path] = []
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
@@ -2628,7 +2630,8 @@ async def get_oxdna_strain(
     if not prod_stages:
         return {"ready": False, "reason": "no production or field run yet"}
     jd = job.job_dir(_workspace())
-    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    # Written frames remain useful after failure or while queued for resume.
+    usable = prod_stages
     trajs: list[Path] = []
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
@@ -2736,7 +2739,7 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
     trajs: list[Path] = []
     for kinds in (("production", "field"), ("equil",), ("md_relax",)):
         stages = [
-            s for s in job.stages if s.kind in kinds and s.status in ("done", "running")
+            s for s in job.stages if s.kind in kinds
         ]
         for s in stages:
             trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
@@ -4433,7 +4436,8 @@ def _rmsf_average_frame(job, align: bool = True):
     if not prod_stages:
         return (None, None, None)
     jd = job.job_dir(_workspace())
-    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    # Written frames remain useful after failure or while queued for resume.
+    usable = prod_stages
     trajs: list[Path] = []
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))

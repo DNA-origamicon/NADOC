@@ -4,6 +4,7 @@ import threading
 import time
 
 import numpy as np
+import pytest
 
 from backend.core.trajectory_cache import persistent_analysis
 
@@ -73,8 +74,9 @@ def test_concurrent_readers_only_compute_once(tmp_path):
     assert len(calls) == 1
 
 
-def test_changed_during_compute_is_not_published(tmp_path):
-    (tmp_path / 'job.json').write_text('{}')
+@pytest.mark.parametrize('status', ['running', 'paused', 'completed'])
+def test_changed_during_compute_is_not_published(tmp_path, status):
+    (tmp_path / 'job.json').write_text(json.dumps({'status': status}))
     trajectory = tmp_path / 'trajectory.dat'
     trajectory.touch()
 
@@ -89,7 +91,7 @@ def test_changed_during_compute_is_not_published(tmp_path):
 
 def test_prepared_marker_checks_sources_and_artifacts(tmp_path):
     from backend.core.trajectory_cache import VERSION
-    from backend.core.trajectory_precompute import _prepared, _source_stamp
+    from backend.core.trajectory_precompute import COVERAGE, _prepared, _source_stamp
 
     source = tmp_path / 'job.json'
     source.write_text('{}')
@@ -98,7 +100,7 @@ def test_prepared_marker_checks_sources_and_artifacts(tmp_path):
     artifact = cache / 'metrics.json'
     artifact.write_text('{}')
     marker = cache / 'prepared.json'
-    marker.write_text(json.dumps({'version': VERSION, 'sources': _source_stamp(tmp_path),
+    marker.write_text(json.dumps({'version': VERSION, 'coverage': COVERAGE, 'sources': _source_stamp(tmp_path),
                                   'artifacts': [artifact.name]}))
     assert _prepared(tmp_path)
     artifact.unlink()
@@ -108,7 +110,8 @@ def test_prepared_marker_checks_sources_and_artifacts(tmp_path):
     assert not _prepared(tmp_path)
 
 
-def test_schedule_coalesces_and_skips_prepared_jobs(tmp_path, monkeypatch):
+@pytest.mark.parametrize("status", ["queued", "completed", "paused", "failed", "stopped"])
+def test_schedule_coalesces_and_skips_prepared_jobs(tmp_path, monkeypatch, status):
     from types import SimpleNamespace
     from backend.core import trajectory_precompute as worker
     import queue
@@ -118,7 +121,7 @@ def test_schedule_coalesces_and_skips_prepared_jobs(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, '_PENDING', set())
     monkeypatch.setattr(worker, '_RECENT', {})
     monkeypatch.setattr(worker, '_THREAD', SimpleNamespace(is_alive=lambda: True))
-    job = SimpleNamespace(status=SimpleNamespace(value='completed'), job_id='test',
+    job = SimpleNamespace(status=SimpleNamespace(value=status), job_id='test',
                           job_dir=lambda ws: tmp_path)
     worker.schedule(job, tmp_path, 'md')
     worker.schedule(job, tmp_path, 'md')
@@ -129,7 +132,8 @@ def test_schedule_coalesces_and_skips_prepared_jobs(tmp_path, monkeypatch):
     assert worker._QUEUE.qsize() == 1
 
 
-def test_background_prepare_reuses_completed_artifacts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("applicable", [True, False])
+def test_background_prepare_reuses_completed_artifacts(tmp_path, monkeypatch, applicable):
     from types import SimpleNamespace
     from backend.core import trajectory_precompute as worker
     from backend.core.oxdna_job import OxdnaJob
@@ -146,7 +150,7 @@ def test_background_prepare_reuses_completed_artifacts(tmp_path, monkeypatch):
     def compute(*args):
         calls.append('metrics')
         (tmp_path / 'analysis_cache' / 'result.json').write_text('{}')
-        metrics._RUNS['precompute'] = {'state': 'done', 'result': {'ready': True}}
+        metrics._RUNS['precompute'] = {'state': 'done', 'result': {'ready': applicable, 'not_applicable': not applicable}}
 
     monkeypatch.setattr(metrics, '_compute', compute)
     worker.prepare(tmp_path, 'oxdna', 'test')
@@ -154,11 +158,12 @@ def test_background_prepare_reuses_completed_artifacts(tmp_path, monkeypatch):
     assert calls == ['flex', 'metrics']
 
 
-def test_cache_survives_process_restart(tmp_path):
+@pytest.mark.parametrize("status", ["draft", "queued", "preparing", "running", "paused", "failed", "stopped", "completed"])
+def test_cache_survives_process_restart(tmp_path, status):
     import subprocess
     import sys
 
-    (tmp_path / 'job.json').write_text('{}')
+    (tmp_path / 'job.json').write_text(json.dumps({'status': status}))
     trajectory = tmp_path / 'trajectory.dat'
     trajectory.touch()
 
@@ -179,17 +184,61 @@ assert analyze(Path(sys.argv[1]))['value'] == 42
     subprocess.run([sys.executable, '-c', script, str(trajectory)], check=True)
 
 
-def test_live_trajectory_does_not_accumulate_disk_artifacts(tmp_path):
+def test_running_snapshot_is_cached_and_growth_invalidates(tmp_path):
     (tmp_path / 'job.json').write_text('{"status": "running"}')
+    trajectory = tmp_path / 'trajectory.dat'
+    trajectory.touch()
+    calls = []
+
+    @persistent_analysis
+    def analyze(path):
+        calls.append(1)
+        return {'ready': True}
+
+    assert analyze(trajectory)['ready']
+    assert analyze.read_cached(trajectory)['ready']
+    assert len(calls) == 1
+    trajectory.write_text('more frames')
+    assert analyze.read_cached(trajectory) is None
+    assert analyze(trajectory)['ready']
+    assert len(calls) == 2
+    (tmp_path / 'job.json').write_text('{"status": "completed"}')
+    assert analyze.read_cached(trajectory)['ready']
+
+
+def test_new_segment_invalidates_prepared_manifest(tmp_path):
+    from backend.core.trajectory_cache import VERSION
+    from backend.core.trajectory_precompute import COVERAGE, _prepared, _source_stamp
+
+    (tmp_path / 'job.json').write_text('{"status":"paused"}')
+    cache = tmp_path / 'analysis_cache'
+    cache.mkdir()
+    (cache / 'full.json').write_text('{}')
+    (cache / 'prepared.json').write_text(json.dumps({
+        'version': VERSION, 'coverage': COVERAGE, 'sources': _source_stamp(tmp_path),
+        'artifacts': ['full.json'],
+    }))
+    assert _prepared(tmp_path)
+    (tmp_path / 'continued.dcd').write_bytes(b'new frames')
+    assert not _prepared(tmp_path)
+
+
+def test_failed_cache_write_is_reported_but_result_remains_viewable(tmp_path, monkeypatch, caplog):
+    import errno
+    from backend.core import trajectory_cache
+
+    (tmp_path / 'job.json').write_text('{"status":"completed"}')
     trajectory = tmp_path / 'trajectory.dat'
     trajectory.touch()
 
     @persistent_analysis
     def analyze(path):
-        return {'ready': True}
+        return {'ready': True, 'value': 42}
 
-    assert analyze(trajectory)['ready']
-    assert not (tmp_path / 'analysis_cache').exists()
-    (tmp_path / 'job.json').write_text('{"status": "completed"}')
-    assert analyze(trajectory)['ready']
-    assert list((tmp_path / 'analysis_cache').glob('*.json'))
+    def full_disk(*args, **kwargs):
+        raise OSError(errno.ENOSPC, 'No space left on device')
+
+    monkeypatch.setattr(trajectory_cache.tempfile, 'NamedTemporaryFile', full_disk)
+    assert analyze(trajectory)['value'] == 42
+    assert analyze.read_cached(trajectory) is None
+    assert 'Could not save analysis analyze' in caplog.text

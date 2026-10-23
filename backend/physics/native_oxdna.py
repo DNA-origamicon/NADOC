@@ -18,6 +18,10 @@ from backend.core.native_full_placement import SOURCE, NativePlacementError, pos
 PHYSICAL_SOURCE = "oxdna-particle-frame-v1"
 
 
+class UnsupportedOxdnaPlacementError(NativePlacementError):
+    """An authored landmark has no calibrated particle-frame conversion."""
+
+
 def _physical_record(record):
     return {key: value for key, value in record.items()
             if key != "helical_site" and not key.startswith("slab_")}
@@ -49,7 +53,7 @@ An unknown named landmark cannot silently be written into a CM column.
             continue
         identity = (record.get("helix_id"), record.get("bp_index"), record.get("direction"), record.get("copy_k", 0))
         if source != SOURCE:
-            raise NativePlacementError("No calibrated oxDNA conversion for this placement source.",
+            raise UnsupportedOxdnaPlacementError("No calibrated oxDNA conversion for this placement source.",
                                        details={"identity": identity, "source": source})
         try:
             site = record["helical_site"]

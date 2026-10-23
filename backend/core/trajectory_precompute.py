@@ -22,18 +22,26 @@ _PENDING = set()
 _RECENT = {}
 _THREAD = None
 
+# Previous manifests covered sampled MD analyses only. Keep existing artifacts,
+# but backfill full-frame results before considering a job prepared.
+COVERAGE = "all-written-frames-v2"
+
+# Defer unattended work while simulations prepare/write data. Queued resumes
+# can already contain stable frames; input discovery decides whether work exists.
+_DEFER_BACKGROUND = {"draft", "preparing", "running"}
+
 
 def _prepared(directory):
     from backend.core.trajectory_cache import VERSION
 
     try:
         record = json.loads((directory / "analysis_cache" / "prepared.json").read_text())
-        if record["version"] != VERSION:
+        if record["version"] != VERSION or record.get("coverage") != COVERAGE:
             return False
-        for name, size, modified in record["sources"]:
-            stat = (directory / name).stat()
-            if (stat.st_size, stat.st_mtime_ns) != (size, modified):
-                return False
+        # Compare the inventory too: a resumed job may add a new segment without
+        # changing any of the trajectory files in the previous manifest.
+        if record["sources"] != [list(row) for row in _source_stamp(directory)]:
+            return False
         return bool(record["artifacts"]) and all(
             (directory / "analysis_cache" / name).is_file() for name in record["artifacts"]
         )
@@ -42,7 +50,7 @@ def _prepared(directory):
 
 
 def schedule(job, workspace, engine):
-    if os.environ.get("NADOC_PRECOMPUTE_WORKER") or job.status.value not in {"completed", "stopped", "failed"}:
+    if os.environ.get("NADOC_PRECOMPUTE_WORKER") or job.status.value in _DEFER_BACKGROUND:
         return
     directory = job.job_dir(Path(workspace))
     if not directory.is_dir() or _prepared(directory):
@@ -113,13 +121,13 @@ def prepare(workspace, engine, job_id):
             from backend.api import routes_md_metrics as metrics
             from backend.core.md_trajectory import md_rmsf, md_rmsf_atomistic, md_rmsf_surface
             job = MdJob.load(job_id, ws)
-            request = metrics.MdMetricsStartRequest()
+            request = metrics.MdMetricsStartRequest(max_frames=0)
         else:
             from backend.core.oxdna_job import OxdnaJob
             from backend.api import routes_oxdna_metrics as metrics
             job = OxdnaJob.load(job_id, ws)
             request = metrics.MetricsStartRequest()
-        if job.status.value not in {"completed", "stopped", "failed"}:
+        if job.status.value in _DEFER_BACKGROUND:
             return
         directory = job.job_dir(ws)
         cache = directory / "analysis_cache"
@@ -149,10 +157,11 @@ def prepare(workspace, engine, job_id):
         run = metrics._RUNS.pop("precompute", {})
         if run.get("state") == "error":
             raise RuntimeError(run.get("error"))
-        if run.get("result", {}).get("ready") and stamp == json.dumps([VERSION, _source_stamp(directory)]):
+        result = run.get("result", {})
+        if (result.get("ready") or result.get("not_applicable")) and stamp == json.dumps([VERSION, _source_stamp(directory)]):
             temp = marker.with_suffix(".tmp")
             temp.write_text(json.dumps({
-                "version": VERSION, "sources": _source_stamp(directory),
+                "version": VERSION, "coverage": COVERAGE, "sources": _source_stamp(directory),
                 "artifacts": [p.name for p in cache.glob("*.json") if p != marker],
             }))
             temp.replace(marker)

@@ -7,11 +7,13 @@ import functools
 import hashlib
 import inspect
 import json
+import logging
 import os
 from pathlib import Path
 import tempfile
 
 VERSION = 1
+_LOG = logging.getLogger(__name__)
 
 
 def _pack(value):
@@ -85,14 +87,9 @@ def persistent_analysis(function):
                      if (p / "job.json").is_file()), None)
         if root is None:
             return None
-        try:
-            status = json.loads((root / "job.json").read_text()).get("status")
-        except (OSError, ValueError):
-            return None
-        if status in {"queued", "preparing", "running", "paused", "draft"}:
-            # Live trajectories already have incremental in-memory caches. Avoid
-            # creating a new permanent artifact for every growing frame prefix.
-            return None
+        # Job status is not evidence that these local files are changing (remote
+        # runs and queued resumes often have stable downloaded trajectories).
+        # The before/after input signature below guards publication for every state.
         key = hashlib.sha256(json.dumps([VERSION, fingerprint], sort_keys=True).encode()).hexdigest()
         return root / "analysis_cache", key, inputs, fingerprint
 
@@ -117,7 +114,9 @@ def persistent_analysis(function):
         try:
             directory.mkdir(exist_ok=True)
             lock = (directory / f"{function.__name__}-{key}.lock").open("a")
-        except OSError:
+        except OSError as error:
+            _LOG.warning("Cannot open analysis cache for %s in %s: %s",
+                         function.__name__, directory, error)
             return function(*args, **kwargs)
         artifact = directory / f"{function.__name__}-{key}.json"
         # Warm reads must not interrupt unrelated backfill. On a miss, advertise
@@ -145,15 +144,18 @@ def persistent_analysis(function):
                 pass
             result = function(*args, **kwargs)
             # Never publish a result against inputs which changed during the pass.
-            if (not isinstance(result, dict) or result.get("ready", True)) and _signature(inputs, []) == fingerprint:
+            if (not isinstance(result, dict) or (result.get("ready", True) or result.get("not_applicable") is True)) and _signature(inputs, []) == fingerprint:
                 temporary = None
                 try:
                     with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as out:
                         temporary = Path(out.name)
                         json.dump(_pack(result), out, separators=(",", ":"))
                     os.replace(temporary, artifact)
-                except OSError:
-                    pass  # read-only/disconnected archives still support viewing
+                except OSError as error:
+                    # Viewing remains possible, but do not silently imply that a
+                    # result survived disk-full/read-only/disconnected storage.
+                    _LOG.warning("Could not save analysis %s in %s: %s",
+                                 function.__name__, directory, error)
                 finally:
                     if temporary is not None:
                         temporary.unlink(missing_ok=True)

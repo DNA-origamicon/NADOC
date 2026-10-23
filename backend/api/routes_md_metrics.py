@@ -48,7 +48,7 @@ _LOCK = threading.Lock()
 class MdMetricsStartRequest(BaseModel):
     scope: str = "latest"  # "latest" (this job only) | "chain" (whole refit lineage)
     n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
-    max_frames: int = 64  # interactive uniform sample; short trajectories stay exact
+    max_frames: int = 0  # all frames; positive values explicitly request a preview
 
 
 def _set(run_id: str, **fields) -> None:
@@ -227,13 +227,17 @@ def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
 
 
 @persistent_analysis
-def _measure(psf, segments, ref, design, n_slices=0, max_frames=64,
+def _measure(psf, segments, ref, design, n_slices=0, max_frames=0,
              on_frame=None, on_stage=None):
-    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.oxdna_health import metric_reference_geometry
     from backend.core.md_trajectory import md_metric_series
 
+    reference, unavailable = metric_reference_geometry(design)
+    if unavailable is not None:
+        return unavailable
+
     return md_metric_series(
-        psf, segments, ref, design, core_reference_geometry(design),
+        psf, segments, ref, design, reference,
         n_slices=n_slices, max_frames=max_frames,
         on_frame=on_frame, on_stage=on_stage,
     )
@@ -300,6 +304,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         temporal_frame_indices: list[int] = []
         boundaries: list[dict] = []
         per_job: list[dict] = []
+        skipped_jobs: list[dict] = []
         n_designed = 0
         raw_frame_offset = 0
         energy_x: list[float] = []
@@ -316,11 +321,16 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                 ref,
                 design,
                 n_slices=req.n_slices,
-                max_frames=per_job_limits[j.job_id],
+                max_frames=0 if req.max_frames <= 0 else per_job_limits[j.job_id],
                 on_frame=_tick,
                 on_stage=lambda phase: _set(run_id, phase=phase),
             )
             if not res.get("ready"):
+                skipped_jobs.append({
+                    "job_id": j.job_id,
+                    "reason": res.get("reason", "No measurable trajectory frames."),
+                    "not_applicable": res.get("not_applicable") is True,
+                })
                 continue
             boundaries.append(
                 {
@@ -371,7 +381,10 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                 state="done",
                 result={
                     "ready": False,
-                    "reason": "trajectory has too few helices/frames to measure",
+                    "reason": "; ".join(dict.fromkeys(p["reason"] for p in skipped_jobs))
+                              or "trajectory has too few helices/frames to measure",
+                    "not_applicable": bool(skipped_jobs) and all(p["not_applicable"] for p in skipped_jobs),
+                    "skipped_jobs": skipped_jobs,
                 },
             )
             return
@@ -379,7 +392,8 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         result = {
             "ready": True,
             "scope": req.scope,
-            "jobs": [j.job_id for j, _ in inputs],
+            "jobs": [p["job_id"] for p in per_job],
+            "skipped_jobs": skipped_jobs,
             "frames_raw": raw_total,
             "frames_sampled": len(twist_pf),
             "sampling": "uniform" if len(twist_pf) < raw_total else "all",

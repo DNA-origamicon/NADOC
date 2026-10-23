@@ -842,6 +842,42 @@ def base_pairing_spatial_profile(
     return out
 
 
+def metric_reference_geometry(design):
+    """Return the analytic reference or a persistable unsupported-input result.
+
+    Only a missing calibration is inapplicable. Invalid transported sites and
+    other geometry errors must still propagate to the caller.
+    """
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.physics.native_oxdna import UnsupportedOxdnaPlacementError
+
+    try:
+        return core_reference_geometry(design), None
+    except UnsupportedOxdnaPlacementError as error:
+        source = error.details.get("source")
+        return None, {
+            "ready": False, "n_frames": 0, "not_applicable": True,
+            "reason": f"Bundle metrics unavailable: no calibrated oxDNA conversion for placement source {source!r}.",
+            "placement_source": source,
+        }
+
+
+def bundle_metrics_unavailable(analytic_reference):
+    """Reject structurally undefined bundle metrics before opening a trajectory.
+
+    This is an input property, not a compute failure. Callers can persist it under
+    the same source signature as successful metrics and skip it in a lineage.
+    """
+    helices = {p["helix_id"] for p in analytic_reference}
+    if len(helices) < 2:
+        return {
+            "ready": False, "n_frames": 0, "not_applicable": True,
+            "reason": "Bundle twist requires at least two helices in the paired DNA "
+                      f"reference (found {len(helices)}).",
+        }
+    return None
+
+
 def production_metric_series(
     design,
     production_traj_path,
@@ -876,6 +912,10 @@ def production_metric_series(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
+
+    unavailable = bundle_metrics_unavailable(analytic_reference)
+    if unavailable is not None:
+        return unavailable
 
     ref = read_configuration_full(reference_conf_path, design)
     paths = (
