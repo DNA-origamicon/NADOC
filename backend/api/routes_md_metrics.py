@@ -17,6 +17,8 @@ in ``backend/api/main.py``.
 
 from __future__ import annotations
 
+from backend.core.trajectory_cache import persistent_analysis
+
 import threading
 import time
 import uuid
@@ -131,7 +133,7 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
     return chain or [anchor]
 
 
-def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
+def _read_job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
     """Energy/pressure log samples for one job on a monotonic simulated-time axis.
 
     A resumed segment has a base log plus ``.resumeN.log`` files whose timesteps overlap
@@ -198,9 +200,47 @@ def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
     }
 
 
-def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
+@persistent_analysis
+def _cached_scalar_series(package, segment_names, segment_metadata, timestep_hint, sources):
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(
+        package_dir=lambda ws: package,
+        segments=[SimpleNamespace(name=n, steps=s, status=state)
+                  for n, s, state in segment_metadata],
+        live_metrics={"timestep_fs": timestep_hint},
+    )
+    return _read_job_scalar_series(job, segment_names, package)
+
+
+def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
+    package = job.package_dir(ws)
+    sources = []
+    for name in dict.fromkeys(segment_names):
+        sources.extend([package / f"{name}.log", package / f"{name}.conf"])
+        sources.extend(sorted(package.glob(f"{name}.resume*.log")))
+    return _cached_scalar_series(
+        package, segment_names,
+        [(s.name, s.steps, s.status) for s in job.segments],
+        (job.live_metrics or {}).get("timestep_fs"), sources,
+    )
+
+
+@persistent_analysis
+def _measure(psf, segments, ref, design, n_slices=0, max_frames=64,
+             on_frame=None, on_stage=None):
     from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.md_trajectory import count_md_frames, md_metric_series
+    from backend.core.md_trajectory import md_metric_series
+
+    return md_metric_series(
+        psf, segments, ref, design, core_reference_geometry(design),
+        n_slices=n_slices, max_frames=max_frames,
+        on_frame=on_frame, on_stage=on_stage,
+    )
+
+
+def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
+    from backend.core.md_trajectory import count_md_frames
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
@@ -270,13 +310,11 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         pressure_boundaries: list[dict] = []
         scalar_time_offset = 0.0
         for j, (psf, ref, segments, design) in inputs:
-            analytic = core_reference_geometry(design)
-            res = md_metric_series(
+            res = _measure(
                 psf,
                 segments,
                 ref,
                 design,
-                analytic,
                 n_slices=req.n_slices,
                 max_frames=per_job_limits[j.job_id],
                 on_frame=_tick,

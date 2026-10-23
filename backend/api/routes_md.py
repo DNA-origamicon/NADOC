@@ -590,6 +590,19 @@ _FLEX_PROGRESS_PATHS: dict[tuple[str, str], Path] = {}
 
 
 async def _run_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0):
+    # Desktop and native VR share this route. Warm artifacts need no analysis
+    # process/import startup; decode away from the API loop so VR polling continues.
+    def read_cached():
+        from backend.core import md_trajectory
+
+        function = getattr(md_trajectory, analysis)
+        cached_reader = getattr(function, "read_cached", None)
+        options = {"include_model": True} if analysis == "md_rmsf_atomistic" else {}
+        return cached_reader(*args, **options) if cached_reader is not None else None
+
+    cached = await run_in_threadpool(read_cached)
+    if cached is not None:
+        return cached
     fd, name = tempfile.mkstemp(prefix='nadoc_md_flex_', suffix='.json')
     os.close(fd)
     path = Path(name)

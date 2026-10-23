@@ -220,8 +220,11 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
     // geometry changes must not rebuild, transfer and upload that atlas again.
     // Actual overlay/layout streams still follow every geometry/design change.
     const carriesScene=displayFlags(doc)!==256
+    const cachedMap=!!doc.querySelector('#md-jobs-viz-body input[name="md-viz"][value="flex"]:checked,#oxdna-jobs-viz-body input[name="oxdna-viz"][value="flex"]:checked')
     if(!carriesScene)stamp=''
-    else if(doc.documentElement?.dataset.vrSimulationTrajectory !== 'true' && (dirty || now-lastStampAt>700)){stamp=broadcastFingerprint({scene});lastStampAt=now}
+    // Simulation changes already publish explicit display/representation events.
+    // A static cached map must not walk every atom again on the heartbeat.
+    else if(doc.documentElement?.dataset.vrSimulationTrajectory !== 'true' && (dirty || (!cachedMap && now-lastStampAt>700))){stamp=broadcastFingerprint({scene});lastStampAt=now}
     const key=fingerprint()+simulationViewActive(doc)+stamp
     if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){last=key;dirty=true}
     geometry=s.currentGeometry;design=s.currentDesign

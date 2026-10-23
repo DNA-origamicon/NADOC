@@ -217,3 +217,18 @@ it('refreshes changed texture contents and reclaims an atlas when texture dimens
  const resized=await captureVRView(scene,document,'',false,first.atlasState)
  expect(resized.schema).toBe(5);expect(resized.atlasState).not.toBe(first.atlasState)
 })
+
+it('keeps a static cached flex map resident without rescanning it on VR heartbeats', async () => {
+  document.body.insertAdjacentHTML('beforeend', '<div id="md-jobs-viz-body"><input type="radio" name="md-viz" value="flex" checked></div>')
+  await publishSettled()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(broadcastFingerprint).toHaveBeenCalledTimes(1)
+  for (let i = 0; i < 5; ++i) await publishSettled()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(broadcastFingerprint).toHaveBeenCalledTimes(1)
+  // Recolouring or replacing the cached map must still reach the headset.
+  controller.refresh()
+  await vi.runAllTimersAsync()
+  expect(fetch).toHaveBeenCalledTimes(2)
+  expect(broadcastFingerprint).toHaveBeenCalledTimes(2)
+})

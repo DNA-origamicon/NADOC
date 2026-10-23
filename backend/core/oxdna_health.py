@@ -17,6 +17,8 @@ topology.
 
 from __future__ import annotations
 
+from backend.core.trajectory_cache import persistent_analysis
+
 import math
 import os
 from dataclasses import dataclass
@@ -415,6 +417,7 @@ _PRODUCTION_RMSF_CACHE = None
 _PRODUCTION_RMSF_CACHE_MAX = 4
 
 
+@persistent_analysis
 def production_rmsf_cached(
     design,
     production_traj_path,
@@ -440,6 +443,7 @@ def production_rmsf_cached(
         else [production_traj_path]
     )
     key = (
+        design.to_json(),
         tuple(_traj_file_sig(p) for p in paths),
         _traj_file_sig(reference_conf_path),
         bool(copies),
@@ -698,6 +702,7 @@ def _scan_frames(fh, start: int, count: int) -> tuple[int, int, bytes]:
     return n, pos, tail
 
 
+@persistent_analysis
 def count_trajectory_frames(traj_path) -> int:
     """Fast, memory-light frame count of an oxDNA ``.dat`` trajectory — the number of
     ``t = …`` header lines (frames are split on those, see

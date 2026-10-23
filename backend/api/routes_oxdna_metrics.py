@@ -14,6 +14,8 @@ the panel drives a per-metric loading bar off it.  Registered in ``backend/api/m
 
 from __future__ import annotations
 
+from backend.core.trajectory_cache import persistent_analysis
+
 import threading
 import time
 import uuid
@@ -83,12 +85,19 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
     return chain or [anchor]
 
 
-def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> None:
+@persistent_analysis
+def _measure(design, trajs, ref_conf, n_slices=0, on_frame=None):
     from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.oxdna_health import (
-        count_trajectory_frames,
-        production_metric_series,
+    from backend.core.oxdna_health import production_metric_series
+
+    return production_metric_series(
+        design, trajs, ref_conf, core_reference_geometry(design),
+        n_slices=n_slices, on_frame=on_frame,
     )
+
+
+def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> None:
+    from backend.core.oxdna_health import count_trajectory_frames
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
@@ -135,9 +144,8 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
         per_job: list[dict] = []
         n_designed = 0
         for j, (design, ref_conf, trajs) in inputs:
-            analytic = core_reference_geometry(design)
-            res = production_metric_series(
-                design, trajs, ref_conf, analytic, n_slices=req.n_slices, on_frame=_tick
+            res = _measure(
+                design, trajs, ref_conf, n_slices=req.n_slices, on_frame=_tick
             )
             if not res.get("ready"):
                 continue

@@ -447,6 +447,9 @@ class MdJob:
             from backend.core.job_archive import cache_job_metadata
 
             cache_job_metadata(workspace_dir, "md_jobs", self.job_id, data)
+        from backend.core.trajectory_precompute import schedule
+
+        schedule(self, workspace_dir, "md")
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MdJob":
@@ -560,6 +563,10 @@ class MdJob:
                 result.append(cls.load(jid, workspace_dir))
             except Exception:
                 pass
+        from backend.core.trajectory_precompute import schedule
+
+        for job in result:
+            schedule(job, workspace_dir, "md")
         return result
 
     def to_dict(self) -> dict:

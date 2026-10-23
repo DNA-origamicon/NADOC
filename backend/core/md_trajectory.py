@@ -19,6 +19,8 @@ they do not rebuild atoms from the design's idealized atomistic model.
 
 from __future__ import annotations
 
+from backend.core.trajectory_cache import persistent_analysis
+
 import json
 import os
 from pathlib import Path
@@ -1677,6 +1679,7 @@ def md_flex_analysis(analysis, args, progress_path):
     return result
 
 
+@persistent_analysis
 def md_rmsf_atomistic(
     topology_path, segments, coordinate_path, design, max_frames: int = 150,
     *, include_model=False, progress=None,
@@ -1732,6 +1735,7 @@ def md_rmsf_atomistic(
             ctx['universe'].trajectory.close()
 
 
+@persistent_analysis
 def md_rmsf_surface(
     topology_path,
     segments,
@@ -1813,6 +1817,7 @@ def md_rmsf_surface(
     return {"ready": True, "surface": surface, "n_frames": average["n_frames"]}
 
 
+@persistent_analysis
 def md_rmsf(
     topology_path, segments, coordinate_path, design, max_frames: int = 150,
     include_reference_frame: bool = False, progress=None,
