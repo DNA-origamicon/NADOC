@@ -1,8 +1,13 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 October 22, 2026: full original11-step sequence checked against independent chronological paths; all stages pass (maximum3.2e-15nm).
-Do not restart autonomous continuation or the 30-minute reviewer timer without a new request.
+October 22 continuation requested; handoff and active summaries reconciled with code/HEAD.
+Next task: qualify remaining linked/constraint Move/Rotate history behavior and explicit refusals; keep gates OFF.
 **Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
+Native history-action qualification:6pass (reorder, three suppress/unsuppress cases, two producer refusals).
+All Full positions/normals and atoms match independent chronological oracles; bonds unchanged.
+Save/reopen/cold proof and source immutability pass; no production behavior or gate changed.
+No new app run or broad-suite pass claimed. Log: `.development-artifacts/feature-history-focus/transform-history-actions.log`.
 ## Scope and next work
 User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
 tails move only when selected. Initial locality repair is committed as 8fd29efb.
@@ -133,15 +138,9 @@ DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
 ## Commit and shared-worktree boundaries
-Prior checkpoint: **8fc9ad96** (Move unpairing); current recorded-unpair history repair follows it. Sweep refusal: **57b1f613**.
+Latest incoming checkpoint: **4eb5f331** (complete original chronology); production fix: **0c56fdd5**.
+Mixed prior edits in `implementation.md` and `memory/project_feature_log_overhaul.md` remain uncommitted; this session corrects their stale summaries.
 
-- 8fd29efb / b2db50e1: production locality and residue-command owner preservation.
-- 44553826 / e120b86b: isolated interleaved chronology and sequence A/B integration.
-- 90dd75a9: isolated out-of-span inventory; native4 +ordering23 pass, Ruff pass.
-- 8637e4ac / 4e31b889: ordinary C7 rollback and C5 dependency dialog; browser1pass each.
-
-Logs: `.development-artifacts/feature-history-focus/` (member-out-of-span, member-ordering-program, transform-rollback-app-final, transform-dependents-app).
-Scratch l7zf1625/b9yhfp3e/rilubkmq independently absent; C5/C7 batches change tests only.
 Full required matrix/implementation sequence: [group placement plan](group_placement_migration_plan.md#required-acceptance-matrix).
 Diagnostic sources: `tools/member_motion_ordering_program.py`, `member_motion_birth_audit.py`,
 `member_motion_audit.py`; generated HTML/logs are local ignored artifacts, not portable committed evidence.

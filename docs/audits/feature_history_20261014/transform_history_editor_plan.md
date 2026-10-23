@@ -798,3 +798,10 @@ No milestone split, exclusion or new completion credit.
 - All16 focused tests pass; maximum chronological position discrepancy3.2e-15nm (F6). Reset removes individual edits while retaining cluster motion; replacement, second cluster and final individual move all pass. Ruff/diff checks pass.
 - Original ordering defect is resolved for the entire original sequence; no further failure found or new operation invented. Retained only the existing five-step and six-step manual files; no extra workspace example needed. General birth/constraint integration and rollout remain separate work.
 - Evidence: `.development-artifacts/feature-history-focus/original-sequence-after-fixes.log`. Test-only addition; no production geometry change or broad-suite rerun.
+
+## History actions after chronological repair — October 22, 2026
+- Added six native regressions using the original first-six-feature sequence: moving the later individual delta before the cluster move, suppressing each of three motion rows, and refusing reordered/suppressed cluster producers.
+- Every Full position/normal and atom matches independent chronological arithmetic from F2; material inventory and bonds stay exact. Reorder changes geometry as authored and moving the row back restores it.
+- Suppressed definitions/IDs survive save/reopen; unsuppress restores exact Full/atom output. Cold proof and unchanged source are required. Producer failures identify the later Move/Rotate row.
+- `just test-focused tests/test_transform_history_actions.py`:6pass,3.62s. No production changes, gates, app qualification or milestone credit; prior broad-suite debt remains.
+- Reconciled the handoff and stale active memory/implementation summaries with current code and incoming HEAD4eb5f331. Log: `.development-artifacts/feature-history-focus/transform-history-actions.log`. Tests create no workspace files.
