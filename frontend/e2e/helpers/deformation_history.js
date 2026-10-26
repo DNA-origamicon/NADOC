@@ -84,6 +84,18 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
   try {
     const seeded = await request.post(`http://127.0.0.1:8004/api/__e2e__/history/seed/${seed}`, { headers })
     expect(seeded.ok(), await seeded.text()).toBe(true)
+    if (pauseRendering && kind === 'transform') {
+      // C8 measures this tool, not background simulation/readiness work (§4).
+      // Preserve a genuine fixture report for boot navigation; no transform,
+      // geometry, history, publication or recovery route is intercepted.
+      const readiness = await request.get('http://127.0.0.1:8004/api/design/readiness', { headers })
+      expect(readiness.ok()).toBe(true)
+      const report = await readiness.text()
+      await page.route(url => url.pathname === '/api/design/readiness', route =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: report }))
+      await page.route(url => url.pathname === '/api/jobs/active', route =>
+        route.fulfill({ status: 200, json: { jobs: [], count: 0, any_running: false } }))
+    }
     await page.goto(`/?doc=${doc}&readiness=simulation`, { waitUntil: pauseRendering ? 'domcontentloaded' : 'load' })
     if (pauseRendering) {
       // Latency checks exclude GPU raster. Pause before waiting for the initial

@@ -34,14 +34,16 @@ it('does not clear a newer local edit while an accepted request is in flight', a
   expect([...pending]).toEqual([['same', pose(8)]])
 })
 
-it('reports legacy partial acceptance and retains the refused owner for retry', async () => {
-  const pending = queued(), patch = vi.fn().mockResolvedValueOnce({}).mockResolvedValueOnce(null)
-  const result = await commitPlacementTransforms(pending, { organized: false, patch, log: false })
-  expect(result.clusterIds).toEqual(['same'])
-  expect(result.geometryApplied).toBe(false)
-  expect(result.error).toBeInstanceOf(Error)
-  expect([...pending.keys()]).toEqual(['second'])
-  expect(patch).toHaveBeenNthCalledWith(1, 'same', { ...pose(1), commit: true, log: false })
+it.each([null, {}])('ordinary multi-cluster movement is all-or-nothing (%s)', async response => {
+  const pending = queued(), patch = vi.fn(), batch = vi.fn(async () => response)
+  const result = await commitPlacementTransforms(pending, { organized: false, patch, batch })
+  expect(batch).toHaveBeenCalledExactlyOnceWith([
+    { cluster_id: 'same', fields: pose(1) }, { cluster_id: 'second', fields: pose(2) },
+  ])
+  expect(patch).not.toHaveBeenCalled()
+  expect(result.clusterIds).toEqual(response ? ['same', 'second'] : [])
+  expect(pending.size).toBe(response ? 0 : 2)
+  expect(result.geometryApplied).toBe(!!response)
 })
 
 it('does not send or clear anything when source ownership has changed', async () => {
@@ -50,4 +52,13 @@ it('does not send or clear anything when source ownership has changed', async ()
   expect(command).not.toHaveBeenCalled()
   expect(result.error.message).toMatch(/changed/i)
   expect(pending.size).toBe(2)
+})
+
+it('single-cluster movement also adopts complete native geometry without the legacy patch path', async () => {
+  const pending = new Map([['only', pose(3)]]), patch = vi.fn(), batch = vi.fn(async () => ({}))
+  const result = await commitPlacementTransforms(pending, { organized: false, patch, batch })
+  expect(batch).toHaveBeenCalledExactlyOnceWith([{ cluster_id: 'only', fields: pose(3) }])
+  expect(patch).not.toHaveBeenCalled()
+  expect(result).toMatchObject({ count: 1, geometryApplied: true, error: null })
+  expect(pending.size).toBe(0)
 })

@@ -103,7 +103,7 @@ def _records(records, expected):
             # its encoder can consume this exact checked coordinate block.
             point(value.get("slab_position")), point(value.get("slab_quaternion"), 4)
             point(site["axis_point"]), point(site["radial_hat"])
-            coordinates.extend(site[name] for name in ("azimuth_rad", "groove_offset_rad", "phase_roll_rad"))
+            coordinates.extend((site["azimuth_rad"], site["groove_offset_rad"], site["phase_roll_rad"]))
     if seen != expected.sites.keys() | expected.extensions.keys():
         reject("Native transform display omitted occupied records", "invalid_preview_geometry")
     # Same exact numeric-type/finiteness checks, batched before the unchanged
@@ -224,8 +224,11 @@ def project_admitted(design, expected, check, *, compact=False):
             points.extend((segment["start"], segment["end"], *segment.get("samples", [])))
         for value in axis.get("ovhg_axes", {}).values():
             points.extend((value["start"], value["end"]))
-    bounds = {"minimum": [min(p[i] for p in points) for i in range(3)],
-              "maximum": [max(p[i] for p in points) for i in range(3)]} if points else None
+    bounds = None
+    if points:
+        import numpy as np
+        block = np.asarray(points, dtype=np.float64)
+        bounds = {"minimum": block.min(axis=0).tolist(), "maximum": block.max(axis=0).tolist()}
     check()
     from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records_compact
     # Reuse the existing lossless f64 transport only for its exact native

@@ -110,12 +110,16 @@ def cluster_connection_tethers(design: Design, cluster) -> list[dict]:
     rigid body ⇒ they move together, no constraint). Never mutates topology."""
     from backend.core.duplex_cluster import duplex_cluster_tethers
 
-    owner = _bead_owner_resolver(design)
+    owner = None
     cid = cluster.id
     out: list[dict] = []
     seen: set = set()
 
     def _emit(a: dict, b: dict, contour: float, rigid: bool = False):
+        # Build ownership only when an actual tether needs resolving.
+        nonlocal owner
+        if owner is None:
+            owner = _bead_owner_resolver(design)
         # a, b are {helix_id, bp, direction}; decide which rides `cluster`.
         oa = owner(a["helix_id"], a["bp"], a["direction"])
         ob = owner(b["helix_id"], b["bp"], b["direction"])
@@ -194,7 +198,7 @@ def cluster_movable_links(design: Design, cluster) -> list[dict]:
     handled by the rigid/free connection tether) — they emit no link body here."""
     from backend.core.duplex_cluster import duplex_cluster_tethers
 
-    raw_owner = _bead_owner_resolver(design, remap_duplex=False)
+    raw_owner = None
     cid = cluster.id
     links: list[dict] = []
     for dcl in design.cluster_transforms:
@@ -210,6 +214,8 @@ def cluster_movable_links(design: Design, cluster) -> list[dict]:
         for t in duplex_cluster_tethers(design, dcl):
             l_bead = t["moving"]  # on the duplex link (its tip/connecting bead)
             p_bead = t["fixed"]  # root bead on a part
+            if raw_owner is None:
+                raw_owner = _bead_owner_resolver(design, remap_duplex=False)
             p_owner = raw_owner(p_bead["helix_id"], p_bead["bp"], p_bead["direction"])
             part_dragged = p_owner == cid
             if part_dragged:

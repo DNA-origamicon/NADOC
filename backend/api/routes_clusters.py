@@ -109,6 +109,25 @@ def repair_unassigned_clusters() -> dict:
     return _design_response(updated, report, normalize_legacy=False)
 
 
+class ClusterPoseItem(BaseModel):
+    cluster_id: str
+    fields: dict
+
+
+class ClusterPosesBody(BaseModel):
+    placements: List[ClusterPoseItem] = Field(min_length=1, max_length=64)
+    expected_revision: int = Field(ge=0, strict=True)
+
+
+@router.post("/design/clusters/poses")
+def move_clusters(body: ClusterPosesBody) -> dict:
+    from backend.api.part_cluster_batch import move_clusters as publish
+    from backend.api.crud import _design_response_with_geometry
+
+    updated, report = publish(body.placements, body.expected_revision)
+    return _design_response_with_geometry(updated, report, normalize_legacy=False)
+
+
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
 def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     """Record authored edits; pose-only previews retain the legacy drag path."""

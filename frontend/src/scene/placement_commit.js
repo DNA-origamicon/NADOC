@@ -1,6 +1,6 @@
 /** Commit explicit placement owners; never resolve an organizational selection. */
 export async function commitPlacementTransforms(pending, {
-  organized, command, patch, log = true, isCurrent = () => true,
+  organized, command, batch, isCurrent = () => true,
 }) {
   const entries = [...pending.entries()]
   const result = { count: 0, clusterIds: [], geometryApplied: false, error: null }
@@ -24,12 +24,11 @@ export async function commitPlacementTransforms(pending, {
       accept(entries)
       result.geometryApplied = true
     } else {
-      if (typeof patch !== 'function') throw new Error('The placement editor is unavailable.')
-      for (const entry of entries) {
-        const response = await patch(entry[0], { ...entry[1], commit: true, log })
-        if (!response) throw new Error('A placement was not accepted. Unapplied movement has been retained.')
-        accept([entry])
-      }
+      if (typeof batch !== 'function') throw new Error('The atomic cluster editor is unavailable.')
+      const response = await batch(entries.map(([cluster_id, fields]) => ({ cluster_id, fields })))
+      if (!response) throw new Error('The move was not accepted. Pending movement has been retained.')
+      accept(entries)
+      result.geometryApplied = true
     }
   } catch (error) {
     result.error = error instanceof Error ? error : new Error(String(error))

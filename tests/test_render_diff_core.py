@@ -299,3 +299,16 @@ def test_ds_linker_connection_change_forces_full_geometry():
         _occ_design([_strand("s0", [_dom("h0", end_bp=3)])], connections=[conn])
     )
     assert _local_changed_helices(before, after) is None
+
+
+def test_cluster_motion_with_unchanged_residue_poses_requires_native_geometry():
+    from tests.test_part_transform_preview import source_recipe
+    from backend.core.render_diff import _topology_diff_field
+    source = source_recipe('nucleotide-transform', suffix=False)
+    owner = source.cluster_transforms[0]
+    moved = source.copy_with(cluster_transforms=[
+        c.model_copy(update={'translation': [9, 0, 0]}) if c.id == owner.id else c
+        for c in source.cluster_transforms])
+    assert source.nucleotide_transforms == moved.nucleotide_transforms
+    assert not _diff_is_cluster_only(source, moved)
+    assert _topology_diff_field(source, moved) == 'nucleotide_transforms'

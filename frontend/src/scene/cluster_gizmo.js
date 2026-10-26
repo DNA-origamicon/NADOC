@@ -1028,13 +1028,13 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     }
   }
 
-  async function commitPendingTransforms({ log = true } = {}) {
+  async function commitPendingTransforms() {
     let client = _getClient()
-    if (!client.patchCluster) client = await _loadClient()
+    if (!client.commitClusterPoses) client = await _loadClient()
     const organized = _pendingSource?.group_organization != null
     const result = await commitPlacementTransforms(_pendingTransforms, {
-      organized, command: client.groupOrganizationCommand, patch: client.patchCluster, log,
-      isCurrent: () => !organized || store.getState().currentDesign === _pendingSource,
+      organized, command: client.groupOrganizationCommand, batch: client.commitClusterPoses,
+      isCurrent: () => store.getState().currentDesign === _pendingSource,
     })
     if (result.count) _pendingSource = store.getState().currentDesign
     return result

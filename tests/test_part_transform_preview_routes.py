@@ -33,8 +33,8 @@ def client(document, monkeypatch):
         yield http, {"X-NADOC-Doc": document}
 
 
-def test_transform_routes_are_disabled_by_default():
-    assert routes().TRANSFORM_PREVIEW_ENABLED is False
+def test_transform_routes_are_enabled_in_production():
+    assert routes().TRANSFORM_PREVIEW_ENABLED is True
 
 
 def test_actual_http_prepare_controls_only_apply_status_and_undo(client):

@@ -13,9 +13,9 @@ export function historyGatePlugin({ transforms = process.env.NADOC_HISTORY_E2E_T
     transform(source, id) {
       const target = id.split('?')[0]
       if (target === transformEditor && transforms) {
-        const gate = 'export const TRANSFORM_HISTORY_EDITOR_ENABLED = false'
-        if (source.split(gate).length !== 2) throw new Error('Missing unique transform test gate')
-        return { code: source.replace(gate, 'export const TRANSFORM_HISTORY_EDITOR_ENABLED = true'), map: null }
+        if (source.split('export const TRANSFORM_HISTORY_EDITOR_ENABLED = true').length !== 2)
+          throw new Error('Missing unique enabled transform gate')
+        return null
       }
       if (target !== editor && target !== sweepEditor) return null
       const result = source

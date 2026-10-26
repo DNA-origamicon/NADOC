@@ -14,7 +14,7 @@ import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
 import { createPartRepairEndpoints } from './part_repair_endpoints.js'
 import { createPartRepairResponse } from './part_repair_response.js'
-import { createGroupOrganizationEndpoint } from './group_organization_endpoints.js'
+import { createGroupOrganizationEndpoint, createClusterPoseEndpoint } from './group_organization_endpoints.js'
 import { createPatternRequests } from './pattern_requests.js'
 import { createSourceBoundRequests } from './source_bound_requests.js'
 import { createExtensionEndpoints } from './extension_endpoints.js'
@@ -84,6 +84,9 @@ const _partRepairResponse = createPartRepairResponse({ store, revisions: _design
 export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
   acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
 export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
+  syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
+  documentRequests: _documentRequests })
+export const commitClusterPoses = createClusterPoseEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
   documentRequests: _documentRequests })
 const _extensionEndpoints = createExtensionEndpoints({

@@ -10,7 +10,7 @@ import { createTransformHistoryProgress } from '../ui/transform_history_progress
 import { attributeFailure } from '../features/feature_history_failure.js'
 import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
 
-export const TRANSFORM_HISTORY_EDITOR_ENABLED = false
+export const TRANSFORM_HISTORY_EDITOR_ENABLED = true
 const SNAPSHOTS = new Set(['placement-poses', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete'])
 export function isNativeTransformFeature(entry) {
   if (entry?.feature_type === 'cluster_op') return entry.proof_version === 1

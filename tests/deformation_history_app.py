@@ -15,7 +15,7 @@ from tests.extrude_matrix_fixture import FAMILIES
 from tests.routing_history_fixture import FIXTURES as ROUTING_FIXTURES
 
 FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
-TRANSFORM_FIXTURES = {"transform-organized-insert", "transform-posed-large", "transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
+TRANSFORM_FIXTURES = {"transform-single-posed", "transform-cluster-insert", "transform-organized-insert", "transform-posed-large", "transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
 def fixture(kind):
@@ -43,13 +43,15 @@ def fixture(kind):
     if kind == 'sweep-separated':
         from tests.test_sweep_separated_strands import separated_source
         return separated_source()
-    if kind == "transform-organized-insert":
+    if kind in {"transform-organized-insert", "transform-cluster-insert"}:
         from tests.test_compound_member_chronology import recipe
         from tests.test_part_transform_preview import snapshot
         source, _ = recipe()
         # Keep unrelated animation-default authoring out of movement acceptance.
         from backend.core.models import DesignAnimation
         source = source.copy_with(animations=[DesignAnimation(name="animation 1")])
+        if kind == "transform-cluster-insert":
+            return source
         return snapshot(source, "group-organize", {"expected_placement_ids": [
             owner.id for owner in source.cluster_transforms]}, "organize")
     if kind == "transform-posed-insert":
@@ -61,6 +63,9 @@ def fixture(kind):
     if kind in {"transform-joint", "transform-linked"}:
         from tests.test_part_transform_constraint_history import constraint_recipe
         return constraint_recipe("joint" if kind == "transform-joint" else "duplex", name=f"__e2e__{kind}")[0]
+    if kind == "transform-single-posed":
+        from tests.test_part_transform_preview import source_recipe
+        return source_recipe("nucleotide-transform", suffix=False)
     if kind == "transform-owner":
         from tests.test_part_transform_preview import source_recipe
         return source_recipe(name="__e2e__transform-owner")
@@ -305,11 +310,10 @@ def create_app():
     async def lifespan(_app):
         assert sweep_routes.SWEEP_PREVIEW_ENABLED, "Sweep production preview must be enabled"
         previous = routes.DEFORMATION_PREVIEW_ENABLED
-        previous_transform = transform_routes.TRANSFORM_PREVIEW_ENABLED
+        assert transform_routes.TRANSFORM_PREVIEW_ENABLED, "Transform production preview must be enabled"
         previous_group = group_gate.GROUP_ORGANIZATION_ENABLED
         routes.DEFORMATION_PREVIEW_ENABLED = True
         if transforms:
-            transform_routes.TRANSFORM_PREVIEW_ENABLED = True
             group_gate.GROUP_ORGANIZATION_ENABLED = True
         try:
             with sealed_fixture.enabled() if sealed else nullcontext():
@@ -320,7 +324,6 @@ def create_app():
                 if identity.startswith("__e2e__history-"):
                     state.drop_doc(identity)
             routes.DEFORMATION_PREVIEW_ENABLED = previous
-            transform_routes.TRANSFORM_PREVIEW_ENABLED = previous_transform
             group_gate.GROUP_ORGANIZATION_ENABLED = previous_group
 
     # Copy route list; never add fixture routes to main.app or replace its lifespan.

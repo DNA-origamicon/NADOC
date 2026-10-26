@@ -58,6 +58,10 @@ def _diff_is_cluster_only(prev: "Design", new: "Design") -> bool:
     re-resolve via the straight-position basis — fall back to the full
     geometry refetch path in that rare case.
     """
+    # Residue-pose displays require authoritative site frames even when the
+    # pose records themselves did not change with this cluster operation.
+    if prev.nucleotide_transforms or new.nucleotide_transforms:
+        return False
     structural = [
         "helices",
         "strands",
@@ -212,6 +216,14 @@ def _topology_diff_field(prev: "Design", new: "Design") -> str | None:
     differs. ``None`` means topology IS unchanged. Used to attach a more
     informative ``path:full_geometry(<reason>)`` tag to the perf trace so
     you can see at a glance why positions_only didn't fire."""
+    # Residue poses also carry site frames and inserted-base geometry. The
+    # cluster delta and positions-only payloads cannot refresh that full state.
+    if (prev.nucleotide_transforms != new.nucleotide_transforms
+            or ((prev.nucleotide_transforms or new.nucleotide_transforms)
+                and prev.cluster_transforms != new.cluster_transforms)):
+        return "nucleotide_transforms"
+    # Check poses before topology: reclassification can also change strands,
+    # but its occupancy patch would omit other helices moved by the cluster.
     if prev.helices != new.helices:
         return "helices"
     if prev.strands != new.strands:
@@ -230,10 +242,6 @@ def _topology_diff_field(prev: "Design", new: "Design") -> str | None:
         return "photoproduct_junctions"
     if prev.deformations != new.deformations:
         return "deformations"
-    # Residue poses also carry site frames and inserted-base geometry. The
-    # cluster delta and positions-only payloads cannot refresh that full state.
-    if prev.nucleotide_transforms != new.nucleotide_transforms:
-        return "nucleotide_transforms"
     # Flexible-segment marks change per-bead `is_flexible_segment` (which beads
     # render rigid vs. as a bowed arc) and carve the helix axis — the
     # positions_only fast path ships neither, so force full geometry. Without

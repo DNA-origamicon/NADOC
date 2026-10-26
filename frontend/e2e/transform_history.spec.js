@@ -156,10 +156,11 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     }
     page.on('response', record)
     const p95s = []
-    // Forty samples estimate p95 without making it synonymous with one outlier.
-    const values = Array.from({ length: size === 'posed-large' ? 40 : 12 }, (_, i) => 32 + i * 2)
+    // Use the same forty-sample p95 estimate for every size, including the first update.
+    // Twelve samples made the reported p95 simply the maximum; no warm-up samples are discarded.
+    const values = Array.from({ length: 40 }, (_, i) => 32 + i * 2)
     for (const [tool, selector] of [['move', '#mr-tx'], ['rotate', '#mr-rz']]) {
-      if (size === 'posed-large' && tool === 'rotate') {
+      if (tool === 'rotate') {
         // Keep each sample set within the existing 60-second preview lease.
         await page.locator('#mr-cancel-btn').click()
         await expect(panel).toBeHidden()
@@ -201,7 +202,7 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     }
     expect(evaluations).toHaveLength(values.length * 2)
     expect(evaluations.every(r => r.status === 200)).toBe(true)
-    expect(new Set(evaluations.map(r => r.sequence)).size).toBe(values.length * (size === 'posed-large' ? 1 : 2))
+    expect(new Set(evaluations.map(r => r.sequence)).size).toBe(values.length)
     expect(await f.checkpoint()).toEqual(source)
     const applyStart = Date.now()
     await page.locator('#mr-apply-btn').click()
@@ -267,8 +268,9 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
   }, `transform-${size}`, { pauseRendering: true })
 })
 
+for (const fixture of ['transform-owner', 'transform-single-posed'])
 for (const entry of ['menu', 'shortcut'])
-test(`Move Rotate ${entry} creation previews Cancel and creates one replayable feature`, async ({ page, request }) => {
+test(`Move Rotate ${entry} ${fixture} creation previews Cancel and creates one replayable feature`, async ({ page, request }) => {
   test.setTimeout(120_000)
   await withHistoryFixture({ page, request }, 'transform', async f => {
     await expect(page.locator('#groups-panel-heading')).toContainText('Staple Groups')
@@ -276,7 +278,13 @@ test(`Move Rotate ${entry} creation previews Cancel and creates one replayable f
     await expect(page.locator('#cluster-new-btn')).toContainText('New Cluster')
     await expect(page.locator('[data-action="organize-groups"], [data-group-create]')).toHaveCount(0)
     const panel = page.locator('#move-rotate-panel'), before = await f.checkpoint()
-    const id = before.design.feature_log.find(e => e.id === 'selected-transform').cluster_id
+    const id = before.design.cluster_transforms[0].id
+    const geometry = records => records.map(n => ({
+      key: [n.helix_id, n.bp_index, n.direction, n.copy_k ?? 0].join(':'),
+      backbone: n.backbone_position, base: n.base_position, normal: n.base_normal,
+      tangent: n.axis_tangent, slab: n.slab_position, quaternion: n.slab_quaternion,
+    })).sort((a, b) => a.key.localeCompare(b.key))
+    const originalGeometry = geometry((await f.browser()).geometry)
     const owner = design => design.cluster_transforms.find(c => c.id === id)
     const open = async () => {
       await page.evaluate(async id => {
@@ -308,9 +316,11 @@ test(`Move Rotate ${entry} creation previews Cancel and creates one replayable f
     await expect.poll(async () => (await f.checkpoint()).design.feature_log.length).toBe(before.design.feature_log.length + 1)
     const after = await f.checkpoint(), created = after.design.feature_log.at(-1)
     expect(after.history).toHaveLength(before.history.length + 1)
-    expect(created.feature_type).toBe('cluster_op')
-    expect(created.proof_version).toBe(1)
-    expect(created.cluster_id).toBe(id)
+    expect(created.op_kind).toBe('placement-poses')
+    expect(created.params.primary_cluster_id).toBe(id)
+    // Server publication precedes delivery/adoption of its full geometry packet.
+    await expect.poll(async () => (await f.browser()).revision).toBe(after.revision)
+    const appliedGeometry = geometry((await f.browser()).geometry)
     expect(owner(after.design).translation[0]).toBe(9)
     expect(owner(after.design).rotation).not.toEqual(owner(before.design).rotation)
     await page.evaluate(async file => {
@@ -319,15 +329,17 @@ test(`Move Rotate ${entry} creation previews Cancel and creates one replayable f
       await api.undo()
     }, f.file)
     expect(owner((await f.checkpoint()).design)).toEqual(owner(before.design))
+    expect(geometry((await f.browser()).geometry)).toEqual(originalGeometry)
     await page.evaluate(async file => {
       const api = await import('/src/api/client.js')
       await api.redo(); await api.loadDesign(file)
     }, f.file)
     expect(owner((await f.checkpoint()).design)).toEqual(owner(after.design))
+    expect(geometry((await f.browser()).geometry)).toEqual(appliedGeometry)
     const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
     expect(proof.ok()).toBe(true)
     expect((await proof.json()).status).toBe('verified')
-  }, 'transform-owner')
+  }, fixture)
 })
 
 test('Move and Rotate historical owner edit Cancel Apply downstream undo and reopen', async ({ page, request }) => {
@@ -894,7 +906,8 @@ test('Move Rotate complete owner edit carries a prior posed insert through histo
   }, 'transform-posed-insert')
 })
 
-test('Move Rotate organized placement creation carries a posed insert in one feature', async ({ page, request }) => {
+for (const organized of [false, true])
+test(`Move Rotate ${organized ? 'organized placement' : 'ordinary cluster'} creation carries a posed insert in one feature`, async ({ page, request }) => {
   test.setTimeout(120_000)
   await withHistoryFixture({ page, request }, 'transform', async f => {
     const before = await f.checkpoint(), original = await f.browser()
@@ -923,7 +936,7 @@ test('Move Rotate organized placement creation carries a posed insert in one fea
     expect(await f.checkpoint()).toEqual(before)
     expect((await f.browser()).geometry).toEqual(original.geometry)
     await open(); await move()
-    const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/group-organization/commands')
+    const response = page.waitForResponse(r => new URL(r.url()).pathname === (organized ? '/api/design/group-organization/commands' : '/api/design/clusters/poses'))
     await page.locator('#mr-apply-btn').click()
     const applied = await response
     expect(applied.ok(), JSON.stringify({ response: await applied.json(), request: applied.request().postDataJSON() })).toBe(true)
@@ -949,5 +962,5 @@ test('Move Rotate organized placement creation carries a posed insert in one fea
     const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
     expect(proof.ok()).toBe(true)
     expect((await proof.json()).status).toBe('verified')
-  }, 'transform-organized-insert')
+  }, organized ? 'transform-organized-insert' : 'transform-cluster-insert')
 })

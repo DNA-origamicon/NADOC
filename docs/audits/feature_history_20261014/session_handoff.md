@@ -1,119 +1,92 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
+Sessions since last gate flip or milestone close: 0.
 
-October 25, 2026: **Move/Rotate remains incomplete; its production gates stay OFF.**
-This session repaired organized-placement publication, multi-selection activation
-and HTTP lifecycle admission, and measured large posed-part undo. These fixes do
-not close FH-18/FH-23. The user has now removed arbitrary organizational-group
-geometry from the scope; clusters own geometry and Staple Groups organize strands.
+October 26, 2026: **Move/Rotate is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON.**
+**Geometry tools done: 5/6 (Bend, Twist, Extrude, Sweep, Move/Rotate); Fine Routing qualified separately.
+CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-18 and aggregate FH-27 remain open.
 
-**Geometry tools done: 4/6 (Bend, Twist, Extrude, Sweep); Fine Routing qualified separately.
-CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-Fine Routing remains enabled and desktop-qualified across all22 native forms;
-its prior evidence is in [the routing plan](fine_routing_history_editor_plan.md).
+## Delivered behavior and qualification
+- Single/multiple cluster Apply publishes one complete-pose command, feature,
+  revision and undo step. It carries existing individual poses through the final
+  cluster frames once and adopts authoritative native geometry. No sequential
+  gizmo PATCH commit remains. Native historical rows dispatch to the enabled editor.
+- ISSUE-158: undo/redo pose recovery takes priority over topology classification;
+  simultaneous staple reclassification no longer omits other moved helices from
+  a partial display response. Actual single-posed menu/shortcut regressions now pass.
+- Existing entry controls, historical edits through downstream topology, exact
+  Cancel, joint/linked constraints, error/blocked attribution, dependents, mid-log
+  refusal, undo/redo/save/reopen/cold replay qualified.18 functional browser cases
+  pass; final creation/recovery5pass and latency3pass. MV-52 closes at this scope.
+- Backend cluster publication9pass; render-diff23pass; tether5pass. Exact geometry
+  record parity against HEAD on five fixtures, including both18270-record designs.
+  Serialization and lazy ownership lookup only; native builders/constants unchanged.
+- Full frontend787files/9447pass/1skip; smoke23pass; lint/whitespace pass.
+  `main.js`7349lines, delta0. All13 retained-log browser scratch roots independently absent.
+- C8 small6×84 / large18×504 / posed-large18×504: translation p9576/889/909ms;
+  rotation67/877/890ms; Apply421/2670/3059ms; Cancel59/59/77ms.
+  Posed-large undo2130ms/redo2446ms.40 samples per preview direction, first included;
+  GPU raster excluded (SwiftShader), unrelated readiness/jobs stubbed in timing
+  harness only. Production tool/history/geometry/publication routes remain live.
+- **One deferred Move/Rotate performance task:** reduce large-preview p95 to the
+  nominal500ms target. Current values pass the authorized2× allowance; do not
+  create another performance task or relax budgets.
+- Logs: `.development-artifacts/feature-history-focus/move-final-*.log`;
+  [transform plan](transform_history_editor_plan.md) records acceptance and limits.
+  Failed intermediate timing/recovery runs remain evidence, not passing claims.
 
-## Current evidence and limits
-- Scope-pruning verification: full frontend9444pass/1skip; normal menu and shortcut
-  Move/Rotate app exercises2pass, including retained sidebar labels and no retired
-  authoring controls. Isolated smoke23pass; both scratch roots independently absent.
-  Lint/whitespace pass; logs `group-prune-*.log` in the existing focus directory.
-  `main.js`7349lines, delta−1. Internal helpers remain; no production gate changed.
-- ISSUE-154: organized placement batches use one complete-pose command, carrying
-  individually posed members once through final frames. Publication includes
-  carried residue poses and one recovery-backed feature. Single placement moves
-  with residue poses retain complete history-seek recovery too.
-- ISSUE-155: menu/shortcut entry preserves multiple selected placements instead
-  of pre-targeting only the primary placement. Explicit targeted actions remain.
-- ISSUE-156: undo/redo/reopen HTTP checks use the existing admitted lifecycle
-  names; native operations worked but their route aliases had refused.
-- Large18×504 posed fixture:18 residue poses,247strands,767649-byte saved file.
-  Exact original geometry after undo, exact redo/reopen and cold proof pass.
-  Preview p95 translation964ms/rotation961ms (40samples per existing60s lease);
-  Apply3033ms, undo2657ms, redo2251ms, Cancel47ms. GPU raster excluded (SwiftShader).
-  Within2× allowances; one performance task remains for the500ms preview target.
-- Junction coverage now builds interval unions once; exhaustive randomized
-  occupancy and huge-coordinate gap tests preserve the old lookup result without
-  per-nucleotide expansion. Native builders/constants/manifests unchanged.
-- Focused group host84pass, fixture39pass, interval/backbone13pass. Existing real
-  Move/Rotate creation/history/constraints/failure/dependents/rollback/insert10pass.
-  Organized creation browser1pass: one feature, Cancel, undo/redo, checked save/reopen,
-  exact geometry and cold proof. Fixture pre-seeds unrelated animation metadata;
-  it does not enable animation mutations in organized production documents.
-  Full frontend9466pass/1skip; isolated smoke23pass; final fixture39pass.
-- Backend FAST19417pass/19skip/84fail: exact83 baseline plus a floating TTL equality
-  (7.0000000000009095 versus7). Isolated comparison file30pass/1fail: that equality
-  passed, another final-expiry boundary failed. These unrelated timing assertions
-  remain unresolved; neither broad nor isolated comparison validation is green.
-  Guarded387s, zero per-test violators. Slow-test triage found aggregate suite cost
-  below the prior400s baseline; no new common slowdown, budget or marker change.
-- Logs: `transform-*.log` and `group-member-*.log` under
-  `.development-artifacts/feature-history-focus/`. All14 retained-log browser/smoke
-  scratch roots independently absent. Lint and whitespace checks pass.
-  FULL deferred: no test-dedicated session is open. `main.js`7350lines, delta0.
+## Scope and next task
+The requested Move/Rotate task is finished; no successor was started.
+Remaining core work is cluster membership/deletion and references, ordinary
+connections, complete reference repair, aggregate desktop qualification and host
+lifecycle closure (FH-18/25/26/27/28). Select the next tool with the user.
 
-## Single next tool — scope pruned by user, October 25
-Finish Move/Rotate for clusters and existing individual-nucleotide operations.
-Staple Groups are organizational: names, colors and strand selection, with no
-transform ownership or persistent geometry-feature targets. The experimental
-PartGroup / Groups and Placements migration, arbitrary Move selected members,
-and its new motion compiler/geometry-consumer rollout are retired requirements.
-Do not implement or enable that regime to complete Move/Rotate. Its conversion
-button, alternate sidebar, membership menus and panel bindings are removed. Referenced schema/display/selection internals remain retirement debt;
-experimental organized documents are refused by the cluster sidebar.
-
-Ordinary multi-cluster creation still commits pending owners sequentially;
-complete atomic Apply through the existing lifecycle, then qualify the retained
-controls, constraints, chronology, dependency errors and undo/reopen behavior.
-Companion correctness for existing cluster/individual operations remains required.
-Transform gates stay OFF until those exits pass. The separate organization gate
-stays OFF because that product direction is retired. See the
-[transform plan](transform_history_editor_plan.md) and the superseding scope in the
-[historical group migration plan](group_placement_migration_plan.md).
+Clusters own geometry among grouping constructs. Staple Groups organize strands
+(names/colors/selection), with no transform ownership or persistent geometry targets.
+The experimental PartGroup / Groups and Placements migration and arbitrary named-
+group motion/compiler/consumer rollout are retired requirements. Both organization
+gates stay OFF; authoring controls are removed. Referenced internal helpers remain
+retirement debt, not a Move/Rotate completion requirement. Experimental organized
+files remain refused by the normal cluster sidebar.
 
 Retain these user decisions and completed repairs:
 - Single-nucleotide Move/Rotate moves only that nucleotide. Tails move only when
   selected. Tail/insert identity aliases, bridge reconstruction, terminal resize
   capture and opposite-strand ownership expansion are repaired.
-- Chronological cluster movement carries preceding individual poses; reset removes
-  the individual component while retaining preceding cluster movement. The original
+- Chronological cluster motion carries preceding individual poses. Reset removes
+  the individual component while retaining earlier cluster motion. The original
   F3–F11 sequence matches independent Full/atom arithmetic (max3.2e-15nm).
-- A complete linked move transports saved member poses once through final frames;
-  differential-end rigid-insert movement still refuses. Undo/redo publish the full
-  native display when residue poses change (ISSUE-148/149), avoiding stale site frames.
-- Attached Sweep refuses when partial movement separates occupied source-strand
-  frames. Do not automatically convert displaced staples into overhangs/linkers.
-  Detached construction remains admitted. Birth candidates with stretched bonds
-  were never authorized for production.
+- Complete linked moves transport saved member poses once through final frames;
+  differential-end rigid-insert movement still refuses. No topology rules changed.
+- Attached Sweep refuses occupied source-strand separation; detached construction
+  remains admitted. Never silently convert displaced staples to overhangs/linkers.
 - Explicit Unpair preserves scaffold/3D, assigns separated staple segments new
-  cadnano rows, retains reclassification and follows stable pose IDs through history.
+  cadnano rows and follows stable pose IDs through history.
 - Manual examples remain `workspace/move_rotate_axes_overhang_focused.nadoc` and
-  `workspace/move_rotate_pose_reset.nadoc`. Use UI tool names and `F1: Extrude 1 [detail]`.
-- Old ordering/chronology/tail artifacts retain individual counterexamples only;
-  their original phase-sweep claims were withdrawn because phase_offset was ignored.
-  Later diagnostic generators use verified native axial-roll setup. Do not claim
-  a missing artifact reviewed, or infer molecular approval from ordering approval.
+  `workspace/move_rotate_pose_reset.nadoc`. Use UI names and `F1: Extrude 1 [detail]`.
+- Older ordering/tail experiments retain individual counterexamples only; their
+  original phase-sweep claims were withdrawn because phase_offset was ignored.
+  Do not infer molecular approval from ordering approval.
 
-## Remaining scope and retained baseline debt
-Core open: cluster membership/movement, transform history, ordinary connections, complete
-reference repair, aggregate desktop qualification and host lifecycle closure
-(FH-18/23/25/26/27/28). Seven parked CAD milestones cover NP connections/fitting,
-biotin, protein/scadnano/DNA-PDB imports and generated-asset composition.
-Legacy-file conversion and simulation/agent provenance remain outside scope.
-Bend/Twist/Sweep gates are ON; Extrude is delivered. Source repair, suppress,
-reorder and the parent/child dependency viewer retain their established behavior.
-Feature-row secondary actions use right-click/Shift+F10: Suppress, Move, dependencies.
-
-The prior backend FAST baseline is19410pass/19skip/83fail, recorded in
-`compound-final-test-smart.log`:11 sealed HTTP/registration,2 junction tolerances,
-51 historical numerical manifests and19 obsolete schema expectations. No manifests
-were regenerated; broad-suite debt is separate from focused acceptance.
-FULL remains subject to the user's test-session gate; never bypass it.
+## Regression limits
+Final `just test-smart` decision: FAST;19429pass/19skip/83fail. Failure IDs exactly
+match `compound-final-test-smart.log`: no additions or removals. The earlier
+lease-TTL assertion passes this time but remains known timing debt.
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+Slow-test triage: guarded384s, zero >5s tests; below prior387–400s, no new shared
+slowdown evidence. No budget/marker changes. Broad suite remains non-green.
+Bend/Twist/Sweep gates ON; Extrude delivered; Fine Routing enabled and qualified
+across22 native forms. Source repair/suppress/reorder/dependency viewer retain
+established behavior. Feature-row actions use right-click/Shift+F10.
+Seven parked CAD milestones remain NP connections/fitting, biotin, imports and
+asset composition. Legacy conversion and simulation/agent provenance are outside scope.
 
 ## Shared-worktree boundaries
-Incoming HEAD for scope pruning: `44c11f48`. Commit only owned feature-history paths, explicitly staged.
-Existing unrelated API/VR/simulation/memory/test edits remain untouched. Mixed
-`issues_ledger.md` and `issues_fix_log.md` include this session's ISSUE-154–156
-additions but remain uncommitted. Mixed `memory/project_feature_log_overhaul.md`
-also retains the new user scope decision without staging unrelated memory edits.
-No push, reset, stash, restore, broad staging,
+Incoming HEAD: `98ec4cd9`. Commit owned feature-history paths explicitly;
+`frontend/src/api/client.js` includes unrelated passive-read changes, so stage
+only the cluster endpoint import/export. Existing API/VR/simulation/memory/test
+edits are untouched. Mixed `issues_ledger.md`, `issues_fix_log.md`,
+`manual_validation_debt.md` and `memory/project_feature_log_overhaul.md` retain
+this task's updates uncommitted. No push, reset, stash, restore, broad staging,
 phase-constant edit, lock or golden regeneration.

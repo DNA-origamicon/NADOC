@@ -111,3 +111,15 @@ def test_clusters_with_connection_tethers_lists_connected_parts():
     # A duplex child cluster is excluded (it uses its own duplex-tethers path).
     dup = next(c for c in d.cluster_transforms if c.overhang_duplex_driver_id)
     assert dup.id not in clusters_with_connection_tethers(d)
+
+
+def test_unconnected_cluster_does_not_build_nucleotide_ownership(monkeypatch):
+    from backend.core import connection_tethers
+    from backend.core.models import ClusterRigidTransform
+    cluster = ClusterRigidTransform(id='ordinary')
+    design = Design(cluster_transforms=[cluster])
+    def unexpected(*args, **kwargs):
+        pytest.fail('No tether endpoint requires a nucleotide ownership graph')
+    monkeypatch.setattr(connection_tethers, '_bead_owner_resolver', unexpected)
+    assert cluster_connection_tethers(design, cluster) == []
+    assert cluster_movable_links(design, cluster) == []

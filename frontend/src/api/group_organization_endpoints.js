@@ -4,7 +4,8 @@ const KINDS = new Set(['group-organize', 'group-create', 'group-update', 'group-
 const POSE_KINDS = new Set(['placement-update', 'placements-update'])
 
 export function createGroupOrganizationEndpoint({ store, request, syncDesign, getDocId,
-  currentRevision, documentRequests }) {
+  currentRevision, documentRequests, path = '/design/group-organization/commands',
+  requestBody = (kind, inputs, revision) => ({ kind, inputs, expected_revision: revision }) }) {
   return async function groupOrganizationCommand(kind, inputs) {
     const state = store.getState(), docId = getDocId(), designId = state.currentDesign?.id
     const revision = currentRevision(), generation = documentRequests.capture()
@@ -20,9 +21,7 @@ export function createGroupOrganizationEndpoint({ store, request, syncDesign, ge
       return fail('Choose a supported group or placement operation.')
     let response
     try {
-      response = await request('POST', '/design/group-organization/commands', {
-        kind, inputs, expected_revision: revision,
-      }, { docId, protectedRetry: false, skipSimulationPrepare: true })
+      response = await request('POST', path, requestBody(kind, inputs, revision), { docId, protectedRetry: false, skipSimulationPrepare: true })
     } catch (error) { return fail(error?.message ?? 'The group edit failed.') }
     if (!response || !current()) return null
     if (response.design?.id !== designId || !Number.isSafeInteger(response.revision)
@@ -42,4 +41,11 @@ export function createGroupOrganizationEndpoint({ store, request, syncDesign, ge
         || store.getState().currentDesign !== response.design) return null
     return response
   }
+}
+
+/** Ordinary cluster poses share the same revision/adoption checks, without organization admission. */
+export function createClusterPoseEndpoint(dependencies) {
+  const command = createGroupOrganizationEndpoint({ ...dependencies, path: '/design/clusters/poses',
+    requestBody: (_kind, inputs, revision) => ({ ...inputs, expected_revision: revision }) })
+  return placements => command('placements-update', { placements })
 }

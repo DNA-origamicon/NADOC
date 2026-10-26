@@ -1,4 +1,4 @@
-"""Disabled transform history editor using the common bounded lease transport."""
+"""Transform history editor using the common bounded lease transport."""
 
 from fastapi import APIRouter, Request
 
@@ -6,7 +6,7 @@ from backend.api.routes_part_deformation_preview import _dispatch
 
 
 router = APIRouter()
-TRANSFORM_PREVIEW_ENABLED = False
+TRANSFORM_PREVIEW_ENABLED = True
 _PATH = "/design/features/transform-preview"
 
 

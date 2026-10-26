@@ -105,3 +105,15 @@ it('keeps the legacy visibility endpoint unchanged', async () => {
   expect(fetch.mock.calls[0][0]).toBe('/api/design/visibility')
   expect(fetch.mock.calls[0][1].method).toBe('PUT')
 })
+
+it('ordinary cluster batch adopts matching geometry through one revision-checked request', async () => {
+  const result = { ...payload(8), nucleotides: [], helix_axes: [] }
+  result.design.group_organization = null
+  const fetch = vi.fn(async () => response(result)); vi.stubGlobal('fetch', fetch)
+  const placements = [{ cluster_id: 'a', fields: {} }, { cluster_id: 'b', fields: {} }]
+  expect(await client.commitClusterPoses(placements)).toBe(result)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(fetch.mock.calls[0][0]).toBe('/api/design/clusters/poses')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ placements, expected_revision: 7 })
+  expect(store.getState().currentGeometry).toBe(result.nucleotides)
+})

@@ -7,15 +7,12 @@
 > conflict with it, the contract wins. The current status sentence lives only in the
 > [handoff](session_handoff.md).
 
-**Current delivery — October20,2026:** 4/6 primary tools complete: Bend, Twist, Extrude,
-and Sweep. FH-20 closes after the four-case fixed-budget C8 pass and final regression
-comparison. CAD ledger: **21/34 complete,13 remaining (6 core,7 parked); delta+1/+0**.
-The user added geometric Move/Rotate to the active scope. On October25 the user
-pruned Groups to staple organization and retained clusters as geometry owners.
-Arbitrary named-group motion and the PartGroup migration are retired requirements;
-cluster/individual Move/Rotate still needs complete qualification, with its gates OFF. See the [handoff](session_handoff.md)
-and [Bend/Twist evidence](bend_twist_release_acceptance.md#native-preview-buffer-reuse--october202026).
-The earlier baseline/checkpoint narrative below is historical; this current scope supersedes it.
+**October26,2026 milestone closure:** FH-23 closes for cluster and existing
+individual-nucleotide Move/Rotate under the revised user scope. Both transform
+gates are ON; see [acceptance evidence](transform_history_editor_plan.md#cluster-and-individual-moverotate-completion--october-26-2026).
+Arbitrary named-group motion and the PartGroup migration remain retired;
+Staple Groups are organizational. Current counts and remaining work live in the
+[handoff](session_handoff.md). Earlier checkpoint narratives below are historical.
 
 ## Progress baseline and mandatory update counts — October 16, 2026
 
@@ -65,6 +62,7 @@ once; its remaining rollout is parked, not removed from the total.
 | FH-20 | Done · October20,2026 | Bend/Twist C1–C9 qualified: paired production gates ON, obsolete desktop mutating fallback unreachable, fixed small/large C8 four-case pass; final frontend9395pass and backend failure set unchanged from83 known baseline failures. |
 | FH-21 | Done · 1 checkpoint | Complete ordinary native extrusion history editor: seven families, earlier edits through downstream features, stable identities, full input controls and validation; independent rebuild with evicted recovery, typed source diagnostics, atomic source-bound publication and undo/reload. [Contract](extrusion_history_editor_plan.md), [evidence](validation_extrusion_history_editor.json). Desktop/latency remains the existing FH-27/MV-50 exit; organization rollout remains disabled. |
 | FH-22 | Done · 1 checkpoint | Complete owned native Sweep history editor: full prefix-based controls, isolated feature-stage display, recovery-independent Apply/Cancel, full source proof and downstream rebuild, atomic undo/reload and typed missing references. [Contract](sweep_history_editor_plan.md), [evidence](validation_sweep_history_editor.json). Both rollout gates remain false; desktop/latency stays FH-27/MV-51. |
+| FH-23 | Done · October26,2026 | Cluster and individual-nucleotide Move/Rotate C1–C9: production gates ON, atomic complete-cluster Apply, exact native recovery, chronological poses, historical/downstream edits, constraints, dependencies, undo/reopen and measured latency. See [transform plan](transform_history_editor_plan.md). One nominal-preview performance task remains within the authorized allowance. |
 | FH-24 | Done · 1 checkpoint | Complete native Fine Routing history editor: all 22 child kinds, input controls and ordered batch add/remove/reorder with stable output slots, independently rebuilt pre-child references and full downstream replay. Source-bound HTTP/isolated worker, exact child diagnostics, organized native lineage, one undo/reload and optimized history seeking are tested. [Contract](fine_routing_history_editor_plan.md), [evidence](validation_fine_routing_history_editor.json). Editor and organization gates stay off; desktop/latency acceptance remains the preallocated FH-27/MV-53 exit. |
 
 ### Remaining core-priority milestones
@@ -76,7 +74,6 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | ID | Status | Fixed remaining exit |
 |---|---|---|
 | FH-18 | In progress; scope pruned by user October25 | Existing cluster membership/deletion and geometry ownership: explicit incoming references, recorded edits, undo/reload/cold replay. Staple Groups remain organizational. The separate PartGroup migration, named-group geometry consumers and arbitrary member-motion/compiler rollout are retired requirements; experimental authoring UI removed; referenced internal compatibility code remains for cleanup. No completion credit from scope pruning. |
-| FH-23 | In progress | Cluster and existing individual-nucleotide Move/Rotate history: complete controls, atomic multi-cluster Apply, chronology, constraints, guarded commit, downstream errors/dependencies, undo/persistence and desktop qualification. Arbitrary organizational-group movement is no longer required (user October25); see the current transform plan. |
 | FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Explicit organized material lineage, owned HTTP/history publication and prefix-derived endpoint/version repair are implemented privately; exact-definition legacy owner migration is implemented privately; complete controls/full profiles, ISSUE-126/143 corrections and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | In progress · 1 checkpoint | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. S06 restores native prerequisites with 30 focused passes; broad/resource/desktop exits remain open. |
