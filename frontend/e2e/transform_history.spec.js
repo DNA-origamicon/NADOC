@@ -271,6 +271,10 @@ for (const entry of ['menu', 'shortcut'])
 test(`Move Rotate ${entry} creation previews Cancel and creates one replayable feature`, async ({ page, request }) => {
   test.setTimeout(120_000)
   await withHistoryFixture({ page, request }, 'transform', async f => {
+    await expect(page.locator('#groups-panel-heading')).toContainText('Staple Groups')
+    await expect(page.locator('#cluster-panel-heading')).toContainText('Movable Clusters')
+    await expect(page.locator('#cluster-new-btn')).toContainText('New Cluster')
+    await expect(page.locator('[data-action="organize-groups"], [data-group-create]')).toHaveCount(0)
     const panel = page.locator('#move-rotate-panel'), before = await f.checkpoint()
     const id = before.design.feature_log.find(e => e.id === 'selected-transform').cluster_id
     const owner = design => design.cluster_transforms.find(c => c.id === id)

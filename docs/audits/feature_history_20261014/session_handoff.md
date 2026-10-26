@@ -13,6 +13,11 @@ Fine Routing remains enabled and desktop-qualified across all22 native forms;
 its prior evidence is in [the routing plan](fine_routing_history_editor_plan.md).
 
 ## Current evidence and limits
+- Scope-pruning verification: full frontend9444pass/1skip; normal menu and shortcut
+  Move/Rotate app exercises2pass, including retained sidebar labels and no retired
+  authoring controls. Isolated smoke23pass; both scratch roots independently absent.
+  Lint/whitespace pass; logs `group-prune-*.log` in the existing focus directory.
+  `main.js`7349lines, delta−1. Internal helpers remain; no production gate changed.
 - ISSUE-154: organized placement batches use one complete-pose command, carrying
   individually posed members once through final frames. Publication includes
   carried residue poses and one recovery-backed feature. Single placement moves
@@ -52,8 +57,9 @@ Staple Groups are organizational: names, colors and strand selection, with no
 transform ownership or persistent geometry-feature targets. The experimental
 PartGroup / Groups and Placements migration, arbitrary Move selected members,
 and its new motion compiler/geometry-consumer rollout are retired requirements.
-Do not implement or enable that regime to complete Move/Rotate. Its dormant
-code/tests remain; retirement is not a claim that their removal is finished.
+Do not implement or enable that regime to complete Move/Rotate. Its conversion
+button, alternate sidebar, membership menus and panel bindings are removed. Referenced schema/display/selection internals remain retirement debt;
+experimental organized documents are refused by the cluster sidebar.
 
 Ordinary multi-cluster creation still commits pending owners sequentially;
 complete atomic Apply through the existing lifecycle, then qualify the retained

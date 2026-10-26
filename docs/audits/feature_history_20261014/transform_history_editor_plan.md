@@ -8,6 +8,8 @@ tool's completion requirements. Older “full original exit” clauses below are
 superseded for that scope. Preserve existing individual-nucleotide movement.
 Finish cluster/individual controls, atomic multi-cluster Apply, chronology,
 constraints, downstream dependencies, undo/reopen, preview and desktop qualification.
+The experimental conversion/sidebar/membership-menu authoring path is removed;
+referenced internal compatibility helpers are not new completion requirements.
 No gate or completion credit follows from pruning the scope alone. See the
 [current handoff](session_handoff.md); do not revive the retired group migration.
 

@@ -40,7 +40,6 @@ import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterIdForNucleotide, clusterMemberFilter } from './cluster_entries.js'
 import { sceneGroupRef, groupRefMemberFilter } from './part_group_selection.js'
-import { appendPartGroupMembershipMenu, appendPartGroupActions } from './part_group_selection_menu.js'
 import { hasOrganization, partGroupById } from './part_group_display.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
@@ -474,27 +473,6 @@ async function _deleteExtensions(ids, context) {
 let _onEditStrandSequence = null
 let _onHideSelection = null
 
-function _appendOrganizationMembership(menu, refs) {
-  if (store.getState().assemblyActive) return
-  appendPartGroupMembershipMenu(menu, { refs,
-    getDesign: () => store.getState().currentDesign,
-    command: (kind, inputs) => api.groupOrganizationCommand(kind, inputs),
-    onAccepted: () => _dismissMenu(),
-  })
-}
-
-function _showPartGroupMenu(x, y, id) {
-  _dismissMenu()
-  const menu = _menuBase(x, y)
-  appendPartGroupActions(menu, { id,
-    getDesign: () => store.getState().currentDesign,
-    command: (kind, inputs) => api.groupOrganizationCommand(kind, inputs),
-    onAccepted: () => _dismissMenu(),
-    onHide: refs => { _onHideSelection?.(refs); _dismissMenu() },
-  })
-  document.body.appendChild(menu); _menuEl = menu; _menuOutsideListeners(menu)
-}
-
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -556,9 +534,6 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
 
   // Check if this strand is a scaffold
   const design = store.getState().currentDesign
-  _appendOrganizationMembership(menu, domainRef
-    ? [{ kind: 'domain', ...domainRef }]
-    : [...new Set([...multiStrandIds, strandId])].map(id => ({ kind: 'strand', id })))
   const _stype = design?.strands?.find(s => s.id === strandId)?.strand_type
   const isScaffold = _stype === 'scaffold'
   const hideRefs = domainRef
@@ -1050,9 +1025,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
 
   }
 
-  if (hasOrganization(store.getState().currentDesign) && !store.getState().assemblyActive) {
-    _appendOrganizationMembership(menu, strandIds.map(id => ({ kind: 'strand', id })))
-  } else {
+  if (!hasOrganization(store.getState().currentDesign) || store.getState().assemblyActive) {
   // Clusters
   menu.appendChild(_menuSep())
   const clusterHdr = document.createElement('div')
@@ -1313,7 +1286,6 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
   _dismissMenu()
   const menu = _menuBase(x, y)
   const design = store.getState().currentDesign
-  _appendOrganizationMembership(menu, [{ kind: 'strand', id: strandId }])
 
   const hdr = document.createElement('div')
   hdr.textContent = 'Scaffold strand'
@@ -2873,7 +2845,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     menu.appendChild(hdr)
     menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ domainRefs })))
     menu.appendChild(_menuSep())
-    _appendOrganizationMembership(menu, domainRefs.map(ref => ({ kind: 'domain', ...ref })))
     _appendRepresentationMenu(menu, { domainRefs })
     document.body.appendChild(menu)
     _menuEl = menu
@@ -4598,7 +4569,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // level) → offer the move/rotate gizmo for it. Takes priority over the
     // per-strand color menu so a selected cluster is always actionable.
     if (_mode === 'part_group' && _drillPartGroupId) {
-      _showPartGroupMenu(e.clientX, e.clientY, _drillPartGroupId)
+      _dismissMenu()
       return
     }
     if (_mode === 'cluster' && _drillClusterId && onClusterMoveRotate) {

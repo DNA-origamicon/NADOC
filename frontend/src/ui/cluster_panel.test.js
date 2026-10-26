@@ -361,3 +361,27 @@ describe('cluster panel assembly display loading', () => {
     panel.destroy()
   })
 })
+
+
+describe('retired Groups and Placements authoring', () => {
+  it('refuses the experimental format without offering conversion or changing its data', () => {
+    mountDom()
+    const currentDesign = { ...design(), group_organization: { version: 1, groups: [] } }
+    const before = JSON.stringify(currentDesign)
+    const store = createMockStore({ currentDesign, selection: { items: [{ type: 'strand', id: 's1' }] } })
+    const api = { createCluster: vi.fn(), convertGroupOrganization: vi.fn() }
+    const panel = initClusterPanel(store, { api })
+    try {
+      expect(document.querySelector('#cluster-list').textContent).toContain('no longer supported')
+      expect(document.querySelector('#cluster-new-btn').disabled).toBe(true)
+      expect(document.body.textContent).not.toContain('Separate Groups and Placements')
+      document.querySelector('#cluster-new-btn').click()
+      expect(api.createCluster).not.toHaveBeenCalled()
+      expect(api.convertGroupOrganization).not.toHaveBeenCalled()
+      expect(JSON.stringify(currentDesign)).toBe(before)
+      store.setState({ currentDesign: design() })
+      expect(document.querySelector('#cluster-list').textContent).toContain('Cluster A')
+      expect(document.querySelector('#cluster-list').textContent).not.toContain('no longer supported')
+    } finally { panel.destroy(); document.body.innerHTML = '' }
+  })
+})

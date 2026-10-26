@@ -139,7 +139,7 @@ it('retains the deferred VR placement contract and restores desktop group resolu
   } finally { d.dispose() }
 })
 
-it.each([true, false])('actual multi-strand menu uses the proper group authoring path (organization=%s)', async organized => {
+it.each([true, false])('multi-strand menu retains cluster authoring without experimental group actions (organization=%s)', async organized => {
   vi.useFakeTimers()
   if (!organized) held.state.currentDesign.group_organization = null
   held.state.currentDesign.strands.push({ ...structuredClone(held.state.currentDesign.strands[0]), id: 't' })
@@ -153,24 +153,14 @@ it.each([true, false])('actual multi-strand menu uses the proper group authoring
     const localNewGroup = [...document.querySelectorAll('option')].some(option => option.textContent === '＋ New group…')
     expect(localNewGroup).toBe(!organized)
     const create = document.querySelector('[data-group-create]')
-    expect(!!create).toBe(organized)
-    if (organized) {
-      groupOrganizationCommand.mockResolvedValueOnce(null)
-      create.click(); await Promise.resolve(); await Promise.resolve()
-      expect(groupOrganizationCommand).toHaveBeenLastCalledWith('group-create', {
-        name: 'Group 4', helix_ids: ['h'], domain_ids: [
-          { strand_id: 's', domain_index: 0 }, { strand_id: 's', domain_index: 1 },
-          { strand_id: 't', domain_index: 0 }, { strand_id: 't', domain_index: 1 },
-        ], color: null, opacity: 1,
-      })
-      expect(document.querySelector('[data-group-create]')).toBe(create)
-      expect(held.state.currentDesign).toBe(before)
-      expect(d.controller.getState()).toEqual(selection)
-    }
+    expect(create).toBeNull()
+    expect(groupOrganizationCommand).not.toHaveBeenCalled()
+    expect(held.state.currentDesign).toBe(before)
+    expect(d.controller.getState()).toEqual(selection)
   } finally { d.dispose() }
 })
 
-it.each([true, false])('single-strand menu preserves Isolate while routing groups correctly (organization=%s)', async organized => {
+it.each([true, false])('single-strand menu preserves Isolate without experimental group actions (organization=%s)', async organized => {
   vi.useFakeTimers()
   if (!organized) held.state.currentDesign.group_organization = null
   held.state.currentDesign.strands[0].strand_type = 'staple'
@@ -183,6 +173,6 @@ it.each([true, false])('single-strand menu preserves Isolate while routing group
     await vi.runOnlyPendingTimersAsync()
     expect([...document.querySelectorAll('div')].some(node => node.textContent === 'Isolate')).toBe(true)
     expect([...document.querySelectorAll('option')].some(option => option.textContent === '＋ New group…')).toBe(!organized)
-    expect(!!document.querySelector('[data-group-create]')).toBe(organized)
+    expect(document.querySelector('[data-group-create]')).toBeNull()
   } finally { d.dispose() }
 })

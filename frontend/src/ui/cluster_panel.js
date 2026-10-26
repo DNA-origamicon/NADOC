@@ -23,7 +23,6 @@ import { initClusterStylePopover } from './cluster_style_popover.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 import { initInstanceDesignCache } from './assembly_instance_designs.js'
-import { createPartGroupPanel, GROUP_ORGANIZATION_CONVERSION_ENABLED } from './part_group_panel.js'
 import { hasOrganization } from '../scene/part_group_display.js'
 
 /** The auto palette slot a cluster gets when it has no explicit colour — the same
@@ -34,7 +33,7 @@ function _paletteHex(index) {
 }
 
 export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null,
-  onGroupClick = null, onGroupVisibilityChange = null, onGroupStylePreview = null, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady }) {
+  getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
@@ -42,10 +41,6 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   const body     = document.getElementById('cluster-panel-body')
   if (!listEl || !newBtn || !heading) return {}
   const subscriptions = []
-  const title = [...heading.querySelectorAll('span')].find(node => node !== arrow)
-  const legacyTitle = title?.textContent, legacyNewLabel = newBtn.textContent
-  const groupPanel = createPartGroupPanel({ store, container: listEl, api, onGroupClick, onClusterClick,
-    onGroupVisibilityChange, onGroupStylePreview })
 
   const repairBtn = document.getElementById('cluster-repair-btn')
   let repairing = false
@@ -101,13 +96,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   // ── Enable / disable new-cluster button ──────────────────────────────────────
   function _syncNewBtn(state) {
     const refs = canonicalSelection(state).items
-    if (!_assemblyMode && hasOrganization(state.currentDesign)) {
-      newBtn.textContent = '+ New Group from Selection'
-      newBtn.disabled = !groupPanel.canCreate()
-      return
-    }
-    newBtn.textContent = legacyNewLabel
-    newBtn.disabled = _assemblyMode ||
+    newBtn.disabled = _assemblyMode || hasOrganization(state.currentDesign) ||
       !refs.some(ref => ref.kind === 'strand' || ref.kind === 'domain')
   }
 
@@ -120,7 +109,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     const state = store.getState()
     const { currentDesign } = state
     if (_assemblyMode || state.assemblyActive) return
-    if (hasOrganization(currentDesign)) { await groupPanel.createFromSelection(); return }
+    if (hasOrganization(currentDesign)) return
     const refs = canonicalSelection(state).items
     const strandIds = refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)
     const domainRefs = refs.filter(ref => ref.kind === 'domain')
@@ -164,34 +153,16 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   let _activeAsmClusterId = null
 
   function _rebuild(clusters, activeId) {
-    const organized = !_assemblyMode && hasOrganization(store.getState().currentDesign)
-    groupPanel.setActive(organized)
-    if (title) title.textContent = organized ? 'Groups and Placements' : legacyTitle
     _syncNewBtn(store.getState())
     if (_assemblyMode) { _rebuildAssembly(); return }
-    if (organized) return
-    _rebuildFlat(clusters, activeId)
-    if (GROUP_ORGANIZATION_CONVERSION_ENABLED && store.getState().currentDesign) {
-      const convert = document.createElement('button')
-      convert.dataset.action = 'organize-groups'
-      convert.textContent = 'Separate Groups and Placements'
-      convert.title = 'Record separate organization while preserving all existing placement inputs'
-      convert.addEventListener('click', async () => {
-        if (!GROUP_ORGANIZATION_CONVERSION_ENABLED || store.getState().assemblyActive) return
-        const source = store.getState().currentDesign
-        if (!source || hasOrganization(source)) return
-        _stylePopover.close()
-        convert.disabled = true
-        try {
-          const result = await api.groupOrganizationCommand('group-organize', {
-            expected_placement_ids: (source.cluster_transforms ?? []).map(item => item.id),
-          })
-          if (!result) showToast('Could not separate groups and placements. The current part was kept.', { severity: 'error' })
-        } catch (error) { showToast(error.message, { severity: 'error' }) }
-        finally { convert.disabled = false }
-      })
-      listEl.append(convert)
+    if (hasOrganization(store.getState().currentDesign)) {
+      // Never reinterpret retired organizational membership as geometry ownership.
+      const message = document.createElement('p')
+      message.textContent = 'This experimental Groups and Placements format is no longer supported.'
+      listEl.replaceChildren(message)
+      return
     }
+    _rebuildFlat(clusters, activeId)
   }
 
   /** A row is lit for the single active cluster OR any cluster in the multi-selection
@@ -541,9 +512,6 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     const instances = assembly?.instances ?? []
     _assemblySnapshot = assembly
     _assemblyMode = true
-    groupPanel.setActive(false)
-    if (title) title.textContent = legacyTitle
-    newBtn.textContent = legacyNewLabel
     _stylePopover.close()   // the assembly list has no swatches
     _instanceOrder.length = 0
     _instanceNames.clear()
@@ -615,17 +583,15 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         _rebuild(currentDesign?.cluster_transforms ?? [], activeClusterId)
       }
     },
-    syncGroupVisibility(ids) { groupPanel.syncVisibility(ids) },
     resetVisibility() {
       _hiddenClusterIds.clear()
-      groupPanel.resetVisibility()
       if (!_collapsed && !_assemblyMode) {
         const { currentDesign, activeClusterId } = store.getState()
         _rebuild(currentDesign?.cluster_transforms ?? [], activeClusterId)
       }
     },
     /** Cancel background reads and tear down the popover's document listeners. */
-    destroy() { subscriptions.forEach(unsubscribe => unsubscribe()); groupPanel.destroy(); _instanceDesigns.prune([]); _stylePopover.destroy() },
+    destroy() { subscriptions.forEach(unsubscribe => unsubscribe()); _instanceDesigns.prune([]); _stylePopover.destroy() },
   }
 }
 

@@ -11,14 +11,15 @@ Do not implement or enable those features to finish Move/Rotate. Existing cluste
 and individual-nucleotide movement, constraints, dependencies and replay still
 require their own correctness and qualification; this decision does not close them.
 
-There is no normal UI entry to the experimental organization regime: the proposed
-cluster-sidebar “Separate Groups and Placements” button is hidden by
-`GROUP_ORGANIZATION_CONVERSION_ENABLED = false`, and backend live admission is
-also disabled. Fixtures can enable it and display “Groups and Placements.”
-The existing Staple Groups sidebar is a different, already available feature.
-Dormant schema/code and its tests remain for now; this is a scope retirement,
-not a claim that all experimental implementation has been deleted. Do not migrate
-user designs or change their cluster ownership during cleanup.
+The experimental cluster-sidebar conversion button, alternate Groups and Placements
+panel, group membership context menus and group-style panel bindings have been
+removed. The existing Staple Groups sidebar remains available and organizational.
+Experimental organized documents show an unsupported-format notice in the cluster
+panel; they are not silently converted into ordinary cluster ownership. Backend
+live admission remains disabled. Internal schema, display/selection helpers and
+historical fixture coverage remain where still referenced; they are compatibility
+and retirement debt, not an active geometry roadmap. Do not migrate user designs
+or change their cluster ownership during cleanup.
 
 The remainder is historical implementation evidence, not current requirements.
 

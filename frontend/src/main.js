@@ -1025,12 +1025,11 @@ async function main() {
     store, designRenderer, unfoldView,
     onPersist: (visibilityState) => api.saveVisibilityState(visibilityState),
     getRevision: api.currentRevisionWatermark,
-    onChange: (_hiddenBases, hiddenClusterIds, hiddenGroupIds) => {
+    onChange: (_hiddenBases, hiddenClusterIds) => {
       _atomSurface?.setHiddenNucs?.(_hiddenBases)
       clusterJoinTool?.refreshVisibility?.()
       spreadsheet?.refresh?.()
       clusterPanel?.syncVisibility?.(hiddenClusterIds)
-      clusterPanel?.syncGroupVisibility?.(hiddenGroupIds)
     },
   })
   // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
@@ -5757,7 +5756,7 @@ async function main() {
     onVisibilityChange: (hiddenClusterIds) => {
       visibilityController?.setHiddenClusters(hiddenClusterIds)
     },
-    ...createGroupPanelBindings({ store, selectionManager, visibilityController,
+    ...createGroupPanelBindings({ store,
       designRenderer, unfoldView, overhangLinkArcs, flexibleArcs,
       getAtomSurface: () => _atomSurface }),
   })
