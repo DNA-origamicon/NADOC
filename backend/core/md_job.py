@@ -541,6 +541,25 @@ class MdJob:
         apply_transfer_state(job, workspace_dir)
         return job
     @classmethod
+    def saved_seeds(cls, workspace_dir: Path) -> set[int]:
+        """Read seed metadata without reconciling jobs or scheduling trajectories."""
+        from backend.core.job_archive import read_index
+
+        folder = workspace_dir / "md_jobs"
+        paths = {p.parent.name: p for p in folder.glob("*/job.json")}
+        for job_id in read_index(workspace_dir, "md_jobs"):
+            paths.setdefault(job_id, folder / ".archive_metadata" / f"{job_id}.json")
+        seeds = set()
+        for path in paths.values():
+            try:
+                data = json.loads(path.read_text())
+                seeds.update(seed for key in ("namd_seed", "ensemble_seed")
+                             if isinstance(seed := data.get(key), int))
+            except (OSError, ValueError, AttributeError):
+                continue
+        return seeds
+
+    @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
         from backend.core.job_archive import archived_job_ids
 

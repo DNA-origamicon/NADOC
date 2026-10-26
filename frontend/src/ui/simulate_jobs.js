@@ -708,6 +708,7 @@ export function initSimulateJobs({
    */
   function _openRowMenu(jobId, e) {
     const node = _nodes.find((n) => n.job_id === jobId)
+    if (node?.creating) { e.preventDefault(); return }
     const panel = node?.engine === 'namd' ? mdPanel
       : node?.engine === 'oxdna' ? oxdnaPanel : null
     if (!panel?.copyJob && !node?.remote_only) return
@@ -913,7 +914,7 @@ export function initSimulateJobs({
   // ── consolidated Change directory / Delete (above the jobs card) ───────────
   function _renderActions(node = _selectedNode()) {
     const eng = node?.engine
-    const canDelete = !!node && eng !== 'lammps' && node.status !== 'running'
+    const canDelete = !!node && !node.creating && eng !== 'lammps' && node.status !== 'running'
     const canArchive = canDelete && (eng === 'oxdna' || eng === 'namd')
     if (actionsHost) actionsHost.style.display = canDelete ? '' : 'none'
     if (deleteActionBtn) deleteActionBtn.style.display = canDelete ? '' : 'none'
@@ -986,10 +987,15 @@ export function initSimulateJobs({
     // here too would duplicate it (two "▶ Relax" stacked). An [L] node has no other
     // control, so the master card owns its Stop / re-Run.
     const node = _selectedNode()
-    if (!node || node.engine !== 'lammps') { runBtn.style.display = 'none'; return }
+    if (!node || (node.engine !== 'lammps' && !(node.creating && !['namd', 'oxdna'].includes(node.engine)))) { runBtn.style.display = 'none'; return }
     runBtn.style.display = ''
     const rc = _runControl()
     runBtn.textContent = _busy ? 'Working…' : rc.label
+    if (rc.spinner) {
+      const spinner = document.createElement('span')
+      spinner.className = 'nadoc-spinner'
+      runBtn.prepend(spinner)
+    }
     runBtn.disabled = rc.disabled
     runBtn.dataset.runAction = rc.action
   }
@@ -1164,6 +1170,40 @@ export function initSimulateJobs({
     }
   })
 
+  const creatingNodes = new Map()
+  function mergeCreatedNodes(nodes) {
+    for (const node of nodes) {
+      if (!creatingNodes.get(node.job_id)?.creating) creatingNodes.delete(node.job_id)
+    }
+    return [...creatingNodes.values(), ...nodes.filter(n => !creatingNodes.has(n.job_id))]
+  }
+  window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
+    _fetchEpoch++
+    if (detail.removeJobId) {
+      creatingNodes.delete(detail.removeJobId)
+      _nodes = _nodes.filter(n => n.job_id !== detail.removeJobId)
+    }
+    const node = detail.node
+    if (node) {
+      _collapsed = false
+      _applyCollapsed(false)
+      creatingNodes.set(node.job_id, node)
+      _nodes = [node, ..._nodes.filter(n => n.job_id !== node.job_id)]
+      _listReady = true
+      _loadedPath = _currentPath()
+      listEl.inert = false
+      setActiveEngine(node.engine)
+      _sel = { engine: node.engine, id: node.job_id }
+      _dispatchDetail(node)
+    } else if (_sel.id === detail.removeJobId) {
+      _panelFor({ engine: _sel.engine })?.deselectJob?.()
+      _sel = { engine: null, id: null }
+    }
+    _renderList()
+    _renderMaster()
+    _schedulePoll()
+  })
+
   // ── fetch + poll ──────────────────────────────────────────────────────────
   let _fetchPending = null
   let _fetchEpoch = 0
@@ -1206,7 +1246,7 @@ export function initSimulateJobs({
           return
         }
         const previousAvailability = _selectedNode()?.storage_available
-        _nodes = nodes
+        _nodes = mergeCreatedNodes(nodes)
         if (_sel.id && previousAvailability !== _selectedNode()?.storage_available) {
           const panel = _sel.engine === 'namd' ? mdPanel : _sel.engine === 'oxdna' ? oxdnaPanel : null
           void panel?.refresh?.()
@@ -1266,7 +1306,9 @@ export function initSimulateJobs({
     }
   })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
+  window.addEventListener('nadoc:document-reset', () => creatingNodes.clear())
   window.addEventListener('nadoc:workspace-path-change', () => {
+    creatingNodes.clear()
     _fetchEpoch++
     _listReady = false
     listEl.inert = true

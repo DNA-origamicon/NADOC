@@ -1,3 +1,4 @@
+import { withCreatingJob } from './sim_job_creation.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
@@ -2960,8 +2961,8 @@ export const browseFiles         = (path, kind)  => {
   const s = q.toString()
   return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
 }
-export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
-export const copyOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`)
+export const createOxdnaJob      = (body)        => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', '/oxdna/jobs', body))
+export const copyOxdnaJob        = (id)          => withCreatingJob('oxdna', { copy_source_id: id }, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`))
 export const updateOxdnaJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/oxdna/jobs/${id}/settings`, body)
 
 // ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
@@ -3047,7 +3048,7 @@ export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/start`)
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
 export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, body)
-export const appendOxdnaRun      = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, body)
+export const appendOxdnaRun      = (id, body)    => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, body))
 export const startOxdnaSurfaceDeposition = (id, body) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, body)
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)
@@ -3443,7 +3444,7 @@ export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/rela
  *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
 export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan?include_box_preview=false', body)
 export const fetchProtocolBoxPreview = (body) => _oxdnaJSON('POST', '/md/protocol-box-preview', body)
-export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+export const createMdJob         = (body)        => withCreatingJob('namd', body, () => _oxdnaJSON('POST', '/md/jobs', body))
 /** Validate the selected NAMD run/download directory. With no path, the backend creates and
  * returns NADOC's portable <workspace>/md_jobs default. */
 export const getMdRunDirStatus   = (path = null) =>
@@ -3689,7 +3690,7 @@ export const appendMdProduction  = (id, body)    => _oxdnaJSON('POST',   `/md/jo
 /** Branch a production run off a completed relaxation (or production) as a CHILD job,
  *  seeded from the parent's equilibrated coords with a distinct velocity seed. Body:
  *  {steps, length_ns, autostart}. Relaxation stays selectable; children nest under it. */
-export const spawnMdProduction   = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/production-run`, body)
+export const spawnMdProduction   = (id, body)    => withCreatingJob('namd', body, () => _oxdnaJSON('POST',   `/md/jobs/${id}/production-run`, body))
 /** Migrate a legacy job whose production was appended onto the relaxation back to a
  *  clean relaxation (production artifacts moved to _superseded_production/, not deleted),
  *  so relax + production become separate entries. */
@@ -3737,7 +3738,7 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Replace settings and rebuild an unstarted draft/prepared job in place. */
 export const updateMdJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/md/jobs/${id}/settings`, body)
-export const copyMdJob           = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/copy`)
+export const copyMdJob           = (id)          => withCreatingJob('namd', { copy_source_id: id }, () => _oxdnaJSON('POST', `/md/jobs/${id}/copy`))
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
 export const finishMdJob = (id, destRoot) =>

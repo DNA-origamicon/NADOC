@@ -1,3 +1,4 @@
+import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { showConfirm } from './primitives/confirm.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 import {confirmElectrodeProtocol} from './namd_electrode_protocol.js'
@@ -171,7 +172,7 @@ export function filterJobsForPart(jobs, partPath, showAll) {
   if (showAll) return jobs
   const current = normalizeWorkspacePath(partPath)
   if (!current) return []
-  return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
+  return jobs.filter(j => j.creating || normalizeWorkspacePath(j.design_source_path) === current)
 }
 
 /**
@@ -439,6 +440,9 @@ export function mdRunControl(selectedJob, {
       action: RUN_ACTION.RUN, label: '▶ Run', disabled: true,
       title: 'Select a run in the list, or create one with ＋ New job.',
     }
+  }
+  if (selectedJob.creating || selectedJob.status === 'preparing') return {
+    action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
   }
   if (selectedJob.restart_snapshot) return { action: RUN_ACTION.RUN, label: 'Preserved attempt', disabled: true,
     title: 'This entry holds the interrupted trajectory. The linked active job owns the Alpine allocation.' }
@@ -1679,7 +1683,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const previousTarget = _visibleTarget
     _syncTargetPane(previousTarget)
     _visibleTarget = target
-    if (target === 'runpod') void _runpod.refresh()
+    if (target === 'runpod' && !job?.creating) void _runpod.refresh()
   }
 
   let _visibleTarget = _currentRunTarget()
@@ -1889,7 +1893,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     try {
       const jobs = await api.listMdJobs()
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
-      _jobs = jobs
+      _jobs = mergeCreatingJobs(jobs, 'namd')
       notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
       _jobs.sort((a, b) => b.created_at - a.created_at)
       _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
@@ -4588,6 +4592,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     })
   }
 
+  window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
+    if (detail.removeJobId) _jobs = _jobs.filter(j => j.job_id !== detail.removeJobId)
+    if (detail.node?.engine === 'namd') {
+      if (detail.node.creating) {
+        const source = _jobs.find(j => j.job_id === detail.node.copy_source_id)
+        Object.assign(detail.node, {
+          design_source_path: _currentPartPath(),
+          design_name: source?.design_name || detail.node.design_name,
+          prep_params: source?.prep_params || detail.node.prep_params,
+          execution_target: source?.execution_target || detail.node.execution_target,
+        })
+      }
+      _jobs = [detail.node, ..._jobs.filter(j => j.job_id !== detail.node.job_id)]
+    }
+  })
+
   async function _copyJob(jobId) {
     const result = await api.copyMdJob(jobId).catch(() => null)
     const copied = result?.job
@@ -4767,6 +4787,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (surfaceMarginEl) surfaceMarginEl.value = String(prep.graphene_sheet_margin_nm ?? 1.5)
     _anchorsCard?.applyConfig?.(prep.anchors || [])
     _surfaceAnchorsCard?.applyConfig?.(prep.surface_anchors || [])
+    _efieldCard?.applyConfig?.(prep.field ?? null)
     surfaceSeedSpec = null
     _syncSurfaceCard()
     if (selectedJob?.seed_oxdna_job_id) {
@@ -4785,6 +4806,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
+    if (selectedJob?.creating) return
     // Repaint Run/Queue off CURRENT server state: this panel has no status poll, so
     // without this the control could offer ▶ Run for a job the queue would refuse (or
     // hide that the job is already waiting in line).
@@ -4925,6 +4947,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const job = _jobs.find(j => j.job_id === jobId)
     if (job) _applyJobState(job)
     if (detailEl) detailEl.style.display = ''
+    if (job?.creating) return
     if (selectionUpdatesVisualization(job)) _fetchDisplayMeta(jobId)
     _fetchJobMetrics(jobId)
 
@@ -5078,7 +5101,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // ── Job detail rendering ──────────────────────────────────────────────────
   function _applyJobState(job, liveMetrics) {
-    if (!job) return
+    if (!job || job.job_id !== _selectedId) return
     _runpod.setJob(job)
 
     const awaitingSubmit = mdRemoteAwaitingSubmit(job)

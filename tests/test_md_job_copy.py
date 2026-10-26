@@ -106,3 +106,17 @@ def test_explicit_run_of_copied_draft_uses_frozen_design(tmp_path, monkeypatch):
     assert captured["request"].draft is False
     assert captured["request"].seed == copied["namd_seed"]
     assert captured["existing_job"].job_id == copied["job_id"]
+
+
+def test_copy_seed_scan_does_not_load_jobs_or_schedule_trajectories(tmp_path, monkeypatch):
+    import json
+    from backend.core import trajectory_precompute
+
+    folder = tmp_path / "md_jobs"
+    (folder / "one").mkdir(parents=True)
+    (folder / "one" / "job.json").write_text(json.dumps({"namd_seed": 17, "ensemble_seed": 23}))
+    (folder / "broken").mkdir()
+    (folder / "broken" / "job.json").write_text("invalid")
+    monkeypatch.setattr(MdJob, "load", forbidden)
+    monkeypatch.setattr(trajectory_precompute, "schedule", forbidden)
+    assert MdJob.saved_seeds(tmp_path) == {17, 23}

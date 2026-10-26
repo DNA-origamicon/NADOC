@@ -1,3 +1,4 @@
+import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 /**
  * oxDNA relaxation jobs panel (Dynamics tab).
@@ -1414,7 +1415,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   async function _fetchJobs() {
     const jobs = await api.listOxdnaJobs().catch(() => null)
     if (Array.isArray(jobs)) {
-      _jobs = jobs
+      _jobs = mergeCreatingJobs(jobs, 'oxdna')
       _renderList()
       // Refresh the launch-button spinners from live job state even when nothing
       // is selected (e.g. after a page reload while a job is still running).
@@ -1422,7 +1423,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (_selectedId) {
         const sel = _jobs.find(j => j.job_id === _selectedId)
         if (sel) {
-          _progress = await api.getOxdnaProgress(_selectedId).catch(() => null)
+          const progress = sel.creating ? null : await api.getOxdnaProgress(sel.job_id).catch(() => null)
+          if (_selectedId !== sel.job_id) return
+          _progress = progress
           _renderDetail(sel)
           // Relaxed display follows the run live: pull a new frame whenever the
           // sim writes one (frame_index advances) or the job finishes; between
@@ -1729,6 +1732,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     })
   }
 
+  window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
+    if (detail.removeJobId) _jobs = _jobs.filter(j => j.job_id !== detail.removeJobId)
+    if (detail.node?.engine === 'oxdna') {
+      if (detail.node.creating) {
+        const source = _jobs.find(j => j.job_id === detail.node.copy_source_id)
+        Object.assign(detail.node, {
+          design_source_path: _currentPartPath(),
+          design_name: source?.design_name || detail.node.design_name,
+          prep_params: source?.prep_params || detail.node.prep_params,
+          run_config: source?.run_config || detail.node.run_config,
+          execution_target: source?.execution_target || detail.node.execution_target,
+        })
+      }
+      _jobs = [detail.node, ..._jobs.filter(j => j.job_id !== detail.node.job_id)]
+    }
+  })
+
   async function _copyJob(jobId) {
     const result = await api.copyOxdnaJob(jobId).catch(() => null)
     const copied = result?.job
@@ -1793,13 +1813,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _setTrajOff()
     }
     _selectedId = jobId
-    _progress = await api.getOxdnaProgress(jobId).catch(() => null)
+    const progress = job.creating ? null : await api.getOxdnaProgress(jobId).catch(() => null)
+    if (_selectedId !== jobId) return
+    _progress = progress
     _renderList()
     _renderDetail(job)
     if (selectionUpdatesVisualization(job)) _applyRunControls(job)
     // If the "OxDNA display" toggle is on, follow it to the newly-selected job
     // (re-deform the model to THIS job's relaxed positions, not the old one's).
-    if (selectionUpdatesVisualization(job) && displayToggle?.checked
+    if (!job.creating && selectionUpdatesVisualization(job) && displayToggle?.checked
         && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
       _lastFrameIndex = null
       await _refreshDisplay()
@@ -2073,14 +2095,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // kind (Full Sim's own button is gone; production is created via the wizard).
     if (runBtn) {
       const rc = _runControl()
-      if (_launching) {
-        _setBtnSpinner(runBtn, true, rc.label, 'Starting…')
+      if (_launching || rc.spinner) {
+        _setBtnSpinner(runBtn, true, rc.label, rc.spinner ? rc.label : 'Starting…')
       } else {
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
       const canStart = canStartJob(job)
-      runBtn.disabled = !_available || _launching ||
+      runBtn.disabled = rc.disabled || !_available || _launching ||
         (rc.action === RUN_ACTION.RUN && (!canStart || prodRunning))
       runBtn.dataset.runAction = rc.action
     }

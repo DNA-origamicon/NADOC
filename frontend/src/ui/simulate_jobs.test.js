@@ -439,6 +439,41 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it('selects pending creation immediately and replaces it without waiting for list refresh', async () => {
+    mount()
+    const { sim, mdPanel } = make([mdNode()])
+    await sim.refresh()
+    sim.selectJob('md1')
+    const emit = detail => window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail }))
+    const pending = mdNode({ job_id: 'creating-test', status: 'preparing', creating: true })
+    emit({ node: pending })
+    expect(sim.getSelected().id).toBe('creating-test')
+    expect(document.querySelector('[data-job-id="creating-test"]')).not.toBeNull()
+    expect(mdPanel.selectJob).toHaveBeenLastCalledWith('creating-test', { explicit: false })
+    await sim.refresh() // server still only knows the old job
+    expect(sim.getSelected().id).toBe('creating-test')
+    emit({ removeJobId: 'creating-test', node: mdNode({ job_id: 'saved-new', status: 'queued' }) })
+    expect(sim.getSelected().id).toBe('saved-new')
+    expect(document.querySelector('[data-job-id="creating-test"]')).toBeNull()
+    expect(mdPanel.selectJob).toHaveBeenLastCalledWith('saved-new', { explicit: false })
+    await sim.refresh()
+    expect(sim.getSelected().id).toBe('saved-new')
+  })
+
+  it('clears pending selection on creation failure', async () => {
+    mount()
+    const { sim, mdPanel } = make([mdNode()])
+    await sim.refresh()
+    window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail: {
+      node: mdNode({ job_id: 'creating-failed', creating: true, status: 'preparing' }),
+    } }))
+    window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail: {
+      removeJobId: 'creating-failed', node: null,
+    } }))
+    expect(sim.getSelected().id).toBeNull()
+    expect(mdPanel.deselectJob).toHaveBeenCalled()
+  })
+
   it('offers Thin job with an explanatory tooltip for completed NAMD jobs', async () => {
     mount()
     const { sim } = make([mdNode()])

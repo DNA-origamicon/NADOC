@@ -728,9 +728,9 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     })
   })
 
-  it('a LOCAL job preparing is untouched — it still stops', () => {
+  it('a LOCAL job preparing stays disabled until ready', () => {
     expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
-      .toMatchObject({ action: 'stop', label: '■ Pause run' })
+      .toMatchObject({ action: 'preparing', disabled: true, spinner: true })
   })
 })
 

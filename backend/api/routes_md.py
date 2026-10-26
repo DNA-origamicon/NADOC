@@ -4767,12 +4767,8 @@ async def get_md_job(job_id: str) -> dict:
 async def copy_md_job(job_id: str) -> dict:
     """Copy settings without launching; relaxation copies remain unprepared drafts."""
     source = _load_job(job_id)
-    used_seeds = [
-        seed
-        for job in MdJob.list_jobs(_workspace())
-        for seed in (job.namd_seed, job.ensemble_seed)
-        if seed is not None
-    ]
+    used_seeds = await run_in_threadpool(MdJob.saved_seeds, _workspace())
+    used_seeds.update(seed for seed in (source.namd_seed, source.ensemble_seed) if seed is not None)
     copied_seed = random_seed(exclude=used_seeds)
 
     if source.run_kind == "production":
