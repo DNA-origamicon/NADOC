@@ -9,6 +9,9 @@ from backend.api.part_model_serialization import admit_model_serialization
 
 MAX_ITEMS = 30_000
 MAX_BYTES = 2_000_000
+# A reference record is not a JSON node: keys, containers and both crossover
+# halves also consume nodes. Keep the row/domain and byte limits independent.
+NODES_PER_ITEM = 32
 COLLECTIONS = ("helices", "strands", "crossovers", "forced_ligations")
 
 
@@ -17,10 +20,11 @@ def _invalid(message):
 
 
 def inventory(source):
-    budget = GraphBudget(max_nodes=MAX_ITEMS, max_bytes=MAX_BYTES, seconds=None, clock=lambda: 0)
+    budget = GraphBudget(max_nodes=MAX_ITEMS * NODES_PER_ITEM, max_bytes=MAX_BYTES, seconds=None, clock=lambda: 0)
     if any(type(getattr(source, name)) is not list for name in COLLECTIONS):
         _invalid("Historical routing choices require native collections")
-    if sum(len(getattr(source, name)) for name in COLLECTIONS) > MAX_ITEMS:
+    count = sum(len(getattr(source, name)) for name in COLLECTIONS)
+    if count > MAX_ITEMS:
         _invalid("Historical routing choices exceed their metadata allowance")
     result = {name: [] for name in COLLECTIONS}
     fields = {
@@ -32,7 +36,8 @@ def inventory(source):
     for name in COLLECTIONS:
         for item in getattr(source, name):
             if name == "strands":
-                if len(item.domains) > MAX_ITEMS:
+                count += len(item.domains)
+                if count > MAX_ITEMS:
                     _invalid("Historical strand domain choices exceed their metadata allowance")
                 record = {"id": item.id, "name": item.name, "is_scaffold": item.is_scaffold, "domains": []}
                 budget.charge({key: value for key, value in record.items() if key != "domains"})
@@ -114,18 +119,22 @@ def validate_packet(packet, *, kind, design_id, revision, feature_id, child_id, 
             or type(packet["prefix"]) is not dict
             or set(packet["prefix"]) != set(COLLECTIONS)):
         _invalid("Historical routing choices differ from the owned child")
-    admit_model_serialization(packet, max_nodes=MAX_ITEMS, max_bytes=MAX_BYTES,
+    admit_model_serialization(packet, max_nodes=MAX_ITEMS * NODES_PER_ITEM, max_bytes=MAX_BYTES,
                               label="Historical routing choices")
     admit_model_serialization(expected_params, max_nodes=MAX_ITEMS, max_bytes=MAX_BYTES,
                               label="Owned routing inputs")
     if not _same_json(packet["params"], expected_params):
         _invalid("Historical routing choices differ from the owned inputs")
+    count = 0
     for name in COLLECTIONS:
         records = packet["prefix"][name]
         if type(records) is not list or any(not _fields(row, _SCHEMAS[name]) for row in records):
             _invalid("Historical routing choices contain malformed native metadata")
         if len({row["id"] for row in records}) != len(records):
             _invalid("Historical routing choices contain ambiguous identities")
+        count += len(records) + (sum(len(row["domains"]) for row in records) if name == "strands" else 0)
+        if count > MAX_ITEMS:
+            _invalid("Historical routing choices exceed their metadata allowance")
     encoded = json.dumps(packet, allow_nan=False, separators=(",", ":"))
     if len(encoded.encode("utf-8")) > MAX_BYTES:
         _invalid("Historical routing choices exceed their serialized allowance")

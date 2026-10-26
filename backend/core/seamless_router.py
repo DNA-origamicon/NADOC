@@ -253,7 +253,9 @@ def auto_scaffold_seamless(
                 continue
             visited.add(nid)
             comp.append(nid)
-            stack.extend(adj[nid] - visited)
+            # Component order is also the fallback route when no Hamiltonian
+            # path exists. It must survive a fresh worker's Python hash seed.
+            stack.extend(sorted(adj[nid] - visited, reverse=True))
         components.append(comp)
 
     # ── Build bridge and zig pairs from Hamiltonian paths ────────────────────

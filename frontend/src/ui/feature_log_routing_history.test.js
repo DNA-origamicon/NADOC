@@ -12,7 +12,7 @@ function fixture({ enabled = true, cursor = -1, native = true, kind = 'nick' } =
   const context = { source: design, revision: 7 }, state = { currentDesign: design, assemblyActive: false }
   const api = { captureRoutingEditContext: vi.fn(() => context), isRoutingEditContextCurrent: vi.fn(() => true), editRoutingFeatureInputs: vi.fn(async () => null), editFeature: vi.fn(), seekFeatures: vi.fn(),
     getRoutingFeatureInputs: vi.fn(async () => ({ kind, params: child.params, prefix: { helices: [{ id: 'prefix-h', bp_start: 0, length_bp: 20 }], strands: [], crossovers: [], forced_ligations: [] }, source_design_id: 'part', source_revision: 7, feature_id: parent.id, child_id: child.id })) }
-  initFeatureLogPanel({ getState: () => state, subscribeSlice: () => () => {} }, { api, routingHistoryEnabled: enabled })
+  initFeatureLogPanel({ getState: () => state, setState: patch => Object.assign(state, patch), subscribeSlice: () => () => {} }, { api, routingHistoryEnabled: enabled })
   document.querySelector('[title="Expand Fine Routing"]').click()
   const edit = () => [...document.querySelectorAll('[data-fl-row="1.0"] button')].find(button => button.textContent === '✎')
   return { api, context, edit, state }
@@ -32,6 +32,19 @@ it.each([{ enabled: false }, { native: false }, { kind: 'strand-delete' }])('doe
 })
 it('requires latest history before loading a native child prefix', () => {
   const f = fixture({ cursor: 0 }); expect(f.edit().disabled).toBe(true); expect(f.api.getRoutingFeatureInputs).not.toHaveBeenCalled()
+})
+it('marks the refused child and blocked suffix, retaining the draft until Cancel', async () => {
+  const f = fixture()
+  f.api.editRoutingFeatureInputs.mockRejectedValue(Object.assign(new Error('Target no longer exists'), {
+    detail: { feature_id: 'child' },
+  }))
+  f.edit().click(); await tick()
+  ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Apply').click(); await tick()
+  expect(f.state.featureHistoryFailure.featureId).toBe('child')
+  expect([...f.state.featureHistoryFailure.blockedIds]).toEqual(['later'])
+  expect(document.querySelector('[role="alert"]').textContent).toContain('Target no longer exists')
+  ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Cancel').click(); await tick()
+  expect(f.state.featureHistoryFailure).toBeNull()
 })
 it('rejects a held prefix after reset without opening a stale editor', async () => {
   const f = fixture(); let finish

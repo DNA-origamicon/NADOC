@@ -502,6 +502,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
+    "test_part_routing_large_history",  # 18HB lifecycle + fresh-process cold proofs (12–15 s each)
     "test_native_connectivity_proof",  # native pipeline/edit + two spawned cold proofs in each case (5.04 s)
     "test_native_join_proof",  # real two-cluster Join/edit + two independent spawned proofs (5.41 s)
     "test_generated_commands",  # shared real origami build + fixed-center attachment fitting
@@ -1032,6 +1033,8 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
+    if module == "test_part_routing_large_history":
+        return "headless"
     if module == "test_assembly_flatten":
         return "cando"
     if "oxdna" in module or "skip_twist" in module or "chudoba" in module:

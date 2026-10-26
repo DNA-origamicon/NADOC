@@ -1317,7 +1317,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
             appendFailureBadge(subRow, child)
 
             if (!inPartContext) {
-              const edit = createRoutingEditAction({ api, design, parent: entry, child, index: i, subIndex: j,
+              const edit = createRoutingEditAction({ api, store, design, parent: entry, child, index: i, subIndex: j,
                 enabled: routingHistoryEnabled, assemblyActive: store.getState().assemblyActive })
               if (edit) subRow.append(edit)
               // A sub-step is individually actionable when its content diff was

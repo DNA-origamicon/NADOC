@@ -1,0 +1,14 @@
+/* Nested routing objects/lists need full rows, not an unbounded flex strip. */
+.routing-feature-editor .routing-input-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.routing-input-fields > :not(label) { grid-column: 1 / -1; min-width: 0; }
+.routing-input-fields > label { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.routing-input-fields input, .routing-input-fields select { width: 100%; min-width: 0; box-sizing: border-box; }
+.routing-input-fields input[type=checkbox] { width: auto; align-self: flex-start; }
+.routing-feature-editor .tool-fields:not(.routing-input-fields) { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .routing-feature-editor .routing-input-fields { grid-template-columns: minmax(0, 1fr); }
+}

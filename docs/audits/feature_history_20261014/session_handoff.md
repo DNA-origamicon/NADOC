@@ -1,150 +1,97 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-October 22, 2026: full original11-step sequence checked against independent chronological paths; all stages pass (maximum3.2e-15nm).
-Three iterations completed: atomic linked-member transport repaired (native4+compound31+constraint16pass).
-Host/history6 + render-diff22 + app1 pass; stale member-pose display after undo/redo repaired.
-Next: qualify remaining named-group/companion/birth semantics and large posed-part undo latency; gates stay OFF.
-**Tools done: 4/6 (Bend, Twist, Extrude, Sweep). CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-Feature-row secondary actions now live in a right-click menu: Suppress/Unsuppress, Move…, View dependencies.
-Existing dialogs, source checks and suppressed/error badges remain; Shift+F10 opens the same menu.
-Menu: frontend9463pass/1skip; app Move, suppress/unsuppress and dependency-view pass; smoke23pass, scratch removed.
-Native history-action qualification remains6pass; see the transform plan for evidence. Unused-import lint debt fixed; `just lint` passes.
-## Scope and next work
-User resolved terminal-tail semantics: single-nucleotide Move/Rotate moves only that nucleotide;
-tails move only when selected. Initial locality repair is committed as 8fd29efb.
-Initial repairs cover tail/insert identity aliases, bridge reconstruction and terminal resize capture.
-See [selection-locality investigation](selection_locality_investigation.md) for provenance and audits.
-Evidence: native20/rotation4/bridge28; frontend9432pass1skip; browser1pass saved Apply.
-Earlier FAST19228pass/19skip/84fail included83 baseline failures plus a corrected bridge oracle.
-Follow-up partial-owner regression exposed generic residue-command postprocessing widening
-an existing posed owner to include the opposite strand. Fixed in b2db50e1; recording/replay preserve ownership;
-native/HTTP10pass including undo/cold proof, browser2pass, group-lineage16pass.
-Final backend FAST19251pass/19skip/84fail:83 retained baseline +one verification timeout;
-complete branch file rerun2pass. FULL deferred; broad suite not green. One real-worker
-readiness Apply parameter classified slow/headless after two >5s runs; collection verified,
-Latest FAST19410pass/19skip/83same baseline failures; aggregate400s, zero per-test violators.
-The isolated compiler captures interleaved fixed-world named moves and up to16 native residue events.
-Chronological7 +program23 +reset13 +existing-tail8 pass; prior constraint-inventory4 pass.
-Every intermediate stage checks Full positions/orientations/site frames, atoms and exact no-M control.
-Samples reuse captured stages without replay/builders. Reset/replacement deletes the current pose component,
-retaining all preceding independent world moves in order; delete/recreate tested. Canonical keys keep tails
-fixed in both representations. Explicit tail selection is unsupported only in this diagnostic compiler;
-native single/whole-tail selection is repaired and tested. No named-motion production promotion.
-Attached Sweep after partial placement expands ownership onto unselected old material. The
-isolated surviving-domain candidate restores old Full positions/orientations/site frames and all
-atoms exactly, preserving newly created atoms/bonds. Split/merge ancestry is explicitly refused.
-The original four native cases identified reverse-site frame preference and stretched birth bonds.
-Real phase coverage now uses native source-duplex axial rotations:144 cases,36 distinct geometries
-per direction/end, all preservation checks pass. Candidate birth bonds reach6.234nm; no promotion.
-Artifact: `.development-artifacts/member-motion-birth-native-phase-review/index.html`, with
-current/candidate/difference/defect panels, exact rings/bonds and per-junction deltas.
-Audit correction: original ordering/chronology/tail and first birth artifacts varied ignored lattice
-phase_offset; variants were identical. Index pages withdraw phase claims; individual counterexamples stand.
-Generators now share verified native axial-roll setup; immutable phase constants stay unchanged.
-Focused checks: birth fixture3, ordering/partial9, tail4 pass. Viewer3 cases/both representations
-pass with no errors/network; scratch oqbczxqa verified absent. Positive defect view inspected.
-User resolved attached construction: reject subsequent attached Sweep when partial motion
-separates the two occupied source-strand frames. Do not automatically convert displaced
-staples into overhangs/linkers; that was a design question, not implementation authorization.
-Production now checks source-end frame agreement (including individual residue poses) before
-preview/build, retains the existing placement for admitted cases, and explains refusal in the
-ordinary panel. Detached construction remains admitted; no selection/ownership expansion fix
-or diagnostic candidate was promoted. Native/HTTP22pass; existing Sweep39pass; browser1pass:
-message visible, Next disabled, exact Cancel, no commit. Earlier Move history edit attributes
-failure to the later Sweep and preserves source. Scratch s4kantpm independently absent.
-C7 ordinary mid-log refusal/Cancel and C5 dependent deletion dialog already pass; do not repeat.
-Unpair Move preserves scaffold/3D and assigns separated staple segments new cadnano rows; ordinary Apply confirms.
-History now retains reclassification and follows stable pose IDs in the private display while keeping prefix targets.
-Native6pass covers prior poses, either partner, later edits, undo/cold proof and downstream refusal; frontend9454pass/1skip.
-Browser1pass: native gizmo edit through a later nick, exact Cancel, stable IDs, Apply/save/reopen/cold proof.
-Guarded FAST19369pass/19skip/83 identical baseline failures;412.91s. Display-worker timing5.14s, focused rerun3.55s/pass; debt retained.
-Manual examples: `workspace/move_rotate_axes_overhang_focused.nadoc` (5 steps), `workspace/move_rotate_pose_reset.nadoc` (adds F6 reset).
-User requires UI tool names and `F1: Extrude 1 [detail]` labels; one/two native examples precede engineering phase sweeps.
-Axes/OH1: native36+cluster122+final65 pass; frontend9458/1skip; browser verifies actual axes, OH toggles, scrubbing and animation.
-Ordinary cluster separation now reclassifies; linked/deformed/loop-skip, independent residue-owner and named-member integration remain unsupported.
-Original F3–F11 chronology verified for every base/atom, including reset/replacement/second cluster/final move; focused16pass. Gates OFF.
-Latest FAST19381pass/19skip/85fail:83 baseline +2 dependency assertions fixed (final38pass); focused71/browser2pass. FULL deferred; display-worker slow classification committed separately, unrelated conftest edits retained.
-Inventory check: Bend/Twist/Sweep gates ON; Extrude delivered; Move/Rotate gates OFF.
-Fine Routing editor is ON in current code (its plan/older ledger row saying OFF is stale).
-Core open: group/member motion, transform history, ordinary connections, complete reference repair,
-integrated desktop qualification and host lifecycle closure (FH-18/23/25/26/27/28).
-Seven parked CAD milestones: NP connections/fitting, biotin, protein/scadnano/DNA-PDB imports,
-and generated-asset composition. Legacy conversion and simulation/agent provenance are outside scope.
-## Current qualification evidence
-- Bend/Twist private guides use native sampled polylines and shared bp-range clipping,
-  preserving domain gaps and every molecular instance; canonical rendering defaults unchanged.
-  Detached spare reuse remains inventory-exact and failure-atomic; resized GPU buffers dispose.
-- Fixed12-sample C8:4pass. Small Bend/Twist preview101/108ms, Apply936/422ms, Cancel59/80ms;
-  large preview866/942ms, Apply4377/5196ms, Cancel151/193ms. Fixed limits unchanged;
-  GPU raster excluded (SwiftShader). C8 closes the last paired exit; FH-20 is complete.
-- Move/Rotate real6×84/18×504 transport uses lossless f64, exact lease-bound scalar deltas,
-  finite real-part capacities, immutable JSON accounting and detached native buffer reuse.
-  Latest app10pass; small Move/Rotate72/60ms, large960/894ms;
-  Apply422/2789ms, Cancel59/50ms. Fixed C8 passes; native validation semantics unchanged.
-  Checked-block authority/DTO133pass2deselected; scalar/native UI162pass plus guides16pass.
-  Log transform-block-final-app.log; root k7fzbcc9 independently absent. Frontend780files/9425pass/1skip;
-  backend19185pass/83same known failures/19skip; final audit-view frontend781files/9426pass/1skip.
-- Old ordering/chronology/tail artifacts retain individual counterexamples only; their phase
-  claims are withdrawn. Tail semantics are resolved and production locality is repaired.
-  Named native-material union/overlap and Bend/Twist/Sweep-prefix program13pass; exact no-M controls6pass.
-  Pre-existing Sweep loop copies are captured once by native copy identity; later birth/partial frames remain unresolved.
-  Prefix lineage integration10pass: Sweep both ends/detach, nick/merge both directions, empty/dissolved references.
-  This proves current-prefix selection only, not earlier-motion or later-material frame semantics.
-- Causal C4: real Move and Rotate edits break a later extrusion-domain reference; earliest
-  feature error and blocked descendant appear, refusal preserves canonical state and Cancel
-  clears feedback. Native4/browser2pass; capacity/unsupported response handling now browser2pass: draft
-  retained, canonical/browser state exact, no false badges, Cancel works. Native DTO refusal9pass;
-  injected UI responses are not capacity benchmarks. Scratch hlrxaq6s/5kcm3ls5 independently absent.
-- Evidence: axis-lines-c8.log, transform-causal-app-final.log, geometry-final-frontend.log,
-  geometry-final-test-smart.log under .development-artifacts/feature-history-focus/.
-  Browser roots tfn8qjbl/wg9x_zte and cancelled diagnostics mhpbkfq8/rzpelai0 independently absent.
-## Completed user-facing behavior
-- Bend/Twist: isolated creation/history editing, downstream error attribution and dependency view.
-  Desktop mutating-preview fallback and destructive history peeling removed; other consumers of
-  legacy creation helpers are not claimed removed. Final C8 passes; both tools are counted done.
-- Sweep: production gates ON; ordinary-part C1–C9 complete. Interactive preview displays axes,
-  nodes and cross-sections over static prefix context. Backend now calls guide planning without
-  building or validating full candidate DNA on every update. Apply retains complete native rebuild.
-  Latest measured p95: small36ms/large88ms, excluding GPU raster; Apply163/2530ms, Cancel47/35ms.
-  Attached/independent/detached source lifecycles, later topology changes, routing removal/refusal,
-  rollback refusal, exact Cancel, undo/redo/save/reopen and independent cold replay passed in app.
-- Extrude: all seven native family lifecycles and five creation workflows covered; ordinary-part
-  C1–C9 complete. Legacy length-only editor removed. Existing modal form remains the editor;
-  live preview is separate follow-on scope. Nicked posed continuation uses the existing straight
-  continuation terminus eligibility rule. Bundle creation is failure-atomic with one Undo.
-- History dependencies: revision-bound parent/child viewer uses existing native resource contracts.
-  Error/blocked badges describe a refused draft; canonical geometry stays unchanged on failure.
-- Whole-row Move: existing evaluation jobs/commit/undo; native replay resolves references at the
-  proposed stage. Shared resources alone are not ordering barriers; valid moves may change geometry.
-  Initial bundle stays first. Missing producers refuse with feature/child attribution. Source proof,
-  final cold replay and per-stage structure checks run; Fine Routing IDs/child order are preserved.
-- Suppress/Unsuppress: saved definitions and IDs remain in place as fingerprinted no-op steps.
-  Capture, replay, rollback, repair drafts and persistence retain suppression. Unsuppress regenerates
-  the saved operation and suffix. Missing producers refuse atomically without cascading deletion.
-- Source repair: existing saved-proposal panel supports Sweep source helix; continuation/frame source
-  frame; deformed continuation reference helix; overhang extrusion anchor helix. Choices come from
-  the actual feature prefix. Existing native binding refreshes derived continuation receipts; full
-  replay validates geometry and downstream features. Repair preserves explicit suppression state.
-  Tracking repair callbacks cannot be skipped by the outer replay cache on repeated proposals.
-- ISSUE-146: repair launcher was hidden inside assembly's configuration-only toolbar. It now has
-  a sibling host with the existing part-context visibility guard; no additional panel or lifecycle.
-## Retained baseline debt
-Earlier source-repair, suppression and reorder evidence: plan and `.development-artifacts/feature-history-focus/`. Source-repair browser2, full frontend9367/1skip,
-smoke23 and focused archive28/capture45/accounting31 passed; disposable roots verified absent.
-Backend baseline `stop-backend-final.log`:83 failures (11 sealed HTTP/registration,
-2 junction tolerances,51 historical numerical manifests,19 obsolete schema expectations).
-No manifests regenerated; legacy compatibility is excluded. Latest validation is reported above.
-```
-DEFERRED: this change would have needed the FULL suite, but no test-dedicated
-session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
-```
-## Commit and shared-worktree boundaries
-Incoming checkpoint: **2e5cc12d**; iterations1/2: **3691de58**, **f155f0fb**; iteration3 adds full pose refresh.
-Mixed prior edits in `implementation.md` and `memory/project_feature_log_overhaul.md` remain uncommitted; this session corrects their stale summaries.
 
-Full required matrix/implementation sequence: [group placement plan](group_placement_migration_plan.md#required-acceptance-matrix).
-Diagnostic sources: `tools/member_motion_ordering_program.py`, `member_motion_birth_audit.py`,
-`member_motion_audit.py`; generated HTML/logs are local ignored artifacts, not portable committed evidence.
-If artifacts are unavailable, inspect those generators before regeneration; do not claim a missing view reviewed.
-Shared worktree has extensive unrelated edits (API/VR/simulation/memory/tests); preserve them. Stage explicit
-owned paths only; no reset/stash/restore, broad staging, push, lock/golden regeneration or phase-constant edits.
+October 25, 2026: **Fine Routing ordinary-part history editor is desktop-qualified.**
+All 22 native forms pass visible-field layout, exact Cancel, Apply through later
+nick/Bend/Extrude, one undo/redo, save/reopen and independent cold replay.
+Batch add/remove/reorder preserves output identities. Upstream deletion lists
+consumers; mid-log editing refuses. Native failures mark the first failing child
+and block its suffix without publishing; Cancel/retry clear that feedback.
+Delayed reference loading respects Cancel and document reset. Editor stays ON;
+the separate organization and Move/Rotate rollout gates are unchanged.
+
+**Geometry tools done: 4/6 (Bend, Twist, Extrude, Sweep); Fine Routing qualified separately.
+CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
+The geometry-tool denominator is unchanged; FH-24's implementation was already
+complete, so this closes its ordinary desktop acceptance rather than adding an FH milestone.
+
+## Current evidence and limits
+- ISSUE-150–153: source-owned refusal feedback; ordinary CAD capture capacity;
+  bounded reference catalog accounting; deterministic seamless fallback traversal;
+  responsive nested forms. No new host, queue, storage format or capability route.
+- Large 18×504 native lifecycle and fresh-process hash-seed 1/2 proof:2pass.
+  Native/HTTP/worker/input/app-fixture focused backend:283pass.
+- Final layout/lifecycle matrix and visual inspection:23pass;32 distinct app cases
+  passed across the final applicable runs. Logs: `routing-*.log` under
+  `.development-artifacts/feature-history-focus/`. App scratch roots independently absent.
+- Small 6×84 / large 18×504: Apply1.95/7.51s; local-input p9528/41ms;
+  Cancel78/286ms; open p952.04/4.64s. Modal inputs have no geometry preview.
+  Large Cancel is within the contract's2× allowance; one performance task remains
+  to reach 200 ms. No retained preview session; large RSS294→317MB includes warm caches.
+- GPU raster excluded from timing (SwiftShader). The 18×504 visual run timed out;
+  the 18×84 desktop form was inspected before/after the layout fix. No geometry
+  golden or physical qualification is claimed.
+- Full frontend: 9464 passed / 1 skipped. Backend FAST: 19409 passed / 19 skipped /
+  84 failed: the exact 83 baseline failures plus a synchronous native-auto seamless
+  verification timeout; isolated whole-file rerun: 8 passed (seamless 0.06 s).
+  Guarded run 390 s, zero per-test violators. Slow-test triage found aggregate
+  suite cost; no budget raised or unrelated tests relegated. Large-routing tests
+  use the central slow/headless registry; collection confirms both remain covered.
+  Isolated smoke: 23 passed; final lint passes. All 10 launcher roots absent.
+  FULL deferred: no test-dedicated session is open.
+- Detailed acceptance and command evidence: [Fine Routing plan](fine_routing_history_editor_plan.md).
+  `frontend/src/main.js` remains 7350 lines, delta0.
+
+## Single next tool
+Finish Move/Rotate. The remaining named-group/companion/birth semantics and large
+posed-part undo qualification belong to its existing exits; both production gates
+remain OFF. Do not substitute another diagnostic program or widen unrelated tools.
+See the [transform plan](transform_history_editor_plan.md) and the
+[group/member acceptance matrix](group_placement_migration_plan.md#required-acceptance-matrix).
+
+Retain these user decisions and completed repairs:
+- Single-nucleotide Move/Rotate moves only that nucleotide. Tails move only when
+  selected. Tail/insert identity aliases, bridge reconstruction, terminal resize
+  capture and opposite-strand ownership expansion are repaired.
+- Chronological cluster movement carries preceding individual poses; reset removes
+  the individual component while retaining preceding cluster movement. The original
+  F3–F11 sequence matches independent Full/atom arithmetic (max3.2e-15nm).
+- A complete linked move transports saved member poses once through final frames;
+  differential-end rigid-insert movement still refuses. Undo/redo publish the full
+  native display when residue poses change (ISSUE-148/149), avoiding stale site frames.
+- Attached Sweep refuses when partial movement separates occupied source-strand
+  frames. Do not automatically convert displaced staples into overhangs/linkers.
+  Detached construction remains admitted. Birth candidates with stretched bonds
+  were never authorized for production.
+- Explicit Unpair preserves scaffold/3D, assigns separated staple segments new
+  cadnano rows, retains reclassification and follows stable pose IDs through history.
+- Manual examples remain `workspace/move_rotate_axes_overhang_focused.nadoc` and
+  `workspace/move_rotate_pose_reset.nadoc`. Use UI tool names and `F1: Extrude 1 [detail]`.
+- Old ordering/chronology/tail artifacts retain individual counterexamples only;
+  their original phase-sweep claims were withdrawn because phase_offset was ignored.
+  Later diagnostic generators use verified native axial-roll setup. Do not claim
+  a missing artifact reviewed, or infer molecular approval from ordering approval.
+
+## Remaining scope and retained baseline debt
+Core open: group/member motion, transform history, ordinary connections, complete
+reference repair, aggregate desktop qualification and host lifecycle closure
+(FH-18/23/25/26/27/28). Seven parked CAD milestones cover NP connections/fitting,
+biotin, protein/scadnano/DNA-PDB imports and generated-asset composition.
+Legacy-file conversion and simulation/agent provenance remain outside scope.
+Bend/Twist/Sweep gates are ON; Extrude is delivered. Source repair, suppress,
+reorder and the parent/child dependency viewer retain their established behavior.
+Feature-row secondary actions use right-click/Shift+F10: Suppress, Move, dependencies.
+
+The prior backend FAST baseline is19410pass/19skip/83fail, recorded in
+`compound-final-test-smart.log`:11 sealed HTTP/registration,2 junction tolerances,
+51 historical numerical manifests and19 obsolete schema expectations. No manifests
+were regenerated; broad-suite debt is separate from focused acceptance.
+FULL remains subject to the user's test-session gate; never bypass it.
+
+## Shared-worktree boundaries
+Incoming HEAD: `e50bdd72`. Commit only owned feature-history paths, explicitly staged.
+Existing unrelated API/VR/simulation/memory/test edits remain untouched. Mixed
+`issues_ledger.md`, `issues_fix_log.md` and `manual_validation_debt.md` remain
+uncommitted rather than including another session's hunks. Only the two new
+large-routing registry additions in mixed `tests/conftest.py` are staged. No push, reset, stash,
+restore, broad staging, phase-constant edit, lock or golden regeneration.

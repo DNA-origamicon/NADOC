@@ -12,6 +12,7 @@ import os
 from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
+from tests.routing_history_fixture import FIXTURES as ROUTING_FIXTURES
 
 FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 TRANSFORM_FIXTURES = {"transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
@@ -24,6 +25,13 @@ def fixture(kind):
     from backend.core.models import DeformationLogEntry, DeformationOp, MinorMutationLogEntry, RoutingClusterLogEntry, SnapshotLogEntry
     from backend.core.part_history_contract import create_empty_part
     from tests.test_part_deformation_preview import _append
+
+    if kind in ROUTING_FIXTURES:
+        from tests.routing_history_fixture import fixture as routing_fixture
+        return routing_fixture(kind)
+    if kind == "routing-refusal":
+        from tests.test_part_routing_owned_edit import recipe
+        return recipe()[0]
 
     if kind == "unpair":
         from tests.test_part_transform_preview import snapshot
@@ -47,7 +55,7 @@ def fixture(kind):
     if kind == "transform-owner":
         from tests.test_part_transform_preview import source_recipe
         return source_recipe(name="__e2e__transform-owner")
-    if kind not in FIXTURES | TRANSFORM_FIXTURES:
+    if kind not in FIXTURES | TRANSFORM_FIXTURES | {"routing-large", "routing-visual"}:
         raise ValueError("Unknown fixture")
     if kind in {'repair-sweep-source', 'repair-extrude-source'}:
         from tests.test_part_geometry_reference_repair import fixture as repair_fixture
@@ -135,7 +143,7 @@ def fixture(kind):
                     cluster_id=source.cluster_transforms[0].id, translation=[1, 2, 3],
                     rotation=[0, 0, 0, 1], pivot=[0, 0, 0], proof_version=1, source="manual-test"))
             return design_state.get_or_404()
-    if kind == "routing":
+    if kind in {"routing", "routing-large", "routing-visual"}:
         # Autostapled 6HB with one positional (v2) staple-end resize: routing step
         # editor and region autostaple browser checks.
         from backend.api import headless_build as hb, state as design_state
@@ -143,7 +151,9 @@ def fixture(kind):
 
         with hb.scratch_session():
             design_state.load_design(create_empty_part("__e2e__history-bend", "HONEYCOMB"))
-            hb.create_bundle([(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 84, lattice=LatticeType.HONEYCOMB)
+            large = kind != "routing"
+            cells = [(r, c) for r in range(6 if large else 3) for c in range(3 if large else 2)]
+            hb.create_bundle(cells, 504 if kind == "routing-large" else 84, lattice=LatticeType.HONEYCOMB)
             hb.auto_scaffold(seamless=True)
             hb.full_autostaple()
             design = design_state.get_or_404()
@@ -312,7 +322,7 @@ def create_app():
     @app.post("/api/__e2e__/history/seed/{kind}")
     def seed(kind: str):
         require_doc()
-        if kind not in FIXTURES and not (transforms and kind in TRANSFORM_FIXTURES):
+        if kind not in FIXTURES | ROUTING_FIXTURES | {"routing-refusal", "routing-large", "routing-visual"} and not (transforms and kind in TRANSFORM_FIXTURES):
             raise HTTPException(422, "Unknown fixture")
         if sealed:
             if kind not in {"bend", "twist"}:
@@ -357,7 +367,8 @@ def create_app():
             with state._lock:
                 source = state._session().design.model_copy(deep=True)
         result = assess_part_history(source, execute=execute, dependencies=dependencies)
-        if source.feature_log[-1].id == "downstream-nick" or source.feature_log[0].id == "selected-sweep":
+        if (source.feature_log[-1].id == "downstream-nick" or source.feature_log[0].id == "selected-sweep"
+                or any(row.id in {"selected-parent", "routing"} for row in source.feature_log)):
             from backend.core.design_geometry import _geometry_for_design
             from tests.test_part_deformation_preview import authoring
             expected = cold_replay(source)

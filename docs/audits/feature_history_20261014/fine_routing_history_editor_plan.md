@@ -1,11 +1,10 @@
 # FH-24 Fine Routing history editor contract
 
-U27 implementation checkpoint, October 16, 2026, based on `3ffde3e3`.
-**All 22 native child kinds are implemented and software-tested.** Current
-accounting is **21/38 complete,17 remaining (8 core,9 parked)**; this closes only
-the original FH-24 implementation exit. Desktop/performance remains the already
-allocated FH-27/MV-53 exit. Editor and organization rollout gates stay off.
-See [validation evidence](validation_fine_routing_history_editor.json).
+Current delivery status and next work live in [the handoff](session_handoff.md).
+All 22 native child kinds are implemented. The ordinary Fine Routing editor is
+ON; the separate group-organization gate is unchanged. October 25 desktop
+qualification and fixes are recorded below. The original U27 software evidence
+is retained in [the validation record](validation_fine_routing_history_editor.json).
 
 The source audit below began against `3fb2c61d` without test execution and earned
 no completion credit. Its fixed inventory and acceptance contract are retained;
@@ -257,3 +256,17 @@ existing recorder. Legacy recovery readers remain necessary and are retained.
 All 22 kinds, organized annotation/realization, actual later native suffixes,
 missing downstream outputs, one undo/reload/cold proof and optimized seek are
 covered. No molecular algorithm, model, constant, pin or golden is changed.
+
+## Ordinary desktop acceptance — October 25, 2026
+- All 22 forms pass the actual Feature Log editor, field bounds, local-only Cancel and (where inputs exist) Apply through later nick/Bend/Extrude, one undo/redo, save/reopen and independent cold replay. Clear-all honestly has no inputs.
+- Failure semantics: refuse atomically, retain draft/source, mark earliest failing child and blocked suffix; Cancel or corrected retry clears feedback. ISSUE-150 connects the existing feedback lifetime.
+- Batch add/remove/reorder preserves retained output IDs and allocates a fresh replacement; dependent deletion, mid-log refusal and held reference-load Cancel/reset pass. Native guarded child requests cannot fall through to legacy address-only edits.
+- ISSUE-151: routing selects the established ordinary CAD capture bounds before its single copy; candidate admission matches. Catalogs retain 30k records/domains and 2 MB, with 32 expanded JSON nodes per record. Worker input/result and five-second operation limits remain unchanged.
+- ISSUE-152: seamless fallback component traversal is now hash-seed independent; source and fresh-worker replay agree without changing native builders/constants. ISSUE-153: scoped responsive fields replace overflowing nested flex strips.
+- `just test-focused tests/test_part_routing_large_history.py`:2pass; native large lifecycle/atomic capacity refusal and fresh-process hash seeds 1/2. Focused affected routing/worker/HTTP/input/app-fixture suite:283pass.
+- App:32 distinct cases passed across applicable runs; final all 22 layout/lifecycle + visual run23pass. Logs `routing-app-final`, `routing-completion-app`, `routing-large-app-final`, `routing-layout-app` under `.development-artifacts/feature-history-focus/` (initial failures retained).
+- C8:6×84 /18×504; local input p9528/41ms, Apply1.95/7.51s, Cancel78/286ms; open p952.04/4.64s. These are modal inputs, not a geometric preview. GPU raster excluded (SwiftShader).
+- One deferred performance task: large Cancel286ms meets the2× allowance but should reach200ms. Repeated opens retain zero preview sessions; large process RSS294→317MB includes warm caches, not a zero-allocation claim.
+- Inspected 18×84 desktop before/after the form repair. The 18×504 software-raster visual run timed out; its transport/adoption timings remain independently qualified. No molecular golden changed.
+- Full frontend:9464pass/1skip. `just test-smart`:FAST19409pass/19skip/84fail (83 exact baseline + synchronous native-auto seamless verification timeout; focused whole-file rerun8pass). FULL deferred by test-session guard. Aggregate390s, zero per-test violators; triage retains budgets and registers the two large tests slow/headless. Isolated smoke:23pass; final lint passes; `main.js`7350, delta0. Launcher scratch cleanup independently checked.
+- Ordinary editor stays ON. Group-organization rollout and aggregate FH-27 remain separate; current counts and the single next tool live only in the handoff.

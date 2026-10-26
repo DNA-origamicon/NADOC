@@ -130,6 +130,17 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
     slot_owned = True
     deadline = monotonic() + TIME_BUDGET
     try:
+        capture_limits = {}
+        capture_timing = {}
+        if family == "routing_edit":
+            # Native routing edits use the same finite CAD source capacity as
+            # Bend/Twist/Sweep. The old generic 25 ms / 30k-node proof capture
+            # refused an ordinary scaffolded 18HB before its inputs could open.
+            # Select once, before capture; never retry a refused copy.
+            from backend.api.part_deformation_preview import MAX_CAPTURE_BYTES, MAX_CAPTURE_NODES
+            from backend.api.part_deformation_preview_sessions import CAPTURE_SECONDS
+            capture_limits = {"max_nodes": MAX_CAPTURE_NODES, "max_bytes": MAX_CAPTURE_BYTES}
+            capture_timing = {"seconds": CAPTURE_SECONDS}
         with state._lock:
             require_http_source()
             policy.require_compatibility(doc, "owned_recipe_rebuild")
@@ -188,7 +199,7 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
                                    "expected_feature_id": expected_feature_id,
                                    "expected_child_id": expected_child_id, "inputs_only": inputs_only,
                                    "added_output_ids": added_ids})
-            captured = capture(source, preserve_entry_types=True)
+            captured = capture(source, preserve_entry_types=True, **capture_limits, **capture_timing)
             if family == "routing_edit":
                 from backend.api.part_group_geometry_budget import require_group_geometry_budget
                 require_group_geometry_budget(captured)
@@ -248,7 +259,7 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
                 _current(context, session, deadline, cancelled, family)
             return packet
         candidate, _authoring_digest, _recipe_digest = decode_candidate(result["candidate"])
-        admit(candidate, preserve_entry_types=True)
+        admit(candidate, preserve_entry_types=True, **capture_limits)
         require_valid_structure(candidate)
         if family == "routing_edit":
             require_group_geometry_budget(candidate)

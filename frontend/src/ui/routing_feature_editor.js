@@ -3,6 +3,8 @@ import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import { toolSection } from './tool_sections.js'
 import { cloneRepairInput } from '../features/part_repair_model.js'
+import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
+import './routing_feature_editor.css'
 
 // Ordinary input editor for recorded Fine Routing steps (feature log ✎ action).
 export const ROUTING_HISTORY_EDITOR_ENABLED = true
@@ -163,7 +165,7 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
     if (kind === 'crossover-place') body.append(output('Output crossover ID', values.crossover_id))
     if (kind === 'forced-ligation-create') body.append(output('Output forced ligation ID', values._fl_id))
     function controls(target, descriptors, prefix = '', changed = () => {}) {
-      const container = el('div', { className: 'tool-fields' })
+      const container = el('div', { className: 'tool-fields routing-input-fields' })
       for (const field of descriptors) {
         const label = (prefix + field.label).trim(), value = target[field.key] === undefined ? field.fallback : target[field.key]
         if (field.type === 'derived') continue // Kept in step with its source field on Apply.
@@ -248,7 +250,7 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
         saving = false; nodes.forEach((node, i) => { node.disabled = disabled[i] }); fail(failure?.message || 'The routing edit failed.')
       }
     }
-    const modal = createModal({ title: `Edit ${title}`, size: 'lg', body,
+    const modal = createModal({ title: `Edit ${title}`, size: 'lg', className: 'routing-feature-editor', body,
       actions: [createButton({ label: empty ? 'Close' : 'Cancel', onClick: () => modal.close() }), ...(!empty ? [createButton({ label: 'Apply', variant: 'primary', onClick: save })] : [])],
       onClose: () => { if (saving && !retired) return false; finish(null) },
     })
@@ -258,8 +260,9 @@ export function editRoutingFeature(packet, { onSave, isCurrent = () => true } = 
 }
 
 /** One visible load, then one local draft. Closing a load never opens a late modal. */
-export async function openRoutingFeatureEditor({ api, index, subIndex, parent, child }) {
+export async function openRoutingFeatureEditor({ api, store, index, subIndex, parent, child }) {
   const context = api.captureRoutingEditContext()
+  const feedback = store ? createFeatureHistoryFeedback(store) : null
   let retired = false
   const message = el('p', { text: 'Loading native references before this routing step…' })
   const reset = () => loading.close()
@@ -275,21 +278,25 @@ export async function openRoutingFeatureEditor({ api, index, subIndex, parent, c
     draftInputs(packet) // Keep a malformed-definition error in the visible load dialog.
     loading.close()
     return await editRoutingFeature(packet, { isCurrent: () => api.isRoutingEditContextCurrent(context),
-      onSave: params => api.editRoutingFeatureInputs(index, subIndex, params, context, parent.id, child.id) })
+      onSave: async params => {
+        feedback?.clear()
+        try { return await api.editRoutingFeatureInputs(index, subIndex, params, context, parent.id, child.id) }
+        catch (error) { feedback?.update(error, context.source); throw error }
+      } })
   } catch (failure) {
     if (retired) return null
     message.setAttribute('role', 'alert'); message.textContent = failure?.message || 'Routing inputs could not be loaded.'
     return null
-  }
+  } finally { feedback?.dispose() }
 }
 
 /** Thin Feature Log entry; snapshot/diff eviction is not input eligibility. */
-export function createRoutingEditAction({ api, design, parent, child, index, subIndex, enabled, assemblyActive }) {
+export function createRoutingEditAction({ api, store, design, parent, child, index, subIndex, enabled, assemblyActive }) {
   if (!enabled || assemblyActive || !isNativeRoutingChild(parent, child)) return null
   const latest = (design.feature_log_cursor ?? -1) === -1 && design.feature_log_sub_cursor == null
   const edit = createButton({ label: '✎', size: 'sm', onClick: async event => {
     event.stopPropagation(); edit.disabled = true
-    try { await openRoutingFeatureEditor({ api, index, subIndex, parent, child }) }
+    try { await openRoutingFeatureEditor({ api, store, index, subIndex, parent, child }) }
     finally { if (edit.isConnected) edit.disabled = !latest }
   } })
   edit.disabled = !latest
