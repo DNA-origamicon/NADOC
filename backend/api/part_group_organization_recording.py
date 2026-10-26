@@ -79,7 +79,7 @@ def _current(context, session):
     _editable(session.design, display=context.operation == "visibility-update")
 
 
-def _placement(source, inputs):
+def _placement_params(source, inputs):
     if (set(inputs) != {"placement_id", "fields"} or type(inputs["placement_id"]) is not str
             or not 1 <= len(inputs["placement_id"]) <= 512 or type(inputs["fields"]) is not dict
             or not inputs["fields"] or set(inputs["fields"]) - POSE_FIELDS.keys()):
@@ -100,7 +100,12 @@ def _placement(source, inputs):
             _invalid("Placement poses require finite numerical vectors of the declared lengths.")
     if not any(pose["rotation"]):
         _invalid("Placement rotation must be a nonzero quaternion.")
-    params = {"_proof_version": 1, "cluster_id": inputs["placement_id"], **pose}
+    return {"_proof_version": 1, "cluster_id": inputs["placement_id"], **pose}
+
+
+def _placement(source, inputs):
+    params = _placement_params(source, inputs)
+    pose = {key: params[key] for key in POSE_FIELDS}
     result = build_overlay("cluster_op", source, params)
     entry = ClusterOpLogEntry(proof_version=1, cluster_id=inputs["placement_id"], **pose)
     return result, entry
@@ -108,24 +113,35 @@ def _placement(source, inputs):
 
 def _prepare(kind, source, inputs):
     if kind == "placement-update":
+        if source.nucleotide_transforms:
+            return _prepare("placements-update", source, {"placements": [inputs]})
         return _placement(source, inputs)
     if kind == "placements-update":
         if (set(inputs) != {"placements"} or type(inputs["placements"]) is not list
                 or not 1 <= len(inputs["placements"]) <= MAX_PLACEMENTS_PER_EDIT):
             _invalid("Select between one and 64 explicit placements for one move.")
-        identities = set()
-        result, entries = source, []
+        from backend.api.part_placement_pose_commands import build as build_poses
+
+        identities, poses = [], []
+        owners = {owner.id: owner for owner in source.cluster_transforms}
         for item in inputs["placements"]:
             if type(item) is not dict or type(item.get("placement_id")) is not str:
                 _invalid("Each move requires an explicit placement identity and pose fields.")
             if item["placement_id"] in identities:
                 _invalid("A move cannot repeat a placement identity.")
-            identities.add(item["placement_id"])
-            updated, entry = _placement(result, item)
-            if updated.cluster_transforms != result.cluster_transforms:
-                entries.append(entry)
-            result = updated
-        return result, entries
+            params = _placement_params(source, item)
+            identity = params["cluster_id"]
+            identities.append(identity)
+            owner = owners[identity]
+            poses.append({"cluster_id": identity, **{key: params[key] for key in POSE_FIELDS},
+                "parent_cluster_id": owner.parent_cluster_id,
+                "overhang_duplex_driver_id": owner.overhang_duplex_driver_id})
+        params = {"_proof_version": 1, "primary_cluster_id": identities[0],
+            "selected_cluster_ids": identities, "poses": poses,
+            "authoring": {"mode": "free", "joint_id": None, "fixed_cluster_ids": [], "pivot_id": "centroid"},
+            "primary_authored_fields": {}, "legacy_source": None}
+        result = build_poses(source, params)
+        return result, SnapshotLogEntry(op_kind="placement-poses", label="Move/Rotate", params=params)
     if kind == "visibility-update":
         value = inputs.get("visibility_state")
         fields = set(VisibilityState.model_fields)
@@ -202,7 +218,7 @@ def apply(kind, inputs, *, expected_revision):
         require_valid_structure(prepared)
         state._assert_photoproduct_dependencies(prepared)
         report = state.validate_design(prepared)
-        if changed and kind in KINDS:
+        if changed and isinstance(entry, SnapshotLogEntry):
             budget = RecoveryBudget(MAX_RECOVERY_BYTES - retained)
             pre, pre_size = state.encode_design_snapshot(captured)
             budget.charge(pre)
@@ -217,7 +233,12 @@ def apply(kind, inputs, *, expected_revision):
             if not changed:
                 doc_context.set_request_revision(context.source_revision)
                 return source, report, None
-            candidate = source.copy_with(**{owned_field: getattr(prepared, owned_field)},
+            fields = {owned_field: getattr(prepared, owned_field)}
+            if kind in PLACEMENT_KINDS:
+                # Native placement carries prior residue poses through the final
+                # owner frames. They are part of this same authored operation.
+                fields["nucleotide_transforms"] = prepared.nucleotide_transforms
+            candidate = source.copy_with(**fields,
                 feature_log=[*source.feature_log, *entries] if entries else source.feature_log)
             state._assert_active_loadout_editable(source, candidate)
             permit = permits.issue_group_edit_permit(admission, candidate,

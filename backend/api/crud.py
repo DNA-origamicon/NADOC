@@ -1111,7 +1111,7 @@ def undo_design():
     Returns 404 if nothing to undo. Per-step wall-clock is exposed via the
     ``Server-Timing`` header.
     """
-    design_state.require_compatibility_write("legacy_undo")
+    design_state.require_compatibility_write("undo")
     trace = _TimingTrace()
     with trace.step("clone_prev"):
         prev = design_state.get_or_404().model_copy(deep=True)
@@ -1129,7 +1129,7 @@ def redo_design():
     Returns 404 if nothing to redo. Per-step wall-clock is exposed via the
     ``Server-Timing`` header.
     """
-    design_state.require_compatibility_write("legacy_redo")
+    design_state.require_compatibility_write("redo")
     trace = _TimingTrace()
     with trace.step("clone_prev"):
         prev = design_state.get_or_404().model_copy(deep=True)
@@ -1759,7 +1759,7 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
-    design_state.require_compatibility_write("legacy_design_load")
+    design_state.require_compatibility_write("load_design")
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
         raise HTTPException(400, detail=f"File not found: {path}")

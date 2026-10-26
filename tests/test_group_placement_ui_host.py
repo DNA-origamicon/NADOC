@@ -29,7 +29,7 @@ def test_multi_placement_commit_is_one_revision_undo_and_cold_replay(document):
     assert document.revision == revision + 1 and len(document.history) == depth + 1
     assert candidate.group_organization is source.group_organization
     assert [p.id for p in candidate.cluster_transforms] == [p.id for p in source.cluster_transforms]
-    assert len(candidate.feature_log) == len(source.feature_log) + len(source.cluster_transforms)
+    assert len(candidate.feature_log) == len(source.feature_log) + 1
     assert last is candidate.feature_log[-1]
     _verified(Design.model_validate_json(candidate.model_dump_json()))
     expected = _geometry_for_design(candidate)
@@ -69,7 +69,8 @@ def test_noop_members_do_not_create_rows_and_all_noop_retains_source(document):
     inputs["placements"][-1]["fields"]["translation"] = [9, 8, 7]
     candidate, _, last = apply(document, "placements-update", inputs)
     assert len(candidate.feature_log) == len(saved[0].feature_log) + 1
-    assert last.cluster_id == inputs["placements"][-1]["placement_id"]
+    assert last.op_kind == "placement-poses"
+    assert last.params["poses"][-1]["cluster_id"] == inputs["placements"][-1]["placement_id"]
 
 
 def test_visibility_preserves_authoring_and_roundtrips_without_new_feature(document):
@@ -117,9 +118,9 @@ def test_new_adapters_recheck_source_and_rollback_publication(document, monkeypa
     unchanged(document, saved)
 
 
-def test_multi_move_history_cap_charges_all_rows(document, monkeypatch):
+def test_multi_move_history_cap_charges_one_compound_row(document, monkeypatch):
     apply(document)
-    monkeypatch.setattr(host, "MAX_HISTORY_ROWS", len(document.design.feature_log) + 1)
+    monkeypatch.setattr(host, "MAX_HISTORY_ROWS", len(document.design.feature_log))
     saved = before(document)
     with pytest.raises(HTTPException) as error:
         apply(document, "placements-update", moves(document))

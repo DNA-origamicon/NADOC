@@ -15,7 +15,7 @@ from tests.extrude_matrix_fixture import FAMILIES
 from tests.routing_history_fixture import FIXTURES as ROUTING_FIXTURES
 
 FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
-TRANSFORM_FIXTURES = {"transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
+TRANSFORM_FIXTURES = {"transform-organized-insert", "transform-posed-large", "transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
 def fixture(kind):
@@ -43,6 +43,15 @@ def fixture(kind):
     if kind == 'sweep-separated':
         from tests.test_sweep_separated_strands import separated_source
         return separated_source()
+    if kind == "transform-organized-insert":
+        from tests.test_compound_member_chronology import recipe
+        from tests.test_part_transform_preview import snapshot
+        source, _ = recipe()
+        # Keep unrelated animation-default authoring out of movement acceptance.
+        from backend.core.models import DesignAnimation
+        source = source.copy_with(animations=[DesignAnimation(name="animation 1")])
+        return snapshot(source, "group-organize", {"expected_placement_ids": [
+            owner.id for owner in source.cluster_transforms]}, "organize")
     if kind == "transform-posed-insert":
         from tests.test_compound_member_history import history_recipe
         return history_recipe().copy_with(name="__e2e__transform-posed-insert")
@@ -117,7 +126,7 @@ def fixture(kind):
     if kind in FAMILIES:
         from tests.extrude_matrix_fixture import fixture as matrix_fixture
         return matrix_fixture(kind)
-    if kind in {"bend-small", "twist-small", "bend-large", "twist-large", "transform-small", "transform-large"}:
+    if kind in {"bend-small", "twist-small", "bend-large", "twist-large", "transform-small", "transform-large", "transform-posed-large"}:
         # C8 native recipes: 6 x 84 and 18 x 504 bp honeycomb, scaffolded
         # and autostapled. The large Bend recipe is unchanged from S61.
         from backend.api import headless_build as hb, state as design_state
@@ -139,6 +148,13 @@ def fixture(kind):
             else:
                 from backend.core.models import ClusterOpLogEntry
                 source = design_state.get_or_404()
+                if kind == "transform-posed-large":
+                    from tests.test_part_transform_preview import snapshot
+                    from tests.test_part_transform_inputs import pose
+                    source = snapshot(source, "nucleotide-transform-batch", {
+                        "history_seed": str(uuid4()), "transforms": [
+                            pose(helix_id=helix.id, bp_index=4, translation=[0.2, 0.1, 0])
+                            for helix in source.helices]}, "prior-residue-poses")
                 return _append(source, ClusterOpLogEntry(id="selected-transform",
                     cluster_id=source.cluster_transforms[0].id, translation=[1, 2, 3],
                     rotation=[0, 0, 0, 1], pivot=[0, 0, 0], proof_version=1, source="manual-test"))
@@ -283,15 +299,18 @@ def create_app():
     from backend.api import routes_part_deformation_preview as routes
     from backend.api import routes_part_sweep_preview as sweep_routes
     from backend.api import routes_part_transform_preview as transform_routes
+    from backend.api import part_group_organization_gate as group_gate
 
     @asynccontextmanager
     async def lifespan(_app):
         assert sweep_routes.SWEEP_PREVIEW_ENABLED, "Sweep production preview must be enabled"
         previous = routes.DEFORMATION_PREVIEW_ENABLED
         previous_transform = transform_routes.TRANSFORM_PREVIEW_ENABLED
+        previous_group = group_gate.GROUP_ORGANIZATION_ENABLED
         routes.DEFORMATION_PREVIEW_ENABLED = True
         if transforms:
             transform_routes.TRANSFORM_PREVIEW_ENABLED = True
+            group_gate.GROUP_ORGANIZATION_ENABLED = True
         try:
             with sealed_fixture.enabled() if sealed else nullcontext():
                 yield
@@ -302,6 +321,7 @@ def create_app():
                     state.drop_doc(identity)
             routes.DEFORMATION_PREVIEW_ENABLED = previous
             transform_routes.TRANSFORM_PREVIEW_ENABLED = previous_transform
+            group_gate.GROUP_ORGANIZATION_ENABLED = previous_group
 
     # Copy route list; never add fixture routes to main.app or replace its lifespan.
     from starlette.middleware import Middleware
@@ -331,7 +351,14 @@ def create_app():
             return {"ok": True, "sealed": True}
         state.load_design(fixture(kind))
         # Nonempty redo is essential: Cancel must preserve it, Apply must clear it.
-        state.set_design(state.get_or_404().copy_with())
+        current = state.get_or_404()
+        if current.group_organization is not None:
+            from backend.api.part_group_organization_recording import apply
+            visibility = current.visibility_state.model_dump(mode="json")
+            visibility["hidden_part_group_ids"] = [current.group_organization.groups[0].id]
+            apply("visibility-update", {"visibility_state": visibility}, expected_revision=state._session().revision)
+        else:
+            state.set_design(current.copy_with())
         state.undo()
         return {"ok": True}
 

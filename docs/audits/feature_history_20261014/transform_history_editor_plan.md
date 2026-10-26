@@ -836,3 +836,15 @@ No milestone split, exclusion or new completion credit.
 - Final `just test-smart` FAST:19410pass/19skip/83fail; failure IDs exactly match the retained83 baseline, no additions. Aggregate400s; slow-test triage found zero >5s tests and no new shared slowdown evidence, so no marker/budget changes. Broad suite remains non-green.
 - DEFERRED: this change would have needed the FULL suite, but no test-dedicated
   session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+
+## Organized placement publication and posed-part latency — October 25, 2026
+- ISSUE-154: the organization recorder now stages all owners through one complete-pose command, carries prior residue poses once, publishes them and records one recovery-backed feature. Single moves with prior poses also retain full recovery; history seeking matches native atoms.
+- ISSUE-155: menu/shortcut activation preserves multiple selected placements instead of passing only the primary target. Existing targeted actions retain their meaning.
+- ISSUE-156: HTTP undo/redo/reopen now use the already-reviewed lifecycle names; default-off organization and strict policy checks remain.
+- Native group host84pass, fixture HTTP39pass, junction interval parity/backbone13pass. Final frontend9466pass/1skip; main.js7350lines, delta0. Broader checks are recorded in the handoff.
+- Read-only junction coverage uses merged interval lookup rather than repeated domain scans; randomized exhaustive occupancy and huge-coordinate gap tests pass. No native coordinates, topology rule, phase constant or numerical manifest changed.
+- Real-app existing entry/history/constraint/downstream-refusal/dependent/rollback/posed-insert cases10pass. Large18×504 posed fixture:18 saved residue poses,247strands,767649-byte file; exact undo geometry, redo/reopen and cold proof pass.
+- Large p95 translation964ms/rotation961ms (40 samples each, separate existing60s leases); Apply3033ms, undo2657ms, redo2251ms, Cancel47ms. GPU raster excluded (SwiftShader). All within2× allowances; retain one performance task for500ms preview target.
+- Earlier12-sample runs exceeded1s; profiling identified validation scans. Forty samples make p95 distinct from the maximum; no latency or lease budget increased. Diagnostic profiling was excluded from qualification.
+- Organized creation browser1pass: exact Cancel, one feature/undo, checked reopen and cold proof. Unrelated default-animation startup write avoided with fixture metadata. All14 retained-log browser/smoke roots independently absent; lint/diff pass. No gate flip or milestone credit. Named-group selected-member motion, complete companion/birth/frame semantics and ordinary atomic multi-placement creation remain required.
+- Final FAST19417pass/19skip/84fail: exact83 baseline plus floating TTL equality. Isolated comparison30pass/1fail (different expiry-boundary assertion); unresolved timing debt, no green claim. Guard387s/zero per-test violators; triage found aggregate cost, no budgets/markers changed. FULL deferred without a test session.

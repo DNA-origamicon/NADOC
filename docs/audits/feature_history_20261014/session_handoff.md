@@ -1,52 +1,59 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
 
-October 25, 2026: **Fine Routing ordinary-part history editor is desktop-qualified.**
-All 22 native forms pass visible-field layout, exact Cancel, Apply through later
-nick/Bend/Extrude, one undo/redo, save/reopen and independent cold replay.
-Batch add/remove/reorder preserves output identities. Upstream deletion lists
-consumers; mid-log editing refuses. Native failures mark the first failing child
-and block its suffix without publishing; Cancel/retry clear that feedback.
-Delayed reference loading respects Cancel and document reset. Editor stays ON;
-the separate organization and Move/Rotate rollout gates are unchanged.
+October 25, 2026: **Move/Rotate remains incomplete; its production gates stay OFF.**
+This session repaired organized-placement publication, multi-selection activation
+and HTTP lifecycle admission, and measured large posed-part undo. These fixes do
+not implement named-group selected-member movement or close FH-18/FH-23.
 
 **Geometry tools done: 4/6 (Bend, Twist, Extrude, Sweep); Fine Routing qualified separately.
 CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
-The geometry-tool denominator is unchanged; FH-24's implementation was already
-complete, so this closes its ordinary desktop acceptance rather than adding an FH milestone.
+Fine Routing remains enabled and desktop-qualified across all22 native forms;
+its prior evidence is in [the routing plan](fine_routing_history_editor_plan.md).
 
 ## Current evidence and limits
-- ISSUE-150–153: source-owned refusal feedback; ordinary CAD capture capacity;
-  bounded reference catalog accounting; deterministic seamless fallback traversal;
-  responsive nested forms. No new host, queue, storage format or capability route.
-- Large 18×504 native lifecycle and fresh-process hash-seed 1/2 proof:2pass.
-  Native/HTTP/worker/input/app-fixture focused backend:283pass.
-- Final layout/lifecycle matrix and visual inspection:23pass;32 distinct app cases
-  passed across the final applicable runs. Logs: `routing-*.log` under
-  `.development-artifacts/feature-history-focus/`. App scratch roots independently absent.
-- Small 6×84 / large 18×504: Apply1.95/7.51s; local-input p9528/41ms;
-  Cancel78/286ms; open p952.04/4.64s. Modal inputs have no geometry preview.
-  Large Cancel is within the contract's2× allowance; one performance task remains
-  to reach 200 ms. No retained preview session; large RSS294→317MB includes warm caches.
-- GPU raster excluded from timing (SwiftShader). The 18×504 visual run timed out;
-  the 18×84 desktop form was inspected before/after the layout fix. No geometry
-  golden or physical qualification is claimed.
-- Full frontend: 9464 passed / 1 skipped. Backend FAST: 19409 passed / 19 skipped /
-  84 failed: the exact 83 baseline failures plus a synchronous native-auto seamless
-  verification timeout; isolated whole-file rerun: 8 passed (seamless 0.06 s).
-  Guarded run 390 s, zero per-test violators. Slow-test triage found aggregate
-  suite cost; no budget raised or unrelated tests relegated. Large-routing tests
-  use the central slow/headless registry; collection confirms both remain covered.
-  Isolated smoke: 23 passed; final lint passes. All 10 launcher roots absent.
-  FULL deferred: no test-dedicated session is open.
-- Detailed acceptance and command evidence: [Fine Routing plan](fine_routing_history_editor_plan.md).
-  `frontend/src/main.js` remains 7350 lines, delta0.
+- ISSUE-154: organized placement batches use one complete-pose command, carrying
+  individually posed members once through final frames. Publication includes
+  carried residue poses and one recovery-backed feature. Single placement moves
+  with residue poses retain complete history-seek recovery too.
+- ISSUE-155: menu/shortcut entry preserves multiple selected placements instead
+  of pre-targeting only the primary placement. Explicit targeted actions remain.
+- ISSUE-156: undo/redo/reopen HTTP checks use the existing admitted lifecycle
+  names; native operations worked but their route aliases had refused.
+- Large18×504 posed fixture:18 residue poses,247strands,767649-byte saved file.
+  Exact original geometry after undo, exact redo/reopen and cold proof pass.
+  Preview p95 translation964ms/rotation961ms (40samples per existing60s lease);
+  Apply3033ms, undo2657ms, redo2251ms, Cancel47ms. GPU raster excluded (SwiftShader).
+  Within2× allowances; one performance task remains for the500ms preview target.
+- Junction coverage now builds interval unions once; exhaustive randomized
+  occupancy and huge-coordinate gap tests preserve the old lookup result without
+  per-nucleotide expansion. Native builders/constants/manifests unchanged.
+- Focused group host84pass, fixture39pass, interval/backbone13pass. Existing real
+  Move/Rotate creation/history/constraints/failure/dependents/rollback/insert10pass.
+  Organized creation browser1pass: one feature, Cancel, undo/redo, checked save/reopen,
+  exact geometry and cold proof. Fixture pre-seeds unrelated animation metadata;
+  it does not enable animation mutations in organized production documents.
+  Full frontend9466pass/1skip; isolated smoke23pass; final fixture39pass.
+- Backend FAST19417pass/19skip/84fail: exact83 baseline plus a floating TTL equality
+  (7.0000000000009095 versus7). Isolated comparison file30pass/1fail: that equality
+  passed, another final-expiry boundary failed. These unrelated timing assertions
+  remain unresolved; neither broad nor isolated comparison validation is green.
+  Guarded387s, zero per-test violators. Slow-test triage found aggregate suite cost
+  below the prior400s baseline; no new common slowdown, budget or marker change.
+- Logs: `transform-*.log` and `group-member-*.log` under
+  `.development-artifacts/feature-history-focus/`. All14 retained-log browser/smoke
+  scratch roots independently absent. Lint and whitespace checks pass.
+  FULL deferred: no test-dedicated session is open. `main.js`7350lines, delta0.
 
 ## Single next tool
-Finish Move/Rotate. The remaining named-group/companion/birth semantics and large
-posed-part undo qualification belong to its existing exits; both production gates
-remain OFF. Do not substitute another diagnostic program or widen unrelated tools.
-See the [transform plan](transform_history_editor_plan.md) and the
+Finish Move/Rotate against the existing full exit, without another diagnostic
+program or a reduced completion claim. Named-group **Move selected members** is
+still refused by the UI and has no production command/compiler. Exact material
+union, ancestry/birth, companion/constraint and shared-frame integration remain.
+Ordinary multi-placement creation also still commits its pending owners
+sequentially; the atomic organized-placement repair does not replace that path.
+Both transform gates and the organization gate remain OFF. See the
+[transform plan](transform_history_editor_plan.md) and
 [group/member acceptance matrix](group_placement_migration_plan.md#required-acceptance-matrix).
 
 Retain these user decisions and completed repairs:
@@ -89,9 +96,8 @@ were regenerated; broad-suite debt is separate from focused acceptance.
 FULL remains subject to the user's test-session gate; never bypass it.
 
 ## Shared-worktree boundaries
-Incoming HEAD: `e50bdd72`. Commit only owned feature-history paths, explicitly staged.
+Incoming HEAD: `97936bb1`. Commit only owned feature-history paths, explicitly staged.
 Existing unrelated API/VR/simulation/memory/test edits remain untouched. Mixed
-`issues_ledger.md`, `issues_fix_log.md` and `manual_validation_debt.md` remain
-uncommitted rather than including another session's hunks. Only the two new
-large-routing registry additions in mixed `tests/conftest.py` are staged. No push, reset, stash,
-restore, broad staging, phase-constant edit, lock or golden regeneration.
+`issues_ledger.md` and `issues_fix_log.md` include this session's ISSUE-154–156
+additions but remain uncommitted. No push, reset, stash, restore, broad staging,
+phase-constant edit, lock or golden regeneration.

@@ -3,6 +3,7 @@
 Coordinates are global lattice indices, not bounds against the original helix
 length. Reference strands are display geometry, never physical slot owners.
 """
+from bisect import bisect_right
 from collections import defaultdict
 
 from backend.core.models import Direction, StrandType
@@ -62,6 +63,26 @@ def occupancy_errors(design):
     return errors
 
 
+def _coverage_index(ranges):
+    """Compact interval unions; never allocate one item per nucleotide."""
+    result = {}
+    for key, values in ranges.items():
+        merged = []
+        for lo, hi in sorted(values):
+            if merged and lo <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
+            else:
+                merged.append((lo, hi))
+        result[key] = ([lo for lo, _ in merged], [hi for _, hi in merged])
+    return result
+
+
+def _covered(key, index):
+    starts, ends = index.get((key[0], key[2]), ((), ()))
+    position = bisect_right(starts, key[1]) - 1
+    return position >= 0 and key[1] <= ends[position]
+
+
 def junction_errors(design):
     """Check authored junction records against active strand paths.
 
@@ -88,8 +109,10 @@ Synthetic linker/overhang paths have their own explicit attachment model.
         for a, b in zip(s.domains, s.domains[1:]):
             transitions.add((slot(a.helix_id, a.end_bp, a.direction), slot(b.helix_id, b.start_bp, b.direction)))
 
+    ranges, refs = _coverage_index(ranges), _coverage_index(refs)
+
     def covered(key, index=ranges):
-        return any(lo <= key[1] <= hi for lo, hi in index.get((key[0], key[2]), ()))
+        return _covered(key, index)
 
     def continuous(a, b):
         if a[0] != b[0]:

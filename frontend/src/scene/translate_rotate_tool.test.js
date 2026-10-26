@@ -278,6 +278,20 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     // — the hideConfirmBtn test (explicit style.display set) covers the toggle.
   })
 
+  it.each(['menu', 'shortcut'])('opens all selected placements from %s', async entry => {
+    const ctx = makeDeps({ state: {
+      selection: { items: [{ kind: 'cluster', id: 'C1' }, { kind: 'cluster', id: 'C2' }] },
+      currentDesign: { cluster_transforms: [{ id: 'C1' }, { id: 'C2' }] },
+    } })
+    ctx.clusterGizmo.attachGroup = vi.fn()
+    initTranslateRotateTool(ctx.deps)
+    if (entry === 'menu') document.getElementById('menu-tools-translate-rotate').click()
+    else shortcutSpecs.find(s => s.key === 'm' && !s.shift).handler()
+    await vi.waitFor(() => expect(ctx.deps.moveRotatePanel.setSessionMode).toHaveBeenCalledWith('cluster-group'))
+    expect(ctx.clusterGizmo.attachGroup).toHaveBeenCalledWith(['C1', 'C2'], ctx.deps.scene, ctx.deps.camera, ctx.deps.canvas)
+    expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
+  })
+
   it('registers the "m" keyboard shortcut whose handler routes activate↔confirm', async () => {
     const ctx = makeDeps({ state: {
       selection: { items: [{ kind: 'cluster', id: 'C1' }] },

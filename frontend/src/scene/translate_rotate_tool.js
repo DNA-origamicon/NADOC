@@ -936,7 +936,9 @@ export function initTranslateRotateTool(deps) {
   function _activateFromCurrentSelection() {
     if (nucleotideTransformTool?.canActivate()) return nucleotideTransformTool.activate()
     const st = store.getState()
-    const target = st.assemblyActive
+    const selectedPlacements = selectedClusterIds(st).filter(id =>
+      st.currentDesign?.cluster_transforms?.some(cluster => cluster.id === id))
+    const target = st.assemblyActive || selectedPlacements.length > 1
       ? null
       : resolveSelectionClusterId(canonicalSelection(st).primary, st.currentDesign)
     return _activateTranslateRotateTool(target)

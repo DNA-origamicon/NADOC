@@ -40,6 +40,9 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
   if (!root) throw new Error('Use the isolated history launcher')
   const doc = `__e2e__history-${kind}`, headers = { 'X-NADOC-Doc': doc }
   const errors = trackConsoleErrors(page), writes = []
+  page.on('response', response => {
+    if (response.status() >= 400) console.log('History HTTP failure', response.status(), new URL(response.url()).pathname)
+  })
   page.on('request', req => {
     if (req.method() !== 'GET' && new URL(req.url()).pathname.startsWith('/api/design'))
       writes.push({ path: new URL(req.url()).pathname, body: req.postDataJSON() })
@@ -80,7 +83,7 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
   let primary = false
   try {
     const seeded = await request.post(`http://127.0.0.1:8004/api/__e2e__/history/seed/${seed}`, { headers })
-    expect(seeded.ok()).toBe(true)
+    expect(seeded.ok(), await seeded.text()).toBe(true)
     await page.goto(`/?doc=${doc}&readiness=simulation`, { waitUntil: pauseRendering ? 'domcontentloaded' : 'load' })
     if (pauseRendering) {
       // Latency checks exclude GPU raster. Pause before waiting for the initial
@@ -97,7 +100,10 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
     await page.evaluate(async file => {
       const api = await import('/src/api/client.js')
       await api.getDesign()
-      if (!await api.saveDesign(file)) throw new Error('Fixture save failed')
+      const { store } = await import('/src/state/store.js')
+      const saved = store.getState().currentDesign.group_organization != null
+        ? await api.saveDesignToWorkspace(file.split('/').at(-1)) : await api.saveDesign(file)
+      if (!saved) throw new Error('Fixture save failed')
     }, file)
     const result = await run({ page, request, doc, headers, root, file, checkpoint, browser, display, popup, open, change, writes, errors })
     // Failure-injection cases must assert exact diagnostic identity before returning

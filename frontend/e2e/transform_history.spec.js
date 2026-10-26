@@ -129,11 +129,12 @@ test('Move history edits reclassified staple addresses with exact Cancel and col
   }, 'unpair')
 })
 
-for (const size of ['small', 'large'])
+for (const size of ['small', 'large', 'posed-large'])
 test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, request }) => {
   test.setTimeout(240_000)
   await withHistoryFixture({ page, request }, 'transform', async f => {
     const panel = page.locator('#move-rotate-panel'), source = await f.checkpoint()
+    const initialGeometry = size === 'posed-large' ? (await f.browser()).geometry : null
     const open = async () => {
       await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
       const pending = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
@@ -155,9 +156,17 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     }
     page.on('response', record)
     const p95s = []
+    // Forty samples estimate p95 without making it synonymous with one outlier.
+    const values = Array.from({ length: size === 'posed-large' ? 40 : 12 }, (_, i) => 32 + i * 2)
     for (const [tool, selector] of [['move', '#mr-tx'], ['rotate', '#mr-rz']]) {
+      if (size === 'posed-large' && tool === 'rotate') {
+        // Keep each sample set within the existing 60-second preview lease.
+        await page.locator('#mr-cancel-btn').click()
+        await expect(panel).toBeHidden()
+        await open()
+      }
       const samples = []
-      for (const value of [32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54]) {
+      for (const value of values) {
         samples.push(await page.evaluate(async ({ selector, value }) => {
           const roots = () => window.__nadocTest.scene.children
             .filter(n => n.name === 'privateTransformPreview').map(n => n.uuid).join()
@@ -190,9 +199,9 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
       console.log('DIAGNOSTIC transform CPU ms (not C8 qualification)', [...totals].sort((a, b) => b[1] - a[1]).slice(0, 30))
       await profiler.detach()
     }
-    expect(evaluations).toHaveLength(24)
+    expect(evaluations).toHaveLength(values.length * 2)
     expect(evaluations.every(r => r.status === 200)).toBe(true)
-    expect(new Set(evaluations.map(r => r.sequence)).size).toBe(24)
+    expect(new Set(evaluations.map(r => r.sequence)).size).toBe(values.length * (size === 'posed-large' ? 1 : 2))
     expect(await f.checkpoint()).toEqual(source)
     const applyStart = Date.now()
     await page.locator('#mr-apply-btn').click()
@@ -200,6 +209,42 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     const applyMs = Date.now() - applyStart, committed = await f.checkpoint()
     expect(committed.revision).toBe(source.revision + 1)
     expect((await f.browser()).revision).toBe(committed.revision)
+    if (size === 'posed-large') {
+      const displayed = await f.browser()
+      expect(displayed.design.nucleotide_transforms).toHaveLength(18)
+      const timings = await page.evaluate(async () => {
+        const api = await import('/src/api/client.js')
+        const { store } = await import('/src/state/store.js')
+        const start = performance.now()
+        if (!await api.undo()) throw Error('Undo failed')
+        const undoMs = performance.now() - start
+        const undone = structuredClone({ geometry: store.getState().currentGeometry,
+          poses: store.getState().currentDesign.nucleotide_transforms })
+        const redoStart = performance.now()
+        if (!await api.redo()) throw Error('Redo failed')
+        return { undoMs, redoMs: performance.now() - redoStart, undone }
+      })
+      expect(timings.undone.poses).toEqual(source.design.nucleotide_transforms)
+      expect(timings.undone.geometry).toEqual(initialGeometry)
+      expect((await f.browser()).geometry).toEqual(displayed.geometry)
+      await page.evaluate(async file => {
+        const api = await import('/src/api/client.js')
+        await api.saveDesign(file)
+        await api.undo()
+      }, f.file)
+      expect((await f.browser()).geometry).toEqual(timings.undone.geometry)
+      await page.evaluate(async file => {
+        const api = await import('/src/api/client.js')
+        await api.redo(); await api.loadDesign(file)
+      }, f.file)
+      expect((await f.browser()).geometry).toEqual(displayed.geometry)
+      const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+      expect(proof.ok()).toBe(true)
+      expect((await proof.json()).status).toBe('verified')
+      console.log(`C8 posed-large undo_ms=${Math.round(timings.undoMs)} redo_ms=${Math.round(timings.redoMs)}`)
+      expect.soft(timings.undoMs, 'Undo display including 2x large Apply allowance').toBeLessThanOrEqual(20000)
+      expect.soft(timings.redoMs, 'Redo display including 2x large Apply allowance').toBeLessThanOrEqual(20000)
+    }
     await open()
     const canonical = await f.checkpoint(), browser = await f.browser(), reads = []
     const recordRead = req => {
@@ -217,7 +262,7 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     expect(f.writes.slice(writes).every(r => r.path === `${previewPath}/cancel`)).toBe(true)
     console.log(`C8 transform-${size} apply_ms=${applyMs} cancel_ms=${cancelMs}`)
     for (const { tool, p95 } of p95s) expect.soft(p95, `${tool} preview p95 including 2x allowance`).toBeLessThanOrEqual(1000)
-    expect.soft(applyMs, 'Apply including 2x allowance').toBeLessThanOrEqual(size === 'large' ? 20000 : 6000)
+    expect.soft(applyMs, 'Apply including 2x allowance').toBeLessThanOrEqual(size.endsWith('large') ? 20000 : 6000)
     expect.soft(cancelMs, 'Cancel including 2x allowance').toBeLessThanOrEqual(400)
   }, `transform-${size}`, { pauseRendering: true })
 })
@@ -831,7 +876,7 @@ test('Move Rotate complete owner edit carries a prior posed insert through histo
     await page.evaluate(async file => {
       const api = await import('/src/api/client.js')
       if (!await api.saveDesign(file)) throw Error('Save failed')
-      await api.undo()
+      if (!await api.undo()) throw Error('Undo failed: ' + JSON.stringify(window.__nadocTest.store.getState().lastError))
     }, f.file)
     expect((await f.browser()).geometry).toEqual(original.geometry)
     await page.evaluate(async file => {
@@ -843,4 +888,62 @@ test('Move Rotate complete owner edit carries a prior posed insert through histo
     expect(proof.ok()).toBe(true)
     expect((await proof.json()).status).toBe('verified')
   }, 'transform-posed-insert')
+})
+
+test('Move Rotate organized placement creation carries a posed insert in one feature', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await withHistoryFixture({ page, request }, 'transform', async f => {
+    const before = await f.checkpoint(), original = await f.browser()
+    const panel = page.locator('#move-rotate-panel')
+    const open = async () => {
+      await page.evaluate(async () => {
+        const { store } = await import('/src/state/store.js')
+        const { createSelectionController } = await import('/src/scene/selection_controller.js')
+        createSelectionController({ store }).replace(['arm-0', 'arm-1'].map(id => ({ kind: 'cluster', id })))
+        document.activeElement?.blur()
+      })
+      await page.getByRole('button', { name: 'Tools', exact: true }).hover()
+      await page.locator('#menu-tools-translate-rotate').click()
+      await expect(panel).toBeVisible()
+    }
+    const move = async () => {
+      await page.locator('#mr-tx').fill('2')
+      await page.locator('#mr-tx').press('Tab')
+      await page.locator('#mr-rz').fill('35')
+      await page.locator('#mr-rz').press('Tab')
+    }
+    await open(); await move()
+    expect(await f.checkpoint()).toEqual(before)
+    await page.locator('#mr-cancel-btn').click()
+    await expect(panel).toBeHidden()
+    expect(await f.checkpoint()).toEqual(before)
+    expect((await f.browser()).geometry).toEqual(original.geometry)
+    await open(); await move()
+    const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/group-organization/commands')
+    await page.locator('#mr-apply-btn').click()
+    const applied = await response
+    expect(applied.ok(), JSON.stringify({ response: await applied.json(), request: applied.request().postDataJSON() })).toBe(true)
+    await expect(panel).toBeHidden()
+    const after = await f.checkpoint(), displayed = await f.browser()
+    expect(after.history).toHaveLength(before.history.length + 1)
+    expect(after.design.feature_log).toHaveLength(before.design.feature_log.length + 1)
+    expect(after.design.feature_log.at(-1).op_kind).toBe('placement-poses')
+    expect(after.design.feature_log.at(-1).params.selected_cluster_ids).toEqual(['arm-0', 'arm-1'])
+    expect(after.design.nucleotide_transforms).not.toEqual(before.design.nucleotide_transforms)
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesignToWorkspace(file.split('/').at(-1))) throw Error('Save failed')
+      if (!await api.undo()) throw Error('Undo failed: ' + JSON.stringify(window.__nadocTest.store.getState().lastError))
+    }, f.file)
+    expect((await f.browser()).geometry).toEqual(original.geometry)
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.redo()) throw Error('Redo failed')
+      if (!await api.loadDesign(file)) throw Error('Reopen failed: ' + JSON.stringify(window.__nadocTest.store.getState().lastError))
+    }, f.file)
+    expect((await f.browser()).geometry).toEqual(displayed.geometry)
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'transform-organized-insert')
 })

@@ -189,3 +189,42 @@ def test_test_app_refuses_a_disabled_sweep_production_gate(monkeypatch):
         with TestClient(create_app()):
             pytest.fail("Fixture silently enabled Sweep")
     assert routes.SWEEP_PREVIEW_ENABLED is False
+
+
+def test_organized_transform_fixture_seeds_with_gate_and_cold_replays(monkeypatch):
+    from backend.api import part_group_organization_gate as gate
+    previous = gate.GROUP_ORGANIZATION_ENABLED
+    monkeypatch.setenv("NADOC_HISTORY_E2E_TRANSFORMS", "1")
+    headers = {"X-NADOC-Doc": "__e2e__history-transform"}
+    with TestClient(create_app()) as client:
+        response = client.post("/api/__e2e__/history/seed/transform-organized-insert", headers=headers)
+        assert response.status_code == 200, response.text
+        proof = client.get("/api/__e2e__/history/proof", headers=headers)
+        assert proof.json()["status"] == "verified", proof.text
+    assert gate.GROUP_ORGANIZATION_ENABLED is previous
+
+
+def test_organized_placement_http_undo_redo_uses_reviewed_lifecycle(monkeypatch, tmp_path):
+    monkeypatch.setenv("NADOC_HISTORY_E2E_TRANSFORMS", "1")
+    headers = {"X-NADOC-Doc": "__e2e__history-transform"}
+    with TestClient(create_app()) as client:
+        assert client.post("/api/__e2e__/history/seed/transform-organized-insert", headers=headers).status_code == 200
+        before = client.get("/api/__e2e__/history/checkpoint", headers=headers).json()
+        response = client.post("/api/design/group-organization/commands", headers=headers, json={
+            "kind": "placements-update", "expected_revision": before["revision"],
+            "inputs": {"placements": [{"placement_id": f"arm-{i}", "fields": {"translation": [2, 0, 0]}}
+                                      for i in range(2)]}})
+        assert response.status_code == 200, response.text
+        moved = response.json()
+        undone = client.post("/api/design/undo", headers=headers)
+        assert undone.status_code == 200, undone.text
+        assert undone.json()["design"]["nucleotide_transforms"] == before["design"]["nucleotide_transforms"]
+        redone = client.post("/api/design/redo", headers=headers)
+        assert redone.status_code == 200, redone.text
+        assert redone.json()["design"]["nucleotide_transforms"] == moved["design"]["nucleotide_transforms"]
+        from backend.api import state
+        path = tmp_path / "organized.nadoc"
+        path.write_text(state._sessions[headers["X-NADOC-Doc"]].design.to_json())
+        reopened = client.post("/api/design/load", headers=headers, json={"path": str(path)})
+        assert reopened.status_code == 200, reopened.text
+        assert reopened.json()["design"]["nucleotide_transforms"] == moved["design"]["nucleotide_transforms"]
