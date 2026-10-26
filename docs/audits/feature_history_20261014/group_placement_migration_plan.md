@@ -1,5 +1,28 @@
 # Group organization and placement: finite migration plan
 
+## Scope pruned by the user — October 25, 2026
+
+Clusters are the geometry-bearing grouping construct. Staple Groups organize
+strands through names, colors and selection; they do not own geometric transforms
+or persistent geometry-feature targets. The separate `PartGroup` / Groups and
+Placements migration below is retired from active scope, including its named-group
+Move selected members operation, motion compiler and geometry-consumer rollout.
+Do not implement or enable those features to finish Move/Rotate. Existing cluster
+and individual-nucleotide movement, constraints, dependencies and replay still
+require their own correctness and qualification; this decision does not close them.
+
+There is no normal UI entry to the experimental organization regime: the proposed
+cluster-sidebar “Separate Groups and Placements” button is hidden by
+`GROUP_ORGANIZATION_CONVERSION_ENABLED = false`, and backend live admission is
+also disabled. Fixtures can enable it and display “Groups and Placements.”
+The existing Staple Groups sidebar is a different, already available feature.
+Dormant schema/code and its tests remain for now; this is a scope retirement,
+not a claim that all experimental implementation has been deleted. Do not migrate
+user designs or change their cluster ownership during cleanup.
+
+The remainder is historical implementation evidence, not current requirements.
+
+
 Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U15 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones

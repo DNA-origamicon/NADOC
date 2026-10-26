@@ -4,7 +4,8 @@ Binding: [operating_contract.md](operating_contract.md); current user instructio
 October 25, 2026: **Move/Rotate remains incomplete; its production gates stay OFF.**
 This session repaired organized-placement publication, multi-selection activation
 and HTTP lifecycle admission, and measured large posed-part undo. These fixes do
-not implement named-group selected-member movement or close FH-18/FH-23.
+not close FH-18/FH-23. The user has now removed arbitrary organizational-group
+geometry from the scope; clusters own geometry and Staple Groups organize strands.
 
 **Geometry tools done: 4/6 (Bend, Twist, Extrude, Sweep); Fine Routing qualified separately.
 CAD ledger: 21/34 complete, 13 remaining (6 core, 7 parked).**
@@ -45,16 +46,23 @@ its prior evidence is in [the routing plan](fine_routing_history_editor_plan.md)
   scratch roots independently absent. Lint and whitespace checks pass.
   FULL deferred: no test-dedicated session is open. `main.js`7350lines, delta0.
 
-## Single next tool
-Finish Move/Rotate against the existing full exit, without another diagnostic
-program or a reduced completion claim. Named-group **Move selected members** is
-still refused by the UI and has no production command/compiler. Exact material
-union, ancestry/birth, companion/constraint and shared-frame integration remain.
-Ordinary multi-placement creation also still commits its pending owners
-sequentially; the atomic organized-placement repair does not replace that path.
-Both transform gates and the organization gate remain OFF. See the
-[transform plan](transform_history_editor_plan.md) and
-[group/member acceptance matrix](group_placement_migration_plan.md#required-acceptance-matrix).
+## Single next tool — scope pruned by user, October 25
+Finish Move/Rotate for clusters and existing individual-nucleotide operations.
+Staple Groups are organizational: names, colors and strand selection, with no
+transform ownership or persistent geometry-feature targets. The experimental
+PartGroup / Groups and Placements migration, arbitrary Move selected members,
+and its new motion compiler/geometry-consumer rollout are retired requirements.
+Do not implement or enable that regime to complete Move/Rotate. Its dormant
+code/tests remain; retirement is not a claim that their removal is finished.
+
+Ordinary multi-cluster creation still commits pending owners sequentially;
+complete atomic Apply through the existing lifecycle, then qualify the retained
+controls, constraints, chronology, dependency errors and undo/reopen behavior.
+Companion correctness for existing cluster/individual operations remains required.
+Transform gates stay OFF until those exits pass. The separate organization gate
+stays OFF because that product direction is retired. See the
+[transform plan](transform_history_editor_plan.md) and the superseding scope in the
+[historical group migration plan](group_placement_migration_plan.md).
 
 Retain these user decisions and completed repairs:
 - Single-nucleotide Move/Rotate moves only that nucleotide. Tails move only when
@@ -80,7 +88,7 @@ Retain these user decisions and completed repairs:
   a missing artifact reviewed, or infer molecular approval from ordering approval.
 
 ## Remaining scope and retained baseline debt
-Core open: group/member motion, transform history, ordinary connections, complete
+Core open: cluster membership/movement, transform history, ordinary connections, complete
 reference repair, aggregate desktop qualification and host lifecycle closure
 (FH-18/23/25/26/27/28). Seven parked CAD milestones cover NP connections/fitting,
 biotin, protein/scadnano/DNA-PDB imports and generated-asset composition.
@@ -96,8 +104,10 @@ were regenerated; broad-suite debt is separate from focused acceptance.
 FULL remains subject to the user's test-session gate; never bypass it.
 
 ## Shared-worktree boundaries
-Incoming HEAD: `97936bb1`. Commit only owned feature-history paths, explicitly staged.
+Incoming HEAD for scope pruning: `44c11f48`. Commit only owned feature-history paths, explicitly staged.
 Existing unrelated API/VR/simulation/memory/test edits remain untouched. Mixed
 `issues_ledger.md` and `issues_fix_log.md` include this session's ISSUE-154–156
-additions but remain uncommitted. No push, reset, stash, restore, broad staging,
+additions but remain uncommitted. Mixed `memory/project_feature_log_overhaul.md`
+also retains the new user scope decision without staging unrelated memory edits.
+No push, reset, stash, restore, broad staging,
 phase-constant edit, lock or golden regeneration.

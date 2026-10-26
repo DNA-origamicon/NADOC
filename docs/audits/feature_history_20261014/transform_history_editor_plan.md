@@ -1,5 +1,17 @@
 # Move/rotate history editor — FH-23
 
+## Current scope — user decision, October 25, 2026
+Clusters alone own geometry among grouping constructs; Staple Groups are
+organizational. The experimental PartGroup migration and arbitrary named-group
+Move selected members/compiler/geometry-consumer matrix are removed from this
+tool's completion requirements. Older “full original exit” clauses below are
+superseded for that scope. Preserve existing individual-nucleotide movement.
+Finish cluster/individual controls, atomic multi-cluster Apply, chronology,
+constraints, downstream dependencies, undo/reopen, preview and desktop qualification.
+No gate or completion credit follows from pruning the scope alone. See the
+[current handoff](session_handoff.md); do not revive the retired group migration.
+
+
 October 16, 2026. Planning baseline follows U17: **20/38 milestones complete**.
 FH-23 is open. This plan neither changes the estimate nor awards completion
 credit. The fixed exit remains complete parameter controls, guarded publication,
