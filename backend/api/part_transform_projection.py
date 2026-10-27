@@ -45,12 +45,20 @@ def _check_slab_block(records, block):
     if records and block.size == len(records) * 28:
         try:
             registration = _native_registration()
-            if all(r.get("placement_source") == SOURCE and r.get("direction") in registration for r in records):
+            if len(registration) == 2 and all(
+                    r.get("placement_source") == SOURCE and r.get("direction") in registration for r in records):
                 values = block.reshape((-1, 28))
                 # Match the original contiguous array layout, including at
                 # acceptance boundaries; avoid Python per-record extraction.
                 arrays = [np.ascontiguousarray(values[:, start:start + 3]) for start in (0, 3, 6, 9)]
-                offsets = np.asarray([registration[r["direction"]] for r in records])
+                # There are two immutable registrations. Select their rows in
+                # NumPy instead of converting the same six Python scalars for
+                # every nucleotide. The arithmetic and contiguous inputs below
+                # remain those of the native authority.
+                directions = tuple(registration)
+                selector = np.fromiter((r["direction"] == directions[1] for r in records),
+                                       dtype=np.intp, count=len(records))
+                offsets = np.asarray([registration[d] for d in directions])[selector]
                 poses = _native_slab_array_poses(*arrays,
                     np.ascontiguousarray(offsets[:, 0]), np.ascontiguousarray(offsets[:, 1]))
                 quaternions = np.ascontiguousarray(values[:, 15:19])
@@ -73,14 +81,20 @@ def _records(records, expected):
     limit(len(records), MAX_RECORDS, "emitted records")
     seen = set()
     coordinates = []
+    checked_fields = set()
     def point(value, length=3):
         if type(value) is not list or len(value) != length:
             reject("Malformed native transform display coordinates", "invalid_preview_geometry")
         coordinates.extend(value)
 
     for value in records:
-        if type(value) is not dict or not _REQUIRED <= value.keys() <= _RECORD_FIELDS:
+        if type(value) is not dict:
             reject("Unreviewed native transform record fields")
+        fields = tuple(value)
+        if fields not in checked_fields:
+            if not _REQUIRED <= value.keys() <= _RECORD_FIELDS:
+                reject("Unreviewed native transform record fields")
+            checked_fields.add(fields)
         key = value["helix_id"], value["bp_index"], value["direction"], value.get("copy_k", 0)
         if key in seen:
             reject("Duplicate native transform display record", "invalid_preview_geometry")
@@ -216,20 +230,6 @@ def project_admitted(design, expected, check, *, compact=False):
             (any(c.linker_type == "ss" for c in design.overhang_connections), "ss-linker-arcs")):
         if present:
             companions.append(name)
-    points = [n[name] for n in records for name in ("backbone_position", "base_position")]
-    points.extend(n["slab_position"] for n in records if n.get("slab_position") is not None)
-    for axis in axes:
-        points.extend((axis["start"], axis["end"], *axis["samples"]))
-        for segment in axis["segments"]:
-            points.extend((segment["start"], segment["end"], *segment.get("samples", [])))
-        for value in axis.get("ovhg_axes", {}).values():
-            points.extend((value["start"], value["end"]))
-    bounds = None
-    if points:
-        import numpy as np
-        block = np.asarray(points, dtype=np.float64)
-        bounds = {"minimum": block.min(axis=0).tolist(), "maximum": block.max(axis=0).tolist()}
-    check()
     from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records_compact
     # Reuse the existing lossless f64 transport only for its exact native
     # record schema. Companions with extra fields or slabless/flexible records
@@ -238,6 +238,30 @@ def project_admitted(design, expected, check, *, compact=False):
     packed = compact and all(n.keys() == compact_fields and n["is_flexible_segment"] is False
                             and n["slab_position"] is not None and n["slab_quaternion"] is not None
                             for n in records)
+    points = [] if packed else [n[name] for n in records for name in ("backbone_position", "base_position")]
+    if not packed:
+        points.extend(n["slab_position"] for n in records if n.get("slab_position") is not None)
+    for axis in axes:
+        points.extend((axis["start"], axis["end"], *axis["samples"]))
+        for segment in axis["segments"]:
+            points.extend((segment["start"], segment["end"], *segment.get("samples", [])))
+        for value in axis.get("ovhg_axes", {}).values():
+            points.extend((value["start"], value["end"]))
+    bounds = None
+    if points or (packed and records):
+        import numpy as np
+        # Bounds use precisely the same bead/base/slab points as the object
+        # path. The checked block already owns these doubles; avoid converting
+        # tens of thousands of small lists back into an array.
+        blocks = []
+        if packed and records:
+            values = coordinates.reshape((-1, 28))
+            blocks.extend((values[:, :6].reshape((-1, 3)), values[:, 12:15]))
+        if points:
+            blocks.append(np.asarray(points, dtype=np.float64))
+        block = np.concatenate(blocks)
+        bounds = {"minimum": block.min(axis=0).tolist(), "maximum": block.max(axis=0).tolist()}
+    check()
     return {"component_kind": "transform-preview-dna", "component_version": 2 if packed else 1, "representation": "native-full-v1",
             "units": "nm", "nucleotides": pack_records_compact(records, coordinate_values=coordinates) if packed else records, "helix_axes": axes, "display_topology": display,
             "required_renderers": companions, "bounds_nm": bounds}

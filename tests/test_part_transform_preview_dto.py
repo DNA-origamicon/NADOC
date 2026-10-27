@@ -80,6 +80,32 @@ def test_compact_delta_is_exact_and_bound_to_validated_lease_rows():
         envelope={"lease_id": "owned"}, display_cache=cache)["candidate"] is None
 
 
+@pytest.mark.parametrize("variant", ["loops", "tails", "child", "sweep"])
+def test_compact_bounds_match_object_projection_exactly(variant):
+    source = small(variant)
+    _, evaluated = moved(source)
+    source = evaluated.design
+    from backend.api.part_transform_display_contract import inventory
+    admitted = inventory(source, lambda: None)
+    ordinary = projection().project_admitted(source, admitted, lambda: None)
+    compact = projection().project_admitted(source, admitted, lambda: None, compact=True)
+    assert json.dumps(compact["bounds_nm"]) == json.dumps(ordinary["bounds_nm"])
+    assert_component(compact, source)
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing"])
+def test_later_record_cannot_reuse_another_records_field_admission(mutation):
+    source = small()
+    records, _ = native(source)
+    if mutation == "extra":
+        records[-1]["unreviewed"] = None
+    else:
+        records[-1].pop("base_position")
+    from backend.api.part_transform_display_contract import inventory
+    with pytest.raises(CommandContractError, match="Unreviewed native transform record fields"):
+        projection()._records(records, inventory(source, lambda: None))
+
+
 @pytest.mark.parametrize("kind,extra", [("cluster_op", False), ("nucleotide-transform", False),
     ("nucleotide-transform-batch", False), ("nucleotide-transform-delete", False),
     ("nucleotide-transform", True), ("nucleotide-transform-batch", True),
