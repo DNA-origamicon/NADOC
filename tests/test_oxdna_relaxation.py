@@ -6669,3 +6669,75 @@ def test_composite_binary_interval_crosses_stage_boundary(design, geometry, tmp_
     expected = np.asarray(full['frames'])[2:11:3].reshape(count, keys, 9)[:,:,:6]
     assert np.allclose(frames, expected, atol=1e-5)
     assert any(phase == 'align' and total == 3 for phase, _, total in calls)
+
+
+def test_display_uses_saved_start_before_first_output(design, geometry, monkeypatch, tmp_path):
+    from backend.api import routes_oxdna as routes
+    from backend.physics.oxdna_interface import write_topology
+
+    monkeypatch.setattr(routes, '_workspace', lambda: tmp_path)
+    job = new_oxdna_job('child', [build_relaxation_stages()[0].to_status()], parent_job_id='parent')
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path)
+    (jd / 'design.json').write_text(design.model_dump_json())
+    write_topology(design, jd / 'topology.top')
+    write_configuration(design, geometry, jd / 'conf.dat', box_nm=80)
+    initial = routes._relaxed_full_map(job, False)
+    assert initial[1]
+    assert initial[2] == 'Starting structure'
+    assert initial[3] == jd / 'conf.dat'
+    # Once output exists, the same display paths (including heavy reps) use it.
+    stage = job.stage_dir(tmp_path, job.stages[0].name)
+    stage.mkdir(parents=True, exist_ok=True)
+    (stage / 'last_conf.dat').write_bytes((jd / 'conf.dat').read_bytes())
+    output = routes._relaxed_full_map(job, False)
+    assert output[2] == job.stages[0].name
+    assert output[3] == stage / 'last_conf.dat'
+    assert not list(jd.glob('**/trajectory.dat'))
+
+
+def test_edit_relaxation_surface_and_anchors_rewrites_actual_inputs(tmp_path, monkeypatch, design, geometry):
+    from backend.api import routes_oxdna as routes
+    from backend.core.oxdna_runner import prepare_oxdna_job
+    monkeypatch.setattr(routes, '_workspace', lambda: tmp_path)
+    config = routes.CreateOxdnaJobRequest(autostart=False, seed=123456).model_dump()
+    specs = assign_stage_seeds(build_relaxation_stages(), 123456)
+    job = new_oxdna_job('saved-forces', [spec.to_status() for spec in specs], random_seed=123456,
+                        run_config={**config, 'kind': 'relax'})
+    prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path)
+    # Preserve a saved frame that differs from regenerated design geometry.
+    lines = (jd / 'conf.dat').read_text().splitlines()
+    particle = lines[3].split()
+    particle[0] = str(float(particle[0]) + 0.123)
+    lines[3] = ' '.join(particle)
+    (jd / 'conf.dat').write_text('\n'.join(lines) + '\n')
+    frozen = (jd / 'conf.dat').read_bytes()
+    topology = (jd / 'topology.top').read_bytes()
+    anchors = [{'kind': 'strand', 'strand_id': design.strands[0].id}]
+    wall = {'dir': [0, 1, 0], 'position_nm': -20, 'offset_nm': 0, 'stiff': 2}
+    saved = asyncio.run(routes.update_oxdna_job_settings(job.job_id, {'surface': wall, 'anchors': anchors}))
+    assert saved['run_config']['anchors'] == anchors
+    assert saved['run_config']['surface']['position_nm'] == pytest.approx(-20)
+    for filename in ['forces.txt', 'equil_forces.txt']:
+        text = (jd / filename).read_text()
+        assert 'repulsion_plane' in text
+        assert 'type = trap' in text
+    assert (jd / 'conf.dat').read_bytes() == frozen
+    assert (jd / 'topology.top').read_bytes() == topology
+    assert any(spec.forces_file == 'equil_forces.txt' for spec in routes.load_stage_specs(jd))
+    # A failed surface-anchor edit does not publish half of the new settings.
+    previous = {name: (jd / name).read_bytes() for name in ['job.json', 'forces.txt', 'equil_forces.txt', 'stages_spec.json']}
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException):
+        asyncio.run(routes.update_oxdna_job_settings(job.job_id, {'surface': None, 'surface_anchors': anchors}))
+    assert all((jd / name).read_bytes() == content for name, content in previous.items())
+    # Disabling clears both the persisted choice and the runnable forces.
+    saved = asyncio.run(routes.update_oxdna_job_settings(job.job_id, {'surface': None, 'anchors': []}))
+    assert saved['run_config']['surface'] is None
+    assert saved['run_config']['anchors'] == []
+    assert 'repulsion_plane' not in (jd / 'forces.txt').read_text()
+    assert 'type = trap' not in (jd / 'forces.txt').read_text()
+    assert not (jd / 'equil_forces.txt').exists()
+    assert all(spec.forces_file != 'equil_forces.txt' for spec in routes.load_stage_specs(jd))

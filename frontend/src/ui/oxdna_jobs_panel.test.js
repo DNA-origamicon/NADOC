@@ -1266,6 +1266,61 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('flex-scale-max').value).toBe('1.40')
   })
 
+  it('saves sidebar choices to the selected relaxation, waits before Run, and restores saved choices on reselect', async () => {
+    const make = id => ({ job_id: id, design_source_path: 'A.nadoc', status: 'queued',
+      backend: 'CPU', stages: [{ kind: 'mc', status: 'pending' }], run_config: { kind: 'relax' } })
+    const jobs = [make('edited'), make('other')]
+    api.listOxdnaJobs.mockImplementation(async () => structuredClone(jobs))
+    api.startOxdnaJob.mockClear()
+    let elements = {}, finishSave
+    let panel
+    const echo = vi.fn(cfg => {
+      elements = { anchors: cfg.anchors, surfaceAnchors: cfg.surfaceAnchors,
+        surface: cfg.surface ? { enabled: true, dir: cfg.surface.dir, positionNm: cfg.surface.position_nm,
+          offsetNm: cfg.surface.offset_nm, stiff: cfg.surface.stiff } : null }
+      panel?.onRunElementsChanged() // Restoring the actual cards also fires their callbacks.
+    })
+    api.updateOxdnaJobSettings.mockImplementation((id, patch) => new Promise(resolve => {
+      finishSave = () => {
+        const job = jobs.find(j => j.job_id === id)
+        job.run_config = { ...job.run_config, ...patch }
+        resolve(structuredClone(job))
+      }
+    }))
+    panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', getRunElements: () => elements, applyRunConfig: echo })
+    await panel.refresh(); await panel.selectJob('edited')
+    api.updateOxdnaJobSettings.mockClear()
+    elements = { anchors: [{ kind: 'strand', strand_id: 'chosen' }],
+      surface: { enabled: true, dir: [0, 1, 0], offsetNm: 3, positionNm: -12, stiff: 2 } }
+    panel.onRunElementsChanged()
+    $('oxdna-jobs-run-btn').click()
+    await flush(30)
+    expect(api.updateOxdnaJobSettings).toHaveBeenCalledWith('edited', expect.objectContaining({
+      anchors: [{ kind: 'strand', strand_id: 'chosen' }],
+      surface: { dir: [0, 1, 0], offset_nm: 3, position_nm: -12, stiff: 2 },
+    }))
+    expect(api.startOxdnaJob).not.toHaveBeenCalled()
+    finishSave(); await flush(40)
+    expect(api.startOxdnaJob).toHaveBeenCalledWith('edited')
+    expect(api.updateOxdnaJobSettings).toHaveBeenCalledTimes(1)
+    await panel.selectJob('other')
+    expect(elements.anchors).toEqual([])
+    await panel.selectJob('edited')
+    expect(elements.anchors).toEqual([{ kind: 'strand', strand_id: 'chosen' }])
+    expect(elements.surface.positionNm).toBe(-12)
+    // Polling does not restore over an edit that is still being saved.
+    elements.anchors = []
+    panel.onRunElementsChanged()
+    echo.mockClear()
+    await panel.refresh()
+    expect(echo).not.toHaveBeenCalled()
+    // Flush the removal; a failed save must prevent Run.
+    api.updateOxdnaJobSettings.mockResolvedValue(null)
+    api.startOxdnaJob.mockClear()
+    $('oxdna-jobs-run-btn').click(); await flush(40)
+    expect(api.startOxdnaJob).not.toHaveBeenCalled()
+  })
+
   it('an interrupted relaxation is resumed from the Relax control', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jKilled', design_source_path: 'A.nadoc', status: 'stopped',
       created_at: 1, current_stage_idx: 1,

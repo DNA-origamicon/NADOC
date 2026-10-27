@@ -1493,6 +1493,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
+  let _inheritedSeedGeneration = 0
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   let _earlyStopBusy = false      // a live early-stop POST is in flight (locks the toggle until the server confirms)
   const _metricsByJob = new Map()
@@ -2466,15 +2467,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return true
     }
     _clearInheritedSeed()   // switching seeds → drop the previous overlay first
+    const generation = _inheritedSeedGeneration
+    _inheritedSeedShown = seedId // Also own/cancel the in-flight load on a job switch.
     _setDisplayStatus('Loading inherited oxDNA-seed positions…', _C.muted, true)
     const r = await oxd.displayJob(seedId, true).catch(() => null)
+    if (generation !== _inheritedSeedGeneration) return false
     if (r?.ok) {
-      _inheritedSeedShown = seedId
       _setDisplayStatus(
         `Inherited oxDNA-seed positions (${r.stage || ''}${r.n ? `, ${r.n} nt` : ''}) — no MD frame yet`,
         _C.accent)
       return true
     }
+    _clearInheritedSeed()
     return false   // seed has no relaxed frame either → fall through to "waiting"
   }
 
@@ -2482,6 +2486,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // restore=false → just drop the flag: a real MD frame has already overwritten the
   // seed overlay, so restoring would wrongly flash the model back to native.
   function _clearInheritedSeed(restore = true) {
+    _inheritedSeedGeneration++
     if (!_inheritedSeedShown) return
     if (restore) getOxdnaDisplay?.()?.stopAndRestore?.()
     _inheritedSeedShown = null
@@ -2518,19 +2523,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     // Display job changed → reset frame tracking + drop any stale seed overlay.
     if (job.job_id !== _displayJobId) {
+      if (_displayJobId) mdDisplayController.stopDisplayKeepWarm?.()
       _mdFrameShown = false
       _clearInheritedSeed()
+      _displayJobId = job.job_id
+      _displayKey = null
     }
 
-    // Seeded run that hasn't shown a real MD frame yet → show the INHERITED oxDNA-seed
-    // positions (the structure MD started from) as a placeholder.  NAMD creates its DCD
-    // file immediately (so `ready` flips true with zero frames), so we gate on "no MD
-    // frame displayed yet", NOT on `ready` — otherwise the seed never shows.  The first
-    // streamed MD frame clears this overlay (see the md-display-state listener).
-    if (job.seed_oxdna_job_id && !_mdFrameShown) {
-      await _showInheritedSeed(job)
-    }
-
+    // Prefer the prepared job's own starting coordinates. Unprepared oxDNA-seeded
+    // drafts can still show their source until a NAMD package is available.
     try {
       const d = await _fetchDisplayMeta(job.job_id)
       if (!d) throw new Error('Could not load MD display metadata')
@@ -2542,6 +2543,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
+        if (d.starting_structure_config) {
+          const key = d.starting_structure_config
+          const forceReload = _displayKey !== key
+          _displayKey = key
+          mdDisplayController.displayLatest(key, { forceReload, live: false, jobId: job.job_id })
+          _setDisplayStatus('Starting structure — no simulation frame yet', _C.accent)
+          return
+        }
+        if (job.seed_oxdna_job_id && !_mdFrameShown) {
+          await _showInheritedSeed(job)
+          if (_selectedId !== job.job_id || !displayToggle?.checked) return
+        }
         // Remote snapshots are explicit: retain any stored frame, and wait for Refresh
         // when none exists. Never pull coordinates merely because this display tick ran.
         _displayJobId = job.job_id
@@ -3703,6 +3716,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     // Only `frame` means data is on screen. Loading and topology-ready retain the spinner.
     if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
+    else if (state === 'frame' && _displayMeta?.starting_structure_config && !_displayMeta?.ready) {
+      _setDisplayStatus('Starting structure — no simulation frame yet', _C.accent, false)
+    }
     else if (remoteDisplay) _setDisplayStatus('', _C.dim, false)
     else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
     else if (state === 'topology-ready') _setDisplayStatus(`${message}…`, _C.muted, true)

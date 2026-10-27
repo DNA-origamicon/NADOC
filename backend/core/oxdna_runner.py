@@ -550,6 +550,7 @@ def prepare_oxdna_job(
     surface_anchors: list[dict] | None = None,
     anchor_stiff: float = 1000.0,
     surface_strands: dict | None = None,
+    initial_configuration: Path | None = None,
 ) -> dict:
     """Write topology.top, conf.dat, design.json, and stages_spec.json into job dir.
 
@@ -563,6 +564,8 @@ def prepare_oxdna_job(
     appended to forces.txt (alongside the mutual traps) and also written to
     equil_forces.txt (the equil stage drops the mutual traps but keeps these).
     Returns the forces info dict (``n_anchored`` etc.) or an empty dict.
+    ``initial_configuration`` preserves an existing job's frozen starting frame
+    when rebuilding force settings; any capture particles are rebuilt separately.
     """
     design = design.without_reference_geometry()
     from backend.physics.oxdna_protein import (
@@ -627,6 +630,15 @@ def prepare_oxdna_job(
         write_topology(design, jd / "topology.top", mobile_gold=mobile_gold)
         write_configuration(design, geometry, jd / "conf.dat", oxdna_native_seed=True)
 
+    if initial_configuration is not None:
+        # Settings edits keep the job's frozen origami/protein coordinates. Strip
+        # old appended capture particles before rebuilding the requested surface.
+        n_base = int((jd / "topology.top").read_text().splitlines()[0].split()[0])
+        lines = initial_configuration.read_text().splitlines(keepends=True)
+        if len(lines) < n_base + 3:
+            raise ValueError("The saved starting configuration is incomplete.")
+        (jd / "conf.dat").write_text("".join(lines[:n_base + 3]))
+
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
     # on a surface differs from one relaxed free).  Computed from the ORIGAMI-ONLY conf
     # (before capture strands are appended) so the wall plane sits at the origami extent,
@@ -686,7 +698,7 @@ def prepare_oxdna_job(
     # The equil stage drops the DNA mutual traps but keeps surface/anchors/capture-strand
     # traps AND the protein tethers (so nothing drifts during the unbiased settle).
     equil_extra = "\n".join(t for t in (sa_text, cap_text, prot_traps) if t)
-    if surface or anchors or protein or cap_text:
+    if surface or anchors or surface_anchors or protein or cap_text:
         (jd / "equil_forces.txt").write_text(equil_extra, encoding="utf-8")
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this

@@ -14,7 +14,7 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   const actions = createDesignReadinessActions({
     store, mode, document, window, onSimulate, getDocId, broadcast: nadocBroadcast,
   })
-  const widget = initDesignReadiness({ host, onAction: (action, step) => actions.run(action, step), onDismiss: dismiss })
+  const widget = initDesignReadiness({ host, initiallyVisible: false, onAction: (action, step) => actions.run(action, step), onDismiss: dismiss })
   const visibility = initDesignReadinessVisibility({ widget })
   const fitPanel = () => {
     if (host.clientHeight > 0) host.style.setProperty('--design-readiness-max-height', `${Math.max(0, host.clientHeight - 72)}px`)

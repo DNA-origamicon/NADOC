@@ -1409,17 +1409,23 @@ async function main() {
   })
   // Echo a run's conditions back into the oxDNA cards (used by both the panel's
   // click-a-job handler and the Chain Simulations click-a-queued-stage handler).
+  let _restoringOxdnaConfig = false
+  const _saveOxdnaElements = () => {
+    if (!_restoringOxdnaConfig) oxdnaPanel?.onRunElementsChanged?.()
+  }
   const _oxdnaApplyConfig = (cfg = {}) => {
-    efieldSetup?.applyConfig?.(cfg.field)
-    oxdnaFloorSetup?.applyConfig?.(cfg.surface)
-    // The floor card's applyConfig does not fire its onChange, so the capture-strand
-    // prerequisite gate has to be re-synced by hand — and BEFORE the strands echo, or
-    // a job that ran on a surface comes back with its strands checkbox still disabled
-    // (and setSurfaceEnabled would then force the echoed-on toggle back off).
-    oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
-    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
-    oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
-    oxdnaSurfaceAnchorsSetup?.applyConfig?.(cfg.surfaceAnchors || cfg.surface_anchors)
+    _restoringOxdnaConfig = true
+    try {
+      efieldSetup?.applyConfig?.(cfg.field)
+      oxdnaFloorSetup?.applyConfig?.(cfg.surface)
+      // Restore the prerequisite gate BEFORE the strands echo, or
+      // a job that ran on a surface comes back with its strands checkbox still disabled
+      // (and setSurfaceEnabled would then force the echoed-on toggle back off).
+      oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+      oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
+      oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
+      oxdnaSurfaceAnchorsSetup?.applyConfig?.(cfg.surfaceAnchors || cfg.surface_anchors)
+    } finally { _restoringOxdnaConfig = false }
   }
   const oxdnaLive = initOxdnaLive({
     oxdnaDisplay,
@@ -1695,6 +1701,7 @@ async function main() {
       oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
       _syncSurfaceAnchorsGate()
       oxdnaPanel?.refreshControls?.()
+      _saveOxdnaElements()
     },
   })
   initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay, ionPaths: mdIonPaths })
@@ -1720,7 +1727,7 @@ async function main() {
     ids: { enable: 'oxdna-peg-enable', controls: 'oxdna-peg-controls',
       shape: 'oxdna-peg-shape', size: 'oxdna-peg-size', density: 'oxdna-peg-density',
       offx: 'oxdna-peg-offx', offy: 'oxdna-peg-offy', seed: 'oxdna-peg-seed', status: 'oxdna-peg-status' },
-    onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay() },
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay(); _saveOxdnaElements() },
     generateSequence: (len) => api.generateRandomSequence(len),
   })
   oxdnaSurfaceStrandsSetup.setSurfaceEnabled(oxdnaFloorSetup.isEnabled())   // initial gate
@@ -1738,8 +1745,8 @@ async function main() {
     engine: 'oxdna',
     getSelection: _anchorSelectionState,
     // The halo is driven by the shared `nadoc:anchors-change` listener above (all five
-    // engines); this callback only recomposes a running live session.
-    onChange: () => oxdnaLive?.onElementsChanged?.(),
+    // engines); also persist edits to the selected unstarted relaxation.
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _saveOxdnaElements() },
   })
   // Surface anchors are authored separately from fixed structure anchors, but use the
   // same selection resolver, row focus and purple-halo behaviour. Their simulation
@@ -1747,7 +1754,7 @@ async function main() {
   const oxdnaSurfaceAnchorsSetup = initOxdnaAnchorsSetup({
     engine: 'oxdna-surface',
     getSelection: _anchorSelectionState,
-    onChange: () => oxdnaPanel?.refreshControls?.(),
+    onChange: () => { oxdnaPanel?.refreshControls?.(); _saveOxdnaElements() },
     ids: {
       toggle: 'oxdna-anchors-toggle', arrow: 'oxdna-anchors-arrow', body: 'oxdna-anchors-body',
       add: 'oxdna-surface-anchors-add', clear: 'oxdna-surface-anchors-clear',

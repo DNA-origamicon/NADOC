@@ -36,6 +36,7 @@ import struct
 import shutil
 import asyncio
 import threading
+import tempfile
 from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
@@ -1478,6 +1479,44 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
     if any(p.oxdna_fixed_core for p in design.nanoparticles):
         constrain_fixed_core_stages(specs)
     specs = assign_stage_seeds(specs, seed)
+    force_defaults = {"surface": None, "anchors": [], "surface_anchors": [],
+                      "surface_strands": None, "anchor_stiff": 1000.0}
+    def force_value(value):
+        value = deepcopy(value)
+        if isinstance(value, dict):
+            value.pop("built", None)
+        return value
+
+    force_changed = any(
+        key in updates and force_value(recorded.get(key, default)) != force_value(getattr(body, key))
+        for key, default in force_defaults.items()
+    )
+    forces_info = None
+    if force_changed:
+        jd = job.job_dir(_workspace())
+        # Prepare and validate off to the side. A failed edit must leave both the
+        # saved settings and the runnable input files untouched.
+        with tempfile.TemporaryDirectory(prefix=".oxdna-settings-", dir=jd.parent) as directory:
+            staged = deepcopy(job)
+            staged.archived = True
+            staged.archive_path = directory
+            try:
+                forces_info = await run_in_threadpool(
+                    prepare_oxdna_job, design, _seed_geometry(design), staged, _workspace(), specs,
+                    surface=body.surface, anchors=body.anchors, surface_anchors=body.surface_anchors,
+                    anchor_stiff=body.anchor_stiff, surface_strands=body.surface_strands,
+                    initial_configuration=jd / "conf.dat",
+                )
+            except (ValueError, OSError) as exc:
+                raise HTTPException(400, f"Could not update oxDNA force settings: {exc}") from exc
+            if not oxdna_job_settings_editable(_load_job(job_id)):
+                raise HTTPException(409, "The job started while its settings were being saved.")
+            for name in ("topology.top", "conf.dat", "forces.txt", "equil_forces.txt"):
+                source = Path(directory) / name
+                if source.exists():
+                    source.replace(jd / name)
+                elif name == "equil_forces.txt":
+                    (jd / name).unlink(missing_ok=True)
     (job.job_dir(_workspace()) / "stages_spec.json").write_text(
         json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
     )
@@ -1501,7 +1540,8 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         body.runpod_quoted_rate_usd_per_hour if body.execution_target == "runpod" else None
     )
     surface_strands = deepcopy(body.surface_strands)
-    built_capture = (recorded.get("surface_strands") or {}).get("built")
+    built_capture = ((forces_info or {}).get("capture") if force_changed
+                     else (recorded.get("surface_strands") or {}).get("built"))
     if surface_strands is not None and built_capture:
         surface_strands["built"] = built_capture
     job.run_config = {
@@ -1512,6 +1552,11 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
         "autostart": False,
         "surface_strands": surface_strands,
     }
+    if forces_info is not None:
+        if job.run_config.get("surface") and forces_info.get("wall"):
+            job.run_config["surface"] = persisted_wall(job.run_config["surface"], forces_info["wall"])
+        old_count = ((recorded.get("surface_strands") or {}).get("built") or {}).get("n_beads", 0)
+        job.n_nucleotides += int((built_capture or {}).get("n_beads", 0)) - int(old_count)
     job.save(_workspace())
     return job.to_dict()
 
@@ -3714,7 +3759,7 @@ def _relaxed_full_map(
     routes. Returns ``(design, full_map, stage_name, conf_path, ref_conf)`` where
     ``full_map`` is ``{(hid,bp,dir): {backbone_position(CM), a1, a3}}`` — the same
     per-nucleotide shape the heavy-rep reconstruction consumes. ``full_map`` is
-    None when no stage has a ``last_conf.dat`` yet.
+    None when neither simulation output nor the saved input frame is available.
 
     ``copies=True`` (atomistic/surface reconstruction only) additionally keys
     loop-insertion copies under their own 4-tuple key so the rigid-frame placer
@@ -3738,7 +3783,12 @@ def _relaxed_full_map(
             break
 
     if conf_path is None:
-        return (None, None, None, None, None)
+        # A child owns a frozen copy of its inherited frame in conf.dat. Use
+        # that input, not the parent's latest output (which may have changed).
+        conf_path = jd / "conf.dat"
+        if not conf_path.is_file():
+            return (None, None, None, None, None)
+        stage_name = "Starting structure"
 
     # Alignment is DISALLOWED for surface jobs: Kabsch-superposing the relaxed structure back
     # onto the design origin undoes the settling that keeps it above the plane, so it renders

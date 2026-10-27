@@ -2818,3 +2818,54 @@ it('inherits build settings through partial child controls and uses the prepared
  parent.parent_job_id='child'
  expect(mdInheritedPrepParams(child,[parent,child]).graphene_pore_diameter_nm).toBe(4)
 })
+
+describe('MD starting structure selection', () => {
+  const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve() }
+  afterEach(() => { clearDom(); vi.useRealTimers() })
+  it('replaces the previous job with the selected unrun input, then follows real output', async () => {
+    vi.useFakeTimers(); vi.clearAllMocks(); clearDom(); localStorage.clear()
+    mountIds({
+      'tab-content-dynamics': 'div', 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div',
+      'md-jobs-display-toggle': 'input', 'md-jobs-display-status': 'div',
+    })
+    const jobs = ['parent', 'child'].map(job_id => ({ job_id, status: 'queued',
+      design_name: 'D', design_source_path: '/w/D.nadoc', created_at: 1, segments: [] }))
+    jobs.push({ ...jobs[1], job_id: 'seeded', status: 'draft', seed_oxdna_job_id: 'ox-source' })
+    mdApi.getOxdnaJob.mockResolvedValue({ run_config: {} })
+    mdApi.listMdJobs.mockResolvedValue(jobs)
+    mdApi.getMdJob.mockImplementation(async id => jobs.find(j => j.job_id === id))
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({ ready: false })
+    mdApi.getMdDisplayMeta.mockImplementation(async id => id === 'parent'
+      ? { ready: true, config_path: '/parent.json', trajectory_path: '/parent.dcd' }
+      : { ready: false, starting_structure_config: '/child-start.json' })
+    const display = { displayLatest: vi.fn(), stopDisplayKeepWarm: vi.fn(),
+      prewarmLatest: vi.fn(), stopPrewarm: vi.fn() }
+    let finishSeed
+    const oxdna = { displayJob: vi.fn(() => new Promise(resolve => { finishSeed = resolve })), stopAndRestore: vi.fn() }
+    const panel = initMdJobsPanel({ mdDisplayController: display, getOxdnaDisplay: () => oxdna,
+      getWorkspacePath: () => '/w/D.nadoc' })
+    await flush(); panel.selectJob('parent'); await flush()
+    const toggle = document.getElementById('md-jobs-display-toggle')
+    toggle.checked = true; toggle.dispatchEvent(new Event('change')); await flush()
+    expect(display.displayLatest).toHaveBeenCalledWith('/parent.json', expect.objectContaining({ jobId: 'parent' }))
+    panel.selectJob('child'); await flush()
+    expect(display.stopDisplayKeepWarm).toHaveBeenCalled()
+    expect(display.displayLatest).toHaveBeenLastCalledWith('/child-start.json', {
+      forceReload: true, live: false, jobId: 'child',
+    })
+    expect(document.getElementById('md-jobs-display-status').textContent).toContain('Starting structure')
+    mdApi.getMdDisplayMeta.mockResolvedValue({ ready: true, config_path: '/child.json', trajectory_path: '/child.dcd' })
+    await vi.advanceTimersByTimeAsync(16000); await flush()
+    expect(display.displayLatest).toHaveBeenLastCalledWith('/child.json', expect.objectContaining({ jobId: 'child', forceReload: true }))
+    mdApi.getMdDisplayMeta.mockImplementation(async id => id === 'seeded' ? { ready: false }
+      : { ready: true, config_path: '/child.json', trajectory_path: '/child.dcd' })
+    panel.selectJob('seeded'); await flush()
+    expect(oxdna.displayJob).toHaveBeenCalledWith('ox-source', true)
+    panel.selectJob('child'); await flush()
+    expect(oxdna.stopAndRestore).toHaveBeenCalled()
+    finishSeed({ ok: true, n: 10 }); await flush()
+    expect(document.getElementById('md-jobs-display-status').textContent).not.toContain('Inherited oxDNA-seed')
+    toggle.checked = false; toggle.dispatchEvent(new Event('change'))
+  })
+})

@@ -21,6 +21,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
+import { createOxdnaJobSettings, relaxationElementsSettings, relaxationElementsSignature } from './oxdna_job_settings.js'
 import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
@@ -1412,8 +1413,40 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   })
 
   // ── Fetch + poll ───────────────────────────────────────────────────────────
+  let _applyingRunControls = false
+  let _controlsJobId = null
+  let _controlsSignature = null
+  let _settingsEpoch = 0
+  const _settingsSignature = job => JSON.stringify(job?.run_config || {})
+  const _jobSettings = createOxdnaJobSettings({
+    save: (id, patch) => api.updateOxdnaJobSettings(id, patch),
+    onSaved: (saved, latest) => {
+      _settingsEpoch++
+      _jobs = _jobs.map(job => job.job_id === saved.job_id ? saved : job)
+      _renderList()
+      if (_selectedId === saved.job_id && latest) {
+        _applyRunControls(saved)
+        _updateButtons(saved)
+        if (displayToggle?.checked) void _refreshDisplay()
+      }
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    },
+    onError: () => showToast(api.lastErrorMessage?.() || 'Surface/anchor settings were not saved. Retry before running.', 'error'),
+  })
+  function _runElementsChanged() {
+    if (!getRunElements || _applyingRunControls || _controlsJobId !== _selectedId) return
+    const job = _selectedJob()
+    if (!oxdnaJobEditable(job) || job.parent_job_id || (job.run_config?.kind || 'relax') !== 'relax') return
+    const patch = relaxationElementsSettings(getRunElements())
+    if (relaxationElementsSignature(patch) === relaxationElementsSignature(_jobSettings.overlay(job).run_config)) return
+    _jobSettings.change(job, patch)
+    _controlsSignature = _settingsSignature(_jobSettings.overlay(job))
+  }
+
   async function _fetchJobs() {
+    const settingsEpoch = _settingsEpoch
     const jobs = await api.listOxdnaJobs().catch(() => null)
+    if (settingsEpoch !== _settingsEpoch) { _base.schedulePoll(); return }
     if (Array.isArray(jobs)) {
       _jobs = mergeCreatingJobs(jobs, 'oxdna')
       _renderList()
@@ -1423,6 +1456,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (_selectedId) {
         const sel = _jobs.find(j => j.job_id === _selectedId)
         if (sel) {
+          if (!_jobSettings.hasPending(sel.job_id) &&
+              (_controlsJobId !== sel.job_id || _controlsSignature !== _settingsSignature(sel))) _applyRunControls(sel)
           const progress = sel.creating ? null : await api.getOxdnaProgress(sel.job_id).catch(() => null)
           if (_selectedId !== sel.job_id) return
           _progress = progress
@@ -1512,12 +1547,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     return runExclusive(runBtn, async () => {
       const job = _selectedJob()
       if (!canStartJob(job)) return
+      const jobId = job.job_id
       if (!(await confirmNoConcurrentJob({
         excludeJobId: _selectedId,
         usesGpu: (job.backend || 'CUDA') === 'CUDA',
       }))) return
+      if (_selectedId !== jobId) return
+      // Capture even a typed edit whose card debounce has not fired yet.
+      _runElementsChanged()
+      try { await _jobSettings.flush(jobId) } catch {
+        showToast(api.lastErrorMessage?.() || 'Could not save surface/anchor settings; the job was not started.', 'error')
+        return
+      }
+      if (_selectedId !== jobId) return
       oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
-      const started = await api.startOxdnaJob(_selectedId)
+      if (_selectedId !== jobId) return
+      const started = await api.startOxdnaJob(jobId)
       if (!started) {
         showToast(api.lastErrorMessage?.() || 'Could not start oxDNA job', 'error')
         return
@@ -1654,11 +1699,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (parent) _applyRunControls(parent)
     },
     updateJob: async (jobId, payload) => {
+      try { await _jobSettings.flush(jobId) } catch {
+        showToast('Save the surface/anchor settings before editing the protocol.', 'error')
+        return null
+      }
       const current = _jobs.find(job => job.job_id === jobId)
       if (!current) return null
       const saved = await api.updateOxdnaJobSettings(jobId, {
         ...(current.run_config || {}),
         ...payload,
+        ...(!current.parent_job_id && (current.run_config?.kind || 'relax') === 'relax'
+          && _controlsJobId === jobId && getRunElements
+          ? relaxationElementsSettings(getRunElements()) : {}),
         seed: current.random_seed ?? current.run_config?.seed,
         autostart: false,
         design_source_path: current.design_source_path || _currentPartPath(),
@@ -1812,13 +1864,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
       _setTrajOff()
     }
+    const controlsChanged = _controlsJobId !== jobId || _controlsSignature !== _settingsSignature(_jobSettings.overlay(job))
     _selectedId = jobId
+    if (controlsChanged && selectionUpdatesVisualization(job)) _applyRunControls(_jobSettings.overlay(job))
     const progress = job.creating ? null : await api.getOxdnaProgress(jobId).catch(() => null)
     if (_selectedId !== jobId) return
     _progress = progress
     _renderList()
     _renderDetail(job)
-    if (selectionUpdatesVisualization(job)) _applyRunControls(job)
     // If the "OxDNA display" toggle is on, follow it to the newly-selected job
     // (re-deform the model to THIS job's relaxed positions, not the old one's).
     if (!job.creating && selectionUpdatesVisualization(job) && displayToggle?.checked
@@ -1852,6 +1905,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // for a running selection. Fired only on an explicit row click (never on a status
   // poll, which would clobber the user mid-edit).
   function _applyRunControls(job) {
+    _controlsJobId = job?.job_id ?? null
+    _controlsSignature = _settingsSignature(job)
     const cfg = runConfigForJob(job)
     if (cfg.advanced) {
       const a = cfg.advanced
@@ -1874,13 +1929,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         ? 'Off for surface jobs — aligning to the design pose would look like the structure clips through the surface.'
         : ''
     }
-    applyRunConfig?.(cfg, job)
+    _applyingRunControls = true
+    try { applyRunConfig?.(cfg, job) } finally { _applyingRunControls = false }
   }
 
   // No job selected → clear the run cards so the E-field arrow (and surface /
   // anchor glow) don't linger from a previously-selected field run.  The arrow is
   // only shown when a field has been applied to the *current* job.
   function _clearRunCards() {
+    _controlsJobId = null
+    _controlsSignature = null
     if (alignToggle) { alignToggle.disabled = false; alignToggle.title = '' }
     applyRunConfig?.({ advanced: null, field: null, surface: null, surfaceStrands: null, anchors: [] }, null)
   }
@@ -2769,7 +2827,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const align = alignToggle ? alignToggle.checked : true
     const r = await oxdnaDisplay.displayJob(_selectedId, align)
     const frame = align ? '' : ', own frame'
-    _displayBaseText = r.ok ? `Showing relaxed positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data')
+    _displayBaseText = r.ok ? `Showing ${r.stage === 'Starting structure' ? 'starting' : 'relaxed'} positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data')
     _displayBaseColor = r.ok ? _C.ok : _C.warn
     // Mark the frame we're now showing so the live-follow poll only re-fetches
     // when the sim writes a newer one.
@@ -3075,6 +3133,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   return {
     refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent,
     refreshControls: () => _updateButtons(_selectedJob()),
+    onRunElementsChanged: _runElementsChanged,
     restoreSubmittedDesign: async (jobId) => {
       const job = _jobs.find(j => j.job_id === jobId)
       return job ? restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs }) : false

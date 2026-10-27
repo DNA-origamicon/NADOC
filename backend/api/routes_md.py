@@ -291,6 +291,12 @@ def _job_to_summary(job: MdJob) -> JobSummary:
     )
 
 
+def _dcd_has_display_frames(path: Path) -> bool:
+    from backend.core.md_import import dcd_has_display_frames
+
+    return dcd_has_display_frames(path)
+
+
 def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
     package_dir = job.package_dir(_workspace())
     output_dir = package_dir / "output"
@@ -314,7 +320,7 @@ def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
                 output_dir / f"{seg.name}.dcd",
                 package_dir / f"{seg.name}.dcd",
             )
-            if d.exists() and d.stat().st_size > 0
+            if d.exists() and d.stat().st_size > 0 and _dcd_has_display_frames(d)
         ]
         if dcds:
             return seg.name, max(dcds, key=lambda d: d.stat().st_mtime)
@@ -4838,6 +4844,8 @@ async def get_md_job_display(job_id: str) -> dict:
         manifest = package_dir / "manifest.json"
 
     segment_name, dcd_path = _latest_display_segment(job)
+    if dcd_path is not None and not _dcd_has_display_frames(dcd_path):
+        dcd_path = None  # The file may have been replaced since segment selection.
     ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(
         job
     )
@@ -4884,10 +4892,19 @@ async def get_md_job_display(job_id: str) -> dict:
         has_live_frame=bool(live_marker),
     )
 
+    # The viewer can show the actual prepared input before a simulation writes
+    # output. Keep this derived single frame separate from trajectory/results.
+    starting_structure = None
+    if manifest.exists() and dcd_path is None and not graphene_only:
+        from backend.core.md_starting_structure import starting_structure_display
+
+        starting_structure = await asyncio.to_thread(starting_structure_display, manifest)
+
     return {
         "job_id": job.job_id,
         "status": job.status.value,
         "ready": ready,
+        "starting_structure_config": str(starting_structure) if starting_structure else None,
         "not_ready_code": (not_ready or {}).get("code"),
         "not_ready_reason": (not_ready or {}).get("reason", ""),
         "config_path": str(manifest.resolve()) if manifest.exists() else None,

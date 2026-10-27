@@ -53,8 +53,35 @@ def test_bridge_is_document_bound_atomic_and_does_not_mutate_design(tmp_path, mo
         event = {'sequence': 1, 'revision': 1, 'id': 'test-reference', 'action': 'color'}
         (tmp_path / 'events.references-event').write_text(json.dumps(event))
         assert client.get('/vr/references').json()['event'] == event
-        assert client.get('/vr/references', headers={'Origin': 'https://untrusted.example'}).status_code == 403
+        unavailable = client.get('/vr/references', headers={'Origin': 'https://untrusted.example'})
+        assert unavailable.status_code == 200
+        assert unavailable.json() == {'session': None}
+        assert client.post('/vr/references', json=data, headers={'Origin': 'https://untrusted.example'}).status_code == 403
         monkeypatch.setattr(doc_context, 'get_current_doc', lambda: 'other')
         assert client.get('/vr/references').json() == {'session': None}
         assert client.post('/vr/references', json=data).status_code == 409
         assert (tmp_path / 'events.references').read_text() == text
+
+
+@pytest.mark.parametrize('host', ['100.99.71.2', '192.0.2.4'])
+def test_remote_poll_has_no_session_and_cannot_publish(host, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api import routes_vr as vr
+    from backend.api.vr_references import router
+
+    monkeypatch.setenv('NADOC_TAILSCALE_IP', '100.89.83.24')
+    monkeypatch.setenv('NADOC_PUBLIC_URL', 'https://nadoc.example.ts.net:5173')
+
+    def unexpected_state_read():
+        pytest.fail('Remote clients must not read the native VR session')
+
+    monkeypatch.setattr(vr, '_read_state', unexpected_state_read)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app, client=(host, 50000)) as client:
+        for headers in ({}, {'Origin': 'https://nadoc.example.ts.net:5173'}):
+            response = client.get('/vr/references', headers=headers)
+            assert response.status_code == 200
+            assert response.json() == {'session': None}
+            assert client.post('/vr/references', json=model(), headers=headers).status_code == 403

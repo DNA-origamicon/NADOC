@@ -32,7 +32,7 @@ export function designReadinessSummary(report) {
  * The supplied host must be positioned. CSS offsets are --design-readiness-top,
  * --design-readiness-right and --design-readiness-left (all default to 12px).
  */
-export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
+export function initDesignReadiness({ host, onAction, onDismiss, initiallyVisible = true } = {}) {
   if (!host) throw new TypeError('Design readiness needs a viewport host.')
   const doc = host.ownerDocument
   const win = doc.defaultView
@@ -40,7 +40,7 @@ export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
   const listeners = []
   let disposed = false
   let suppressed = false
-  let userDismissed = false
+  let userDismissed = !initiallyVisible
   let explicitlyShown = false
   let contentVisible = false
   let isOpen = false
@@ -347,8 +347,9 @@ export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
   }
 
   function resetVisibility() {
-    userDismissed = false
+    userDismissed = !initiallyVisible
     explicitlyShown = false
+    applyVisibility()
   }
 
   return { show, resetVisibility, setReport, setLoading, setError, setSuppressed, open: reveal, focusStep, dispose }

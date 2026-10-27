@@ -63,7 +63,7 @@ _SBATCH_NAME = "nadoc_job.sbatch"
 # Local package artifacts NOT uploaded: a fresh remote run creates its own output/
 # and logs.  (Directory names checked against any path component; suffixes against
 # the file name.)
-_SKIP_DIRS = {"output"}
+_SKIP_DIRS = {"output", ".nadoc-analysis"}
 _SKIP_SUFFIXES = {".log"}
 
 

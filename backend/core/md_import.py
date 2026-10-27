@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -99,6 +100,15 @@ def _first_existing(candidates: list[Path]) -> Path | None:
     return None
 
 
+def dcd_has_display_frames(path: Path) -> bool:
+    from backend.core.dcd_fast import read_layout, UnsupportedDCD
+
+    try:
+        return read_layout(path).n_frames > 0
+    except (OSError, UnsupportedDCD, struct.error):
+        return True  # Let the existing reader handle other DCD layouts.
+
+
 def _latest_existing_dcd(
     package_dir: Path, stage_names: list[str], output_dir: Path | None = None
 ) -> tuple[Path | None, str | None]:
@@ -115,13 +125,14 @@ def _latest_existing_dcd(
                 output / f"{name}.dcd",
                 package_dir / f"{name}.dcd",
             )
-            if d.exists() and d.stat().st_size > 0
+            if d.exists() and d.stat().st_size > 0 and dcd_has_display_frames(d)
         ]
         if candidates:
             dcd = max(candidates, key=lambda p: p.stat().st_mtime)
             return dcd.resolve(), name
     dcds = (
-        sorted(output.glob("*.dcd"), key=lambda p: p.stat().st_mtime)
+        sorted((p for p in output.glob("*.dcd") if dcd_has_display_frames(p)),
+               key=lambda p: p.stat().st_mtime)
         if output.exists()
         else []
     )
