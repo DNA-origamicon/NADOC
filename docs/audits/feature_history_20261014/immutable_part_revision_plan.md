@@ -1,5 +1,8 @@
 # Immutable strict-part revisions: minimum migration
 
+> **Status reconciliation, October 26, 2026:** This is retained storage-design evidence. Further sealed-path rollout, agent policy and old-file migration are excluded from the current CAD finish. FH-28 checks concrete durable publication/recovery, cancellation and retained-state gaps on retained production paths; this plan does not authorize another host or a storage migration. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
 Reviewed migration plan, October 15, 2026. The pure immutable preparation and
 materialization foundation passes 49 focused tests. The staged internal
 session-content union and retention path now pass their focused regressions;

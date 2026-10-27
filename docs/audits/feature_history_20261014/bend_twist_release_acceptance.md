@@ -1,5 +1,8 @@
 # Bend/twist release acceptance — S01/S02/S03
 
+> **Status reconciliation, October 26, 2026:** Bend/Twist acceptance is complete; production gates are ON. The final “Native preview buffer reuse — October20,2026” entry supersedes the S53/S54 queue and earlier open C8/ISSUE-100 statements. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
 **User priority — October 18, 2026:** Complete Bend, Twist, Sweep and Extrude
 before moving to other areas. Completion includes their applicable creation and
 history-edit controls, isolated preview/Cancel/Apply, dependency and downstream

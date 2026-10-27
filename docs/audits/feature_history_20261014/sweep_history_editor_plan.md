@@ -1,5 +1,8 @@
 # Sweep history editor — FH-22
 
+> **Status reconciliation, October 26, 2026:** Ordinary Sweep C1–C9 is accepted by “Guide-only Sweep preview” (October 19); both gates are ON and MV-51 is closed. Earlier gate-OFF and S54-next statements are historical. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
 **User priority — October 18, 2026:** Complete Bend, Twist, Sweep and Extrude
 before moving to other areas. Completion includes their applicable creation and
 history-edit controls, isolated preview/Cancel/Apply, dependency and downstream

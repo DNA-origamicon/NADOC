@@ -14,28 +14,14 @@ Arbitrary named-group motion and the PartGroup migration remain retired;
 Staple Groups are organizational. Current counts and remaining work live in the
 [handoff](session_handoff.md). Earlier checkpoint narratives below are historical.
 
-## Progress baseline and mandatory update counts — October 16, 2026
+## Current ledger and historical baseline
 
-**Completed: 21. Estimated total: 38. Remaining: 17 — 8 core-priority and
-9 parked asset/provenance milestones.** Baseline B1 remains 17/38, reconstructed
-from implementation and evidence through `2c15e747`. No earlier numerical target was
-agreed; do not invent historical estimate deltas. This is a milestone estimate,
-not a count of messages/commits or a percentage of time or user-ready features.
-Core estimates have moderate confidence; parked work has lower confidence.
-
-Keep delivery and effort visible separately: **60 engineering checkpoints have
-been delivered since B1 (U1–U60), closing four additional milestones**. Thirteen of
-those checkpoints were spent on still-open FH-18. The 38 is an estimate of
-deliverable milestones, not a promise of 38 commits or assistant responses;
-the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
-
-One counted update is a named, reviewable milestone with a fixed exit. Completed
-implementation foundations below have scoped tests/evidence; some remain gated.
-Their outstanding desktop, performance and rollout exits are explicitly included
-in the remaining milestones. No G1–G5 phase is claimed complete by this count.
-Assemblies and machine-specific VR validation are excluded and remain deferred;
-desktop qualification is included. Previously completed asset work is counted
-once; its remaining rollout is parked, not removed from the total.
+Current counts and tool qualification live in the [handoff](session_handoff.md).
+The original B1 estimate was 38; FH-13, FH-29, FH-37 and FH-38 are outside
+CAD-editing scope under the October 18 decision. Their historical rows below
+are retained for traceability and excluded from current totals.
+Implementation milestones do not substitute for their separately allocated
+rollout exits. No completion credit is assigned by this reconciliation.
 
 ### Completed implementation milestones
 
@@ -56,29 +42,27 @@ once; its remaining rollout is parked, not removed from the total.
 | FH-13 | Done | Registered batches, trusted strict policy, one-shot permits and closed HTTP boundary: `f7c20fbc`, `cec8aa55`, `7d02a5f2`, [publication checkpoint](strict_publication_checkpoint.md). Public batch gate remains closed. |
 | FH-14 | Done | Immutable revision ownership, typed persistence and owned cold recovery: `7886cd42`–`800a093c`, [persistence](immutable_part_persistence_plan.md), [recovery evidence](validation_immutable_recovery_transport.json). Public immutable rollout remains open. |
 | FH-15 | Done | Honest physical-input freshness and isolated oxDNA preparation foundation: `764b413b`–`ad800573`, [freshness](physical_freshness_plan.md), [preparation evidence](validation_oxdna_preparation_route.json). Full receipts and owned-preparation rollout remain open. |
-| FH-16 | Done | Core transaction hardening and complete private bend/twist editor implementation: `35a96ef7`–`1ae1137f`, [lifecycle](validation_core_geometry_lifecycle.json), [editor](validation_deformation_history_editor.json). Isolated editor/HTTP rollout remains gated. |
+| FH-16 | Done | Core transaction hardening and complete private bend/twist editor implementation: `35a96ef7`–`1ae1137f`, [lifecycle](validation_core_geometry_lifecycle.json), [editor](validation_deformation_history_editor.json). Paired production rollout subsequently qualified under FH-20. |
 | FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery is FH-19; desktop checks remain open. |
 | FH-19 | Done · 2 checkpoints | Recover supported invalid saved recipes: original bytes/digest preserved, bounded read-only admission, explicit grouping repair, independently regenerated valid copy and exact download. Isolated HTTP/process lifecycle and File-menu controls are connected and automated-tested; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_delivery.json). Native empty-root recipes within the declared bounds only; desktop/latency acceptance remains FH-27/MV-49, as allocated before implementation. |
 | FH-20 | Done · October20,2026 | Bend/Twist C1–C9 qualified: paired production gates ON, obsolete desktop mutating fallback unreachable, fixed small/large C8 four-case pass; final frontend9395pass and backend failure set unchanged from83 known baseline failures. |
-| FH-21 | Done · 1 checkpoint | Complete ordinary native extrusion history editor: seven families, earlier edits through downstream features, stable identities, full input controls and validation; independent rebuild with evicted recovery, typed source diagnostics, atomic source-bound publication and undo/reload. [Contract](extrusion_history_editor_plan.md), [evidence](validation_extrusion_history_editor.json). Desktop/latency remains the existing FH-27/MV-50 exit; organization rollout remains disabled. |
-| FH-22 | Done · 1 checkpoint | Complete owned native Sweep history editor: full prefix-based controls, isolated feature-stage display, recovery-independent Apply/Cancel, full source proof and downstream rebuild, atomic undo/reload and typed missing references. [Contract](sweep_history_editor_plan.md), [evidence](validation_sweep_history_editor.json). Both rollout gates remain false; desktop/latency stays FH-27/MV-51. |
+| FH-21 | Done · 1 checkpoint | Complete ordinary native extrusion history editor: seven families, earlier edits through downstream features, stable identities, full input controls and validation; independent rebuild with evicted recovery, typed source diagnostics, atomic source-bound publication and undo/reload. [Contract](extrusion_history_editor_plan.md), [evidence](validation_extrusion_history_editor.json). Ordinary C1–C9 acceptance closes MV-50; aggregate FH-27 remains. Organization rollout remains disabled. |
+| FH-22 | Done · 1 checkpoint | Complete owned native Sweep history editor: full prefix-based controls, isolated feature-stage display, recovery-independent Apply/Cancel, full source proof and downstream rebuild, atomic undo/reload and typed missing references. [Contract](sweep_history_editor_plan.md), [evidence](validation_sweep_history_editor.json). Both production gates are ON; ordinary C1–C9 acceptance closes MV-51. Aggregate FH-27 remains. |
 | FH-23 | Done · October26,2026 | Cluster and individual-nucleotide Move/Rotate C1–C9: production gates ON, atomic complete-cluster Apply, exact native recovery, chronological poses, historical/downstream edits, constraints, dependencies, undo/reopen and measured latency. See [transform plan](transform_history_editor_plan.md). One nominal-preview performance task remains within the authorized allowance. |
-| FH-24 | Done · 1 checkpoint | Complete native Fine Routing history editor: all 22 child kinds, input controls and ordered batch add/remove/reorder with stable output slots, independently rebuilt pre-child references and full downstream replay. Source-bound HTTP/isolated worker, exact child diagnostics, organized native lineage, one undo/reload and optimized history seeking are tested. [Contract](fine_routing_history_editor_plan.md), [evidence](validation_fine_routing_history_editor.json). Editor and organization gates stay off; desktop/latency acceptance remains the preallocated FH-27/MV-53 exit. |
+| FH-24 | Done · 1 checkpoint | Complete native Fine Routing history editor: all 22 child kinds, input controls and ordered batch add/remove/reorder with stable output slots, independently rebuilt pre-child references and full downstream replay. Source-bound HTTP/isolated worker, exact child diagnostics, organized native lineage, one undo/reload and optimized history seeking are tested. [Contract](fine_routing_history_editor_plan.md), [evidence](validation_fine_routing_history_editor.json). Ordinary editor is ON and MV-53 is closed; organization remains OFF. Aggregate FH-27 remains. |
 
 ### Remaining core-priority milestones
 
-Each row begins with zero major engineering checkpoints spent since B1. Track
-future checkpoints against these IDs in the update ledger below. This accounting
-starts now; historical work on an unfinished row is not claimed to be zero.
+The five active core exits are below. Checkpoint counts are historical effort,
+not a requirement to continue U-number accounting or repeat completed acceptance.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
 | FH-18 | In progress; scope pruned by user October25 | Existing cluster membership/deletion and geometry ownership: explicit incoming references, recorded edits, undo/reload/cold replay. Staple Groups remain organizational. The separate PartGroup migration, named-group geometry consumers and arbitrary member-motion/compiler rollout are retired requirements; experimental authoring UI removed; referenced internal compatibility code remains for cleanup. No completion credit from scope pruning. |
-| FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Explicit organized material lineage, owned HTTP/history publication and prefix-derived endpoint/version repair are implemented privately; exact-definition legacy owner migration is implemented privately; complete controls/full profiles, ISSUE-126/143 corrections and qualification remain open. |
-| FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
+| FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Owned HTTP/history publication and prefix-derived endpoint/version repair have private implementations. Complete ordinary controls/source profiles, ISSUE-126 replay admission, ISSUE-143 correctness and qualification remain open. Ordinary ISSUE-126 route containment is implemented. PartGroup rollout and old-file owner migration are excluded. |
+| FH-26 | Remaining | Complete missing core dependency-repair families: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. Reuse delivered Extrude/Sweep source repair, suppression/reorder and dependency inspection; do not restart them. |
 | FH-27 | In progress · 1 checkpoint | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. S06 restores native prerequisites with 30 focused passes; broad/resource/desktop exits remain open. |
-| FH-28 | In progress · 11 checkpoints; task growth flagged | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
-| FH-29 | Remaining | Core registered automation release: complete geometry catalog under trusted policy, editable UI/script equivalence, bypass/stale/tamper closure and qualified public gates. |
+| FH-28 | In progress · 11 checkpoints; task growth flagged | Qualify retained production host lifecycle: durable creation/recovery/publication on actual paths, cancellation, stale results and retained-state limits accepted. No additional sealed-path rollout, strict-agent storage or legacy-file migration requirement. |
 
 ### Parked milestones still included in the estimate
 
@@ -94,8 +78,20 @@ Ordinary DNA connections belong to FH-25, not the parked nanoparticle bucket.
 | FH-34 | Parked | scadnano import: complete source/options/identity/loss contract and independent regeneration. |
 | FH-35 | Parked | DNA-PDB import: complete source/conversion/identity/loss contract and independent regeneration. |
 | FH-36 | Parked | Generated asset composition: ordinary commands through final connections, cold replay and upstream edits. |
-| FH-37 | Parked | oxDNA preparation/run provenance: owned archive and package/solver/attempt/restart receipts, qualified rollout. |
-| FH-38 | Parked | NAMD/atomistic-reference provenance: complete declared consumed-input receipts and honest current/stale/unknown reporting. |
+
+### Outside CAD-editing scope
+
+FH-13 (implemented strict policy), FH-29 (automation release), FH-37 (oxDNA
+provenance) and FH-38 (NAMD/atomistic provenance) are parked outside the count.
+Seven parked asset milestones FH-30–FH-36 remain in the CAD total, but are not
+prerequisites for the five core exits.
+
+### Historical accounting and implementation evidence
+
+Everything below records the former B1/U1–U60 plan. Its mandatory-update rules,
+38-milestone totals, G1–G5 ordering, gates and successor instructions are
+superseded by the operating contract, later scope decisions and current handoff.
+Do not revive retired PartGroup motion, sealed-path rollout or legacy conversion.
 
 ### Reporting and scope-control rule
 

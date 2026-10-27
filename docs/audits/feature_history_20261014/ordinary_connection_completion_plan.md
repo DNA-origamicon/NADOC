@@ -1,5 +1,31 @@
 # FH-25 ordinary DNA connection completion contract
 
+> **Current scope, October 26, 2026:** FH-25 remains open. The U28–U43 entries are historical implementation evidence; their counts, successor instructions, PartGroup rollout and old-file owner migration are not active requirements. Complete ordinary supported controls/source profiles, native correctness/admission, source-bound replay and desktop/resource acceptance. ISSUE-143 remains open. ISSUE-126 now has ordinary-route containment; see the clarification below. Current accounting: [handoff](session_handoff.md).
+
+## ISSUE-126 clarification — October 26, 2026
+The incompatible same-attach dsDNA case can produce two FORWARD bridge domains
+in the same `(helix, bp, direction)` slots; this is invalid topology, not a
+rendering artifact. `fd2772f1` added the existing polarity rule before ordinary
+version creation, combined Connect and stored-version Apply, including gated
+adapter dispatch. These routes reject known incompatible dsDNA pairs with HTTP400.
+Recording also checks occupancy; clean-source conflicts refuse atomically with
+HTTP409. Existing-invalid designs use a non-increasing conflict-count allowance,
+not proof of a repaired design. ID-derived unknown polarity passes the early rule.
+Lower-level recipe execution still reproduces the defect in characterization
+coverage. FH-25 must close admission/diagnostics on its supported replay paths;
+ordinary-route containment does not make those invalid recipes valid. Rejection
+of a chemically incompatible choice is appropriate, not a missing supported
+pairing. Do not flip strands or alter molecular builders to make it pass.
+
+
+Audit verification: `just test-focused tests/test_connection_polarity_rule.py`
+13pass; `tests/test_occupancy_uniqueness.py`6pass; native organized-family
+characterization node36pass (includes expected invalid native output/refusal).
+Each ran separately through `just test-focused`;55pass total. One initial
+multi-target invocation was rejected by the wrapper before collection. No app
+or broad-suite rerun, no production/molecular changes, no FH-25 closure.
+
+
 U28 source audit and native characterization, October 16, 2026, against
 `2ad8b7a9`. **Not a completed connection implementation or rollout.** Progress
 remains **21/38 complete,17 remaining (8 core,9 parked)**. This checkpoint adds

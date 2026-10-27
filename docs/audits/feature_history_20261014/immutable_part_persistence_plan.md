@@ -1,5 +1,8 @@
 # Strict immutable recovery: publication prerequisite
 
+> **Status reconciliation, October 26, 2026:** This is retained persistence-design evidence. Its private strict/sealed rollout and old-file recovery queue is not the current CAD finish. FH-28 retains actual production publication/recovery, cancellation and bounded-retention acceptance; do not expand it to excluded agent or legacy-migration work. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
 The internal session-content union is staged behind a false public creation
 switch. Switching strict creation requires this recovery path and the existing
 evaluation jobs' immutable-handle adaptation. A private storage seal alone

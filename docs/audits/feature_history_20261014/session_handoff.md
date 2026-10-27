@@ -1,9 +1,9 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 0.
+Sessions since last gate flip or milestone close: 1.
 
 October 26, 2026: **Move/Rotate is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON.**
-**Geometry tools done: 5/6 (Bend, Twist, Extrude, Sweep, Move/Rotate); Fine Routing qualified separately.
+**Original four tools done: 4/4 (Bend, Twist, Extrude, Sweep); Move/Rotate and Fine Routing also qualified.
 CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-18 and aggregate FH-27 remain open.
 
 ## Delivered behavior and qualification
@@ -39,7 +39,8 @@ CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-
 The requested Move/Rotate task is finished; no successor was started.
 Remaining core work is cluster membership/deletion and references, ordinary
 connections, complete reference repair, aggregate desktop qualification and host
-lifecycle closure (FH-18/25/26/27/28). Select the next tool with the user.
+lifecycle closure (FH-18/25/26/27/28). Recommended next implementation task: close the existing cluster membership/deletion
+and incoming-reference gap (FH-18); no implementation was started by this audit.
 
 Clusters own geometry among grouping constructs. Staple Groups organize strands
 (names/colors/selection), with no transform ownership or persistent geometry targets.
@@ -82,11 +83,23 @@ established behavior. Feature-row actions use right-click/Shift+F10.
 Seven parked CAD milestones remain NP connections/fitting, biotin, imports and
 asset composition. Legacy conversion and simulation/agent provenance are outside scope.
 
+## October 26 status reconciliation
+Documentation-only reconciliation; no gate or milestone changed. Earlier S/U
+queues and pending tool labels are historical. MV-50/51 and ordinary ISSUE-100
+are closed against existing acceptance; MV-48 retains cluster/integration gaps.
+MV-49 old-file recovery is outside required completion under contract §10.
+ISSUE-126 is contained on ordinary create/Connect/Apply routes by `fd2772f1`;
+lower-level native recipes still need explicit admission/diagnostic closure.
+FH-28 concerns retained production lifecycle gaps, not restarting sealed-host
+rollout. The contract’s R3 migration is not evidence of a missing tool gate.
+
 ## Shared-worktree boundaries
-Incoming HEAD: `98ec4cd9`. Commit owned feature-history paths explicitly;
-`frontend/src/api/client.js` includes unrelated passive-read changes, so stage
-only the cluster endpoint import/export. Existing API/VR/simulation/memory/test
-edits are untouched. Mixed `issues_ledger.md`, `issues_fix_log.md`,
-`manual_validation_debt.md` and `memory/project_feature_log_overhaul.md` retain
-this task's updates uncommitted. No push, reset, stash, restore, broad staging,
-phase-constant edit, lock or golden regeneration.
+Audit incoming HEAD: `48f50740`. Only this audit's documentation hunks are staged.
+Reconciliations in `implementation.md`, `issues_ledger.md`,
+`manual_validation_debt.md` and `memory/project_feature_log_overhaul.md` remain
+uncommitted because their pre-existing edits prevent clean selective staging.
+All are applied in the shared worktree; prior unrelated edits are preserved.
+No production behavior, molecular constants, manifests, goldens or gates changed.
+No push, reset, stash, restore or broad staging.55 focused checks pass for
+ISSUE-126 route containment, occupancy rollback and native characterization;
+these do not replace tool app acceptance or clear the83-failure broad baseline.

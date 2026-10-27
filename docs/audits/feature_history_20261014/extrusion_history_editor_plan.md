@@ -1,5 +1,8 @@
 # Ordinary extrusion history editor — U16 / FH-21
 
+> **Status reconciliation, October 26, 2026:** Ordinary Extrude C1–C9 and source-reference repair are accepted (October 19 entries below); MV-50 is closed at that scope. Earlier pending qualification and named-group rollout requirements are historical. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
 **User priority — October 18, 2026:** Complete Bend, Twist, Sweep and Extrude
 before moving to other areas. Completion includes their applicable creation and
 history-edit controls, isolated preview/Cancel/Apply, dependency and downstream
