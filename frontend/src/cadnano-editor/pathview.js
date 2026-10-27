@@ -579,7 +579,6 @@ export function initPathview(canvasEl, containerEl, {
   let _xoverDragD1        = null    // primary: domain after crossover
   // Multi-crossover group: array of { xo, origIdx, d0, d1, isScaf, origBow }
   let _xoverDragGroup     = []
-  const XOVER_SNAP_DIST   = 7      // snap threshold in bp units
 
   // ── Gutter lasso (screen-space vertical rubber-band over the helix circles) ──
   let _gutterLassoStarted = false
@@ -3557,7 +3556,12 @@ export function initPathview(canvasEl, containerEl, {
       // Bow direction must match the original (left→left, right→right)
       if (_xoverBowDir(bp, isScaf) !== origBowDir) continue
       const nb = neighborFn(cellA.row, cellA.col, bp, isHC)
-      if (!nb || nb[0] !== targetRow || nb[1] !== targetCol) continue
+      // Scaffold tables are directional (especially on square lattices).
+      // Imported crossovers can store either helix as half_a; accept the pair
+      // from either endpoint, just as the move API does.
+      const reverseNb = neighborFn(targetRow, targetCol, bp, isHC)
+      if (!(nb && nb[0] === targetRow && nb[1] === targetCol) &&
+          !(reverseNb && reverseNb[0] === cellA.row && reverseNb[1] === cellA.col)) continue
       // Check not occupied by another crossover
       if (occupiedA.has(bp) || occupiedB.has(bp)) continue
       // Check resized domains would not overlap other domains
@@ -3577,9 +3581,8 @@ export function initPathview(canvasEl, containerEl, {
   /**
    * Draw ghost crossover arc + attached strand bodies during drag.
    *
-   * Shows a continuous preview at the cursor's current bp:
-   *  - Dim grey when not at a valid snap position (feedback that drag is working)
-   *  - Bright cyan when snapped to a valid target
+   * Shows a bright cyan preview at the nearest legal target, with the next
+   * two legal targets in each direction marked by small dark blue dots.
    * The two strand bodies extend/shrink from their fixed ends to the ghost bp.
    */
   function _drawXoverDragGhost() {
@@ -3603,6 +3606,23 @@ export function initPathview(canvasEl, containerEl, {
     // Render the drag preview back at the mirror (display) location when the
     // crossover is being dragged on the mirror side of a periodic boundary.
     if (_ghostShiftBp) ctx.translate(_ghostShiftBp * BP_W, 0)
+    // Use the same small dot geometry as distant crossover indicators. These
+    // hints are group-valid moves, so every selected crossover can move there.
+    const left = _xoverDragValidDeltas.filter(d => d < primaryDelta).slice(-2)
+    const right = _xoverDragValidDeltas.filter(d => d > primaryDelta).slice(0, 2)
+    ctx.fillStyle = '#005fa0'
+    for (const g of _xoverDragGroup) {
+      for (const half of [g.xo.half_a, g.xo.half_b]) {
+        const info = _rowMap.get(half.helix_id)
+        if (!info) continue
+        const y = (half.strand === 'FORWARD' ? info.fwdY : info.revY) - CELL_H / 2 - 3
+        for (const delta of [...left, ...right]) {
+          ctx.beginPath()
+          ctx.arc(_bpCenterX(g.origIdx + delta), y, XOVER_R * 0.7, 0, 2 * Math.PI)
+          ctx.fill()
+        }
+      }
+    }
     ctx.globalAlpha = alpha
 
     for (const g of _xoverDragGroup) {
@@ -4427,8 +4447,8 @@ export function initPathview(canvasEl, containerEl, {
           if (validDeltas.length > 0) {
             _xoverDragXover    = xo
             _xoverDragOrigIdx  = xo.half_a.index
-            _xoverDragSnapBp   = null
-            _xoverDragCursorBp = null
+            _xoverDragSnapBp   = xo.half_a.index
+            _xoverDragCursorBp = xo.half_a.index
             _xoverDragValidDeltas = validDeltas
             _xoverDragStartWX  = wx
             _xoverDragOrigBow  = origBow
@@ -4723,19 +4743,19 @@ export function initPathview(canvasEl, containerEl, {
     }
     if (_xoverDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
-      // Subtract the captured mirror shift so the bp is in REAL space when dragging
-      // a crossover shown on the mirror side (no-op in the body / boundary off).
-      const curBpFrac = (wx - GUTTER) / BP_W - _ghostShiftBp   // fractional for accurate snap distance
-      // Always track cursor position (clamped to integer bp within helix bounds)
+      // Measure displacement from the grab point to avoid jumping when an arc
+      // is grabbed off-centre; this also preserves periodic mirror coordinates.
+      const curBpFrac = _xoverDragOrigIdx + (wx - _xoverDragStartWX) / BP_W
+      // Track the cursor in integer base-pair coordinates
       _xoverDragCursorBp = Math.round(curBpFrac)
-      // Find nearest valid delta within snap distance (delta-based for multi-xover)
+      // Find the nearest legal shared delta, including between widely spaced sites
       const curDelta = curBpFrac - _xoverDragOrigIdx
       let bestDelta = null, bestDist = Infinity
       for (const vd of _xoverDragValidDeltas) {
         const dist = Math.abs(vd - curDelta)
         if (dist < bestDist) { bestDist = dist; bestDelta = vd }
       }
-      _xoverDragSnapBp = (bestDelta !== null && bestDist <= XOVER_SNAP_DIST)
+      _xoverDragSnapBp = (bestDelta !== null)
         ? _xoverDragOrigIdx + bestDelta : null
       if (_xoverDragSnapBp != null && _xoverDragSnapBp !== _xoverDragOrigIdx) {
         const delta = _xoverDragSnapBp - _xoverDragOrigIdx

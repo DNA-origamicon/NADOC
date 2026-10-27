@@ -23,6 +23,7 @@ describe('generated feature editing', () => {
     expect(generatedFeatureSchema(command('g', ['pathing']))[0]).toEqual({
       key: 'pathing', label: 'Pathing', type: 'select', options: ['colocalized', 'interior', 'exterior'],
     })
+    expect(generatedFeatureSchema(command('g', ['scaffold_name']))[0].options).toEqual(['M13mp18', 'p7560', 'p8064'])
     expect(generatedFeatureSchema(command('g'))).toEqual([])
   })
 })

@@ -36,6 +36,7 @@
  * @param {Function} deps.getOoActiveIds            - () => string[] (live getter)
  */
 import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
+import { registerWorkflowShortcuts } from '../input/workflow_shortcuts.js'
 import { showToast } from './toast.js'
 import { nextTabLevel, previousTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
@@ -442,28 +443,7 @@ export function initKeyboardShortcuts(deps) {
     },
   })
 
-  // Number hotkeys — workflow shortcuts (routing → sequencing in order).
-  // Auto Crossover / Autobreak are intentionally hotkey-less; the one-click
-  // Full Autostaple (which subsumes them) owns '2'.
-  for (const [key, menuId, desc] of [
-    ['1', 'menu-routing-scaffold-ends',    'Autoscaffold'],
-    ['2', 'menu-routing-full-autostaple',  'Full Autostaple'],
-    ['4', 'menu-seq-update-routing',       'Add Loops/Skips'],
-    ['5', 'menu-seq-assign-scaffold',      'Scaffold sequence'],
-    ['6', 'menu-seq-assign-staples',       'Staple sequence'],
-    ['0', 'menu-seq-hairpin-dimer',        'Hairpin/dimer checker'],
-  ]) {
-    registerShortcut({
-      key, ctrl: false, shift: false, alt: false,
-      description: desc,
-      blockedInInput: true,
-      handler(e) {
-        e.preventDefault()
-        const btn = document.getElementById(menuId)
-        if (btn && !btn.disabled) btn.click()
-      },
-    })
-  }
+  registerWorkflowShortcuts()
 
   registerShortcut({
     key: '`', ctrl: false,

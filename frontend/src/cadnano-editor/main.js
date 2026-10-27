@@ -1,3 +1,5 @@
+import { dispatchKeyEvent } from '../input/shortcuts.js'
+import { registerWorkflowShortcuts } from '../input/workflow_shortcuts.js'
 /**
  * NADOC Origami Editor — main entry point.
  *
@@ -1315,6 +1317,8 @@ window.addEventListener('mousemove', (e) => { _lastMouseX = e.clientX; _lastMous
 const _toolDisplayNames = { select: 'Select', pencil: 'Pencil', nick: 'Nick', paint: 'Paint' }
 
 // ── Keyboard shortcuts
+registerWorkflowShortcuts()
+document.addEventListener('keydown', dispatchKeyEvent)
 window.addEventListener('keydown', (e) => {
   const ctrl = e.ctrlKey || e.metaKey
 
@@ -1419,16 +1423,6 @@ window.addEventListener('keydown', (e) => {
     viewButton.click()
     return
   }
-
-  // Routing / sequencing number shortcuts
-  if (e.key === '1') document.getElementById('menu-routing-scaffold-ends')?.click()
-  // '2' = one-click Full Autostaple (subsumes Auto Crossover + Autobreak, which
-  // are now hotkey-less).
-  if (e.key === '2') { const b = document.getElementById('menu-routing-full-autostaple'); if (b && !b.disabled) b.click() }
-  if (e.key === '4') { const b = document.getElementById('menu-seq-update-routing'); if (b && !b.disabled) b.click() }
-  if (e.key === '5') document.getElementById('menu-seq-assign-scaffold')?.click()
-  if (e.key === '6') document.getElementById('menu-seq-assign-staples')?.click()
-  if (e.key === '0') document.getElementById('menu-seq-hairpin-dimer')?.click()
 
   // Help modal
   if (e.key === '?' || e.key === 'F1') _helpModal?.classList.add('visible')
