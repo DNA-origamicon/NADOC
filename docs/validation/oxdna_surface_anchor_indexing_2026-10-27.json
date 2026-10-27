@@ -1,0 +1,24 @@
+{
+  "job": "a0821e58ef99",
+  "new_prepared_job": "923b910d39e0",
+  "workspace": "/tmp/nadoc-anchor-index-check-49d8my1v",
+  "expected_absolute_anchor_indices": [
+    30641,
+    30705,
+    30721,
+    30737,
+    30753,
+    30769
+  ],
+  "protein_offset": 1178,
+  "gentle_and_approach_correct": true,
+  "protein_tether_blocks": 2,
+  "old_final_frame_rejected": "surface approach did not reach contact (maximum anchor-plane gap 59.000 nm; allowed 0.750 nm)",
+  "new_mapping_version": 2,
+  "simulation_started": false,
+  "fresh_V2_relaxation_protein_force_generation": {
+    "reciprocal_tether_blocks": 2
+  },
+  "surface_protein_attachment_tests_passed": 76,
+  "relaxation_tests_passed": 262
+}

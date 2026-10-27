@@ -70,7 +70,7 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
     {"oxdna-surface-anchors-add", "Add selection as anchor", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:oxdna-anchors-toggle"}},
     {"oxdna-surface-anchors-clear", "Clear", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:oxdna-anchors-toggle"}},
     {"oxdna-surface-anchors-glow", "Highlight all anchors", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:oxdna-anchors-toggle"}},
-    {"oxdna-surface-deposition-run", "Run surface deposition", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:oxdna-anchors-toggle"}},
+    {"oxdna-surface-deposition-run", "Surface deposition", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:oxdna-anchors-toggle"}},
     {"section:dynamics:efield-toggle", "Electric field", "", "section:dynamics:efield-toggle", {"section:dynamics:simulate-heading"}},
     {"efield-enable", "Apply an electric field to the run", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:efield-toggle"}},
     {"efield-mag", "Force / nt (pN)", "Simulations", "", {"section:dynamics:simulate-heading", "section:dynamics:efield-toggle"}},

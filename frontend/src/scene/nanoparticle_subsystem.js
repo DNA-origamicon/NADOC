@@ -162,7 +162,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       })
     }
     for (const conjugation of design?.nanoparticle_conjugations ?? []) {
-      const particle = particlesById.get(conjugation.nanoparticle_id); if (!particle) continue
+      const particle = particlesById.get(conjugation.nanoparticle_id); if (!particle?.visible) continue
       const matrix = poseMatrix(particle), radius = particle.diameter_nm / 2
       for (const record of conjugation.surface_strands ?? []) {
         const dir = new THREE.Vector3(...record.site_local)
@@ -345,6 +345,10 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     if (isDot) add('Streptavidin coating…', () => openStreptavidinDialog(particle))
     if (!isDot) add('Attach to overhang', () => attachToOverhang?.(id), !!particle?.coating)
     if (!isDot) add('Conjugate Manager…', () => openConjugateManager?.(id))
+    add('Hide', async () => {
+      await patchNanoparticle(id, { visible: false })
+      selectionController.clear()
+    })
     add('Delete', () => deleteNanoparticle(id))
     document.body.appendChild(menu)
     onOutside = event => {
@@ -393,6 +397,11 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   rebuild()
   return {
     root, meshes, gizmo, rebuild, connectorRoot, linkerAtomRoot,
+    async unhideAll() {
+      const hidden = (store.getState().currentDesign?.nanoparticles ?? []).filter(p => !p.visible)
+      // Each response replaces the design in the store; preserve request order.
+      for (const particle of hidden) await patchNanoparticle(particle.id, { visible: true })
+    },
     renderExternalGeometry(design, geometry) {
       externalView = { currentDesign: design, currentGeometry: geometry }
       rebuild()

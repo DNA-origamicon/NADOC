@@ -842,6 +842,34 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
   }
 
+  it('keeps the spinner on the current frame request and ignores superseded completions', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
+    const disp = fakeDisplay()
+    const pending = []
+    disp.displayJob.mockImplementation(() => new Promise(resolve => pending.push(resolve)))
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    expect($('oxdna-jobs-display-status').textContent).toContain('Loading')
+    expect($('oxdna-jobs-display-status').getAttribute('aria-busy')).toBe('true')
+    $('oxdna-jobs-align-toggle').dispatchEvent(new Event('change'))
+    pending[0]({ ok: false, reason: 'superseded' })
+    await flush()
+    expect($('oxdna-jobs-display-status').textContent).toContain('Loading')
+    pending[1]({ ok: true, n: 5, stage: 'equil' })
+    await flush()
+    expect($('oxdna-jobs-display-status').textContent).toContain('Showing')
+    expect($('oxdna-jobs-display-status').getAttribute('aria-busy')).toBe('false')
+    $('oxdna-jobs-align-toggle').dispatchEvent(new Event('change'))
+    $('oxdna-jobs-display-toggle').checked = false
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    pending[2]({ ok: true, n: 5 })
+    await flush()
+    expect($('oxdna-jobs-display-status').textContent).toBe('Display off')
+  })
+
   it('clicking "View error log" on a failed job opens the modal (regression: modal.open was missing)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'failed',
       created_at: 1, current_stage_idx: 1,
@@ -876,14 +904,14 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(api.deleteOxdnaJob).toHaveBeenCalledWith('j1')
   })
 
-  it('a completed relaxation → status line reads production ready, Flexibility map disabled (waiting for production)', async () => {
+  it('a completed relaxation → status line offers continuation, Flexibility map disabled (waiting for production)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
     // "Full Sim" is gone — production launches via "+ New job"'s production mode.
     // The status line still reflects readiness (used to seed the wizard's mode).
-    expect($('oxdna-jobs-prod-status').textContent.toLowerCase()).toContain('production ready')
+    expect($('oxdna-jobs-prod-status').textContent.toLowerCase()).toContain('continue from its final frame')
     expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)   // no production/field run yet
     expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for a production or field run')
   })
@@ -1319,6 +1347,54 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     api.startOxdnaJob.mockClear()
     $('oxdna-jobs-run-btn').click(); await flush(40)
     expect(api.startOxdnaJob).not.toHaveBeenCalled()
+  })
+
+  it.each(['relax', 'surface_deposition'])('deposition toggle saves a continuation from %s and Run waits for it', async (parentKind) => {
+    document.body.insertAdjacentHTML('beforeend', '<input type="checkbox" id="oxdna-surface-deposition-run"><div id="oxdna-surface-deposition-status"></div>')
+    const jobs = [{ job_id: 'child', parent_job_id: 'parent', design_source_path: 'A.nadoc',
+      status: 'queued', backend: 'CPU', stages: [{ kind: 'production', status: 'pending' }],
+      run_config: { kind: 'run', surface: { dir: [0, 1, 0], position_nm: -10, stiff: 5 },
+        surface_anchors: [{ kind: 'strand', id: 's1' }] } },
+      { job_id: 'parent', design_source_path: 'A.nadoc', status: 'completed', stages: relaxStages(), run_config: { kind: parentKind } }]
+    api.listOxdnaJobs.mockImplementation(async () => structuredClone(jobs))
+    api.startOxdnaJob.mockClear()
+    let elements = {}, finishSave
+    api.updateOxdnaJobSettings.mockImplementation((id, patch) => new Promise(resolve => {
+      finishSave = () => {
+        const job = jobs.find(j => j.job_id === id)
+        job.run_config = { ...job.run_config, ...patch, kind: patch.surface_deposition ? 'surface_deposition' : 'run' }
+        resolve(structuredClone(job))
+      }
+    }))
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', getRunElements: () => elements,
+      applyRunConfig: cfg => { elements = { anchors: cfg.anchors, surfaceAnchors: cfg.surfaceAnchors,
+        surface: cfg.surface ? { enabled: true, dir: cfg.surface.dir, positionNm: cfg.surface.position_nm, stiff: cfg.surface.stiff } : null } },
+    })
+    await panel.refresh(); await panel.selectJob('child')
+    const toggle = $('oxdna-surface-deposition-run')
+    expect(toggle.disabled).toBe(false)
+    expect(toggle.checked).toBe(false)
+    toggle.checked = true; toggle.dispatchEvent(new Event('change'))
+    expect(toggle.checked).toBe(true)
+    expect(api.startOxdnaJob).not.toHaveBeenCalled()
+    $('oxdna-jobs-run-btn').click(); await flush(30)
+    expect(api.updateOxdnaJobSettings).toHaveBeenLastCalledWith('child', expect.objectContaining({
+      surface_deposition: true, surface_anchors: [{ kind: 'strand', id: 's1' }],
+    }))
+    expect(api.startOxdnaJob).not.toHaveBeenCalled()
+    finishSave(); await flush(40)
+    expect(api.startOxdnaJob).toHaveBeenCalledWith('child')
+    await panel.selectJob('parent')
+    expect(toggle.disabled).toBe(true)
+    expect(toggle.checked).toBe(parentKind === 'surface_deposition')
+    expect($('oxdna-surface-deposition-status').textContent).toContain('click + New job')
+    await panel.selectJob('child')
+    expect(toggle.checked).toBe(true)
+    toggle.checked = false; toggle.dispatchEvent(new Event('change'))
+    $('oxdna-jobs-run-btn').click(); await flush(30)
+    expect(api.updateOxdnaJobSettings).toHaveBeenLastCalledWith('child', expect.objectContaining({ surface_deposition: false }))
+    finishSave(); await flush(40)
+    expect(toggle.checked).toBe(false)
   })
 
   it('an interrupted relaxation is resumed from the Relax control', async () => {

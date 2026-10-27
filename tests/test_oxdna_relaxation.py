@@ -6741,3 +6741,65 @@ def test_edit_relaxation_surface_and_anchors_rewrites_actual_inputs(tmp_path, mo
     assert 'type = trap' not in (jd / 'forces.txt').read_text()
     assert not (jd / 'equil_forces.txt').exists()
     assert all(spec.forces_file != 'equil_forces.txt' for spec in routes.load_stage_specs(jd))
+
+
+def test_detached_worker_advances_after_launcher_exit(design, geometry, tmp_path, mock_oxdna):
+    import subprocess
+    import sys
+    from backend.core import oxdna_runner, simulation_runtime
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100, min_bp_retained=0.0)
+    job = new_oxdna_job('detached', [s.to_status() for s in specs], max_relax_retries=0)
+    oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+    job.status = OxdnaStatus.queued
+    job.save(tmp_path)
+    # Delays ensure the original launcher exits before the first stage ends.
+    mock_oxdna.write_text(mock_oxdna.read_text().replace('import sys, re, shutil', 'import sys, re, shutil, time\ntime.sleep(0.5)'))
+    launcher = '''from pathlib import Path
+import sys
+from backend.core.oxdna_job import OxdnaJob
+from backend.core.oxdna_runner import start_job, load_stage_specs
+ws = Path(sys.argv[1]); job = OxdnaJob.load(sys.argv[2], ws)
+start_job(job, ws, load_stage_specs(job.job_dir(ws)))
+'''
+    subprocess.run([sys.executable, '-c', launcher, str(tmp_path), job.job_id], check=True, timeout=20)
+    try:
+        assert simulation_runtime.is_owned(job.job_dir(tmp_path))
+        # A second launcher cannot duplicate the running worker.
+        first_pid = OxdnaJob.load(job.job_id, tmp_path).pid
+        subprocess.run([sys.executable, '-c', launcher, str(tmp_path), job.job_id], check=True, timeout=20)
+        assert OxdnaJob.load(job.job_id, tmp_path).pid == first_pid
+        done = _wait_terminal(job.job_id, tmp_path)
+        assert done.status == OxdnaStatus.completed, done.error
+        assert all(s.status == 'done' for s in done.stages)
+    finally:
+        oxdna_runner.stop_job(job.job_id, tmp_path)
+
+
+@pytest.mark.slow
+def test_detached_worker_stop_from_fresh_process(design, geometry, tmp_path, mock_oxdna):
+    import subprocess
+    import sys
+    from backend.core import oxdna_runner
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100, min_bp_retained=0.0)
+    job = new_oxdna_job('stop detached', [s.to_status() for s in specs], max_relax_retries=0)
+    oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+    job.status = OxdnaStatus.queued; job.save(tmp_path)
+    mock_oxdna.write_text(mock_oxdna.read_text().replace('import sys, re, shutil', 'import sys, re, shutil, time\ntime.sleep(30)'))
+    oxdna_runner.start_job(job, tmp_path, specs)
+    try:
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            live = OxdnaJob.load(job.job_id, tmp_path)
+            if live.oxdna_pid:
+                break
+            time.sleep(.1)
+        assert live.oxdna_pid
+        subprocess.run([sys.executable, '-c',
+            'import sys; from pathlib import Path; from backend.core.oxdna_runner import stop_job; assert stop_job(sys.argv[2], Path(sys.argv[1]))',
+            str(tmp_path), job.job_id], check=True, timeout=15)
+        done = _wait_terminal(job.job_id, tmp_path, timeout=15)
+        assert done.status == OxdnaStatus.stopped, done.error
+        assert done.oxdna_pid is None
+        assert not oxdna_runner._pid_is_oxdna(live.oxdna_pid)
+    finally:
+        oxdna_runner.stop_job(job.job_id, tmp_path)

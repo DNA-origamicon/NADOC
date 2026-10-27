@@ -4183,7 +4183,13 @@ async function main() {
 
   document.getElementById('unhide-all-btn')?.addEventListener('click', async () => {
     if (store.getState().assemblyActive) await unhideAssemblyVisualization({ store, api })
-    else { visibilityController?.unhideAll(); clusterPanel?.resetVisibility?.(); spreadsheet?.refresh?.() }
+    else {
+      visibilityController?.unhideAll()
+      await visibilityController?.flushPersistence()
+      await nanoparticleSubsystem.unhideAll()
+      clusterPanel?.resetVisibility?.()
+      spreadsheet?.refresh?.()
+    }
     // "Unhide All" must make the restored structure observable. In particular,
     // recover tabs whose camera/target was poisoned before finite-safe framing
     // shipped, and include elements that were outside a view framed around only

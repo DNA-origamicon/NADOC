@@ -461,16 +461,16 @@ class SurfaceDepositionRequest(BaseModel):
     # Calibrated on surface_test: 2.5 pN remained 2.49 nm off-plane after 100k
     # steps, while 5 pN reached 0.15 nm without damaging the duplex.
     approach_force_pn: float = Field(5.0, gt=0.0, le=20.0)
-    max_approach_force_pn: float = Field(20.0, gt=0.0, le=50.0)
-    approach_window_steps: int = Field(50_000, ge=1000, le=5_000_000)
-    max_approach_windows: int = Field(8, ge=0, le=32)
+    max_approach_force_pn: float = Field(50.0, gt=0.0, le=50.0)
+    approach_window_steps: int = Field(10_000, ge=1000, le=5_000_000)
+    max_approach_windows: int = Field(40, ge=0, le=128)
     capture_gap_nm: float = Field(1.0, gt=0.0, le=5.0)
     contact_gap_nm: float = Field(0.75, gt=0.0, le=5.0)
     approach_steps: int = Field(1_000_000, ge=1000, le=200_000_000)
     settle_steps: int = Field(500_000, ge=1000, le=200_000_000)
     equil_steps: int = Field(250_000, ge=1000, le=200_000_000)
     steps_per_frame: int = Field(DEFAULT_STEPS_PER_FRAME, ge=1, le=200_000_000)
-    anchor_stiff: float = Field(1.0, gt=0.0, le=100.0)
+    anchor_stiff: float = Field(2.0, gt=0.0, le=100.0)
     seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
 
 
@@ -1296,13 +1296,35 @@ async def copy_oxdna_job(job_id: str) -> dict:
 
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=False)
-    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", AVERAGE_SEQUENCE_FILE}
+    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE}
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
     try:
         for name in files:
             if name and (source_dir / name).is_file():
                 shutil.copy2(source_dir / name, copied_dir / name)
+        if any(spec.parfile for spec in copied_specs):
+            from backend.physics.oxdna_attachments import inherit_attachments
+            inherit_attachments(source_dir, copied_dir)
+        if (copied.run_config or {}).get("kind") == "surface_deposition":
+            copied.run_config["surface_anchor_mapping_version"] = 2
+            # Copy restarts from conf.dat, not the source's adsorbed final frame.
+            # Runtime contact history and adaptive force files cannot follow it.
+            for key in list(copied.run_config):
+                if key in {"surface_captured_particles", "surface_contacted_particles"} or (
+                    key.startswith("approach_retry_") and key != "approach_retry_chunk_steps"
+                ):
+                    copied.run_config.pop(key)
+            design = _load_snapshot_design(copied_dir)
+            if design is None:
+                raise HTTPException(409, "The copied deposition has no design snapshot.")
+            for name, scale in (("deposition_gentle_forces.txt", 0.2), ("deposition_approach_forces.txt", 1.0)):
+                write_surface_deposition_approach_forces(
+                    copied_dir / name, design, copied_dir / "conf.dat",
+                    wall=copied.run_config["surface"], anchors=copied.run_config["surface_anchors"],
+                    force_pn=float(copied.run_config.get("approach_force_pn", 5.0)) * scale,
+                )
+            (copied_dir / "deposition_settle_forces.txt").unlink(missing_ok=True)
         (copied_dir / "stages_spec.json").write_text(
             json.dumps([asdict(spec) for spec in copied_specs], indent=2),
             encoding="utf-8",
@@ -1322,6 +1344,98 @@ async def copy_oxdna_job(job_id: str) -> dict:
     }
 
 
+def _copy_child_parameters(parent_dir, child_dir, specs, *, missing_only=False):
+    """Carry the exact frozen interaction inputs with every continuation."""
+    from backend.physics.oxdna_attachments import inherit_attachments
+    inherit_attachments(parent_dir, child_dir)
+    required = {spec.parfile for spec in specs if spec.parfile}
+    for name in required:
+        if not (parent_dir / name).is_file():
+            raise HTTPException(409, f"Parent simulation parameter file is missing: {name}")
+    for name in required | {"oxDNA2_average_sequence_parameters.txt", "design_ref.dat"}:
+        source = parent_dir / name
+        if source.is_file() and (not missing_only or not (child_dir / name).exists()):
+            shutil.copy(source, child_dir / name)
+
+
+def _prepared_child_target(prepared, target):
+    if target is None:
+        return prepared
+    result = deepcopy(target)
+    for key in ("stages", "n_nucleotides", "run_config", "efield", "max_relax_retries"):
+        setattr(result, key, deepcopy(getattr(prepared, key)))
+    result.current_stage_idx = 0
+    result.error = None
+    return result
+
+
+def _rebuild_continuation_settings(job, updates):
+    """Prepare changed forces/protocol off to the side before publishing an edit."""
+    from pydantic import ValidationError
+    recorded = job.run_config or {}
+    merged = {**recorded, **updates}
+    deposition = merged.get("surface_deposition", recorded.get("kind") == "surface_deposition")
+    if not isinstance(deposition, bool):
+        raise HTTPException(422, "surface_deposition must be a boolean.")
+    if not job.parent_job_id or recorded.get("kind") not in {"run", "surface_deposition"}:
+        raise HTTPException(409, "Create a continuation from a completed oxDNA job before enabling surface deposition.")
+    if deposition and (merged.get("field") or merged.get("anchors") or merged.get("surface_strands")):
+        raise HTTPException(422, "Surface deposition uses Surface Anchors only. Move Structure Anchors to Surface Anchors and disable field/capture strands.")
+    seed = job.random_seed
+    try:
+        if deposition:
+            settings = {key: value for key, value in merged.items() if key in SurfaceDepositionRequest.model_fields}
+            settings["anchor_stiff"] = merged.get("surface_anchor_stiff", 2.0)
+            settings["seed"] = seed
+            request = SurfaceDepositionRequest.model_validate(settings)
+            prepare = _prepare_surface_deposition_job
+        else:
+            settings = {key: value for key, value in merged.items() if key in RunRequest.model_fields}
+            settings["anchor_stiff"] = merged.get("production_anchor_stiff", DEFAULT_ANCHOR_STIFF)
+            settings["seed"] = seed
+            request = RunRequest.model_validate(settings)
+            prepare = _prepare_run_job
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors()) from exc
+    ws = _workspace()
+    jd = job.job_dir(ws)
+    with tempfile.TemporaryDirectory(prefix=".oxdna-settings-", dir=jd.parent) as directory:
+        target = deepcopy(job)
+        target.archived = True
+        target.archive_path = directory
+        prepared = prepare(job.parent_job_id, request, target=target)
+        specs = load_stage_specs(Path(directory))
+        if recorded.get("kind") == prepared.run_config.get("kind"):
+            old_specs = {s.name: s for s in load_stage_specs(jd)}
+            for index, spec in enumerate(specs):
+                previous = old_specs.get(spec.name)
+                if previous:
+                    previous.forces_file = spec.forces_file
+                    previous.forces_meta = spec.forces_meta
+                    specs[index] = previous
+        # Preserve the selected job's execution settings, not the parent's.
+        for spec in specs:
+            spec.backend = job.backend
+            spec.device = job.device
+            spec.salt_concentration = job.salt_concentration
+        (Path(directory) / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
+        prepared.stages = [s.to_status() for s in specs]
+        prepared.run_config["surface_deposition"] = deposition
+        prepared.run_config["autostart"] = False
+        if recorded.get("kind") == prepared.run_config.get("kind") and "stage_overrides" in recorded:
+            prepared.run_config["stage_overrides"] = deepcopy(recorded["stage_overrides"])
+        prepared.run_config["steps"] = merged.get("steps", 2_000_000)
+        prepared.run_config["production_anchor_stiff"] = merged.get("production_anchor_stiff", recorded.get("anchor_stiff", DEFAULT_ANCHOR_STIFF))
+        if not oxdna_job_settings_editable(_load_job(job.job_id)):
+            raise HTTPException(409, "The job started while its settings were being saved.")
+        for source in Path(directory).iterdir():
+            if source.is_file():
+                source.replace(jd / source.name)
+        prepared.archived, prepared.archive_path = job.archived, job.archive_path
+        prepared.save(ws)
+    return prepared
+
+
 @router.put("/oxdna/jobs/{job_id}/settings")
 async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
     """Update an unstarted job in place while preserving its frozen simulation inputs."""
@@ -1335,6 +1449,20 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "Only prepared jobs that have not been submitted or started can be edited.",
         )
     recorded = dict(job.run_config or {})
+    force_keys = {"surface", "anchors", "surface_anchors", "surface_strands", "field"}
+    deposition = recorded.get("surface_deposition", recorded.get("kind") == "surface_deposition")
+    if "surface_deposition" in updates and not isinstance(updates["surface_deposition"], bool):
+        raise HTTPException(422, "surface_deposition must be a boolean.")
+    mode_changed = "surface_deposition" in updates and updates["surface_deposition"] != deposition
+    forces_changed = any(key in updates and updates[key] != recorded.get(key) for key in force_keys)
+    if mode_changed or (
+        job.parent_job_id and recorded.get("kind") in {"run", "surface_deposition"} and forces_changed
+    ):
+        # Sidebar edits are serialized separately from the protocol wizard.
+        if any(key not in force_keys | {"surface_deposition"} and value != recorded.get(key)
+               for key, value in updates.items()):
+            raise HTTPException(422, "Save surface/anchor changes separately from execution or stage edits.")
+        return _rebuild_continuation_settings(job, updates).to_dict()
     if recorded.get("kind", "relax") != "relax" or job.parent_job_id is not None:
         specs = load_stage_specs(job.job_dir(_workspace()))
         if not specs:
@@ -1344,7 +1472,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             "execution_target", "kind", "partition", "runpod_budget_usd",
             "runpod_gpu_key", "runpod_quoted_rate_usd_per_hour", "runpod_volume_id",
             "salt_concentration", "seed", "slurm_resources", "stage_overrides",
-            "stages", "steps",
+            "stages", "steps", "surface_deposition",
         }
         def _frozen_value(key: str, value):
             value = deepcopy(value)
@@ -1384,7 +1512,7 @@ async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
             }
             if editable:
                 overrides.setdefault(row["name"], {}).update(editable)
-        if "steps" in updates:
+        if "steps" in updates and (len(specs) == 1 or updates["steps"] != recorded.get("steps")):
             if len(specs) != 1:
                 raise HTTPException(422, "Edit each stage's steps separately for this protocol.")
             overrides.setdefault(specs[0].name, {})["steps"] = updates["steps"]
@@ -1633,6 +1761,18 @@ async def start_oxdna_job(job_id: str) -> dict:
     specs = load_stage_specs(job.job_dir(_workspace()))
     if not specs:
         raise HTTPException(500, "stages_spec.json missing; cannot resume this job.")
+    # Older derived protein jobs omitted anm.par. Recover only from their exact
+    # topology-matching parent, and never replace an existing frozen parameter file.
+    jd = job.job_dir(_workspace())
+    missing = {spec.parfile for spec in specs if spec.parfile and not (jd / spec.parfile).is_file()}
+    if missing:
+        if not job.parent_job_id:
+            raise HTTPException(409, "Simulation parameter files are missing: " + ", ".join(sorted(missing)))
+        parent = _load_job(job.parent_job_id)
+        pjd = parent.job_dir(_workspace())
+        if (pjd / "topology.top").read_bytes() != (jd / "topology.top").read_bytes():
+            raise HTTPException(409, "Cannot recover protein parameters: the child topology differs from its parent.")
+        _copy_child_parameters(pjd, jd, specs, missing_only=True)
     if (job.run_config or {}).get("kind") == "surface_deposition" and (
         "surface approach did not reach contact" in (job.error or "")
     ):
@@ -1677,9 +1817,9 @@ def _prepare_surface_approach_retry(job, specs, workspace_dir: Path):
     prior_retries = int(rc.get("approach_retry_count", 0))
     # A continuation exists because the constant-force approach plateaued, so raise
     # the cap immediately. Repeating the same attraction cannot change its mechanical
-    # equilibrium. Later continuations ramp once more, never beyond 20 pN per anchor.
+    # equilibrium. Later continuations ramp once more, never beyond the recorded per-anchor ceiling.
     force_pn = min(
-        float(rc.get("max_approach_force_pn", 20.0)),
+        float(rc.get("max_approach_force_pn", 50.0)),
         base_force_pn * (2 ** (prior_retries + 1)),
     )
     info = write_surface_deposition_approach_forces(
@@ -1691,25 +1831,31 @@ def _prepare_surface_approach_retry(job, specs, workspace_dir: Path):
         force_pn=force_pn,
         capture_contacted=True,
         capture_gap_nm=float(rc.get("capture_gap_nm", 1.0)),
-        capture_stiff=float(rc.get("surface_anchor_stiff", 1.0)),
+        capture_stiff=float(rc.get("surface_anchor_stiff", 2.0)),
+        captured_particles=rc.get("surface_captured_particles"),
+        contacted_particles=rc.get("surface_contacted_particles"),
+        contact_gap_nm=float(rc.get("contact_gap_nm", 0.75)),
     )
 
     approach = specs[approach_idx]
     old_total = int(approach.steps)
     # Reclassify contact frequently.  A long continuation lets an anchor that has
     # reached the plane leave again before the next force file is materialised.
-    chunk = int(rc.get("approach_retry_chunk_steps") or min(old_total, 50_000))
+    chunk = int(rc.get("approach_retry_chunk_steps") or min(old_total, 10_000))
     rc["approach_retry_chunk_steps"] = chunk
     rc["approach_retry_count"] = prior_retries + 1
     rc["approach_retry_force_pn"] = force_pn
     rc["approach_retry_max_gap_nm"] = info["max_initial_gap_nm"]
     rc["approach_retry_captured"] = info["n_captured"]
+    rc["surface_captured_particles"] = info["captured_particles"]
+    rc["surface_contacted_particles"] = info["contacted_particles"]
     rc["approach_retry_remaining"] = len(info["remaining_particles"])
     # Preserve the original energy cadence so resume accounting credits the already
     # completed attempt correctly after the total budget grows.
     if approach.print_energy_every_override is None:
         approach.print_energy_every_override = max(1, old_total // 100)
     approach.steps = old_total + chunk
+    approach.refresh_vel = False
     job.stages[approach_idx].steps = approach.steps
     for idx in range(approach_idx, len(job.stages)):
         job.stages[idx].status = "pending"
@@ -1902,6 +2048,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
     shutil.copy(pjd / "design.json", cjd / "design.json")
+    _copy_child_parameters(pjd, cjd, [stage])
     shutil.copy(relaxed_conf, cjd / "conf.dat")
     try:
         info = write_field_forces(
@@ -1938,6 +2085,14 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
 
 @router.post("/oxdna/jobs/{job_id}/run")
 async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
+    child = _prepare_run_job(job_id, body)
+    from backend.core.md_chain_executor import in_unattended_chain_spawn
+    if in_unattended_chain_spawn() and child.execution_target == "local":
+        start_job(child, _workspace(), load_stage_specs(child.job_dir(_workspace())))
+    return child.to_dict()
+
+
+def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     """Spawn a CONSOLIDATED production run as a child job branched from a relaxed
     parent.  The run is unbiased MD plus any combination of independently-enabled
     elements: an electric field, a hard surface (repulsion plane), and anchor traps.
@@ -1957,7 +2112,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         raise HTTPException(400, "Mobile gold production currently supports free solution without additional field/surface/anchor elements")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(
-            400, "A production run requires a completed relaxation job."
+            400, "A production run requires a completed oxDNA job."
         )
     _assert_job_current(parent)
     if find_oxdna() is None:
@@ -2066,6 +2221,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "kind": "run",
             "seed": job_seed,
             "steps": body.steps,
+            "steps_per_frame": body.steps_per_frame,
+            "anchor_stiff": body.anchor_stiff,
             "field": field_config,
             "surface": body.surface.model_dump(exclude_none=True)
             if body.surface
@@ -2085,6 +2242,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
 
     from dataclasses import asdict
 
+    child = _prepared_child_target(child, target)
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     if mobile_gold:
@@ -2097,6 +2255,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             shutil.copy(pjd / filename, cjd / filename)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
     shutil.copy(pjd / "design.json", cjd / "design.json")
+    _copy_child_parameters(pjd, cjd, [stage])
     shutil.copy(relaxed_conf, cjd / "conf.dat")
 
     info = {
@@ -2155,19 +2314,18 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             stream.write("\n" + peg_terminal_field_text(cap["spec"], field_in))
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
-    child.save(ws)
-    # Interactive creation waits for the panel's Run button. An unattended chain
-    # already owns launch authorization and must start its local child, otherwise
-    # the supervisor waits forever for a queued stage to finish.
-    from backend.core.md_chain_executor import in_unattended_chain_spawn
-
-    if in_unattended_chain_spawn() and child.execution_target == "local":
-        start_job(child, ws, [stage])
-    return child.to_dict()
+    if target is None:
+        child.save(ws)
+    return child
 
 
 @router.post("/oxdna/jobs/{job_id}/surface-deposition")
 async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) -> dict:
+    # Creation never starts an interactive run; the shared Run action owns launch.
+    return _prepare_surface_deposition_job(job_id, body).to_dict()
+
+
+def _prepare_surface_deposition_job(job_id: str, body: SurfaceDepositionRequest, *, target=None):
     """Branch a relaxed job into force-ramp → contact-restraint → equilibration stages."""
     parent = _load_job(job_id)
     if (parent.run_config or {}).get("mobile_gold"):
@@ -2175,6 +2333,9 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     from backend.physics.oxdna_peg import is_peg
     if is_peg((parent.run_config or {}).get("surface_strands")):
         raise HTTPException(409, "PEG is already grafted; use Run to continue this surface simulation")
+    capture = (parent.run_config or {}).get("surface_strands") or {}
+    if capture.get("built"):
+        raise HTTPException(409, "This parent contains surface capture strands; use a regular continuation to preserve their tethers.")
     if body.max_approach_force_pn < body.approach_force_pn:
         raise HTTPException(400, "max_approach_force_pn must be >= approach_force_pn")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
@@ -2235,12 +2396,18 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         feature_log_position=parent.feature_log_position,
         run_config={
             "kind": "surface_deposition",
+            "surface_anchor_mapping_version": 2,
             "seed": job_seed,
             "surface": wall,
             "surface_anchors": [
                 a.model_dump(by_alias=True, exclude_none=True)
                 for a in body.surface_anchors
             ],
+            "approach_steps": body.approach_steps,
+            "settle_steps": body.settle_steps,
+            "equil_steps": body.equil_steps,
+            "steps_per_frame": body.steps_per_frame,
+            "approach_window_steps": body.approach_window_steps,
             "approach_force_pn": body.approach_force_pn,
             "max_approach_force_pn": body.max_approach_force_pn,
             "approach_retry_chunk_steps": body.approach_window_steps,
@@ -2251,10 +2418,12 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         },
         max_relax_retries=0,
     )
+    child = _prepared_child_target(child, target)
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
     shutil.copy(pjd / "design.json", cjd / "design.json")
+    _copy_child_parameters(pjd, cjd, stages)
     # The card's absolute surface coordinate belongs to the displayed frame. Free
     # relaxation jobs are displayed Kabsch-aligned to the design even though their
     # saved configurations have diffused/tumbled. Align the deposition seed into
@@ -2294,6 +2463,10 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
             # Preserve that placement and only validate it; free parents or a changed
             # plane are placed using the extent of the entire structure.
             translate=not same_surface_plane,
+            # This checkpoint already evolved against the same finite-stiffness
+            # wall. Thermal excursions (including bound anchors across the plane)
+            # must not prevent saving a new anchor selection or continuing it.
+            validate_penetration=not same_surface_plane,
         )
         write_surface_deposition_approach_forces(
             cjd / "deposition_gentle_forces.txt",
@@ -2325,9 +2498,9 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         json.dumps([asdict(stage) for stage in stages], indent=2), encoding="utf-8"
     )
     child.status = OxdnaStatus.queued
-    child.save(ws)
-    start_job(child, ws, stages)
-    return child.to_dict()
+    if target is None:
+        child.save(ws)
+    return child
 
 
 class AnchorPreviewRequest(BaseModel):
@@ -3992,6 +4165,8 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
         nanoparticles.append({"id": design.nanoparticles[key[1]].id, "pose": pose.ravel().tolist()})
     return {
         "nanoparticles": nanoparticles,
+        "display_notes": (["Quantum dots are display-only in this oxDNA job; no QD–DNA attachment is simulated."]
+                          if any(p.kind == "quantum_dot" for p in design.nanoparticles) else []),
         "job_id": job.job_id,
         "ready": True,
         "status": job.status.value,

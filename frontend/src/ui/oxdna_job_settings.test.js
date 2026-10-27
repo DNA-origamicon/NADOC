@@ -2,6 +2,19 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createOxdnaJobSettings, relaxationElementsSettings } from './oxdna_job_settings.js'
 afterEach(() => vi.useRealTimers())
 
+it('autosaves anchors without Run or an explicit flush', async () => {
+  vi.useFakeTimers()
+  const saved = { job_id: 'queued', status: 'queued', run_config: { surface_anchors: ['added'] } }
+  const save = vi.fn().mockResolvedValue(saved)
+  const onSaved = vi.fn()
+  const settings = createOxdnaJobSettings({ save, onSaved })
+  settings.change({ job_id: 'queued' }, { surface_anchors: ['added'] })
+  await vi.advanceTimersByTimeAsync(250)
+  expect(save).toHaveBeenCalledWith('queued', { surface_anchors: ['added'] })
+  expect(onSaved).toHaveBeenCalledWith(saved, true)
+  expect(settings.hasPending('queued')).toBe(false)
+})
+
 it('coalesces typing, serializes writes, and keeps edits attached to their job', async () => {
   vi.useFakeTimers()
   let complete

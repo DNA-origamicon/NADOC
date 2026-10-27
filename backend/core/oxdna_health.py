@@ -2955,6 +2955,7 @@ def _aligned_downsampled_frames(
     frame_start=None,
     frame_end=None,
     frame_step=1,
+    include_proteins=False,
 ):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
@@ -2980,7 +2981,7 @@ def _aligned_downsampled_frames(
     cache_key = (
         _aligned_cache_key(stages, reference_conf_path, max_frames, copies),
         frame_start, frame_end, frame_step,
-        bool(align),
+        bool(align), bool(include_proteins),
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
     )
@@ -3043,6 +3044,12 @@ def _aligned_downsampled_frames(
             _capture_particle_key(i, trailing_extra_strand_length)
             for i in range(int(n_trailing_extra))
         )
+    protein_frame = None
+    if include_proteins and getattr(design, "protein_attachments", []):
+        from backend.physics.oxdna_protein import trajectory_protein_frames
+        protein_frame, protein_keys, protein_seed = trajectory_protein_frames(design, reference_conf_path)
+        key_list.extend(protein_keys)
+        ref_display.update(protein_seed)
     _transform = (
         (lambda fr: _flatten_cg_frame_array(fr, key_list))
         if frame_transform is not None
@@ -3172,7 +3179,7 @@ def _aligned_downsampled_frames(
                 tsig,
                 ref_sig,
                 copies,
-                bool(align),
+                bool(align), bool(include_proteins),
                 int(n_trailing_extra),
                 int(trailing_extra_strand_length),
                 idx,
@@ -3195,13 +3202,17 @@ def _aligned_downsampled_frames(
 
             def _align_frame(idx, fr):
                 nonlocal done
-                af = (
-                    unwrap_align_to_reference(
-                        fr, ref, design, box, plan=_plan_for(fr), align=align
+                protein_keys = [k for k in fr if k[0] == "__protein_bead__"]
+                protein_positions = [fr.pop(k)["backbone_position"] for k in protein_keys]
+                if do_align and protein_positions:
+                    af, protein_positions = unwrap_align_to_reference(
+                        fr, ref, design, box, plan=_plan_for(fr), align=align,
+                        extra_points=protein_positions,
                     )
-                    if do_align
-                    else fr
-                )
+                else:
+                    af = unwrap_align_to_reference(fr, ref, design, box, plan=_plan_for(fr), align=align) if do_align else fr
+                if protein_frame is not None:
+                    af.update(protein_frame(protein_positions))
                 if idx == 0 and frame_transform is not None:
                     capture_first.update(
                         {
@@ -3217,7 +3228,7 @@ def _aligned_downsampled_frames(
                             tsig,
                             ref_sig,
                             copies,
-                            bool(align),
+                            bool(align), bool(include_proteins),
                             int(n_trailing_extra),
                             int(trailing_extra_strand_length),
                             idx,
@@ -3239,6 +3250,7 @@ def _aligned_downsampled_frames(
                 n_trailing_extra=n_trailing_extra,
                 trailing_extra_strand_length=trailing_extra_strand_length,
                 on_frame=_align_frame,
+                include_proteins=protein_frame is not None,
             )
 
         stage_frames: list[dict] = []
@@ -3318,7 +3330,7 @@ def _flatten_cg_frame_array(frame: dict, key_list):
     out = np.zeros((n, 9))
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
     for i, key in enumerate(key_list):
-        if key[0] == "__gold__": out[i, 0:3] = cm[i]
+        if key[0] in {"__gold__", "__protein_transform__"}: out[i, 0:3] = cm[i]
     out[:, 3:6] = a1
     out[:, 6:9] = a3
     return out.astype(np.float32, copy=False).reshape(-1)
@@ -3357,7 +3369,7 @@ def _flatten_cg_frame_ntrj_array(
     out = np.empty((n, 6), dtype=dtype)
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
     for i, key in enumerate(key_list):
-        if key[0] == "__gold__": out[i, 0:3] = cm[i]
+        if key[0] in {"__gold__", "__protein_transform__"}: out[i, 0:3] = cm[i]
     out[:, 3:6] = a1
     return np.ascontiguousarray(out.reshape(-1))
 
@@ -3468,6 +3480,7 @@ def pack_composite_trajectory_bin(
         stages,
         reference_conf_path,
         max_frames,
+        include_proteins=True,
         copies=True, frame_start=frame_start, frame_end=frame_end, frame_step=frame_step,
         progress=_align_progress,
         align=align,
@@ -3553,6 +3566,7 @@ def composite_trajectory(
         stages,
         reference_conf_path,
         max_frames,
+        include_proteins=True,
         copies=True, frame_start=frame_start, frame_end=frame_end,
         progress=progress,
         align=align,

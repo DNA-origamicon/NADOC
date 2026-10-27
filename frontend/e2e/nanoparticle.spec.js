@@ -91,3 +91,35 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
   await page.evaluate(id => window.__nadocTest.nanoparticles.remove(id), id)
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().length)).toBe(0)
 })
+
+test('gold and quantum dots hide from the context menu and return with Unhide All', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.goto('/')
+  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.click('#menu-file-new')
+  await page.fill('#new-design-name', '__e2e__nanoparticle_visibility')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.locator('#welcome-screen')).not.toBeVisible()
+  await page.waitForFunction(() => Boolean(window.__nadocTest?.nanoparticles))
+  const ids = []
+  for (const kind of ['gold', 'dot']) {
+    const created = await page.evaluate(kind => kind === 'gold'
+      ? window.__nadocTest.nanoparticles.create(10)
+      : window.__nadocTest.nanoparticles.createQuantumDot('nn-hecz-600', 9.5), kind)
+    const id = created.nanoparticle_id
+    ids.push(id)
+    await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({
+      position: [15, 10, 15], target: [0, 0, 0],
+    }))
+    const point = await page.evaluate(id => window.__nadocTest.nanoparticles.screenPosition(id), id)
+    await page.evaluate(point => document.getElementById('canvas').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, button: 2, clientX: point.x, clientY: point.y,
+    })), point)
+    await page.locator('.nanoparticle-context-menu').getByRole('button', { name: 'Hide', exact: true }).click()
+    await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().length)).toBe(0)
+    await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
+    expect(await page.evaluate(id => window.__nadocTest.store.getState().currentDesign.nanoparticles.find(p => p.id === id).visible, id)).toBe(false)
+  }
+  await page.evaluate(() => document.getElementById('unhide-all-btn').click())
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().map(p => p.id).sort())).toEqual(ids.sort())
+})

@@ -556,6 +556,41 @@ def protein_display_transforms(
     return out
 
 
+def trajectory_protein_frames(design, reference_path):
+    """Fit per-frame protein poses; compact rows travel with DNA in either wire format."""
+    from backend.api.routes_oxdna import _seed_geometry
+    from backend.physics.oxdna_interface import read_protein_bead_positions, _strand_nucleotide_order
+
+    attachments, blocks = build_protein_blocks(design, _seed_geometry(design))
+    keys = [("__protein_transform__", att.id, row) for att in attachments for row in range(3)]
+
+    def fit(positions):
+        if len(positions) != protein_bead_count(blocks):
+            raise ValueError("Trajectory protein particle count differs from the frozen design")
+        out, cursor = {}, 0
+        for att, beads in zip(attachments, blocks):
+            source = np.asarray([bead.pos_nm for bead in beads])
+            target = np.asarray(positions[cursor:cursor + len(beads)])
+            cursor += len(beads)
+            if len(beads) >= 3:
+                rotation, translation = _kabsch(source, target)
+            else:
+                rotation = np.eye(3)
+                translation = target.mean(axis=0) - source.mean(axis=0)
+            for row in range(3):
+                out[("__protein_transform__", att.id, row)] = {
+                    "backbone_position": rotation[row],
+                    "a1": np.array([translation[row], 0., 0.]),
+                    "a3": np.zeros(3),
+                }
+        return out
+
+    seed = read_protein_bead_positions(reference_path, len(_strand_nucleotide_order(design)))
+    if len(seed) != protein_bead_count(blocks):
+        seed = [bead.pos_nm for block in blocks for bead in block]
+    return fit, keys, fit(seed)
+
+
 def protein_forces_text(
     design: Design,
     attachments: list,

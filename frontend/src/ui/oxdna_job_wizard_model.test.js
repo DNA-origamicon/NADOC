@@ -152,7 +152,8 @@ describe('oxDNA production wizard model', () => {
     const jobs = [
       { job_id: 'a', status: 'completed', design_source_path: 'X.nadoc', created_at: 1 },
       { job_id: 'b', status: 'running', design_source_path: 'X.nadoc', created_at: 2 },
-      { job_id: 'c', status: 'completed', design_source_path: 'X.nadoc', created_at: 3 },
+      { job_id: 'c', status: 'completed', design_source_path: 'X.nadoc', created_at: 3,
+        parent_job_id: 'a', run_config: { kind: 'surface_deposition' } },
       { job_id: 'd', status: 'completed', design_source_path: 'Other.nadoc', created_at: 4 },
     ]
     expect(oxdnaProductionParents(jobs, 'X.nadoc').map(j => j.job_id)).toEqual(['c', 'a'])

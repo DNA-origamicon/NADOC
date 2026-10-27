@@ -22,6 +22,7 @@
  * Factory: initOxdnaDisplay({ designRenderer, api }) → controller.
  */
 
+import { Matrix4, Quaternion, Vector3 } from 'three'
 import { createVRExactAtomCache } from '../scene/vr_exact_atom_cache.js'
 import { expandMdAtomFrame } from '../scene/md_atom_frames_bin.js'
 import { bindSurfaceMotion } from '../scene/surface_motion.js'
@@ -295,7 +296,7 @@ export function framesToUpdates(keys, frame) {
   if (![6, 9, 12].includes(stride)) return []
   const updates = []
   for (let j = 0; j < keys.length; j++) {
-    if (keys[j][0] === "__gold__") continue
+    if (["__gold__", "__protein_transform__"].includes(keys[j][0])) continue
     const o = j * stride
     const update = {
       helix_id: keys[j][0], bp_index: keys[j][1], direction: keys[j][2],
@@ -359,6 +360,38 @@ export function proteinTransformMap(displayResponse) {
     }
   }
   return out
+}
+
+/** Decode the three row-major transform records bundled with this exact frame. */
+export function trajectoryProteinTransforms(keys, frame) {
+  const result = {}, rows = {}
+  const stride = keys?.length ? frame?.length / keys.length : 0
+  if (![6, 9, 12].includes(stride)) return result
+  for (let i = 0; i < keys.length; i++) {
+    const [kind, id, row] = keys[i]
+    if (kind !== '__protein_transform__' || ![0, 1, 2].includes(row)) continue
+    const values = Array.from(frame.slice(i * stride, i * stride + 4))
+    if (!values.every(Number.isFinite)) continue
+    ;(rows[id] ||= [null, null, null])[row] = values
+  }
+  for (const [id, r] of Object.entries(rows)) {
+    if (r.every(Boolean)) result[id] = [...r.flat(), 0, 0, 0, 1]
+  }
+  return result
+}
+
+export function interpolateProteinTransforms(keys, from, to, t) {
+  const a = trajectoryProteinTransforms(keys, from), b = trajectoryProteinTransforms(keys, to), result = {}
+  for (const id of Object.keys(a)) {
+    if (!b[id]) continue
+    const p = new Vector3(), q = new Quaternion(), scale = new Vector3()
+    const p2 = new Vector3(), q2 = new Quaternion(), scale2 = new Vector3()
+    new Matrix4().set(...a[id]).decompose(p, q, scale)
+    new Matrix4().set(...b[id]).decompose(p2, q2, scale2)
+    const matrix = new Matrix4().compose(p.lerp(p2, t), q.slerp(q2, t), new Vector3(1, 1, 1))
+    result[id] = matrix.transpose().toArray()
+  }
+  return result
 }
 
 /**
@@ -1260,9 +1293,14 @@ export function initOxdnaDisplay({
       if (_mode === 'relaxed') {
         if (kind === 'atomistic') {
           const flat = await _memoHeavy(kind, () => _relaxedAtomisticFlat(epoch, live))
-          if (live() && flat) await _pushAtomistic(flat, epoch, live)
+          if (live() && strict && !flat) throw new Error('Could not load atomic positions')
+          if (live() && flat) {
+            const applied = await _pushAtomistic(flat, epoch, live)
+            if (live() && strict && !applied) throw new Error('Could not display atomic positions')
+          }
         } else {
           const mesh = await _memoHeavy(kind, () => _relaxedSurfaceMesh(live))
+          if (live() && strict && !mesh) throw new Error('Could not load surface frame')
           if (live() && mesh) _pushSurface(mesh)
         }
       } else if (_mode === 'rmsf') {
@@ -1522,8 +1560,9 @@ export function initOxdnaDisplay({
     _jobId = jobId
     _align = align
     _warmAtomisticBundle(jobId)   // prebuild the atomistic bundle off the click path
-    _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
-    return { ok: true, n: updates.length, stage: resp.stage_name }
+    await _applyHeavy({ strict: true })   // finish loading only once the visible representation is applied
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    return { ok: true, n: updates.length, stage: resp.stage_name, notes: resp.display_notes || [] }
   }
 
   /** Ensure non-relaxed display modes use the REAL job strands, never the setup preview.
@@ -1535,7 +1574,7 @@ export function initOxdnaDisplay({
       const display = _displayCompanionByJob.get(key)
       onSurfaceStrands?.(display?.surface_strands || null)
       nanoparticleRenderer?.applyOxdnaPoses?.(display?.nanoparticles || [])
-      proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
+      if (_mode !== 'trajectory') proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
       return epoch === _epoch
     }
     const display = await api.getOxdnaDisplay(jobId, { align, signal })
@@ -1543,7 +1582,7 @@ export function initOxdnaDisplay({
     _displayCompanionByJob.set(key, display || {})
     onSurfaceStrands?.(display?.surface_strands || null)
     nanoparticleRenderer?.applyOxdnaPoses?.(display?.nanoparticles || [])
-    proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
+    if (_mode !== 'trajectory') proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(display))
     return true
   }
 
@@ -2036,6 +2075,7 @@ export function initOxdnaDisplay({
     _stream?.cancelPendingSeeks()
     _frameIdx = idx
     _stream?.prefetch(idx)
+    proteinRenderer?.applyOxdnaTransforms?.(trajectoryProteinTransforms(_traj.keys, _traj.frames[idx]))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _traj.frames[idx])
     _applyFem(framesToUpdates(_traj.keys, _traj.frames[idx]))
     if (heavy) _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
@@ -2131,6 +2171,7 @@ export function initOxdnaDisplay({
     const a = _traj.frames[from], b = _traj.frames[to]
     if (!a || !b || a.length !== b.length) return
     _interpolationCg = cubicCoordinates(_traj.frames[before], a, b, _traj.frames[after], t, _interpolationCg)
+    proteinRenderer?.applyOxdnaTransforms?.(interpolateProteinTransforms(_traj.keys, a, b, t))
     nanoparticleRenderer?.applyOxdnaCoreFrame?.(_traj.keys, _interpolationCg)
     _applyFem(framesToUpdates(_traj.keys, _interpolationCg))
     if (_repKind() === 'surface') {

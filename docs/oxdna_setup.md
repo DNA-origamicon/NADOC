@@ -61,6 +61,36 @@ runs NADOC. By default that is `<repo>/.venv/bin/python`; set `NADOC_OXPY_PYTHON
 only when the backend intentionally uses a different interpreter. The managed build
 also applies NADOC's `BaseForce.F0`/`BaseForce.dir` steering patch required by Live.
 
+## Surface deposition
+
+Surface deposition is an option on a prepared continuation job. Select a completed
+relaxation, use **+ New job** to create a production continuation, then select the
+new queued job. Enable **Hard surface**, add the intended **Surface Anchors**, and
+check **Surface deposition** in the Anchors card. Use **Send all to surface
+anchors** if the selections are currently in Structure Anchors.
+
+The toggle saves a gentle approach, main approach, contact-restraint settle, and
+equilibration protocol onto that same job. It does not launch a simulation; use
+the normal **Run** button after editing. Unchecking it restores ordinary production
+with the chosen surface and surface anchors. Started jobs are immutable; create a
+new continuation to change their protocol. Deposition uses its own normal-only
+anchor forces; electric fields, Structure Anchors, and grafted capture strands
+require an ordinary continuation instead.
+
+The approach begins at 1 pN per anchor, then 5 pN, with an adaptive ceiling of
+50 pN. Contact is checked every 10,000 steps during up to 40 extra approach
+windows (the same 400,000-step extra budget as the previous eight windows).
+Adaptive windows and contact retries retain checkpoint velocities instead of
+randomizing them again. Captured anchors retain their normal-only restraints,
+with stiffness 2 in oxDNA units. Each anchor must actually reach the 0.75 nm contact band; subsequent thermal
+excursions do not erase an established contact or release its restraint. Lateral
+motion remains free.
+
+Protein-containing continuations inherit the parent's frozen `anm.par` and
+sequence parameter file as well as its topology and relaxed configuration. A
+missing required protein parameter file is reported while preparing the job,
+before launching oxDNA.
+
 ## Live continuation
 
 **Live** always starts from the currently selected completed oxDNA job, using that
@@ -364,3 +394,53 @@ elements fixed; the surface deposition designation remains independently editabl
 | Surface deposition never reaches settle | Inspect the reported remaining-anchor count and maximum gap. The runner automatically captures arrivals and ramps the remaining anchors up to the configured ceiling; increase the window count or force ceiling only if the structure remains healthy. |
 | Deposited anchors stretch nearby backbone bonds | Use the surface-specific normal restraint (default stiffness `1.0`), not the generic immobile structure-anchor stiffness. Restart settle from the last healthy approach checkpoint if an older run used stiff traps. |
 | Override ignored | `$OXDNA_BIN` must point at an **executable** file (or PATH-resolvable name). A bad path is silently skipped and resolution falls through. |
+
+
+## Detached execution and molecular attachments
+
+Local oxDNA jobs now run the complete protocol in a separate worker process.
+Closing or restarting the NADOC API server leaves that worker running, including
+stage transitions and adaptive surface-contact retries. The front end reconnects
+through the existing job, progress, health and frame endpoints. Stop sends a
+request to the worker, which cancels its engine subprocess and saves a stopped
+checkpoint. A host reboot or worker crash still requires checkpoint recovery.
+
+Protein–DNA conjugation springs are frozen separately in `attachment_forces.txt`.
+Every stage combines these molecular springs with its current protocol forces in
+`effective_forces.txt`, including adaptive retries and stages without other forces.
+This preserves attachments without carrying over DNA relaxation restraints or
+absolute-position pins. Legacy continuations can inherit attachment evidence
+from an identical-topology ancestor when creating a new continuation or copy.
+Completed trajectories are not retroactively corrected. For the previously
+untethered VoltronCoreArmV2 deposition, start a corrected continuation from its
+attached relaxation rather than treating the drifted result as attached sampling.
+
+Quantum dots in the current oxDNA path are display-only; their presence in the
+scene does not imply a simulated body or a DNA tether. The Display status makes
+this explicit. A physical QD model and an explicit functionalization/linker must
+be defined before a QD connection can be simulated.
+
+Display shows an animated Loading indicator until the selected representation
+has loaded; obsolete requests cannot overwrite newer status. Hard-surface
+position inputs display at most three decimals. First activation rounds the
+calculated position to 0.1 nm; loading an existing saved plane preserves its
+underlying precision until the user edits it.
+
+
+Protein-containing surface-deposition jobs prepared before the anchor-indexing
+correction must be recreated (or copied with regenerated forces), not resumed.
+Deposition now resolves every selected DNA base against the frozen topology,
+including its leading protein block, for placement, approach, retries and settle
+contact checks. Old contact history cannot certify the newly mapped anchors.
+The earlier V2 deposition completion checks used the wrong particle indices and
+are not evidence that the intended anchors reached the plane.
+
+
+Protein poses in trajectory playback are now fitted from the protein beads in
+each saved frame and carried through the same DNA alignment. Both trajectory
+transports and progressive pages include these poses. Scrubbing applies the exact
+frame pose; smooth playback interpolates translation and rotation. The separate
+protein renderer no longer holds the final-configuration pose during playback.
+Existing trajectories already contain the required beads; reopen the trajectory
+after refreshing the application. This display correction does not alter the
+simulation or repair attachments in older runs.

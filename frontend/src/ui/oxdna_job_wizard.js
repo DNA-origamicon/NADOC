@@ -305,14 +305,14 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     if (editJob) { sourceMount.replaceChildren(); return }   // editing an existing job's kind is fixed
     const modes = el('div', { className: 'wizard-modes', children: [
       modeButton('relax', 'Relaxation', 'Relax a fresh structure from its designed topology.'),
-      modeButton('production', 'Production', 'Continue sampling from an already-relaxed structure.'),
+      modeButton('production', 'Production', 'Continue from the final frame of a completed relaxation, production, or surface deposition.'),
     ] })
     const children = [modes]
     if (mode === 'production') {
       const parents = oxdnaProductionParents(getJobs(), getPartPath(), { includeJobId: parentJobId })
       if (!parents.length) {
         children.push(el('div', { className: 'wizard-note', children: [
-          el('p', { text: 'No completed relaxation for this design yet. Production starts from equilibrated coordinates, so a relaxation has to finish first.' }),
+          el('p', { text: 'No completed oxDNA job for this design yet. Finish a relaxation first; subsequent continuations can also start from completed production or surface-deposition jobs.' }),
           createButton({ label: 'Set up a relaxation instead', variant: 'ghost', onClick: () => setMode('relax') }),
         ] }))
       } else {

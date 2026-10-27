@@ -876,9 +876,9 @@
             "section:dynamics:simulate-heading",
             "section:dynamics:oxdna-anchors-toggle"
           ],
-          "label": "Run surface deposition",
+          "label": "Surface deposition",
           "section": "Simulations",
-          "kind": "button",
+          "kind": "input",
           "options": [],
           "action": "",
           "source": "frontend/index.html",

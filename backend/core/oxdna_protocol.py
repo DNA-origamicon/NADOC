@@ -682,7 +682,7 @@ def build_surface_deposition_stages(
             forces_meta={
                 "surface_deposition": "settle",
                 "materialize_contact_traps": True,
-                "anchor_stiff": 1.0,
+                "anchor_stiff": 2.0,
             },
             **common,
         ),

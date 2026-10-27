@@ -115,3 +115,43 @@ test('New job assembles a prepared payload without running oxDNA', async ({ page
   })
   expect(jobs.some(job => job.job_id === '__e2e__prepared-only')).toBe(false)
 })
+
+test('surface deposition is a saved toggle on a queued job and only Run starts it', async ({ page }) => {
+  test.setTimeout(90_000)
+  const job = { job_id: '__e2e__deposition-toggle', parent_job_id: '__e2e__relaxed',
+    design_source_path: '2hb_1xT.nadoc', design_name: '2hb_1xT', status: 'queued', backend: 'CPU',
+    created_at: 1, stages: [{ name: '1_production', kind: 'production', status: 'pending', steps: 1000 }],
+    run_config: { kind: 'run', surface: { dir: [0, 1, 0], position_nm: -10, stiff: 5 },
+      surface_anchors: [{ kind: 'strand', id: 'test-anchor' }], anchors: [] } }
+  const patches = [], starts = []
+  await page.route(/\/api\/oxdna\/jobs(?:\?.*)?$/, route => route.fulfill({ json: [job] }))
+  await page.route(`**/api/oxdna/jobs/${job.job_id}`, route => route.fulfill({ json: job }))
+  await page.route(`**/api/oxdna/jobs/${job.job_id}/settings`, async route => {
+    const patch = route.request().postDataJSON(); patches.push(patch)
+    Object.assign(job.run_config, patch, { kind: patch.surface_deposition ? 'surface_deposition' : 'run' })
+    await route.fulfill({ json: job })
+  })
+  await page.route(`**/api/oxdna/jobs/${job.job_id}/start`, async route => {
+    starts.push(route.request().postDataJSON())
+    job.status = 'running'
+    await route.fulfill({ json: { ok: true, job_id: job.job_id, status: 'running' } })
+  })
+  await page.route('**/api/simulate/jobs**', route => route.fulfill({ json: [{ ...job, engine: 'oxdna', kind: job.run_config.kind }] }))
+  await page.route('**/api/jobs/active', route => route.fulfill({ json: { jobs: [] } }))
+  await openOxdna(page)
+  await page.locator(`[data-job-id="${job.job_id}"]:visible`).first().click()
+  await page.locator('#oxdna-anchors-toggle').click()
+  const toggle = page.getByRole('checkbox', { name: 'Surface deposition', exact: true })
+  await expect(toggle).toBeEnabled()
+  await toggle.check()
+  await expect.poll(() => patches.length).toBeGreaterThan(0)
+  expect(patches.at(-1).surface_deposition).toBe(true)
+  expect(starts).toHaveLength(0)
+  await toggle.uncheck()
+  await expect.poll(() => patches.at(-1).surface_deposition).toBe(false)
+  await toggle.check()
+  await page.locator('#oxdna-jobs-run-btn').click()
+  await expect.poll(() => starts.length).toBe(1)
+  expect(patches.at(-1).surface_deposition).toBe(true)
+  await expect(toggle).toBeDisabled()
+})

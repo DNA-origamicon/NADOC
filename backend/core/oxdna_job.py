@@ -74,6 +74,7 @@ class OxdnaJob:
     stages: list[OxdnaStageStatus] = field(default_factory=list)
     current_stage_idx: int = 0
     error: Optional[str] = None
+    pid: Optional[int] = None  # detached orchestration worker (verified via runtime lease)
     oxdna_pid: Optional[int] = None
     device: str = "0"  # CUDA device index
     backend: str = "CUDA"  # "CPU" | "CUDA"

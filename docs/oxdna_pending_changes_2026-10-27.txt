@@ -1,0 +1,98 @@
+oxDNA changes — implementation tracking
+Assessment date: 2026-10-27
+Implementation: items 1, 3, 4 and 5 implemented after the user confirmed completion.
+Item 2: display-only notice implemented; a QD physical model/linker remains unspecified.
+Validation results are recorded in docs/validation/oxdna_worker_attachments_2026-10-27.json.
+
+Original execution boundary (before the user confirmed job completion)
+- Do not restart NADOC, edit runtime source, or modify the current job's inputs.
+- Observed running job: a0821e58ef99 (VoltronCoreArmV2), parent 223c939e616c.
+- Original assessment/checklist retained below; no previously completed job inputs were rewritten.
+
+1. Preserve protein-DNA attachment forces (highest priority)
+Evidence:
+- The frozen design contains an overhang-targeted protein, a conjugation atom,
+  and binder strand ohbind_ovhg_inline_sc_strand_167_3p_1d0852bc.
+- Protein-DNA attachments ARE implemented in oxdna_protein.protein_forces_text.
+- Parent equil_forces.txt contains symmetric mutual_trap blocks joining protein
+  particle 432 and DNA particle 30833, stiff 1.424, r0 1.071 (oxDNA units).
+- The child's run, gentle, approach, and settle force files contain no mutual_trap.
+- Active settle input references the child's deposition_settle_forces.txt.
+Conclusion: the connection was lost in continuation force construction. It is not
+missing because this design predates the protein attachment implementation.
+Prepared change:
+- Separate persistent molecular attachment forces from protocol-specific forces.
+- Preserve validated attachment identities, parameters, and particle indices in
+  production, deposition gentle/approach/settle/equilibration, adaptive retries,
+  copy, settings rebuild, and checkpoint resume.
+- Do not blindly inherit relaxation base-pair traps or positional anchors.
+- Validate against the frozen topology; report unresolved intended attachments.
+- Keep active inputs immutable. Re-run a corrected child from the attached parent;
+  do not silently tether an already-drifted protein midway through this job.
+Acceptance:
+- Regression tests verify symmetric attachment blocks in every relevant stage,
+  including rewritten retry/settle files; no duplicates or relaxation-only traps.
+- Real V2 validation tracks protein-binder separation with periodic boundaries
+  accounted for, and verifies binder-to-origami pairing separately.
+- Earlier successful deposition/retention tests did not validate attachments and
+  must not be treated as validation of the complete conjugated assembly.
+
+2. Quantum-dot attachment and simulation participation
+Evidence:
+- Frozen design contains a quantum dot, with empty biotin_dna and no nanoparticle
+  conjugations. Its catalog metadata says no affinity ligand.
+- Job topology has 30,849 particles = 29,671 DNA + 1,178 protein; no extra QD body.
+- Existing gold/streptavidin helpers include gold-specific restrictions; do not
+  assume their attachment model applies to a quantum dot.
+Prepared change:
+- Audit QD representation and attachment UI/export support, including whether a
+  displayed dot follows design coordinates or any simulated object.
+- Make simulated versus display-only participation and connection status clear.
+- Define an explicit QD coarse-grained body and connection model before claiming
+  QD attachment support. Linker/functionalization choices need design input; do not
+  infer a physical connection from proximity or silently add one.
+- Test topology inclusion, connection persistence, and displayed frame transforms.
+
+3. Detached oxDNA worker with front-end synchronization
+- Reuse simulation_runtime.launch_detached / worker_lease patterns from BLADE and
+  SNUPI. Move full run_job orchestration out of the API-server thread.
+- Worker owns stage transitions, adaptive contact retries, health updates, disk
+  checks, checkpoints, terminal status, and errors throughout its lifetime.
+- Preserve existing job IDs, disk manifests, progress endpoints and list polling;
+  reconnect the front end to durable state after server restart.
+- Implement verified worker ownership, duplicate-start prevention, and explicit
+  Stop signaling that terminates both orchestration and the engine subprocess.
+- Keep user Stop distinct from server exit or unexpected worker failure.
+Acceptance:
+- Restart API server mid-stage and at a deposition transition; job advances while
+  server is down and list/progress/stage/health/frame information resynchronizes.
+- Verify Stop after reconnect, stale PID handling, no duplicate workers, and
+  checkpoint recovery following worker death. Host reboot is a separate case.
+
+4. oxDNA Display loading feedback
+Evidence: oxdna_jobs_panel._refreshDisplay currently renders r.reason directly;
+oxdna_display returns 'superseded' for obsolete requests.
+Prepared change:
+- Show an animated spinner and 'Loading…' while an available frame is requested,
+  decoded, and applied; clear only when the current request completes or fails.
+- Use request generation/job identity guards so obsolete completions cannot
+  overwrite the latest loading state. Never surface 'superseded' as a user error.
+- Distinguish no available frame ('Waiting for first frame' / unavailable) from
+  loading, and genuine failures from cancellation or a job/display selection change.
+- Preserve last rendered frame during refresh; finish on actual render completion.
+Acceptance: delayed frame, overlapping refresh, job switch, Display Off, missing
+frame and real errors; spinner remains accurate without stale status overwrites.
+
+5. Hard-surface position precision
+Primary entry point: frontend/src/ui/oxdna_floor_setup.js and floor math helpers.
+- Show at most three decimal places in the position number field.
+- Round newly calculated initial position to the nearest 0.1 nm when first enabled.
+- Normalize user edits to three decimal places; keep preview and saved new values
+  consistent, including negative values and axis changes.
+- Format existing saved values without silently changing frozen job inputs; do
+  not re-round an existing configured plane whenever selection/enabled state reloads.
+Acceptance: initial enable, negative coordinates, decimal input, saved-value
+reload, repeated toggling, and preview/save agreement.
+
+Suggested order after the current run: attachment preservation, detached worker,
+display feedback and precision; scope QD physics explicitly before implementing it.

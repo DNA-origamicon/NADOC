@@ -498,7 +498,7 @@ def worker_lease(job_dir):
             lease.close()
 
 
-def launch_detached(job, workspace_dir, module, repo_root, *, on_spawn=None, on_exit=None):
+def launch_detached(job, workspace_dir, module, repo_root, *, on_spawn=None, on_exit=None, initialize_stage=True):
     """Shared detached-worker handoff; parent never overwrites finished output."""
     import sys
 
@@ -518,7 +518,7 @@ def launch_detached(job, workspace_dir, module, repo_root, *, on_spawn=None, on_
             env=env, pass_fds=(lease.fd, read_fd))
         job.pid = proc.pid
         job.status = type(job.status)('running')
-        for stage in job.stages[:1]:
+        for stage in (job.stages[:1] if initialize_stage else []):
             stage.status, stage.started_at = 'running', time.time()
         job.save(workspace_dir)
         if on_spawn is not None:

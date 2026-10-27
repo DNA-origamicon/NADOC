@@ -753,6 +753,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // the "Unload trajectory?" prompt must key off the OWNER of the frames, not the selection.
   let _trajJobId  = null
   let _lastFrameIndex = null   // last live frame the relaxed display was refreshed to
+  let _displayRequest = 0
+  let _displayLoading = false
   let _displayBaseText = ''    // base display-status text (countdown appended while running)
   let _displayBaseColor = _C.ok
 
@@ -1436,9 +1438,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _runElementsChanged() {
     if (!getRunElements || _applyingRunControls || _controlsJobId !== _selectedId) return
     const job = _selectedJob()
-    if (!oxdnaJobEditable(job) || job.parent_job_id || (job.run_config?.kind || 'relax') !== 'relax') return
+    if (!oxdnaJobEditable(job)) return
+    const kind = job.run_config?.kind || 'relax'
+    if (!['relax', 'run', 'surface_deposition'].includes(kind)) return
     const patch = relaxationElementsSettings(getRunElements())
-    if (relaxationElementsSignature(patch) === relaxationElementsSignature(_jobSettings.overlay(job).run_config)) return
+    if (job.parent_job_id) patch.surface_deposition = !!depositionBtn?.checked
+    const saved = _jobSettings.overlay(job).run_config
+    if (relaxationElementsSignature(patch) === relaxationElementsSignature(saved) &&
+        (!job.parent_job_id || patch.surface_deposition === (saved?.surface_deposition ?? kind === 'surface_deposition'))) return
     _jobSettings.change(job, patch)
     _controlsSignature = _settingsSignature(_jobSettings.overlay(job))
   }
@@ -2166,12 +2173,20 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     if (depositionBtn) {
       const el = getRunElements?.() || {}
-      const enabled = prodReady && !!el.surface?.enabled && !!el.surfaceAnchors?.length
-      depositionBtn.disabled = !enabled
-      depositionBtn.style.cursor = enabled ? 'pointer' : 'not-allowed'
-      depositionBtn.style.background = enabled ? '#1a4a1a' : '#122117'
-      depositionBtn.style.borderColor = enabled ? '#3fb950' : '#30363d'
-      depositionBtn.style.color = enabled ? '#3fb950' : '#484f58'
+      const saved = _jobSettings.overlay(job)?.run_config || {}
+      depositionBtn.checked = saved.surface_deposition ?? saved.kind === 'surface_deposition'
+      const editable = oxdnaJobEditable(job) && !!job?.parent_job_id &&
+        ['run', 'surface_deposition'].includes(saved.kind)
+      const ready = !!el.surface?.enabled && !!el.surfaceAnchors?.length
+      depositionBtn.disabled = !editable || (!depositionBtn.checked && !ready)
+      const hint = job?.status === 'completed'
+        ? 'To deposit again from this job’s final frame, click + New job, create a continuation, then enable Surface deposition on the new job.'
+        : !editable ? 'Select a new, unstarted continuation from a completed oxDNA job (relaxation, production, or deposition).'
+        : !ready ? 'Enable Hard surface and add Surface Anchors.'
+        : 'Apply surface deposition to this job, then press Run.'
+      depositionBtn.title = hint
+      const status = document.getElementById('oxdna-surface-deposition-status')
+      if (status) status.textContent = hint
     }
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
@@ -2179,7 +2194,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
     else if (prodReady && hasRun)
       _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). "+ New job" to continue from the last frame.`, _C.ok)
-    else _setProdStatus(prodReady ? 'Production ready — "+ New job" to continue from this relaxed structure.' : '', _C.dim)
+    else _setProdStatus(prodReady ? 'Job complete — "+ New job" to continue from its final frame.' : '', _C.dim)
 
     // In LAMMPS-viz mode the viz radios are owned by selectLammpsJob (gated on the LAMMPS
     // run's own viewability) — skip the oxDNA sampling/trajectory gates below so a poll
@@ -2330,7 +2345,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   async function _launchProduction(parentJobId, wizardPayload) {
     const parent = _jobs.find(j => j.job_id === parentJobId)
     if (!parent) {
-      showToast('Select a completed relaxation to continue from', 'error')
+      showToast('Select a completed oxDNA job to continue from', 'error')
       return null
     }
     if (!(await _ensureJobCurrent('a production run', parent))) return null
@@ -2412,39 +2427,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     return null
   }
 
-  depositionBtn?.addEventListener('click', async () => {
-    if (!_selectedId || depositionBtn.disabled) return
-    if (!(await _ensureJobCurrent('a surface deposition run'))) return
-    if (!(await confirmNoConcurrentJob({
-      excludeJobId: _selectedId,
-      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
-    }))) return
-    const el = getRunElements?.() || {}
-    if (!el.surface?.enabled || !el.surfaceAnchors?.length) return
-    oxdnaLive?.stop()
-    depositionBtn.disabled = true
-    depositionBtn.textContent = 'Starting deposition…'
-    const r = await api.startOxdnaSurfaceDeposition(_selectedId, {
-      surface: {
-        dir: el.surface.dir,
-        offset_nm: el.surface.offsetNm,
-        position_nm: el.surface.positionNm,
-        stiff: el.surface.stiff,
-      },
-      surface_anchors: el.surfaceAnchors,
-      // steps_per_frame omitted — the backend's own DEFAULT_STEPS_PER_FRAME (10,000)
-      // applies (formerly read from the now-removed #oxdna-jobs-prod-steps-per-frame
-      // input, which the wizard's production mode owns now).
-    })
-    depositionBtn.textContent = 'Run surface deposition'
-    if (r?.job_id) {
-      showToast('Surface deposition started', 'ok')
-      await _fetchJobs()
-      await _selectJob(r.job_id)
-    } else {
-      showToast(api.lastErrorMessage?.() || 'Failed to start surface deposition', 'err')
-      _updateButtons(_selectedJob())
-    }
+  depositionBtn?.addEventListener('change', () => {
+    _runElementsChanged()
+    _updateButtons(_selectedJob())
   })
 
   exportBtn?.addEventListener('click', async () => {
@@ -2824,10 +2809,25 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   async function _refreshDisplay() {
     if (storageUnavailable(_selectedJob())) return
     if (!_selectedId || !oxdnaDisplay) return
+    const jobId = _selectedId
+    const request = ++_displayRequest
     const align = alignToggle ? alignToggle.checked : true
-    const r = await oxdnaDisplay.displayJob(_selectedId, align)
+    _displayLoading = true
+    _renderDisplayStatus()
+    let r
+    try { r = await oxdnaDisplay.displayJob(jobId, align) }
+    catch (error) { r = { ok: false, reason: error.message || 'Could not load frame' } }
+    if (request !== _displayRequest || jobId !== _selectedId || !displayToggle?.checked) return
+    _displayLoading = false
+    if (r.reason === 'superseded') {
+      _displayBaseText = ''
+      _renderDisplayStatus()
+      return
+    }
+    if (r.reason === 'no relaxed frame yet') r.reason = 'Waiting for first frame'
     const frame = align ? '' : ', own frame'
     _displayBaseText = r.ok ? `Showing ${r.stage === 'Starting structure' ? 'starting' : 'relaxed'} positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data')
+    if (r.ok && r.notes?.length) _displayBaseText += ' · ' + r.notes.join(' ')
     _displayBaseColor = r.ok ? _C.ok : _C.warn
     // Mark the frame we're now showing so the live-follow poll only re-fetches
     // when the sim writes a newer one.
@@ -2839,6 +2839,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // plus a "next frame ~Xs" countdown while the selected job is still running (the
   // relaxed display follows the run, refreshing each time the sim writes a frame).
   function _renderDisplayStatus() {
+    if (_displayLoading) {
+      if (displayStatus && displayStatus.dataset.loading !== '1') {
+        displayStatus.replaceChildren(makeSpinner(_C.accent, 10), document.createTextNode(' Loading…'))
+        displayStatus.dataset.loading = '1'
+        displayStatus.setAttribute('role', 'status')
+        displayStatus.setAttribute('aria-busy', 'true')
+      }
+      return
+    }
+    if (displayStatus) { displayStatus.dataset.loading = '0'; displayStatus.setAttribute('aria-busy', 'false') }
     let text = _displayBaseText
     let color = _displayBaseColor
     if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed'
@@ -2864,6 +2874,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     else if (trajToggle?.checked) await _refreshTraj()
   })
   function _setDisplayOff() {
+    ++_displayRequest
+    _displayLoading = false
+    if (displayStatus) { displayStatus.dataset.loading = '0'; displayStatus.setAttribute('aria-busy', 'false') }
     // Always restore (and bump the controller's epoch) so an in-flight relaxed
     // fetch from the live-follow poll / a job switch can't re-apply positions
     // after we've turned the display off.  Only ever called for the relaxed

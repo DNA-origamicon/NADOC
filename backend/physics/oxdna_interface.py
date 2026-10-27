@@ -2369,6 +2369,7 @@ def read_trajectory_frames_at(
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
     on_frame=None,
+    include_proteins=False,
 ) -> dict[int, dict[tuple, dict]]:
     """Parse ONLY the frames at ``indices`` (0-based positions in the sequence of
     ``t = …`` headers), streaming the file so unwanted frames are never held in memory
@@ -2384,7 +2385,14 @@ def read_trajectory_frames_at(
     order = _strand_nucleotide_order(design)
     want = {int(i) for i in indices}
     out: dict[int, dict] = {}
-    def emit(idx, frame):
+    def emit(idx, frame, data):
+        if include_proteins:
+            offset = _protein_lead_offset(data, order, n_trailing_extra)
+            for i, line in enumerate(data[:offset]):
+                frame[("__protein_bead__", i, "PROTEIN")] = {
+                    "backbone_position": np.asarray([float(v) for v in line.split()[:3]]) * OXDNA_LENGTH_UNIT,
+                    "a1": np.zeros(3), "a3": np.zeros(3),
+                }
         if not frame:
             return
         if on_frame is not None:
@@ -2407,7 +2415,7 @@ def read_trajectory_frames_at(
                         n_trailing_extra=n_trailing_extra,
                         trailing_extra_strand_length=trailing_extra_strand_length,
                     )
-                    emit(cur_idx, m)
+                    emit(cur_idx, m, buf)
                     buf = None
                 header_idx += 1
                 if header_idx in want:
@@ -2423,7 +2431,7 @@ def read_trajectory_frames_at(
                 n_trailing_extra=n_trailing_extra,
                 trailing_extra_strand_length=trailing_extra_strand_length,
             )
-            emit(cur_idx, m)
+            emit(cur_idx, m, buf)
     return out
 
 
@@ -2855,6 +2863,44 @@ def read_cm_positions_oxdna(conf_path: str | Path) -> list[list[float]]:
     return out
 
 
+def resolve_configuration_anchor_particles(design, anchors, conf_path, n_total):
+    """Map design DNA indices into the frozen configuration's particle order.
+
+    DNANM puts proteins BEFORE DNA. Check the job-root topology even when the
+    configuration is a stage checkpoint; never infer the offset from a surplus
+    of coordinates (which may instead be appended capture particles).
+    """
+    conf = Path(conf_path)
+    top = conf.parent / "topology.top"
+    if not top.exists():
+        top = conf.parent.parent / "topology.top"
+    n_walk = len(_strand_nucleotide_order(design))
+    offset = 0
+    if top.exists():
+        try:
+            header = top.read_text().splitlines()[0].split()
+            total = int(header[0])
+            n_dna = int(header[2]) if len(header) >= 5 else total
+            offset = int(header[3]) if len(header) >= 5 else 0
+        except (IndexError, ValueError) as exc:
+            raise ValueError("Invalid topology header for surface anchor mapping") from exc
+        if total != n_total or offset < 0 or n_dna < n_walk or offset + n_dna > total or (len(header) >= 5 and n_dna != n_walk):
+            raise ValueError("Topology particle counts do not match the surface anchor configuration")
+    elif n_total != n_walk:
+        raise ValueError("Surface anchor mapping requires topology.top for a non-DNA-only configuration")
+    particles, keys = resolve_anchor_particles(design, anchors)
+    particles = [offset + p for p in particles]
+    if not particles or any(p < offset or p >= n_total for p in particles):
+        raise ValueError("Surface deposition requires at least one resolved surface anchor in this configuration")
+    return particles, keys
+
+
+def _validate_surface_contact_history(particles, *histories):
+    selected = set(particles)
+    if any(not set(history or []).issubset(selected) for history in histories):
+        raise ValueError("Surface contact history uses different particle indices; create a new deposition job")
+
+
 def place_configuration_against_surface(
     conf_path: str | Path,
     design: Design,
@@ -2864,23 +2910,25 @@ def place_configuration_against_surface(
     translate: bool = True,
     clearance_nm: float = 0.05,
     penetration_tolerance_nm: float = 0.01,
+    validate_penetration: bool = True,
 ) -> dict:
     """Place a whole configuration on the allowed side of a hard surface.
 
     Free structures are translated rigidly until their closest nucleotide has a small
     positive clearance. Existing surface-relaxed structures can be validated without
-    translation. Anchor positions never determine the translation: a flexible,
+    translation. For a checkpoint already simulated against this same plane,
+    callers may disable penetration rejection: repulsion_plane has finite stiffness
+    and surface-bound particles can fluctuate across the plane. Anchor positions
+    never determine the translation: a flexible,
     non-coplanar anchor group may span tens of nanometres and centring it would drive
     much of the structure through the wall.
     """
-    particles, _ = resolve_anchor_particles(design, anchors)
-    if not particles:
-        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
     conf_path = Path(conf_path)
     lines = conf_path.read_text(encoding="utf-8").splitlines()
     if len(lines) < 4:
         raise ValueError("Surface deposition configuration has no nucleotide positions.")
     cm = read_cm_positions_oxdna(conf_path)
+    particles, anchor_keys = resolve_configuration_anchor_particles(design, anchors, conf_path, len(cm))
     valid = [p for p in particles if p < len(cm)]
     if not valid:
         raise ValueError("Surface anchors do not map to this oxDNA configuration.")
@@ -2902,14 +2950,15 @@ def place_configuration_against_surface(
             output.append(" ".join(fields))
         else:
             output.append(line)
-    conf_path.write_text("\n".join(output) + "\n", encoding="utf-8")
     min_gap_after = min_gap_before + shift_distance
     max_penetration_nm = max(0.0, -min_gap_after) / NM_TO_OXDNA
-    if max_penetration_nm > float(penetration_tolerance_nm):
+    if validate_penetration and max_penetration_nm > float(penetration_tolerance_nm):
         raise ValueError(
             "surface deposition seed intersects the hard floor "
             f"(maximum penetration {max_penetration_nm:.3f} nm)"
         )
+    if translate:
+        conf_path.write_text("\n".join(output) + "\n", encoding="utf-8")
     return {
         "translation_oxdna": shift,
         "translation_nm": [value / NM_TO_OXDNA for value in shift],
@@ -3061,6 +3110,9 @@ def write_surface_deposition_approach_forces(
     capture_contacted: bool = False,
     capture_gap_nm: float = 1.0,
     capture_stiff: float = 1.0,
+    captured_particles: list[int] | None = None,
+    contacted_particles: list[int] | None = None,
+    contact_gap_nm: float = 0.75,
 ) -> dict:
     """Write a wall plus normal-only plane attraction on selected anchor beads.
 
@@ -3069,10 +3121,9 @@ def write_surface_deposition_approach_forces(
     point trap it leaves both tangential degrees of freedom unconstrained, allowing
     a large origami to slide and rotate while depositing.
     """
-    particles, anchor_keys = resolve_anchor_particles(design, anchors)
-    if not particles:
-        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
     cm = read_cm_positions_oxdna(conf_path)
+    particles, anchor_keys = resolve_configuration_anchor_particles(design, anchors, conf_path, len(cm))
+    _validate_surface_contact_history(particles, captured_particles, contacted_particles)
     stiff = float(wall.get("stiff", 0.0))
     if stiff <= 0:
         raise ValueError("Surface deposition requires a surface stiffness > 0.")
@@ -3094,10 +3145,16 @@ def write_surface_deposition_approach_forces(
         for particle in valid_particles
     }
     capture_limit = float(capture_gap_nm) * NM_TO_OXDNA
+    previously_captured = set(captured_particles or [])
     captured = (
-        [p for p in valid_particles if abs(signed_gaps[p]) <= capture_limit]
+        [p for p in valid_particles if p in previously_captured or abs(signed_gaps[p]) <= capture_limit]
         if capture_contacted else []
     )
+    # Adsorption is persistent. Thermal excursions do not release a bound anchor;
+    # record actual contact separately from entry into the wider capture band.
+    contact_limit = float(contact_gap_nm) * NM_TO_OXDNA
+    prior_contacts = set(contacted_particles or [])
+    contacted = [p for p in captured if p in prior_contacts or abs(signed_gaps[p]) <= contact_limit]
     remaining = [p for p in valid_particles if p not in set(captured)]
     for particle in captured:
         gap = signed_gaps[particle]
@@ -3119,6 +3176,7 @@ def write_surface_deposition_approach_forces(
         "force_pn": float(force_pn),
         "n_captured": len(captured),
         "captured_particles": captured,
+        "contacted_particles": contacted,
         "remaining_particles": remaining,
         "wall_position": position,
         "max_initial_gap_nm": max(initial_gaps, default=0.0),
@@ -3134,18 +3192,19 @@ def write_surface_deposition_settle_forces(
     anchors: list[dict],
     anchor_stiff: float = DEFAULT_SURFACE_ANCHOR_STIFF,
     max_contact_gap_nm: float = 0.75,
+    contacted_particles: list[int] | None = None,
 ) -> dict:
     """Constrain contacted anchors to surface height and retain the wall.
 
-    The approach must first bring every selected CM within ``max_contact_gap_nm``;
-    otherwise fail instead of capturing a distant anchor. The remaining small normal
-    gap is projected away, then a low-dimensional restraint acts only along the plane
-    normal; both tangential coordinates remain free throughout settle and equilibration.
+    Every selected CM must first reach ``max_contact_gap_nm``, either now or in
+    the recorded contact history while its normal restraint remains active. A new
+    distant anchor still fails. Only the restraint target is projected onto the
+    plane; coordinates never move here. Both tangential coordinates remain free
+    throughout settle and equilibration.
     """
-    particles, anchor_keys = resolve_anchor_particles(design, anchors)
-    if not particles:
-        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
     cm = read_cm_positions_oxdna(conf_path)
+    particles, anchor_keys = resolve_configuration_anchor_particles(design, anchors, conf_path, len(cm))
+    _validate_surface_contact_history(particles, contacted_particles)
     direction = _normalize3(wall.get("dir"))
     position = resolved_wall(wall, cm)["position"]
     gaps = {
@@ -3153,7 +3212,11 @@ def write_surface_deposition_settle_forces(
         for p in particles if p < len(cm)
     }
     max_gap_units = float(max_contact_gap_nm) * NM_TO_OXDNA
-    too_far = {p: gap for p, gap in gaps.items() if abs(gap) > max_gap_units}
+    # Previously contacted particles already carry this same normal restraint.
+    # Do not require all bound anchors' thermal fluctuations to be simultaneously
+    # inside the initial contact band before continuing with unchanged restraints.
+    contacted = set(contacted_particles or [])
+    too_far = {p: gap for p, gap in gaps.items() if p not in contacted and abs(gap) > max_gap_units}
     if too_far:
         worst = max(abs(gap) for gap in too_far.values()) / NM_TO_OXDNA
         raise ValueError(

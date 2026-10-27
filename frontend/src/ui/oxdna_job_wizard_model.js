@@ -131,7 +131,7 @@ export function oxdnaProductionDefaults(overrides = {}) { return { ...PRODUCTION
 export function validateOxdnaProductionWizard(values = {}) {
   const v = oxdnaProductionDefaults(values)
   const errors = {}
-  if (!v.parentJobId) errors.parentJobId = 'Choose a completed relaxation to continue from.'
+  if (!v.parentJobId) errors.parentJobId = 'Choose a completed oxDNA job to continue from.'
   const range = (key, min, max, message) => {
     const n = Number(v[key])
     if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message

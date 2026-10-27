@@ -371,7 +371,7 @@ def test_measure_wall_response_zero_dir_raises():
 
 def _completed_parent(tmp_path, design):
     """A minimal completed relaxation parent the /run endpoint can branch from."""
-    from backend.physics.oxdna_interface import write_configuration
+    from backend.physics.oxdna_interface import write_configuration, write_topology
     from backend.api.crud import _geometry_for_design
     from backend.core.oxdna_protocol import build_relaxation_stages
 
@@ -381,7 +381,7 @@ def _completed_parent(tmp_path, design):
     jd = job.job_dir(tmp_path)
     jd.mkdir(parents=True, exist_ok=True)
     (jd / "design.json").write_text(design.model_dump_json())
-    (jd / "topology.top").write_text("placeholder\n")
+    write_topology(design, jd / "topology.top")
     geom = _geometry_for_design(design)
     write_configuration(design, geom, jd / "conf.dat", box_nm=80.0)
     # The relaxed seed _latest_relaxed_conf reads: the final stage's last_conf.
@@ -505,7 +505,10 @@ def test_run_preserves_surface_anchor_provenance(design, monkeypatch, tmp_path):
 
 
 def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
-    client, _ = _run_client(monkeypatch, tmp_path)
+    from unittest.mock import Mock
+    client, routes = _run_client(monkeypatch, tmp_path)
+    start = Mock()
+    monkeypatch.setattr(routes, 'start_job', start)
     parent = _completed_parent(tmp_path, design)
     anchor = {"kind": "domain", "strandId": design.strands[0].id, "domainIndex": 0}
     r = client.post(
@@ -520,6 +523,8 @@ def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
     child = OxdnaJob.load(r.json()["job_id"], tmp_path)
     assert child.parent_job_id == parent.job_id
     assert child.run_config["kind"] == "surface_deposition"
+    assert child.status == OxdnaStatus.queued
+    start.assert_not_called()
     assert [s.kind for s in child.stages] == [
         "deposition_gentle", "deposition_approach", "deposition_settle", "deposition_equil"
     ]
@@ -529,9 +534,9 @@ def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
     import json
     specs = json.loads((jd / "stages_spec.json").read_text())
     assert specs[2]["forces_meta"]["materialize_contact_traps"] is True
-    assert specs[2]["forces_meta"]["anchor_stiff"] == pytest.approx(1.0)
-    assert child.run_config["approach_retry_chunk_steps"] == 50_000
-    assert child.run_config["max_approach_windows"] == 8
+    assert specs[2]["forces_meta"]["anchor_stiff"] == pytest.approx(2.0)
+    assert child.run_config["approach_retry_chunk_steps"] == 10_000
+    assert child.run_config["max_approach_windows"] == 40
     assert child.run_config["capture_gap_nm"] == pytest.approx(1.0)
     assert child.run_config["contact_gap_nm"] == pytest.approx(0.75)
 
@@ -862,3 +867,308 @@ def test_run_keeps_surface_anchors_free_in_plane(design, monkeypatch, tmp_path):
     assert "type = lowdim_trap" in forces
     assert "visibility = 0,1,0" in forces
     assert "type = trap\n" not in forces
+
+
+def test_queued_run_deposition_toggle_edits_same_job_and_waits_for_run(design, monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    from backend.core.oxdna_job import OxdnaJob
+    client, routes = _run_client(monkeypatch, tmp_path)
+    start = Mock()
+    monkeypatch.setattr(routes, 'start_job', start)
+    parent = _completed_parent(tmp_path, design)
+    # Hybrid children must carry the frozen parameter data; it is not in topology.top.
+    (parent.job_dir(tmp_path) / 'anm.par').write_text('frozen protein parameters')
+    import backend.physics.oxdna_protein as proteins
+    monkeypatch.setattr(proteins, 'has_proteins', lambda _: True)
+    created = client.post(f'/api/oxdna/jobs/{parent.job_id}/run', json={'steps': 3000})
+    assert created.status_code == 200, created.text
+    jid = created.json()['job_id']
+    jd = tmp_path / 'oxdna_jobs' / jid
+    assert (jd / 'anm.par').read_text() == 'frozen protein parameters'
+    anchor = {'kind': 'domain', 'strandId': design.strands[0].id, 'domainIndex': 0}
+    patch = {'surface_deposition': True, 'surface': {'dir': [0, 1, 0], 'position_nm': -10, 'stiff': 5},
+             'anchors': [], 'surface_anchors': [anchor], 'surface_strands': None}
+    saved = client.put(f'/api/oxdna/jobs/{jid}/settings', json=patch)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['job_id'] == jid
+    assert saved.json()['status'] == 'queued'
+    assert len(saved.json()['stages']) == 4
+    assert (jd / 'anm.par').read_text() == 'frozen protein parameters'
+    assert len(list((tmp_path / 'oxdna_jobs').glob('*/job.json'))) == 2
+    start.assert_not_called()
+    edited = client.put(f'/api/oxdna/jobs/{jid}/settings', json={
+        **saved.json()['run_config'],
+        'stages': [{'name': '1_surface_gentle', 'steps': 2000, 'dt': 0.001}],
+    })
+    assert edited.status_code == 200, edited.text
+    changed = client.put(f'/api/oxdna/jobs/{jid}/settings', json={
+        'surface': {'dir': [0, 1, 0], 'position_nm': -11, 'stiff': 5},
+    })
+    assert changed.status_code == 200, changed.text
+    assert changed.json()['stages'][0]['steps'] == 2000
+    assert routes.load_stage_specs(jd)[0].dt == 0.001
+    off = client.put(f'/api/oxdna/jobs/{jid}/settings', json={'surface_deposition': False})
+    assert off.status_code == 200, off.text
+    assert off.json()['run_config']['kind'] == 'run'
+    assert off.json()['stages'][0]['steps'] == 3000
+    assert off.json()['run_config']['surface_anchors'] == [anchor]
+    on = client.put(f'/api/oxdna/jobs/{jid}/settings', json={'surface_deposition': True})
+    assert on.status_code == 200, on.text
+    start.assert_not_called()
+    # Resume also repairs legacy children that were prepared without anm.par.
+    (jd / 'anm.par').unlink()
+    assert client.post(f'/api/oxdna/jobs/{jid}/start').status_code == 200
+    assert (jd / 'anm.par').read_text() == 'frozen protein parameters'
+    start.assert_called_once()
+    assert client.put(f'/api/oxdna/jobs/{jid}/settings', json={'surface_deposition': False}).status_code == 409
+
+
+def test_deposition_invalid_edit_leaves_prepared_job_untouched(design, monkeypatch, tmp_path):
+    client, routes = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    created = client.post(f'/api/oxdna/jobs/{parent.job_id}/run', json={'steps': 1000}).json()
+    jd = tmp_path / 'oxdna_jobs' / created['job_id']
+    before = {name: (jd / name).read_bytes() for name in ['job.json', 'stages_spec.json', 'conf.dat']}
+    bad = client.put(f"/api/oxdna/jobs/{created['job_id']}/settings", json={'surface_deposition': True})
+    assert bad.status_code == 422, bad.text
+    assert all((jd / name).read_bytes() == content for name, content in before.items())
+
+
+def test_surface_capture_retains_adsorption_without_waiving_first_contact(design, geometry, tmp_path):
+    import numpy as np
+    from backend.physics.oxdna_interface import (
+        write_configuration, resolve_anchor_particles, NM_TO_OXDNA,
+        write_surface_deposition_approach_forces, write_surface_deposition_settle_forces,
+    )
+    conf = tmp_path / 'conf.dat'
+    write_configuration(design, geometry, conf)
+    lines = conf.read_text().splitlines()
+    rows = np.loadtxt(conf, skiprows=3)
+    anchors = [{'kind': 'domain', 'strand_id': design.strands[0].id, 'domain_index': 0}]
+    particles, _ = resolve_anchor_particles(design, anchors)
+    wall = {'dir': [0, 1, 0], 'position_nm': 0, 'stiff': 5}
+    def at_gap(nm):
+        rows[particles, 1] = nm * NM_TO_OXDNA
+        with conf.open('w') as stream:
+            stream.write('\n'.join(lines[:3]) + '\n')
+            np.savetxt(stream, rows)
+    def approach(**kwargs):
+        return write_surface_deposition_approach_forces(tmp_path / 'approach.txt', design, conf,
+            wall=wall, anchors=anchors, force_pn=5, capture_contacted=True, **kwargs)
+    at_gap(0.9)  # Capturable, but not yet inside the actual 0.75 nm contact threshold.
+    near = approach()
+    assert set(near['captured_particles']) == set(particles)
+    assert near['contacted_particles'] == []
+    with pytest.raises(ValueError, match='did not reach contact'):
+        write_surface_deposition_settle_forces(tmp_path / 'settle.txt', design, conf,
+            wall=wall, anchors=anchors, contacted_particles=near['contacted_particles'])
+    at_gap(0.5)
+    reached = approach(captured_particles=near['captured_particles'])
+    assert set(reached['contacted_particles']) == set(particles)
+    at_gap(1.25)  # A later fluctuation must not switch an established bond off.
+    retained = approach(captured_particles=reached['captured_particles'],
+                        contacted_particles=reached['contacted_particles'])
+    assert set(retained['captured_particles']) == set(particles)
+    assert set(retained['contacted_particles']) == set(particles)
+    assert retained['remaining_particles'] == []
+    before = conf.read_bytes()
+    write_surface_deposition_settle_forces(tmp_path / 'settle.txt', design, conf,
+        wall=wall, anchors=anchors, contacted_particles=retained['contacted_particles'])
+    assert conf.read_bytes() == before  # No coordinate projection/teleportation.
+    assert 'lowdim_trap' in (tmp_path / 'settle.txt').read_text()
+    with pytest.raises(ValueError, match='did not reach contact'):
+        write_surface_deposition_settle_forces(tmp_path / 'fresh.txt', design, conf,
+            wall=wall, anchors=anchors)  # An unbound distant anchor still fails.
+
+
+def test_copy_deposition_discards_runtime_contact_history(design, monkeypatch, tmp_path):
+    from backend.core.oxdna_job import OxdnaJob
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    created = client.post(f'/api/oxdna/jobs/{parent.job_id}/surface-deposition', json={
+        'surface': {'dir': [0, 1, 0], 'position_nm': -10, 'stiff': 5},
+        'surface_anchors': [{'kind': 'domain', 'strandId': design.strands[0].id, 'domainIndex': 0}],
+    })
+    assert created.status_code == 200, created.text
+    job = OxdnaJob.load(created.json()['job_id'], tmp_path)
+    job.run_config.update(surface_captured_particles=[0], surface_contacted_particles=[0], approach_retry_count=5)
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / 'deposition_approach_forces.txt').write_text('stale lowdim_trap')
+    (job.job_dir(tmp_path) / 'deposition_settle_forces.txt').write_text('stale contacts')
+    response = client.post(f'/api/oxdna/jobs/{job.job_id}/copy')
+    assert response.status_code == 200, response.text
+    copied = OxdnaJob.load(response.json()['job']['job_id'], tmp_path)
+    assert 'surface_contacted_particles' not in copied.run_config
+    assert 'surface_captured_particles' not in copied.run_config
+    assert 'approach_retry_count' not in copied.run_config
+    assert copied.run_config['approach_retry_chunk_steps'] == 10000
+    assert not (copied.job_dir(tmp_path) / 'deposition_settle_forces.txt').exists()
+    assert 'attraction_plane' in (copied.job_dir(tmp_path) / 'deposition_approach_forces.txt').read_text()
+
+
+@pytest.mark.parametrize('thermal_excursion', [False, True])
+def test_deposition_continuation_uses_previous_final_frame(design, monkeypatch, tmp_path, thermal_excursion):
+    """Create -> edit -> run supports repeated deposition without repositioning."""
+    from unittest.mock import Mock
+    from backend.core.oxdna_job import OxdnaJob
+    client, routes = _run_client(monkeypatch, tmp_path)
+    start = Mock()
+    monkeypatch.setattr(routes, 'start_job', start)
+    parent = _completed_parent(tmp_path, design)
+    settings = {
+        'surface': {'dir': [0, 1, 0], 'position_nm': -10, 'stiff': 5},
+        'surface_anchors': [{'kind': 'domain', 'strandId': design.strands[0].id, 'domainIndex': 0}],
+    }
+    first = client.post(f'/api/oxdna/jobs/{parent.job_id}/surface-deposition', json=settings)
+    assert first.status_code == 200, first.text
+    deposited = OxdnaJob.load(first.json()['job_id'], tmp_path)
+    jd = deposited.job_dir(tmp_path)
+    # Give the final checkpoint a distinct lateral displacement from the starting frame.
+    lines = (jd / 'conf.dat').read_text().splitlines()
+    for i in range(3, len(lines)):
+        values = lines[i].split()
+        values[0] = str(float(values[0]) + 0.25)
+        lines[i] = ' '.join(values)
+    if thermal_excursion:
+        from backend.core.constants import NM_TO_OXDNA
+        values = lines[3].split()
+        values[1] = str((-10 - 0.321) * NM_TO_OXDNA)
+        lines[3] = ' '.join(values)
+    final = '\n'.join(lines) + '\n'
+    checkpoint = deposited.stage_dir(tmp_path, deposited.stages[-1].name) / 'last_conf.dat'
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_text(final)
+    deposited.status = OxdnaStatus.completed
+    for stage in deposited.stages:
+        stage.status = 'done'
+    deposited.save(tmp_path)
+    parent_record = (jd / 'job.json').read_bytes()
+    continuation = client.post(f'/api/oxdna/jobs/{deposited.job_id}/run', json=settings)
+    assert continuation.status_code == 200, continuation.text
+    child_id = continuation.json()['job_id']
+    toggled = client.put(f'/api/oxdna/jobs/{child_id}/settings', json={
+        **settings, 'surface_deposition': True,
+    })
+    assert toggled.status_code == 200, toggled.text
+    child = OxdnaJob.load(child_id, tmp_path)
+    assert child.status == OxdnaStatus.queued
+    assert child.parent_job_id == deposited.job_id
+    assert child.run_config['kind'] == 'surface_deposition'
+    assert child.run_config['surface'] == deposited.run_config['surface']
+    assert len(child.stages) == 4
+    import numpy as np
+    from io import StringIO
+    actual = (child.job_dir(tmp_path) / 'conf.dat').read_text()
+    assert actual.splitlines()[:3] == final.splitlines()[:3]
+    np.testing.assert_allclose(np.loadtxt(StringIO(actual), skiprows=3),
+                               np.loadtxt(StringIO(final), skiprows=3), rtol=0, atol=1e-12)
+    assert (jd / 'job.json').read_bytes() == parent_record
+    assert checkpoint.read_text() == final
+    # Add another anchor without Run, then read it through a fresh API client
+    # and a fresh job load: persistence must not depend on a frontend cache.
+    added = {'kind': 'domain', 'strandId': design.strands[1].id, 'domainIndex': 0}
+    anchors = [*settings['surface_anchors'], added]
+    saved = client.put(f'/api/oxdna/jobs/{child_id}/settings', json={'surface_anchors': anchors})
+    assert saved.status_code == 200, saved.text
+    reloaded = OxdnaJob.load(child_id, tmp_path)
+    assert reloaded.run_config['surface_anchors'] == anchors
+    assert reloaded.status == OxdnaStatus.queued
+    fresh_client, _ = _run_client(monkeypatch, tmp_path)
+    fetched = fresh_client.get(f'/api/oxdna/jobs/{child_id}')
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()['run_config']['surface_anchors'] == anchors
+    start.assert_not_called()
+
+
+def test_surface_approach_retry_preserves_checkpoint_velocities(design, monkeypatch, tmp_path):
+    import shutil
+    from backend.core.oxdna_job import OxdnaJob
+    client, routes = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    response = client.post(f'/api/oxdna/jobs/{parent.job_id}/surface-deposition', json={
+        'surface': {'dir': [0, 1, 0], 'position_nm': -10, 'stiff': 5},
+        'surface_anchors': [{'kind': 'domain', 'strandId': design.strands[0].id, 'domainIndex': 0}],
+    })
+    assert response.status_code == 200, response.text
+    job = OxdnaJob.load(response.json()['job_id'], tmp_path)
+    jd = job.job_dir(tmp_path)
+    specs = routes.load_stage_specs(jd)
+    checkpoint = jd / specs[1].name / 'last_conf.dat'
+    checkpoint.parent.mkdir()
+    shutil.copy(jd / 'conf.dat', checkpoint)
+    before = checkpoint.read_bytes()
+    old_steps = specs[1].steps
+    updated = routes._prepare_surface_approach_retry(job, specs, tmp_path)
+    assert updated[1].refresh_vel is False
+    assert updated[1].steps == old_steps + 10000
+    assert routes.load_stage_specs(jd)[1].refresh_vel is False
+    assert checkpoint.read_bytes() == before
+
+
+@pytest.mark.parametrize('checkpoint', [False, True])
+def test_hybrid_deposition_targets_selected_dna_not_leading_proteins(design, geometry, tmp_path, checkpoint):
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        write_configuration, _strand_nucleotide_order,
+        write_surface_deposition_approach_forces, write_surface_deposition_settle_forces,
+        place_configuration_against_surface,
+    )
+    seed = tmp_path / 'conf.dat'
+    write_configuration(design, geometry, seed)
+    lines = seed.read_text().splitlines()
+    n_dna = len(lines) - 3
+    # Two leading protein beads; DNA index zero is absolute particle two.
+    row = '0 0.1 0 1 0 0 0 0 1 0 0 0 0 0 0'
+    dna = ['0 20 0 1 0 0 0 0 1 0 0 0 0 0 0'] * n_dna
+    seed.write_text('\n'.join(lines[:3] + [row, row] + dna) + '\n')
+    (tmp_path / 'topology.top').write_text(f'{n_dna + 2} 3 {n_dna} 2 2\n')
+    if checkpoint:
+        stage = tmp_path / '2_surface_approach'; stage.mkdir()
+        conf = stage / 'last_conf.dat'; conf.write_bytes(seed.read_bytes())
+    else:
+        conf = seed
+    key = _strand_nucleotide_order(design)[0]
+    anchor = {'kind': 'base', 'helixId': key[0], 'bp': key[1], 'direction': key[2]}
+    wall = {'dir': [0, 1, 0], 'position_nm': 0, 'stiff': 5}
+    placement = place_configuration_against_surface(conf, design, wall=wall, anchors=[anchor], translate=False)
+    assert placement['anchor_gap_min_nm'] == pytest.approx(20 / NM_TO_OXDNA)
+    approach = write_surface_deposition_approach_forces(tmp_path/'approach.txt', design, conf,
+        wall=wall, anchors=[anchor], capture_contacted=True)
+    assert approach['anchor_particles'] == [2]
+    assert approach['captured_particles'] == []
+    assert 'type = attraction_plane' in (tmp_path/'approach.txt').read_text()
+    with pytest.raises(ValueError, match='did not reach contact'):
+        write_surface_deposition_settle_forces(tmp_path/'settle.txt', design, conf, wall=wall, anchors=[anchor])
+    # The old wrong-particle contact history cannot bypass the corrected gate.
+    with pytest.raises(ValueError, match='different particle indices'):
+        write_surface_deposition_settle_forces(tmp_path/'settle.txt', design, conf,
+            wall=wall, anchors=[anchor], contacted_particles=[0])
+    data = conf.read_text().splitlines(); data[5] = row
+    conf.write_text('\n'.join(data) + '\n')
+    before = conf.read_bytes()
+    captured = write_surface_deposition_approach_forces(tmp_path/'retry.txt', design, conf,
+        wall=wall, anchors=[anchor], capture_contacted=True)
+    assert captured['captured_particles'] == [2]
+    assert captured['contacted_particles'] == [2]
+    settled = write_surface_deposition_settle_forces(tmp_path/'settle.txt', design, conf,
+        wall=wall, anchors=[anchor], contacted_particles=captured['contacted_particles'])
+    assert settled['anchor_particles'] == [2]
+    text = (tmp_path/'settle.txt').read_text()
+    assert 'type = lowdim_trap\nparticle = 2\n' in text
+    assert conf.read_bytes() == before
+    # Missing/mismatched topology must never silently fall back to DNA-only indices.
+    (tmp_path/'topology.top').unlink()
+    with pytest.raises(ValueError, match='requires topology.top'):
+        write_surface_deposition_approach_forces(tmp_path/'bad.txt', design, conf, wall=wall, anchors=[anchor])
+
+
+def test_legacy_hybrid_deposition_cannot_resume_old_wrong_particle_forces(tmp_path):
+    import asyncio
+    from backend.core.oxdna_runner import run_job
+    job = new_oxdna_job('legacy SD', [], run_config={'kind': 'surface_deposition'})
+    jd = job.job_dir(tmp_path); jd.mkdir(parents=True)
+    (jd / 'topology.top').write_text('5 2 3 2 1\n')
+    job.status = OxdnaStatus.running; job.save(tmp_path)
+    asyncio.run(run_job(job, tmp_path, []))
+    assert job.status == OxdnaStatus.failed
+    assert 'corrected anchor indexing' in job.error

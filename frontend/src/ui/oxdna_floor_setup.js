@@ -53,10 +53,14 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ge
   let _enabled = false
   const _bounds = () => getStructureBounds?.() || null
 
-  function _absolutePosition() { return parseFloat(offsetIn?.value || '0') || 0 }
+  let _position = parseFloat(offsetIn?.value || '0') || 0
+  let _configured = false
+  if (offsetIn) offsetIn.step = '0.001'
+  function _absolutePosition() { return _position }
   function _setAbsolutePosition(value) {
+    _position = value
     if (offsetIn) {
-      offsetIn.value = String(value)
+      offsetIn.value = String(Number(Number(value).toFixed(3)))
     }
     if (offsetLbl) offsetLbl.textContent = formatOffsetNm(value)
   }
@@ -119,19 +123,24 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ge
     // Re-resolve contact from the currently visible representation. This prevents a
     // stale absolute coordinate from a previous job/representation being reused when
     // the surface is enabled for a newly displayed relaxed frame.
-    if (turningOn) {
+    if (turningOn && !_configured) {
       const contact = floorContactCoordinate(axisSel?.value || '-y', _bounds())
-      if (contact != null) _setAbsolutePosition(contact)
+      if (contact != null) { _setAbsolutePosition(Math.round(contact * 10) / 10); _configured = true }
     }
     _syncControlsVisibility(); _renderStatus()
   })
   axisSel?.addEventListener('change', () => {
     const contact = floorContactCoordinate(axisSel.value, _bounds())
-    if (contact != null) _setAbsolutePosition(contact)
+    if (contact != null) { _setAbsolutePosition(Math.round(contact * 10) / 10); _configured = true }
     _renderStatus()
   })
   offsetIn?.addEventListener('input', () => {
-    if (offsetLbl) offsetLbl.textContent = formatOffsetNm(offsetIn.value)
+    const value = Number(offsetIn.value)
+    if (!Number.isFinite(value)) return
+    _position = Number(value.toFixed(3))
+    _configured = true
+    if (offsetIn.value.split('.')[1]?.length > 3) _setAbsolutePosition(_position)
+    if (offsetLbl) offsetLbl.textContent = formatOffsetNm(_position)
     _renderStatus()
   })
   stiffIn?.addEventListener('input', _renderStatus)
@@ -141,6 +150,7 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ge
   // spec turns the surface off.  Maps the stored normal back to an axis side.
   function applyConfig(surface) {
     _enabled = !!surface
+    _configured = !!surface
     if (enableChk) enableChk.checked = _enabled
     if (surface) {
       const axis = axisForNormal(surface.dir)

@@ -578,7 +578,7 @@ describe('initOxdnaDisplay controller', () => {
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1) // scrubbing never rebuilds/refetches caps
   })
 
-  it('trajectory keeps a hybrid protein at the job simulation pose', async () => {
+  it('trajectory does not reuse a final protein pose when the frame has no protein data', async () => {
     const M = Array.from({ length: 16 }, (_, i) => i)
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
@@ -595,7 +595,8 @@ describe('initOxdnaDisplay controller', () => {
 
     await ctrl.loadTrajectory('hybrid-job')
 
-    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenCalledWith({ 'protein-1': M })
+    expect(proteinRenderer.applyOxdnaTransforms).not.toHaveBeenCalledWith({ 'protein-1': M })
+    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith({})
     ctrl.showFrame(0)
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1)
   })
@@ -1934,4 +1935,33 @@ it('plays prepared VR atoms without per-frame loading notifications',async()=>{
  for(const i of [0,1,0,1])await ctrl.showFullTrajectoryFrame(page,i)
  expect(status).not.toHaveBeenCalled();expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(calls)
  ctrl.stopAndRestore()
+})
+
+
+it('updates protein poses with each trajectory frame and interpolates rotation without scaling', async () => {
+  const { trajectoryProteinTransforms, interpolateProteinTransforms } = await import('./oxdna_display.js')
+  const keys = [['h0', 0, 'FORWARD'], ...[0,1,2].map(row => ['__protein_transform__', 'protein1', row])]
+  const first = [0,0,0,1,0,0, 1,0,0,0,0,0, 0,1,0,0,0,0, 0,0,1,0,0,0]
+  // 90-degree Z rotation, translation (10, 0, 0).
+  const last = [1,0,0,1,0,0, 0,-1,0,10,0,0, 1,0,0,0,0,0, 0,0,1,0,0,0]
+  const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
+  const designRenderer = { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }
+  const api = {
+    getOxdnaTrajectory: vi.fn(async () => ({ ready:true, n_frames:2, keys, frames:[first,last], stages:[], markers:[] })),
+    getOxdnaDisplay: vi.fn(async () => ({ proteins:[{ attachment_id:'protein1', transform:trajectoryProteinTransforms(keys,last).protein1 }] })),
+  }
+  const display = initOxdnaDisplay({designRenderer, proteinRenderer, api})
+  await display.loadTrajectory('job')
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,first))
+  display.showFrame(1)
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,last))
+  expect(designRenderer.applyFemPositions.mock.calls.at(-1)[0]).toHaveLength(1)
+  const middle = interpolateProteinTransforms(keys,first,last,0.5).protein1
+  expect(middle[3]).toBe(5)
+  expect(middle[0]).toBeCloseTo(Math.SQRT1_2)
+  expect(middle[1]).toBeCloseTo(-Math.SQRT1_2)
+  display.showFrame(0)
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,first))
+  display.stopAndRestore()
+  expect(proteinRenderer.clearOxdnaTransforms).toHaveBeenCalled()
 })

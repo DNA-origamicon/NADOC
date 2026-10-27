@@ -53,6 +53,7 @@ class GizmoMove(BaseModel):
 
 
 class NanoparticlePatch(BaseModel):
+    visible: Optional[bool] = None
     diameter_nm: Optional[float] = Field(default=None, gt=0.0, le=1000.0)
     pose: Optional[list[float]] = None
     gizmo_move: Optional[GizmoMove] = None
@@ -166,6 +167,15 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    if body.visible is not None:
+        if body.model_fields_set != {"visible"}:
+            raise HTTPException(422, detail="Change visibility separately from particle geometry.")
+
+        def set_visibility(design: Design) -> None:
+            _particle_or_404(design, nanoparticle_id).visible = body.visible
+
+        updated, report = design_state.mutate_and_validate(set_visibility)
+        return _design_response(updated, report)
     from backend.api.part_quantum_dot_commands import route_native_target as native_dot, record as record_dot
     if particle.kind == "quantum_dot" and body.coating is None and native_dot(current, nanoparticle_id):
         updated, report, _ = record_dot("nanoparticle-patch",
