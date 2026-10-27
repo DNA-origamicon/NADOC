@@ -2801,7 +2801,22 @@ refusal; native compound Apply/cold-replay/undo checks pass. Actual linked-contr
 solve matrices and qualified rollout remain open, so the still-used legacy path
 and this issue are not declared resolved.
 
-## ISSUE-126 — Connection-version DS application can retain duplicate bridge occupancy (2026-10-16, OPEN)
+## ISSUE-126 — Connection-version DS application can retain duplicate bridge occupancy (2026-10-16, FIXED — COLLISION-FREE EXECUTION/PUBLICATION)
+
+**October 26 correction:** The user requires a completely collision-free result,
+including edits to already-invalid sources. Native connection construction and
+shared recipe execution now reject duplicate occupancy with
+`nucleotide_double_occupancy`; cold proof identifies the failing connection.
+Ordinary publication no longer permits equal/decreasing conflict counts;
+undo/redo reject conflicting snapshots before changing state or stacks. Complete
+atomic repair remains allowed; partial repair is refused. Interval sweeps count
+each conflicting slot once and preserve all claimant identities in diagnostics.
+No molecular formula, strand polarity, sequence or geometry golden changed.
+See the [connection closure](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md)
+and [handoff](docs/audits/feature_history_20261014/session_handoff.md) for validation.
+FH-25 and the independent ISSUE-143 remain open.
+
+**Historical evidence (superseded status/queue):**
 
 - The native mixed-end fixture with `root-to-root-dsdna-linker` produces two
   FORWARD bridge domains on the same virtual helix. This is existing output,

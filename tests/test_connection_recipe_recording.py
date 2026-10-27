@@ -39,7 +39,7 @@ def test_owned_apply_disconnect_one_undo_and_replay(document, worker, direct_sou
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as error:
             create(document, organized(application(document.design, family)))
-        assert error.value.detail['code'] == 'ambiguous_group_lineage'
+        assert error.value.detail['code'] == 'nucleotide_double_occupancy'
         unchanged(document, before)
         return
     lengths = [o.sub_domains[0].length_bp for o in document.design.overhangs[:2]]

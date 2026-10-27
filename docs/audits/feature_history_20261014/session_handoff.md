@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 1.
+Sessions since last gate flip or milestone close: 2.
 
 October 26, 2026: **Move/Rotate is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON.**
 **Original four tools done: 4/4 (Bend, Twist, Extrude, Sweep); Move/Rotate and Fine Routing also qualified.
@@ -36,7 +36,7 @@ CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-
   Failed intermediate timing/recovery runs remain evidence, not passing claims.
 
 ## Scope and next task
-The requested Move/Rotate task is finished; no successor was started.
+ISSUE-126 occupancy correction is complete; no successor was started.
 Remaining core work is cluster membership/deletion and references, ordinary
 connections, complete reference repair, aggregate desktop qualification and host
 lifecycle closure (FH-18/25/26/27/28). Recommended next implementation task: close the existing cluster membership/deletion
@@ -69,7 +69,7 @@ Retain these user decisions and completed repairs:
   original phase-sweep claims were withdrawn because phase_offset was ignored.
   Do not infer molecular approval from ordering approval.
 
-## Regression limits
+## Regression limits — prior Move/Rotate acceptance
 Final `just test-smart` decision: FAST;19429pass/19skip/83fail. Failure IDs exactly
 match `compound-final-test-smart.log`: no additions or removals. The earlier
 lease-TTL assertion passes this time but remains known timing debt.
@@ -88,18 +88,37 @@ Documentation-only reconciliation; no gate or milestone changed. Earlier S/U
 queues and pending tool labels are historical. MV-50/51 and ordinary ISSUE-100
 are closed against existing acceptance; MV-48 retains cluster/integration gaps.
 MV-49 old-file recovery is outside required completion under contract §10.
-ISSUE-126 is contained on ordinary create/Connect/Apply routes by `fd2772f1`;
-lower-level native recipes still need explicit admission/diagnostic closure.
+ISSUE-126 now refuses duplicate occupancy in native construction/replay and
+ordinary publication. The user requires completely collision-free results even
+for previously invalid sources: partial repairs and conflicting undo/redo refuse.
 FH-28 concerns retained production lifecycle gaps, not restarting sealed-host
 rollout. The contract’s R3 migration is not evidence of a missing tool gate.
 
+## ISSUE-126 correction and verification
+Shared native execution refuses duplicate slot ownership before returning a
+candidate; finite construction checks before lineage observation. Cold proof
+identifies the offending connection feature. Ordinary mutation, replacement,
+crossover batches and undo/redo require completely collision-free output.
+Invalid files remain inspectable; complete atomic repair is allowed. No merging,
+polarity flipping or molecular-placement change. Sparse interval sweeps count
+unique conflicting slots; references remain non-physical overlays.
+Focused occupancy12pass, native connection proof17pass, preview52pass/2deselected.
+Initial connection regression392pass; final policy regression313pass/1test-only
+failure (deque/list comparison), corrected and covered by the12pass rerun.
+Final `just test-smart`: FAST19436pass/19skip/84fail: exact83 baseline IDs plus
+`test_native_auto_proof[merge]` synchronous verification408; whole-file focused
+rerun8pass. FULL deferred without a test-dedicated session; no broad green claim.
+Guard370s, zero per-test violators; prior guard384s. Triage found aggregate
+real-worker/fixture cost; no budget/marker changes. Lint/diff pass. No app run.
+Evidence: `.development-artifacts/feature-history-focus/issue126-*.log`.
+Initial smart98fail included15 obsolete raw-invalid-output expectations, now
+corrected to early refusal; compatible dsDNA cold proof remains a positive test.
+
 ## Shared-worktree boundaries
-Audit incoming HEAD: `48f50740`. Only this audit's documentation hunks are staged.
-Reconciliations in `implementation.md`, `issues_ledger.md`,
-`manual_validation_debt.md` and `memory/project_feature_log_overhaul.md` remain
-uncommitted because their pre-existing edits prevent clean selective staging.
-All are applied in the shared worktree; prior unrelated edits are preserved.
-No production behavior, molecular constants, manifests, goldens or gates changed.
-No push, reset, stash, restore or broad staging.55 focused checks pass for
-ISSUE-126 route containment, occupancy rollback and native characterization;
-these do not replace tool app acceptance or clear the83-failure broad baseline.
+Incoming HEAD: `6ea70aef`. Commit only this task's explicit paths/own hunks.
+Pre-existing API/VR/simulation/test/memory changes are preserved. Issue/fix-log
+and MV-54 corrections are staged as selective hunks; project memory’s current
+ISSUE-126 note remains uncommitted because its surrounding hygiene/reconciliation
+changes are mixed. Prior unrelated/audit hunks remain unstaged. No push/reset/
+stash/restore. Temporary audit preimages removed; retained only bounded logs.
+No molecular constants, manifests, geometry goldens or rollout gates changed.

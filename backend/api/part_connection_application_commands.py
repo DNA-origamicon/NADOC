@@ -531,6 +531,8 @@ def _materialize(design, body, selected):
         overhang_connections=[*result.overhang_connections, connection]))
     before = result
     result = generate_linker_topology(result, connection)
+    from backend.core.occupancy import require_unique_occupancy
+    require_unique_occupancy(result)
     observe(before, result, added_linker=connection.id)
     bridge_id = f"__lnk__{connection.id}"
     affected = overhang_dependent_strand_ids(result, [a_id, b_id], extra_helix_ids=[bridge_id])

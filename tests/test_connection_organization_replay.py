@@ -29,19 +29,17 @@ def test_all_native_families_preserve_groups_and_disconnect_from_recipe(direct_s
     source = organize(pending(direct_source, family))
     before = source.model_dump_json()
     values = application(source, family)
-    native = execute('overhang-bulk', source.copy_with(group_organization=None), values)
     if family in {'root-to-root-dsdna-linker', 'end-to-end-dsdna-linker'}:
-        # ISSUE-126: native output has duplicate directional occupancy. Native
-        # parity alone cannot qualify group ancestry; keep the explicit refusal.
+        # ISSUE-126: refuse in native execution, before lineage or publication.
         from backend.core.part_command_errors import CommandContractError
-        from backend.core.part_group_lineage import _inventory, _Budget
-        with pytest.raises(CommandContractError, match='Overlapping domains') as native_error:
-            _inventory(native, _Budget())
+        with pytest.raises(CommandContractError) as native_error:
+            execute('overhang-bulk', source.copy_with(group_organization=None), values)
         with pytest.raises(CommandContractError) as organized_error:
             execute('overhang-bulk', source, organized(values))
-        assert organized_error.value.code == native_error.value.code == 'ambiguous_group_lineage'
+        assert organized_error.value.code == native_error.value.code == 'nucleotide_double_occupancy'
         assert source.model_dump_json() == before
         return
+    native = execute('overhang-bulk', source.copy_with(group_organization=None), values)
     result = append(source, 'overhang-bulk', organized(values), 'apply-organized')
     assert authored(result.copy_with(group_organization=None)) == authored(native)
     for i, overhang in enumerate(source.overhangs[:2]):

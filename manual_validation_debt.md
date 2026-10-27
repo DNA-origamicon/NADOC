@@ -1329,6 +1329,13 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Editor rollout remains off; assembly and machine-specific VR stay deferred.
 
 - **MV-54 — PENDING — Atomic ordinary connection removal (2026-10-16).**
+  **October 26 scope/defect update:** ISSUE-126 is corrected by native and
+  publication occupancy refusal; incompatible dsDNA choices must fail atomically,
+  not be qualified as successful connections. ISSUE-143 and ordinary desktop/
+  resource qualification remain. PartGroup rollout and old-file owner migration
+  in the historical U41–U43 extensions below are retired requirements. Use the
+  portable scratch policy, not the obsolete mandatory Archive-mount instruction.
+
   **NOT VERIFIED IN APP.** With Archive mounted, privately enable backend
   `part_connection_disconnect.ENABLED` and frontend `nativeConnectionRemovalEnabled`
   together. Exercise Unapply and Delete on both direct types with equal/A-longer/

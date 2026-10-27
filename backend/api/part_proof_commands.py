@@ -391,6 +391,14 @@ def execute_long(kind, design, params):
 
 
 def _execute(kind, design, params, *, expensive):
+    from backend.core.occupancy import require_unique_occupancy
+
+    updated = _execute_candidate(kind, design, params, expensive=expensive)
+    require_unique_occupancy(updated)
+    return updated
+
+
+def _execute_candidate(kind, design, params, *, expensive):
     if not dependencies(kind, params).known:
         raise NotImplementedError("Command lacks a versioned proof contract")
     from backend.core.part_suppression import KIND

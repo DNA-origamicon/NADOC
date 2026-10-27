@@ -8,6 +8,17 @@ test-pinned, routed through extracted modules (NOT back into main.js), gated by 
 exercise — and to measure whether the loop is actually tight (wall-clock, edits-to-green, did a phase
 regress anything).
 
+## ISSUE-126 — collision-free native results and publication (2026-10-26)
+
+Native construction and replay now reject duplicate slot occupancy before
+acceptance; ordinary edits and undo/redo require entirely collision-free results.
+User decision: partial repair of an invalid source is refused; complete atomic
+repair is allowed. Diagnostics retain all claimants and cold-proof attribution.
+No molecular placement, polarity, sequence, phase constant or golden changed.
+See the [connection plan](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md)
+and [current handoff](docs/audits/feature_history_20261014/session_handoff.md)
+for validation, baseline failures and deferred broad coverage. No app claim.
+
 ## Baselines (at loop start, 2026-06-05)
 
 - `frontend/src/main.js` LOC: 9600

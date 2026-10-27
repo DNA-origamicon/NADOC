@@ -20,6 +20,15 @@ def params(source, delete_version=False):
 @pytest.mark.parametrize('delete_version', [False, True])
 def test_native_disconnect_restores_all_families_and_replays(direct_source, family, delete_version):
     source = pending(direct_source, family)
+    from tests.test_part_connection_application_commands import parallel_bridge
+    from backend.core.part_command_errors import CommandContractError
+    if parallel_bridge(source, family):
+        before = source.model_dump_json()
+        with pytest.raises(CommandContractError) as error:
+            append(source, 'overhang-bulk', apply_params(source, 'candidate'), 'apply')
+        assert error.value.code == 'nucleotide_double_occupancy'
+        assert source.model_dump_json() == before
+        return  # There is no accepted invalid bridge to disconnect.
     source = append(source, 'overhang-bulk', direct_params(source) if family in {'root-to-root', 'end-to-root'}
                     else apply_params(source, 'candidate'), 'apply')
     before = source.model_dump_json()

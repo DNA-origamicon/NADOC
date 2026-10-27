@@ -80,7 +80,9 @@ def test_edit_policy_protects_only_existing_contract_and_output_identity(pending
 
 @pytest.mark.parametrize("material", ["ss", "ds"])
 def test_native_prefix_pending_apply_and_reapply_survive_cold_input_replay(application_prefix, material):
-    source = _pending(application_prefix.model_copy(deep=True), f"root-to-root-{material}dna-linker")
+    # Opposite-polarity fixture: same-attach ssDNA, mixed-attach dsDNA are valid.
+    attach = 'root-to-root' if material == 'ss' else 'end-to-root'
+    source = _pending(application_prefix.model_copy(deep=True), f"{attach}-{material}dna-linker")
     source = applied(source)
     source = applied(source, identity="replacement-linker", feature_id="reapply")
     assert [row.id for row in source.overhang_connections] == ["replacement-linker"]

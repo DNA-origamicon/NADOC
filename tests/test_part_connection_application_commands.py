@@ -10,8 +10,6 @@ from copy import deepcopy
 from fastapi import HTTPException
 import pytest
 
-from backend.api import state
-
 from backend.api import routes_connection_versions as routes
 from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import NucleotideTransform, OverhangBinding
@@ -84,18 +82,15 @@ def parallel_bridge(design, connection_type):
 
 
 def assert_parallel_bridge_refused(route_call, *builder_calls):
-    """The route refuses the pairing; a native builder's raw output (never published
-    directly) is rejected by the publication occupancy check."""
+    """Both route admission and native construction refuse duplicate ownership."""
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as caught:
         route_call()
     assert "same direction" in str(caught.value.detail), caught.value.detail
     for call in builder_calls:
-        result = call()
-        built = result[0] if isinstance(result, tuple) else result
-        with pytest.raises(HTTPException) as rejected:
-            state._assert_occupancy(built, None)
-        assert rejected.value.detail["code"] == "nucleotide_double_occupancy"
+        with pytest.raises(CommandContractError) as rejected:
+            call()
+        assert rejected.value.code == "nucleotide_double_occupancy"
 
 
 def _legacy(design, params, monkeypatch):
@@ -605,4 +600,24 @@ def test_replacement_may_reuse_namespace_of_explicitly_removed_complete_owner(so
     replaced, _ = _build(source, params)
     assert [row.id for row in replaced.overhang_connections] == ["removed-owner-child"]
     assert not any(row.id == "__lnk__removed-owner" for row in replaced.helices)
+    assert source.model_dump_json() == before
+
+
+@pytest.mark.parametrize('connection_type', ['root-to-root-dsdna-linker', 'end-to-end-dsdna-linker'])
+def test_cold_proof_attributes_occupancy_conflict_to_connection(source, connection_type):
+    from backend.core.models import SnapshotLogEntry
+
+    source = _pending(source, connection_type)
+    before = source.model_dump_json()
+    row = SnapshotLogEntry(
+        id='invalid-bridge', op_kind='overhang-bulk', label='Invalid bridge',
+        timestamp='2026-10-26T00:00:00Z', params=_params(source),
+        design_snapshot_gz_b64='poisoned recovery', post_state_gz_b64='poisoned output',
+    )
+    report = proof(source.copy_with(feature_log=[*source.feature_log, row]))
+    assert report['status'] not in {'verified', 'reproduced_import'}
+    issue = next(item for item in report['issues'] if item['code'] == 'nucleotide_double_occupancy')
+    assert issue['feature_id'] == 'invalid-bridge'
+    assert '__lnk__applied-linker' in issue['detail']
+    assert not report['native_editable']
     assert source.model_dump_json() == before

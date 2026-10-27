@@ -74,6 +74,14 @@ def test_direct_relocation_requires_material_transport_not_only_identity(direct_
 def test_linker_adds_new_material_on_existing_hosts(application_prefix, family):
     source = organize(pending(application_prefix, family))
     inputs = apply_params(source, 'candidate')
+    from tests.test_part_connection_application_commands import parallel_bridge
+    if parallel_bridge(source, family):
+        before = source.model_dump_json()
+        with pytest.raises(CommandContractError) as error:
+            execute('overhang-bulk', source.copy_with(group_organization=None), inputs)
+        assert error.value.code == 'nucleotide_double_occupancy'
+        assert source.model_dump_json() == before
+        return
     native = execute('overhang-bulk', source.copy_with(group_organization=None), inputs)
     old = {address(d) for s in source.strands for d in s.domains}
     added_on_old_hosts = [d for s in native.strands for d in s.domains

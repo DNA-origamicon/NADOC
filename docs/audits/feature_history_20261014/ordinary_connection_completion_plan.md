@@ -1,29 +1,16 @@
 # FH-25 ordinary DNA connection completion contract
 
-> **Current scope, October 26, 2026:** FH-25 remains open. The U28–U43 entries are historical implementation evidence; their counts, successor instructions, PartGroup rollout and old-file owner migration are not active requirements. Complete ordinary supported controls/source profiles, native correctness/admission, source-bound replay and desktop/resource acceptance. ISSUE-143 remains open. ISSUE-126 now has ordinary-route containment; see the clarification below. Current accounting: [handoff](session_handoff.md).
+> **Current scope, October 26, 2026:** FH-25 remains open. The U28–U43 entries are historical implementation evidence; their counts, successor instructions, PartGroup rollout and old-file owner migration are not active requirements. Complete ordinary supported controls/source profiles, native correctness/admission, source-bound replay and desktop/resource acceptance. ISSUE-143 remains open. ISSUE-126 now rejects conflicting native results and ordinary publications; see the closure below. Current accounting: [handoff](session_handoff.md).
 
-## ISSUE-126 clarification — October 26, 2026
-The incompatible same-attach dsDNA case can produce two FORWARD bridge domains
-in the same `(helix, bp, direction)` slots; this is invalid topology, not a
-rendering artifact. `fd2772f1` added the existing polarity rule before ordinary
-version creation, combined Connect and stored-version Apply, including gated
-adapter dispatch. These routes reject known incompatible dsDNA pairs with HTTP400.
-Recording also checks occupancy; clean-source conflicts refuse atomically with
-HTTP409. Existing-invalid designs use a non-increasing conflict-count allowance,
-not proof of a repaired design. ID-derived unknown polarity passes the early rule.
-Lower-level recipe execution still reproduces the defect in characterization
-coverage. FH-25 must close admission/diagnostics on its supported replay paths;
-ordinary-route containment does not make those invalid recipes valid. Rejection
-of a chemically incompatible choice is appropriate, not a missing supported
-pairing. Do not flip strands or alter molecular builders to make it pass.
-
-
-Audit verification: `just test-focused tests/test_connection_polarity_rule.py`
-13pass; `tests/test_occupancy_uniqueness.py`6pass; native organized-family
-characterization node36pass (includes expected invalid native output/refusal).
-Each ran separately through `just test-focused`;55pass total. One initial
-multi-target invocation was rejected by the wrapper before collection. No app
-or broad-suite rerun, no production/molecular changes, no FH-25 closure.
+## ISSUE-126 correction — October 26, 2026
+- User contract: every accepted result is collision-free; partial repair of an invalid source is refused. Logical slots use helix identity, BP and direction; reference overlays retain their existing non-physical exclusion.
+- Shared native execution (normal/long/scoped/organized) validates every returned result; finite connection construction rejects duplicate occupancy before lineage observation. Cold proof attributes refusal to the offending feature.
+- Ordinary publication no longer accepts equal/decreasing conflict counts. Undo/redo validate before changing state/stacks. Existing invalid files remain inspectable; an atomic complete repair is allowed.
+- Interval sweeps report every conflicting slot once, including triple/self overlap, without allocating per BP. No owner is silently merged, deleted or flipped; native placement/sequence/constants are unchanged.
+- The earlier raw-output characterizations now require native rejection and unchanged source. Ordinary polarity checks remain an early, readable admission guard; unknown polarity cannot bypass final occupancy validation.
+- Final focused: occupancy12pass, native cold proof17pass, preview52pass/2deselected; earlier connection regression392pass. Native invalid construction now refuses; existing corrupt-input preview backstop remains tested.
+- Final FAST19436pass/19skip/84fail: exact83 baseline plus synchronous native-auto merge408; whole-file focused rerun8pass. FULL deferred, guard370s/zero per-test violators, no budget/marker changes; lint/diff pass. No app run or molecular change.
+- Logs: `.development-artifacts/feature-history-focus/issue126-*.log`; initial15 outdated characterization failures and corrected deque/list assertion retained honestly. FH-25/ISSUE-143 remain open; no milestone/gate credit.
 
 
 U28 source audit and native characterization, October 16, 2026, against

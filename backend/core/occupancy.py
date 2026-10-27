@@ -10,7 +10,27 @@ how many bases sit at a bp, not which strand owns the slot, so they do not affec
 this check.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
+
+from backend.core.part_command_errors import CommandContractError
+
+
+def require_unique_occupancy(design):
+    """Refuse a native candidate before it can become an accepted replay result.
+
+    This checks ownership, not spatial proximity, and never merges claimants or
+    changes their polarity. Reference overlays retain their existing exclusion.
+    """
+    conflicts, total = occupancy_conflicts(design, limit=1)
+    if total:
+        conflict = conflicts[0]
+        raise CommandContractError(
+            "Two bases occupy the same helix, bp and direction: "
+            f"{conflict['helix_id']} bp {conflict['bp']}..{conflict['bp_end']} "
+            f"{conflict['direction']}; strands {conflict['strand_ids']}. "
+            "Choose compatible connection endpoints or repair the conflicting domains.",
+            code="nucleotide_double_occupancy",
+        )
 
 
 def occupancy_conflicts(design, *, limit=20):
@@ -18,28 +38,34 @@ def occupancy_conflicts(design, *, limit=20):
 
     Each conflict: {"helix_id", "bp", "direction", "strand_ids"} where strand_ids
     lists every claimant (a strand appears twice if it covers the slot twice).
-    Runs in O(occupied slots) using per-helix interval sweeps, not per-bp dicts.
+    Counts each conflicting slot once, even when three or more domains claim it.
+    Uses interval sweeps rather than allocating a boolean for every bp.
     """
-    # (helix_id, direction) -> list of (lo, hi, strand_id)
-    intervals = defaultdict(list)
+    # End-exclusive events keep inclusive domain endpoints exact in both directions.
+    events = defaultdict(lambda: defaultdict(Counter))
     for strand in design.strands:
         if strand.is_reference:
             continue
         for domain in strand.domains:
             lo, hi = sorted((domain.start_bp, domain.end_bp))
-            intervals[(domain.helix_id, domain.direction)].append((lo, hi, strand.id))
+            lane = events[(domain.helix_id, domain.direction)]
+            lane[lo][strand.id] += 1
+            lane[hi + 1][strand.id] -= 1
     conflicts, total = [], 0
-    for (helix_id, direction), spans in intervals.items():
-        events = sorted(spans)
-        active = []  # (hi, strand_id) intervals still covering the sweep point
-        for lo, hi, strand_id in events:
-            active = [(h, s) for h, s in active if h >= lo]
-            for other_hi, other_id in active:
-                overlap_hi = min(hi, other_hi)
-                total += overlap_hi - lo + 1
+    for (helix_id, direction), lane in events.items():
+        active = Counter()
+        count, previous = 0, None
+        for position in sorted(lane):
+            if count > 1 and previous is not None:
+                total += position - previous
                 if len(conflicts) < limit:
-                    conflicts.append({"helix_id": helix_id, "bp": lo, "bp_end": overlap_hi,
+                    conflicts.append({"helix_id": helix_id, "bp": previous, "bp_end": position - 1,
                                       "direction": getattr(direction, "value", direction),
-                                      "strand_ids": [other_id, strand_id]})
-            active.append((hi, strand_id))
+                                      "strand_ids": sorted(active.elements())})
+            for strand_id, delta in lane[position].items():
+                active[strand_id] += delta
+                count += delta
+                if not active[strand_id]:
+                    del active[strand_id]
+            previous = position
     return conflicts, total

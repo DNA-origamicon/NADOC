@@ -405,7 +405,17 @@ def test_orphan_linker_owner_refuses_with_typed_reference_failure(monkeypatch):
 def test_native_parallel_ds_bridge_is_explicitly_refused_not_silently_deduplicated(application_prefix, monkeypatch):
     from tests.test_part_connection_application_commands import _pending, _params, _build
     pending = _pending(application_prefix.model_copy(deep=True), "root-to-root-dsdna-linker")
-    source, _ = _build(pending, _params(pending))
+    with pytest.raises(CommandContractError) as error:
+        _build(pending, _params(pending))
+    assert error.value.code == 'nucleotide_double_occupancy'
+    # Also retain preview refusal for a pre-invariant/corrupt input. The low-level
+    # topology helper is not an accepted native command or a publication path.
+    from backend.core.lattice import generate_linker_topology
+    a, b = pending.overhangs[:2]
+    connection = m.OverhangConnection(id='invalid-bridge', overhang_a_id=a.id,
+        overhang_b_id=b.id, overhang_a_attach='root', overhang_b_attach='root',
+        linker_type='ds', length_value=7, length_unit='bp')
+    source = generate_linker_topology(pending.copy_with(overhang_connections=[connection]), connection)
     domains = [d for strand in source.strands for d in strand.domains if d.helix_id.startswith("__lnk__")]
     assert len(domains) == 2 and domains[0].direction == domains[1].direction
     assert {domains[0].start_bp, domains[0].end_bp} == {domains[1].start_bp, domains[1].end_bp}

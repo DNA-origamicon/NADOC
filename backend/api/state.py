@@ -656,8 +656,10 @@ def _assert_occupancy(design: Design | None, before: Design | None = None) -> No
     """Reject edits that make any (helix, bp, direction) slot hold more than one base.
 
     Every helix position + bp + direction is one nucleotide of one strand. A
-    design that already violates this (e.g. an old import) may still be edited
-    and repaired, but no edit may add conflicting slots.
+    design that already violates this (e.g. an old import) may be inspected,
+    but an edit is accepted only if its complete result is collision-free.
+    ``before`` remains an accepted argument for existing transaction callers;
+    prior conflicts never grant permission to publish conflicting output.
     """
     if design is None:
         return
@@ -666,14 +668,12 @@ def _assert_occupancy(design: Design | None, before: Design | None = None) -> No
     conflicts, total = occupancy_conflicts(design, limit=5)
     if not total:
         return
-    if before is not None and occupancy_conflicts(before, limit=0)[1] >= total:
-        return
     raise HTTPException(
         status_code=409,
         detail={
             "code": "nucleotide_double_occupancy",
-            "message": "This edit would place two bases in the same helix position, bp and direction. "
-                       "Each slot can hold one base of one strand.",
+            "message": "This result would leave two bases in the same helix position, bp and direction. "
+                       "Each slot can hold one base of one strand; all conflicts must be removed.",
             "conflicting_slots": total,
             "conflicts": conflicts,
         },
@@ -1025,6 +1025,7 @@ def undo() -> tuple[Design, ValidationReport]:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
         _require_live_design(s.history[-1], lifecycle="undo")
         restored = _restore_edit_snapshot(s.history[-1], s.design)
+        _assert_occupancy(restored)
         s.redo.append(_snapshot_copy(s.design))
         s.history.pop()
         s.design = restored
@@ -1046,6 +1047,7 @@ def redo() -> tuple[Design, ValidationReport]:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
         _require_live_design(s.redo[-1], lifecycle="redo")
         restored = _restore_edit_snapshot(s.redo[-1], s.design)
+        _assert_occupancy(restored)
         s.history.append(_snapshot_copy(s.design))
         s.redo.pop()
         s.design = restored
