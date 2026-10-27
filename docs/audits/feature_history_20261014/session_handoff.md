@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 4; user explicitly renewed this optimization scope after the counter3 report.
+Sessions since last gate flip or milestone close: 5; user explicitly renewed this optimization scope after the counter3 report.
 
 October 27, 2026: **Move/Rotate functional scope is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON. Ordinary large previews are faster; the nominal500ms target and variable posed-design latency remain open.**
 **Original four tools done: 4/4 (Bend, Twist, Extrude, Sweep); Move/Rotate and Fine Routing also qualified.
@@ -119,29 +119,29 @@ Initial smart98fail included15 obsolete raw-invalid-output expectations, now
 corrected to early refusal; compatible dsDNA cold proof remains a positive test.
 
 ## Shared Move/Rotate performance refactor — October 27
-Process map and measured bottlenecks are in the transform plan. Native axis
-ownership now uses a stable boundary sweep; slab attachment retains arrays
-through quaternion conversion. Graph accounting reports aliases directly and
-fast-paths plain scalars; browser ASCII accounting reuses a stateless regexp.
-Complete projection bytes match incoming HEAD on seven fixtures, including both
-18270-base designs. Backend evaluate+display448–470ms versus526–541ms previously.
-Focused backend176pass/2deselected; full frontend787files/9450pass/1skip and final
-frontend byte-accounting98pass. New alias-accounting test passes in the broad run.
-`just test-smart`: FAST19448pass/19skip/83fail; exact prior83 failure IDs.
-DEFERRED: this change would have needed the FULL suite, but no test-dedicated
-session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
-Guard403s versus369s, zero per-test violators. Triage found existing worker/fixture
-costs; same-process graph benchmarks improved on models, coordinates and JSON.
-No budget/marker change. Evidence: `feature-history-focus/transform-refactor-*.log`
-under `.development-artifacts/`; intermediate timing failures remain recorded.
-Final browser3pass: small/large/posed translation p9579/749/972ms; rotation68/727/909ms.
-Apply468/2692/3533ms; Cancel70/47/74ms; posed undo2752ms/redo2593ms plus exact reopen/cold proof.
-All40 samples per direction retained; GPU raster excluded. Ordinary large12–14% faster;
-posed p95 varied despite six exact paired backend packets improving median718→608ms.
-All10 scratch roots independently absent; disposable diagnostic scripts removed.
+The transform plan contains the full process map and prior measurements.
+Prior commit `eddc10e7`: boundary sweep, array-retaining slabs, graph accounting
+and browser string accounting; ordinary large p95749/727ms, posed972/909ms.
+Current user request explicitly renews optimization of the costly shared native
+geometry path and reuse of earlier solutions. General `_geometry_for_helices`
+now reuses the compact path's `native_slab_poses_for_arrays` before discarding
+arrays. Only emitted unposed native rows enter that batch; posed residues,
+authored sources, bridges and extensions retain final record authority.
+No molecular formula/tolerance change, new persistent cache or invalidation rule.
+Six alternating same-process pairs per fixture against incoming HEAD: geometry
+median ordinary133.59→120.63ms, posed132.51→117.83ms; all12 packets byte-identical.
+Focused123pass; exact placements across deformations, loop/skip copies, partial
+occupancy, tails, outside-helix domains and moved copies; error identities retained.
+Record/schema/occupancy validation and response accounting remain major costs.
+Final browser3pass: small/large/posed move p9576/733/760ms, rotate69/696/735ms;
+Apply435/2667/2973ms, Cancel46/51/52ms; exact posed reopen/cold replay pass.
+FAST19456pass/19skip/84fail: baseline83 plus verification408; isolated file2pass.
+FULL deferred: no test-dedicated session; parked in .nadoc-slow-pending.
+Guard373s, zero per-test violators; existing worker/fixture costs, no marker changes.
+All5 scratch roots absent; scripts deleted; `native-followup-*.log` retains evidence.
 
 ## Shared-worktree boundaries
-Incoming HEAD: `0e29b9ee`. Commit only this task's explicit paths/own hunks.
+Incoming HEAD: `eddc10e7`. Commit only this task's explicit paths/own hunks.
 Pre-existing API/VR/simulation/test/memory changes are preserved. Issue/fix-log
 and MV-54 corrections were committed as selective hunks; project memory’s current
 ISSUE-126 note remains uncommitted because its surrounding hygiene/reconciliation

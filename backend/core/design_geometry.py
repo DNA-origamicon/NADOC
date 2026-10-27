@@ -558,6 +558,11 @@ def _geometry_for_helices(
     result: list[dict] = []
     nuc_pos_map: dict = {}
     anchor_keys = _extension_anchor_keys(design, extension_ids) if needs_pos_map else set()
+    from backend.core.native_slab_placement import attach_native_slab_poses, native_slab_poses_for_arrays
+
+    posed_keys = {t.target_key() for t in design.nucleotide_transforms if t.kind == "base"}
+    pending_slabs = []
+    slab_batches, array_slab_records = [], []
 
     # Pre-compute min/max bp referenced by any strand domain per helix.
     # Needed to render ss-scaffold loops that extend outside the physical helix span.
@@ -594,6 +599,7 @@ def _geometry_for_helices(
             radial_hats = arrs["radial_hats"].tolist()
             azimuths = arrs["azimuths"].tolist()
             groove_offsets = (arrs["azimuths"][1::2] - arrs["azimuths"][::2]).tolist()
+        slab_indices, slab_records = [], []
         copies: dict[tuple[int, Direction], int] = {}
         for i in range(M):
             bp = bp_list[i]
@@ -641,6 +647,23 @@ def _geometry_for_helices(
                     **sinfo,
                 }
             )
+            record = result[-1]
+            if sites and ("base", helix_id, bp, d_enum.value, copy_k) not in posed_keys:
+                slab_indices.append(i)
+                slab_records.append(record)
+            else:
+                pending_slabs.append(record)
+        if slab_indices:
+            # Reuse the compact geometry authority before discarding native
+            # arrays. Only emitted, unposed sites participate: absent slots must
+            # not gain validation requirements, and residue poses must precede
+            # final slab evaluation to preserve the exact arithmetic.
+            selected = {name: arrs[name][slab_indices] for name in (
+                "bp_indices", "directions", "positions", "base_positions",
+                "base_normals", "axis_tangents")}
+            selected.update(helix_id=helix_id, placement_source=arrs["placement_source"])
+            slab_batches.append(selected)
+            array_slab_records.extend(slab_records)
 
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
@@ -682,11 +705,28 @@ def _geometry_for_helices(
             extra_arrs = apply_overhang_rotation_if_needed(extra_arrs, helix, design)
             _emit_arrs(extra_arrs, helix.id)
 
+    if slab_batches:
+        # One batch avoids per-helix NumPy/SciPy setup. Keep the records for
+        # exact diagnostic identities if the batch authority rejects a record.
+        selected = {name: np.concatenate([batch[name] for batch in slab_batches]) for name in (
+            "bp_indices", "directions", "positions", "base_positions", "base_normals", "axis_tangents")}
+        selected.update(helix_id=None, placement_source=SOURCE)
+        try:
+            centers, quaternions = native_slab_poses_for_arrays(selected)
+        except NativePlacementError:
+            # The record authority retains per-residue identity and diagnostics.
+            attach_native_slab_poses(array_slab_records)
+        else:
+            for record, center, quaternion in zip(array_slab_records, centers.tolist(), quaternions.tolist()):
+                record["slab_position"] = center
+                record["slab_quaternion"] = quaternion
+
     # Emit bridge nucs for ds linkers AFTER the regular helix loop so they
     # can read the live OH/complement positions (cluster transforms applied)
     # to derive their axis. Without this pass the bridge tube is JS-only —
     # not selectable, no real geometry payload, no slabs/cones in standard
     # rendering paths.
+    emitted_count = len(result)
     _emit_bridge_nucs(design, nuc_info, result)
 
     if design.extensions and (full_mode or extension_ids):
@@ -694,8 +734,8 @@ def _geometry_for_helices(
     # Individual residue poses must not become construction inputs for connected,
     # unselected bridge residues. Apply them once after all material is emitted.
     apply_nucleotide_transforms_to_geometry(result, design)
-    from backend.core.native_slab_placement import attach_native_slab_poses
-    attach_native_slab_poses(result)
+    pending_slabs.extend(result[emitted_count:])
+    attach_native_slab_poses(pending_slabs)
     return result
 
 

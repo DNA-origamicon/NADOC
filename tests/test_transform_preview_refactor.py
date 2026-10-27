@@ -61,3 +61,53 @@ def test_dense_slab_attachment_is_bit_exact_with_previous_batch_layout(rotation)
     assert np.asarray([r['slab_position'] for r in records]).tobytes() == centers.tobytes()
     assert np.asarray([r['slab_quaternion'] for r in records]).tobytes() == quaternions.tobytes()
     assert records == original
+
+
+@pytest.mark.parametrize('kind', ['straight', 'bend', 'twist', 'sweep', 'partial', 'posed', 'extension', 'outside'])
+def test_general_geometry_reuses_array_slabs_with_exact_post_pose_results(kind, monkeypatch):
+    from backend.core import native_slab_placement as slabs
+    from backend.core.models import NucleotideTransform, StrandExtension
+    from tests.test_native_compact_geometry import _design
+
+    design = _design(kind if kind in {'bend', 'twist', 'sweep', 'partial'} else 'straight')
+    if kind == 'posed':
+        design.nucleotide_transforms = [NucleotideTransform(kind='base', helix_id=design.helices[0].id,
+            bp_index=9, copy_k=1, direction=Direction.FORWARD, translation=[1, -3, 2],
+            rotation=Rotation.from_euler('xyz', [.3, -.5, .8]).as_quat().tolist())]
+    elif kind == 'extension':
+        design.extensions = [StrandExtension(strand_id=design.strands[0].id, end='five_prime', sequence='AAA')]
+    elif kind == 'outside':
+        design.strands[0].domains[0].start_bp = -3
+    pending = []
+    original = slabs.attach_native_slab_poses
+    def attach(records):
+        pending.extend(records)
+        return original(records)
+    monkeypatch.setattr(slabs, 'attach_native_slab_poses', attach)
+    actual = _geometry_for_design(design)
+    expected = deepcopy(actual)
+    # The previous general producer attached every slab after every residue
+    # pose. Re-evaluate that authority from the final bead/base records.
+    for record in expected:
+        record.pop('slab_position', None)
+        record.pop('slab_quaternion', None)
+    original(expected)
+    import orjson
+    assert orjson.dumps(actual) == orjson.dumps(expected)
+    assert len(pending) == (1 if kind == 'posed' else 3 if kind == 'extension' else 0)
+
+
+def test_array_slab_failure_preserves_actual_residue_diagnostic(monkeypatch):
+    from backend.core import design_geometry as geometry
+    from backend.core.native_full_placement import NativePlacementError
+    design = make_minimal_design()
+    original = geometry.native_full_arrays_for_helix
+    def corrupted(*args, **kwargs):
+        arrays = original(*args, **kwargs)
+        arrays['base_positions'][0] += 100
+        return arrays
+    monkeypatch.setattr(geometry, 'native_full_arrays_for_helix', corrupted)
+    with pytest.raises(NativePlacementError, match='registration') as caught:
+        geometry._geometry_for_design(design)
+    assert caught.value.details['identity']['helix_id'] == design.helices[0].id
+    assert caught.value.details['identity']['bp_index'] == 0
