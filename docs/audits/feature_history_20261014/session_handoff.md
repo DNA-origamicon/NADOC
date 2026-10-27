@@ -1,8 +1,8 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 3.
+Sessions since last gate flip or milestone close: 4; user explicitly renewed this optimization scope after the counter3 report.
 
-October 26, 2026: **Move/Rotate functional scope is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON. The nominal500ms preview performance task remains open.**
+October 27, 2026: **Move/Rotate functional scope is complete for clusters and existing individual-nucleotide operations; both production transform gates are ON. Ordinary large previews are faster; the nominal500ms target and variable posed-design latency remain open.**
 **Original four tools done: 4/4 (Bend, Twist, Extrude, Sweep); Move/Rotate and Fine Routing also qualified.
 CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-18 and aggregate FH-27 remain open.
 
@@ -36,13 +36,12 @@ CAD ledger: 22/34 complete, 12 remaining (5 core, 7 parked).** FH-23 closes; FH-
   Failed intermediate timing/recovery runs remain evidence, not passing claims.
 
 ## Scope and next task
-ISSUE-126 occupancy correction is complete. The user then selected the remaining
-Move/Rotate performance task; this session reduced adapter overhead but did not
-close the nominal500ms target. At counter3, contract §5 requires a stop-loss
-report and user direction before a successor. Recommended continuation: a
-broader performance pass through shared native geometry/display processing,
-preserving exact coordinates and validation. No new host/cache lifecycle or
-molecular-placement change is proposed or authorized by these measurements.
+ISSUE-126 occupancy correction is complete. The user explicitly authorized the
+shared Move/Rotate optimization/refactor after the counter3 stop-loss, and asked
+for a complete process/bottleneck map. The transform plan now maps Prepare,
+evaluation, transport, private rendering, Apply and Cancel with measured costs.
+Work remains on the same nominal500ms performance task; do not revive retired
+grouping requirements or select an unrelated milestone from this authorization.
 Remaining core work is cluster membership/deletion and references, ordinary
 connections, complete reference repair, aggregate desktop qualification and host
 lifecycle closure (FH-18/25/26/27/28); none was started in this performance task.
@@ -119,26 +118,30 @@ Evidence: `.development-artifacts/feature-history-focus/issue126-*.log`.
 Initial smart98fail included15 obsolete raw-invalid-output expectations, now
 corrected to early refusal; compatible dsDNA cold proof remains a positive test.
 
-## Move/Rotate performance continuation — October 26
-Display adapter reuses checked coordinate blocks for bounds, batches immutable
-registration lookup, and admits each distinct record-field shape once per call.
-All records still undergo occupancy, finite-coordinate and native-pose checks.
-Focused display58pass/2deselected; native slab verdict81pass; lint/diff pass.
-Backend phase profiling: typical evaluate+display~526–541ms versus~551–556ms;
-one later sample631ms. This is diagnostic, not browser acceptance or a500ms pass.
-`just test-smart`: FAST19443pass/19skip/83fail; exact prior83 failure IDs.
+## Shared Move/Rotate performance refactor — October 27
+Process map and measured bottlenecks are in the transform plan. Native axis
+ownership now uses a stable boundary sweep; slab attachment retains arrays
+through quaternion conversion. Graph accounting reports aliases directly and
+fast-paths plain scalars; browser ASCII accounting reuses a stateless regexp.
+Complete projection bytes match incoming HEAD on seven fixtures, including both
+18270-base designs. Backend evaluate+display448–470ms versus526–541ms previously.
+Focused backend176pass/2deselected; full frontend787files/9450pass/1skip and final
+frontend byte-accounting98pass. New alias-accounting test passes in the broad run.
+`just test-smart`: FAST19448pass/19skip/83fail; exact prior83 failure IDs.
 DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
-Guard369s versus prior370s, no per-test violators; triage confirms aggregate
-worker/fixture cost, no new slowdown evidence or budget/marker changes.
-Final browser3pass: small/large/posed-large translation p9587/850/865ms,
-rotation65/848/825ms; Apply424/5154/2936ms; Cancel76/51/59ms.
-Posed undo2215ms/redo2430ms; exact reopen/cold proof passes.40 samples per
-direction, GPU raster excluded. Both browser roots independently absent.
-Evidence: `.development-artifacts/feature-history-focus/move-completion-*.log`.
+Guard403s versus369s, zero per-test violators. Triage found existing worker/fixture
+costs; same-process graph benchmarks improved on models, coordinates and JSON.
+No budget/marker change. Evidence: `feature-history-focus/transform-refactor-*.log`
+under `.development-artifacts/`; intermediate timing failures remain recorded.
+Final browser3pass: small/large/posed translation p9579/749/972ms; rotation68/727/909ms.
+Apply468/2692/3533ms; Cancel70/47/74ms; posed undo2752ms/redo2593ms plus exact reopen/cold proof.
+All40 samples per direction retained; GPU raster excluded. Ordinary large12–14% faster;
+posed p95 varied despite six exact paired backend packets improving median718→608ms.
+All10 scratch roots independently absent; disposable diagnostic scripts removed.
 
 ## Shared-worktree boundaries
-Incoming HEAD: `d37f01c1`. Commit only this task's explicit paths/own hunks.
+Incoming HEAD: `0e29b9ee`. Commit only this task's explicit paths/own hunks.
 Pre-existing API/VR/simulation/test/memory changes are preserved. Issue/fix-log
 and MV-54 corrections were committed as selective hunks; project memory’s current
 ISSUE-126 note remains uncommitted because its surrounding hygiene/reconciliation

@@ -118,14 +118,16 @@ const domainKey = (sid, ordinal) => JSON.stringify([sid, ordinal])
 /** Bound occurrences, depth and encoded JSON bytes before any domain expansion.
  * Plain data only: no getters, prototypes, cycles or sparse-array coercion. */
 const immutableJsonBounds = new WeakMap()
+const escapedOrNonAscii = /[^\x20-\x21\x23-\x5b\x5d-\x7e]/
 function boundedJson(value) {
   let nodes = 0, bytes = 0
   const active = new Set()
   function stringSize(value) {
-    // Large compact coordinate blocks are ASCII without JSON escapes. Check
-    // that property in the native regexp engine, then charge the exact bytes;
-    // arbitrary Unicode/escaped strings keep the complete character walk.
-    if (value.length >= 4096 && /^[\x20-\x21\x23-\x5b\x5d-\x7e]*$/.test(value)) {
+    // Identity strings and field names repeat thousands of times, as well as
+    // the large compact coordinate block. For unescaped ASCII the regexp
+    // engine can establish the exact byte count without a JS character walk.
+    // Unicode/escaped strings retain the complete accounting below.
+    if (!escapedOrNonAscii.test(value)) {
       if (value.length + 2 > limits.bytes) fail('packet byte allowance exceeded')
       return value.length + 2
     }

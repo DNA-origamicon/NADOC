@@ -63,16 +63,15 @@ def checkpoint():
 
 def bounded(result, *, max_nodes=MAX_OUTPUT_NODES, max_bytes=MAX_OUTPUT_BYTES):
     try:
-        seen, aliases = set(), []
+        aliases = []
         def shared(value):
             if isinstance(value, (dict, list, tuple)):
-                identity = id(value)
-                if identity in seen:
-                    aliases.append(value)
-                else:
-                    seen.add(identity)
+                aliases.append(value)
         budget = GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes, seconds=None, clock=monotonic)
-        budget.charge(result, validate=shared)
+        # The graph walker already tracks container identities. Report only
+        # repeated containers instead of doing another identity lookup and
+        # Python callback for every scalar in the response.
+        budget.charge(result, on_alias=shared)
         if aliases:
             from backend.api.part_model_serialization import admit_model_serialization
             # GraphBudget charges each container's children once. Preflight

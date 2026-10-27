@@ -150,6 +150,16 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     const profiler = process.env.NADOC_TRANSFORM_PROFILE ? await page.context().newCDPSession(page) : null
     if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
     const evaluations = []
+    const measureNetwork = profiler || process.env.NADOC_TRANSFORM_TIMINGS
+    const networkTimings = []
+    const recordTiming = request => {
+      if (measureNetwork && new URL(request.url()).pathname === `${previewPath}/evaluate`) {
+        const t = request.timing()
+        networkTimings.push({ total: t.responseEnd, wait: t.responseStart - t.requestStart,
+          download: t.responseEnd - t.responseStart })
+      }
+    }
+    page.on('requestfinished', recordTiming)
     const record = response => {
       if (new URL(response.url()).pathname === `${previewPath}/evaluate`)
         evaluations.push({ status: response.status(), sequence: response.request().postDataJSON().request_sequence })
@@ -189,6 +199,13 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
       console.log(`C8 ${tool}-${size} update_ms=${samples.map(Math.round).join(',')} p95=${Math.round(p95)}`)
     }
     page.off('response', record)
+    page.off('requestfinished', recordTiming)
+    if (measureNetwork) {
+      console.log('DIAGNOSTIC transform network mean ms', Object.fromEntries(
+        ['total', 'wait', 'download'].map(k => [k, networkTimings.reduce((sum, t) => sum + t[k], 0) / networkTimings.length])))
+      console.log('DIAGNOSTIC transform network samples ms', networkTimings.map(t =>
+        [t.wait, t.download].map(Math.round)))
+    }
     if (profiler) {
       const { profile } = await profiler.send('Profiler.stop')
       const nodes = new Map(profile.nodes.map(node => [node.id, node.callFrame])), totals = new Map()

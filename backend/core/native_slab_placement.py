@@ -180,6 +180,30 @@ def native_slab_poses_for_arrays(arrays):
     return np.asarray([r["slab_position"] for r in records]), np.asarray([r["slab_quaternion"] for r in records])
 
 
+def _native_record_poses(native):
+    """Keep the checked native batch in arrays until its consumer needs lists."""
+    if not native:
+        return None
+    try:
+        arrays = [np.asarray([r.get(field) for r in native], dtype=float)
+                  for field in ("backbone_position", "base_position", "base_normal", "axis_tangent")]
+        registration = _native_registration()
+        if (not all(a.shape == (len(native), 3) and np.all(np.isfinite(a)) for a in arrays)
+                or not all(r.get("direction") in registration for r in native)):
+            return None
+        directions = tuple(registration)
+        if len(directions) == 2:
+            selector = np.fromiter((r["direction"] == directions[1] for r in native),
+                                   dtype=np.intp, count=len(native))
+            offsets = np.asarray([registration[d] for d in directions])[selector]
+            slab_offsets, base_offsets = offsets[:, 0], offsets[:, 1]
+        else:
+            slab_offsets, base_offsets = map(np.asarray, zip(*(registration[r['direction']] for r in native)))
+        return _native_slab_array_poses(*arrays, slab_offsets, base_offsets)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _expected_slab_poses(records):
     """Batch the native authority's arithmetic; retain its scalar error oracle.
 
@@ -190,23 +214,12 @@ def _expected_slab_poses(records):
     result = [None] * len(records)
     indices = [i for i, record in enumerate(records) if record.get("placement_source") == SOURCE]
     native = [records[i] for i in indices]
-    try:
-        arrays = [np.asarray([r.get(field) for r in native], dtype=float)
-                  for field in ("backbone_position", "base_position", "base_normal", "axis_tangent")]
-        valid = all(a.shape == (len(native), 3) and np.all(np.isfinite(a)) for a in arrays)
-        valid = valid and all(r.get("direction") in _native_registration() for r in native)
-    except (TypeError, ValueError, OverflowError):
-        valid = False
-    if native and valid:
-        slab_offsets, base_offsets = map(np.asarray, zip(*(_native_registration()[r['direction']] for r in native)))
-        poses = _native_slab_array_poses(*arrays, slab_offsets, base_offsets)
-        valid = poses is not None
-        if valid:
-            centers, frames = poses
-            for i, center, frame in zip(indices, centers, frames):
-                result[i] = center, frame
-    if not valid:
+    poses = _native_record_poses(native)
+    if poses is None:
         return [_expected_slab_pose(record) for record in records]
+    centers, frames = poses
+    for i, center, frame in zip(indices, centers, frames):
+        result[i] = center, frame
     for i, record in enumerate(records):
         if record.get("placement_source") != SOURCE:
             result[i] = _expected_slab_pose(record)
@@ -215,6 +228,17 @@ def _expected_slab_poses(records):
 
 def attach_native_slab_poses(records):
     """Attach the only slab pose to final authoritative bead/base records."""
+    # Ordinary DNA is a single native batch. Keep its centers/frames in arrays
+    # through quaternion conversion, instead of allocating a tuple and two
+    # NumPy views per base and reconstructing the same frame array afterwards.
+    if records and all(record.get("placement_source") == SOURCE for record in records):
+        poses = _native_record_poses(records)
+        if poses is not None:
+            centers, frames = poses
+            for record, center, quaternion in zip(records, centers.tolist(), Rotation.from_matrix(frames).as_quat().tolist()):
+                record["slab_position"] = center
+                record["slab_quaternion"] = quaternion
+            return records
     # The same native authority and integrity checks, evaluated in arrays.
     posed_records = []
     frames = []

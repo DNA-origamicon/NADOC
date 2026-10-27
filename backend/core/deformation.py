@@ -2669,23 +2669,27 @@ def _segments_for_helix(design: "Design", h: "Helix", candidates=None) -> list[d
                 "bp_hi": h.bp_start + h.length_bp - 1,
             }
         ]
-    boundaries = sorted({
-        bp
-        for _, _, d in cands
-        for bp in (min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp) + 1)
-    })
+    # Sweep the same domain boundaries once. Previously each atomic interval
+    # rescanned every domain on the helix, twice per preview (producer and
+    # independent coverage check). Preserve all owners and their stable order.
+    starts, ends = {}, {}
+    for index, (_, _, domain) in enumerate(cands):
+        starts.setdefault(min(domain.start_bp, domain.end_bp), []).append(index)
+        ends.setdefault(max(domain.start_bp, domain.end_bp) + 1, []).append(index)
+    boundaries = sorted(starts.keys() | ends.keys())
+    owner_order = sorted(range(len(cands)), key=lambda i: (
+        cands[i][0].strand_type != _StrandType.SCAFFOLD, cands[i][0].id, cands[i][1], i))
+    rank = {index: order for order, index in enumerate(owner_order)}
+    active = set()
     deduped: list[dict] = []
     for lo, end_exclusive in zip(boundaries, boundaries[1:]):
-        owners = [
-            (s, di, d) for s, di, d in cands
-            if min(d.start_bp, d.end_bp) <= lo
-            and max(d.start_bp, d.end_bp) >= end_exclusive - 1
-        ]
+        active.difference_update(ends.get(lo, ()))
+        active.update(starts.get(lo, ()))
+        owners = [cands[i] for i in sorted(active, key=rank.__getitem__)]
         if not owners:
             continue
         # Keep the legacy scalar owner deterministic for older clients, while
         # domain_ids is the authoritative movement membership.
-        owners.sort(key=lambda x: (x[0].strand_type != _StrandType.SCAFFOLD, x[0].id, x[1]))
         s, di, d = owners[0]
         deduped.append(
             {

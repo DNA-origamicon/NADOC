@@ -110,3 +110,18 @@ def test_recovery_storage_charge_remains_separate_from_proof_input_charge():
     assert initial == expanded
     assert not expanded.feature_log[0].design_snapshot_gz_b64
     assert retained_recovery_bytes(source.feature_log, max_rows=3, limit=4005) == 4005
+
+
+def test_alias_reporting_preserves_charges_and_scalar_validation():
+    from backend.core.part_capture_graph import GraphBudget
+    shared = [1, 2.5, True, None, "text"]
+    value = [shared, shared]
+    plain = GraphBudget(max_nodes=9, max_bytes=16, seconds=None, clock=lambda: 0)
+    plain.charge(value)
+    assert plain.remaining == [1, 0]
+    aliases, visited = [], []
+    observed = GraphBudget(max_nodes=9, max_bytes=16, seconds=None, clock=lambda: 0)
+    observed.charge(value, validate=visited.append, on_alias=aliases.append)
+    assert observed.remaining == plain.remaining
+    assert len(aliases) == 1 and aliases[0] is shared
+    assert visited == [value, shared, "text", None, True, 2.5, 1, shared]

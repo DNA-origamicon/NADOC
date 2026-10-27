@@ -23,7 +23,7 @@ class GraphBudget:
         self.deadline = clock() + seconds if seconds is not None else None
 
     def charge(self, value, copy_memo=None, *, scalar_atoms=False,
-               copy_scalar_atoms=False, validate=None, reject_cycles=False):
+               copy_scalar_atoms=False, validate=None, reject_cycles=False, on_alias=None):
         from backend.core.part_capture_copy import scalar_atom_charge, seed_scalar_atom_copy
 
         remaining, deadline, clock = self.remaining, self.deadline, self.clock
@@ -42,7 +42,7 @@ class GraphBudget:
             remaining[0] -= 1
             if remaining[0] < 0 or remaining[1] < 0 or (deadline is not None and clock() > deadline):
                 raise CaptureLimit("Part verification capture budget exceeded")
-            if validate is not None:
+            if validate is not None or on_alias is not None:
                 # A rejecting archive validator may inspect mapping keys. Admit
                 # that bounded work first, without touching subclass hooks or
                 # changing the ordinary proof walk (which has no validator).
@@ -50,14 +50,23 @@ class GraphBudget:
                     waiting = pending_values if reject_cycles else len(pending)
                     if len(item) * 2 + waiting > remaining[0]:
                         raise CaptureLimit("Part verification capture node budget exceeded")
-                validate(item)
-            if isinstance(item, str):
+                if validate is not None:
+                    validate(item)
+            kind = type(item)
+            if kind is str or isinstance(item, str):
                 remaining[1] -= len(item) * 4
-            elif isinstance(item, (BaseModel, dict, list, tuple)):
+            elif kind in (int, float, bool) or item is None:
+                # Ordinary JSON scalars have no children. Avoid Pydantic's
+                # model instance check on every coordinate; admission,
+                # validation callbacks and deadline charges above still run.
+                continue
+            elif kind in (dict, list, tuple) or isinstance(item, (BaseModel, dict, list, tuple)):
                 identity = id(item)
                 if reject_cycles and identity in active:
                     raise CaptureShapeError("Preparation archive contains a cycle")
                 if identity in seen:
+                    if on_alias is not None:
+                        on_alias(item)
                     continue
                 seen.add(identity)
                 if reject_cycles:
@@ -66,7 +75,7 @@ class GraphBudget:
                     active.add(identity)
                     pending.append((item, True))
                 waiting = pending_values if reject_cycles else len(pending)
-                if isinstance(item, BaseModel):
+                if kind not in (dict, list, tuple) and isinstance(item, BaseModel):
                     children = item.__dict__.values()
                     if scalar_atoms:
                         scalar_charge = (seed_scalar_atom_copy(item, copy_memo) if copy_scalar_atoms

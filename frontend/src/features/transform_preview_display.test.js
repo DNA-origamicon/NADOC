@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validateTransformPreviewDisplay, validateTransformPreviewComponent, consumeValidatedTransformPreviewComponent } from './transform_preview_display.js'
 import { compactTransformComponent, transformComponent, transformPacket } from '../test-helpers/transform_preview.js'
+import { TRANSFORM_DISPLAY_LIMITS as limits } from './transform_preview_limits.js'
 
 // Exercise boundary mechanisms with the original tiny capacities.
 vi.mock('./transform_preview_limits.js', () => ({ TRANSFORM_DISPLAY_LIMITS: {
@@ -56,6 +57,17 @@ const linker = length_value => ({ id: 'link', name: null, overhang_a_id: 'a', ov
   bridge_sequence: null, target_joint_id: null, unbound_angle_deg: null, bound_angle_deg: null })
 
 describe('closed native transform display', () => {
+  it.each(['short ASCII / id-126', 'quote" slash\\ newline\n', 'ascii\n', 'ascii\r', 'ascii\u2028', 'é😀\ud800'])('counts exact JSON bytes for %j', text => {
+    const value = { probe: text }, previous = limits.bytes
+    const bytes = new TextEncoder().encode(JSON.stringify(value)).length
+    try {
+      limits.bytes = bytes
+      // It reaches schema rejection only after byte admission succeeds.
+      expect(() => validateTransformPreviewComponent(value)).toThrow(/fields/)
+      limits.bytes = bytes - 1
+      expect(() => validateTransformPreviewComponent(value)).toThrow(/packet byte allowance/)
+    } finally { limits.bytes = previous }
+  })
   it('reuses only immutable JSON accounting and still validates new coordinates', () => {
     const c = compactTransformComponent()
     c.nucleotides.rows = Object.freeze(c.nucleotides.rows.map(row => Object.freeze([...row])))

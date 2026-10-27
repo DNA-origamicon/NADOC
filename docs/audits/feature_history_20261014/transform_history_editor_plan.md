@@ -887,3 +887,58 @@ No milestone split, exclusion or new completion credit.
 - `just test-smart`: FAST19443pass/19skip/83fail, exact83 prior baseline IDs with no additions. FULL deferred without a test-dedicated session; no broad green claim. Guard369s/zero per-test violators versus prior370s; skill triage confirms aggregate real-worker/fixture cost, no marker/budget changes.
 - Evidence: `.development-artifacts/feature-history-focus/move-completion-*.log` (~384KiB). Both browser scratch roots and both profiler scratch roots independently absent. Baseline was exploratory; final browser qualification ran serialized without focused-test overlap.
 - Counter reaches3 with no gate flip; operating-contract §5 stop-loss applies. The measured remaining cost spans shared native geometry/axes, validation and browser processing; request user direction before a broader successor pass.
+
+## Preview process map and shared refactor — October 27, 2026
+
+User authorization: continue shared optimization/refactoring after the prior stop-loss, and map the complete process and bottlenecks. This map expands the usual evidence-only entry to answer that request.
+
+```mermaid
+flowchart LR
+  A[Panel or gizmo input] --> B[Controller draft and latest request]
+  B --> C[HTTP body and lease admission]
+  C --> D[Copy prepared prefix and execute native command]
+  D --> E[Validate candidate and display inventory]
+  E --> F[Native records, slab poses, axes and coverage]
+  F --> G[Controls, lossless packing and response bounds]
+  G --> H[Encode and transfer JSON]
+  H --> I[Browser envelope, schema, occupancy and frame checks]
+  I --> J[Decode into detached private scene buffer]
+  J --> K[Update instances, axes and connections; swap candidate]
+```
+
+- **Prepare:** resolve the selected historical feature, capture/rebuild its prefix once, retain the existing lease, and project before/candidate panes. The renderer creates a detached spare for reusable ordinary DNA. Numerical preparation retains its existing worker/progress route. Prefix rebuilding and initial scene construction are not repeated for each slider update.
+- **Input/controller:** `transform_history_tool.js` coalesces gesture input; `deformation_history_controller.js` retains the newest draft, sequences evaluation, rejects stale responses and binds row references to the exact lease. It does not mutate the canonical store during preview.
+- **HTTP/host:** `routes_part_deformation_preview.py` bounds request acquisition, checks policy and dispatches to a request thread. `part_deformation_preview_sessions.py` checks document/revision/lease/sequence and the existing work slot, evaluates the owned candidate, then checks the origins again before returning. No new host, worker, queue or cache lifecycle was added.
+- **Native work:** `part_transform_preview.py` deep-copies the prepared prefix, normalizes and executes the selected native command, and validates it. `part_transform_preview_dto.py` admits display scope, derives controls and projects the candidate. `part_transform_projection.py` checks every emitted record's ownership/finiteness/native registration, builds axes and independently checks domain coverage, then packs exact float64 coordinates. Geometry remains derived output.
+- **Transport/browser:** the bounded packet contains ~6.63 MB on the representative large fixture with lease row reuse. Thread-side ORJSON encoding avoids FastAPI's generic walk; loopback retains identity encoding. The controller validates the envelope before restoring immutable scalar rows. `transform_preview_display.js` bounds and validates the complete packet; the codec decodes the checked block once. `transform_history_preview.js` updates a detached spare only when topology/scalar ordering matches, otherwise rebuilds it, and swaps only a complete candidate. Native instanced matrices, axes and connections still update; GPU raster is excluded from the SwiftShader timing harness.
+- **Apply:** drain the latest draft, independently prove/replay the source and downstream history, publish one command/revision/undo step, then adopt canonical geometry. This remains separate from slider evaluation. **Cancel:** discard the lease and private panes, restoring the canonical view without a canonical geometry request. Recovery, expiry, lost-reply and refusal semantics are unchanged.
+
+Backend stage timings below are unprofiled diagnostic ranges for the ordinary 18×504 fixture, not additive p95s or a gate qualification. Before: incoming `0e29b9ee` evidence in `move-completion-phases-after.log`; after: `transform-refactor-phases-final.log`. A separate same-process old/new projection comparison also verifies exact bytes.
+
+| Stage | Before, ms | After, ms | Finding/change |
+|---|---:|---:|---|
+| Copy prefix, execute and validate | 45–48 | 47–49 | Retained; not a history replay |
+| Display inventory | 41–44 | 44–46 | Retained independent reference/occupancy checks |
+| Controls with existing gate reuse | 6–7 | 6–7 | Already small |
+| Native geometry and slab attachment | 119–125 | 100–103 | Keep native frames in arrays through quaternion conversion |
+| Record ownership/coordinate/slab validation | 94–98 | 91–94 | Remaining major cost; checks retained |
+| Axis generation + independent coverage | 74–77 | 41–44 | Domain-boundary sweep replaces repeated all-domain scans; same stable owners |
+| Compact packing | 10–11 | 10–14 | Lossless wire representation unchanged |
+| Whole-response accounting/encoding bound | 79–83 | 56–59 | Graph walker reports aliases directly; no duplicate identity walk or per-scalar alias callback |
+| Complete evaluate + display | 526–541 | 448–470 | Diagnostic improvement; excludes HTTP and browser |
+
+Browser CPU/network profiling is diagnostic only: across 80 evaluations plus editor reopen, mean request total654.6ms comprised631.4ms wait and22.6ms download. Self CPU samples concentrated in JSON graph accounting2052ms, record validation1050ms, occupancy expansion991ms, decoding904ms, string sizing807ms and scalar visiting804ms over the whole profiling window; these are self CPU samples, not per-update wall times. Another8035ms is attributed only to the browser’s native/program bucket and940ms to garbage collection; the profile cannot assign that native bucket to a specific JS function. This identifies server work and client data validation as the primary costs, rather than transfer or rotation arithmetic. Short unescaped ASCII labels/field names now use exact native-regexp byte accounting; escaped/Unicode strings retain full accounting, with exact-boundary tests including trailing newline and lone surrogate.
+
+The profiled browser run exceeded the rotation timing allowance (1094ms p95); it is not qualification. The first diagnostic selector matched no tests; both roots were cleaned. Final unprofiled qualification and regression results are recorded below. No budget was relaxed, warm-up sample dropped, or molecular constant/placement formula changed.
+
+### Qualification and remaining limits
+- Full frontend787files/9450pass/1skip; final focused display98pass covers the hoisted stateless regexp and six exact byte-boundary cases. Focused backend176pass/2scientific exclusions; additional alias-callback accounting test passes in the broad run. Lint/diff pass.
+- Complete compact projection bytes match incoming `0e29b9ee` on seven fixtures: ordinary small/large, posed-large, loops, child owners, sweep and tails. Same-process prior/current large projection401→338ms; posed406→348ms. No native coordinates or metadata differ.
+- Final app3pass (`transform-refactor-browser-qualified.log`): small6×84 / large18×504 / posed-large18×504 translation p9579/749/972ms; rotation68/727/909ms. Ordinary large improves12–14% against850/848ms; the latest posed p95 is worse than865/825ms, so no consistent posed end-to-end gain is claimed.
+- Apply468/2692/3533ms; Cancel70/47/74ms; posed undo2752ms/redo2593ms, exact save/reopen and independent cold replay pass.40 samples per direction including first input; GPU raster excluded. Existing2× acceptance passes; nominal500ms performance task stays open.
+- Lightweight request timing in that run: ordinary large mean518ms (497ms wait/20ms download), posed623ms (599ms wait/24ms download). The largest posed spike1226ms includes941ms before response headers. Server/scheduling variability remains unresolved; it is not attributed to a proven browser-only cause.
+- To separate computation from cross-run variance, six alternating old/new backend pairs used the *same posed design, prefix, parameters and process*. New code was faster in every pair; medians718→608ms (15%), with all six response packets byte-identical. Posed stage diagnostics show evaluation~64ms, inventory50–56ms, geometry124ms, record checks100–111ms, axes/coverage~52ms and bounds62–68ms. Remaining costs are record processing/validation and native geometry, plus variable server waits.
+- Earlier unprofiled run had large translation p951042ms and failed, while posed801/819ms passed. The short-string regexp was subsequently hoisted to avoid per-call allocation. That removes work but does not prove the cause of every spike. Earlier failed/no-test/profiled runs remain in evidence; no samples or budgets were relaxed.
+- `just test-smart`: FAST19448pass/19skip/83fail; exact83 baseline failure IDs, no additions. DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+- Guard403s versus369s, zero per-test violators. Slow-test triage finds existing real-worker/fixture costs. Alternating graph-walker microbench medians prior/current: models0.058/0.054ms, coordinates29.662/23.492ms, JSON35.953/29.821ms; no measured shared-walker regression. No marker/budget changes and no broad green claim.
+- Logs: `.development-artifacts/feature-history-focus/transform-refactor-*.log`. All10 owned scratch roots independently absent; disposable diagnostic scripts deleted after completion. User designs and unrelated shared-worktree changes remain untouched. No gate flip or milestone credit.
