@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { withHistoryFixture } from './helpers/deformation_history.js'
+import { installRetentionProbe } from './helpers/retention_probe.js'
 
 // All persisted files, caches and browser profiles are beneath the shared
 // launcher's disposable root; document cleanup runs even after assertion errors.
@@ -19,7 +20,8 @@ async function openConnections(page, family) {
   await page.setViewportSize({ width: 1920, height: 1080 })
   const close = page.getByRole('button', { name: 'Close Simulations sidebar', exact: true })
   if (await close.isVisible()) await close.click()
-  await page.locator('.right-tab-btn[data-tab="overhangs"]').click()
+  if (!await page.locator('#oconn-heading').isVisible())
+    await page.locator('.right-tab-btn[data-tab="overhangs"]').click()
   if (!await page.locator('#oconn-body').isVisible()) await page.locator('#oconn-heading').click()
   const options = await page.locator('#oconn-select-a option').evaluateAll(items => items.map(item => item.value).filter(Boolean))
   await page.locator('#oconn-select-a').selectOption(options[0])
@@ -212,6 +214,35 @@ test('saved connection sequence changes reapply through one ordinary control', a
     const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers })
     expect((await proof.json()).status).toBe('verified')
   }, 'connection-opposite', { pauseRendering: true })
+})
+
+for (const profile of ['opposite', 'large']) test(`connection ${profile} repeated lifecycle retention`, async ({ page, request }) => {
+  test.skip(process.env.NADOC_HISTORY_E2E_RETENTION !== '1', 'Explicit GC diagnostic; run separately from latency checks')
+  test.setTimeout(180000)
+  const retention = await installRetentionProbe(page)
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const original = await f.browser(), samples = []
+    for (let cycle = 0; cycle < 12; cycle++) {
+      await openConnections(page, 'root-to-root-ssdna-linker')
+      await page.locator('#oconn-generate').click()
+      await expect.poll(async () => (await f.browser()).design.connection_versions.length).toBe(1)
+      const id = (await f.browser()).design.connection_versions[0].id
+      await invoke(page, 'applyConnectionVersion', id)
+      await invoke(page, 'applyConnectionVersion', id)
+      await invoke(page, 'loadDesign', f.file)
+      const restored = await f.browser()
+      expect(restored.design.connection_versions).toEqual(original.design.connection_versions)
+      expect(restored.design.feature_log).toEqual(original.design.feature_log)
+      expect(geometry(restored.geometry)).toEqual(geometry(original.geometry))
+      const response = await request.get('http://127.0.0.1:8004/api/__e2e__/history/resources', { headers: f.headers })
+      expect(response.ok()).toBe(true)
+      const backend = await response.json()
+      expect(backend.document_sessions).toBe(0)
+      samples.push({ cycle, backend, ...await retention.sample() })
+      console.log(`FH27 connection ${profile} retained cycle ${cycle + 1}/12`)
+    }
+    console.log(`FH27 connection retention ${profile}: ${JSON.stringify(samples)}`)
+  }, `connection-${profile}`, { pauseRendering: true })
 })
 
 test('connection production unequal direct visual review', async ({ page, request }) => {

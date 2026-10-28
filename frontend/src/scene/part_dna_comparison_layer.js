@@ -105,6 +105,23 @@ function buildLayer(component, scene, paletteToken, name, arcType) {
       }
     }
     drawConnections()
+    if (arcType === 'comparison') {
+      // A separate WebGLRenderer registers disposal listeners on geometry it
+      // uploads. Sharing live templates would retain its buffers/context after
+      // close. Copy each template once for this pane; preserve its exact data.
+      const templates = new Map()
+      root.traverse(node => {
+        const source = node.geometry
+        if (!source?.userData?.shared || (node._instanceAlpha
+            && source.getAttribute('instanceAlpha') === node._instanceAlpha)) return
+        if (!templates.has(source)) {
+          const copy = source.clone()
+          copy.userData = { ...source.userData, shared: false }
+          templates.set(source, copy)
+        }
+        node.geometry = templates.get(source)
+      })
+    }
     // Native continuity/seam classifications are the only deformation-derived
     // topology used by this renderer. A change to either requires a rebuild.
     const signature = topology => JSON.stringify([

@@ -25,6 +25,17 @@ describe('isolated complete native DNA scene', () => {
     for (const field of ['backboneEntries', 'slabEntries']) for (const entry of native[field]) {
       const actual = mesh(layer.root, entry.instMesh.name)
       expect(instance(actual, entry.id).elements).toEqual(instance(entry.instMesh, entry.id).elements)
+      expect(actual.geometry).not.toBe(entry.instMesh.geometry)
+      if (entry.instMesh.geometry.index) {
+        expect(actual.geometry.index).not.toBe(entry.instMesh.geometry.index)
+        expect(actual.geometry.index.array).toEqual(entry.instMesh.geometry.index.array)
+      }
+      for (const [name, attribute] of Object.entries(entry.instMesh.geometry.attributes)) {
+        const copy = actual.geometry.getAttribute(name)
+        expect(copy).not.toBe(attribute)
+        expect(copy.array).not.toBe(attribute.array)
+        expect(copy.array).toEqual(attribute.array)
+      }
     }
     expect(JSON.stringify(component)).toBe(before)
     for (const node of objects(nativeScene)) {

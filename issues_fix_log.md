@@ -8,6 +8,19 @@ test-pinned, routed through extracted modules (NOT back into main.js), gated by 
 exercise — and to measure whether the loop is actually tight (wall-clock, edits-to-green, did a phase
 regress anything).
 
+## FH-27 — private comparison renderer retention (2026-10-28)
+
+Root cause: live DNA templates were uploaded into each private WebGL renderer;
+shared geometry/attribute disposal references retained its closed GPU context
+and canvas. Comparison-only deep buffer copies preserve exact vertex/index data
+and placement, and their existing owner disposes them without touching live templates.
+Red browser repro:12 detached comparison canvases after12 closes; corrected:0.
+The weak-reference instrumentation hypothesis was rejected by an in-memory heap
+retaining path from the live scene through a shared attribute and WebGL buffer.
+21 focused checks,12-cycle app repro and visual review pass; full frontend9480 pass/1 skip.
+Normal app review/Apply/undo/reopen passes: comparison1106–1154 ms, Apply295 ms.
+See [aggregate evidence](docs/audits/feature_history_20261014/implementation.md#aggregate-integration-qualification--october-28-2026).
+
 ## ISSUE-126 — collision-free native results and publication (2026-10-26)
 
 Native construction and replay now reject duplicate slot occupancy before

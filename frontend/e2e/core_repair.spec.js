@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { withHistoryFixture } from './helpers/deformation_history.js'
+import { installRetentionProbe } from './helpers/retention_probe.js'
 
 const endpoint = 'http://127.0.0.1:8004/api'
 const invoke = (page, method, ...args) => page.evaluate(async ({ method, args }) =>
@@ -9,6 +10,7 @@ const read = (value, path) => path.reduce((object, token) => object[token], valu
 
 for (const family of Object.keys(paths)) test(`core repair ${family}: private review, cancel, apply and reopen`, async ({ page, request }) => {
   test.setTimeout(120000)
+  const retention = process.env.NADOC_HISTORY_E2E_RETENTION === '1' ? await installRetentionProbe(page) : null
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const original = await f.browser(), path = paths[family]
     const feature = original.design.feature_log.find(row => family === 'routing' ? row.id === 'selected-parent'
@@ -51,8 +53,8 @@ for (const family of Object.keys(paths)) test(`core repair ${family}: private re
     await panel.getByRole('button', { name: 'Evaluate proposal', exact: true }).click()
     await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeEnabled({ timeout: 15000 })
     const beforeReview = await f.checkpoint(), geometry = (await f.browser()).geometry
-    const timings = []
-    for (let cycle = 0; cycle < 3; cycle++) {
+    const timings = [], retained = []
+    for (let cycle = 0; cycle < (retention ? 12 : 3); cycle++) {
       const started = Date.now()
       const reply = page.waitForResponse(response => /\/features\/evaluation\/jobs\/[^/]+\/comparison$/.test(response.url()))
       await panel.getByRole('button', { name: 'Compare authored geometry', exact: true }).click()
@@ -64,6 +66,7 @@ for (const family of Object.keys(paths)) test(`core repair ${family}: private re
       const comparison = panel.getByRole('region', { name: 'Private proposal comparison' })
       await expect(comparison.locator('canvas')).toBeVisible()
       timings.push(Date.now() - started)
+      if (retention) expect((await retention.sample()).webgl.comparisonLive).toBe(1)
       await comparison.getByRole('button', { name: 'Fit comparison', exact: true }).click()
       await comparison.locator('canvas').press('ArrowRight')
       if (family === 'bend' && cycle === 0 && process.env.NADOC_HISTORY_E2E_VISUAL === '1') {
@@ -74,8 +77,20 @@ for (const family of Object.keys(paths)) test(`core repair ${family}: private re
       await comparison.getByRole('button', { name: 'Close comparison', exact: true }).click()
       await expect(comparison.locator('canvas')).toHaveCount(0)
       expect(await f.checkpoint()).toEqual(beforeReview)
+      if (retention) {
+        const sample = await retention.sample()
+        expect(sample.webgl.comparisonLive).toBe(0)
+        expect(sample.webgl.comparisonSeen).toBe(cycle + 1)
+        retained.push({ cycle, ...sample })
+      }
     }
-    console.log(`FH26 comparison ${family} request/display ms: ${JSON.stringify(timings)}`)
+    console.log(retention ? `FH27 comparison retention ${family}: ${JSON.stringify(retained)}`
+      : `FH26 comparison ${family} request/display ms: ${JSON.stringify(timings)}`)
+    if (retention) {
+      const detached = await retention.detachedNodes()
+      console.log(`FH27 comparison detached nodes: ${JSON.stringify(detached)}`)
+      expect(detached).toHaveLength(0)
+    }
     expect((await f.browser()).geometry).toEqual(geometry)
     await panel.getByRole('button', { name: 'Cancel evaluation', exact: true }).click()
     await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeDisabled()
