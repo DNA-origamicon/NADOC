@@ -1,11 +1,25 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 8 (per contract, only a gate flip resets this counter).
-User selected FH-18 and explicitly directed continuation until fully closed on October27,2026, superseding the one-task/stop-loss limit for this work.
+Sessions since last gate flip or milestone close: 9 (per contract, only a gate flip resets this counter; October 28 goal setup adds no engineering completion credit).
+User requested an active goal on October 28, 2026 to finish the feature-log and dependency revamp before 6:00 p.m. today. This authorizes successive remaining in-scope tasks without recurring one-task/stop-loss confirmation; scientific, test and shared-worktree safeguards still apply.
 
 **Tools done: 4/4 (Bend, Twist, Extrude, Sweep); Move/Rotate and Fine Routing also qualified.**
 CAD ledger: **23/34 complete, 11 remaining (4 core, 7 parked)**.
 **FH-18 is fully closed at the current user-selected cluster scope.** ISSUE-99 is resolved at that scope; MV-48 retains aggregate FH-27 integration/resource debt. No production gate changed.
+
+## October 28 deadline, corrections and execution plan
+
+- Active goal deadline: **October 28, 2026 before 6:00 p.m. America/Denver (MDT; October 29 00:00 UTC)**. Starting HEAD: `9e5f08e3`. This setup records the plan; it makes no new implementation or validation claim.
+- Completion means closing the four active core exits below. The seven parked asset/import milestones and existing exclusions remain parked; elapsed time, test runs and partial implementations do not earn milestone credit.
+- **FH-25 first:** follow the [ordinary connection plan](ordinary_connection_completion_plan.md). Briefly map remaining ordinary controls/source profiles onto delivered finite/direct/indirect Apply/Connect, metadata and unapply/delete implementations; reproduce ISSUE-143, finish supported correctness and qualify replay, downstream edits, undo/reopen and app/resource behavior. Do not restart completed private contracts.
+- **FH-26 next:** finish missing core dependency-repair families, earliest-error/blocked-descendant feedback, reviewed reference/input replacement or explicit cascade, candidate review and Apply/undo/reload. Reuse existing dependency inspection, suppression/reorder and Extrude/Sweep repair.
+- **FH-28 next:** qualify the retained production creation/recovery/publication lifecycle, cancellation, stale results and retained-state limits using existing hosts.
+- **FH-27 final integration:** track gaps from the outset; close representative desktop workflows, latency/memory acceptance, relevant app/unused-legacy debt and required regression exits. A focused pass cannot clear broad-suite debt.
+- Check remaining exits and deadline risk at **4:00, 5:00 and 5:30 p.m. MDT**; reserve the final 45 minutes for qualification and accurate closeout. These are execution checkpoints, not permission to skip unfinished exits or a claim that all work will fit.
+- Preserve the [October 27 corrective measures](transform_history_editor_plan.md#completion-audit-and-corrective-measures--october-27-2026): measure the current app baseline; target aggregate costs sufficient to close the observed deficit; preserve exact outputs/refusals; run broader regression after candidate acceptance. Do not reopen closed Move/Rotate/cluster work without a reproduced regression or revive historical S/U queues.
+- Preserve independent cold replay from authored inputs, exact Cancel, single Apply/undo, stable identities and failure atomicity. ISSUE-126 remains closed: accepted publication/repair/undo/redo must be completely collision-free; partial repair refuses. Molecular changes still require concrete A/B evidence and specific authorization; continue independent work while that is pending.
+- Run focused meaningful checks first, serialize heavy checks under existing guards, retain timing budgets and verify cleanup. Keep the 83 known baseline failures and deferred FULL explicit; neither is a green result. No speculative infrastructure, new per-session reports, unrelated downloads or original-workspace mutation.
+- Keep this handoff as the current-state authority with one next task; update ledger/memory only when their existing milestone/gate rules require it. Report unmet exits and deadline risk honestly; do not reduce scope or weaken acceptance to declare success.
 
 ## Delivered behavior
 - Make Cluster v3 preserves existing native nucleotide and axis geometry, including posed whole-helix and domain selections. Existing placed owners retain their scope; an eligible identity default can surrender whole helices. The new cluster starts at identity, and moving it remains a separate Move/Rotate feature.
@@ -37,4 +51,4 @@ Transform gates remain ON; no Move/Rotate performance task remains. Clusters own
 ISSUE-126 collision-free publication/repair/undo policy remains complete. Remaining core milestones are FH-25/26/27/28; seven asset/import/connection milestones remain parked.
 
 ## Shared-worktree boundaries
-Incoming HEAD: `12382f9d`. Commit only explicit FH-18 implementation, tests and closure-record hunks. Pre-existing API/VR/simulation/test/memory-hygiene/audit edits remain preserved. No push, reset, stash, restore, dependency download or original workspace mutation. `main.js` unchanged.
+Goal-start HEAD: `9e5f08e3` (FH-18 closure). Commit only explicit feature-history task hunks under the operating contract; pre-existing API/VR/simulation/test/memory-hygiene/audit edits remain preserved. Goal setup changes only this handoff. No push, reset, stash, restore, dependency download or original workspace mutation. `main.js` unchanged.
