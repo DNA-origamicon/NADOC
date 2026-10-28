@@ -107,7 +107,7 @@ def capabilities():
     from backend.api.part_recipe_capabilities import editing_capabilities
     kinds = PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS
     return {**part_replay_capabilities(), **editing_capabilities(kinds), "proof_version": PROOF_VERSION,
-            "proof_version_overrides": {"cluster_create": {"supported": [1, GROUP_CREATE_VERSION],
+            "proof_version_overrides": {"cluster_create": {"supported": [1, 2, GROUP_CREATE_VERSION],
                                                             "authoring": GROUP_CREATE_VERSION},
                                         "extension-upsert": {"supported": [1, EXTENSION_UPSERT_VERSION],
                                                              "authoring": EXTENSION_UPSERT_VERSION}},

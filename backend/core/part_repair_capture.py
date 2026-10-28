@@ -161,7 +161,7 @@ def capture_draft_inputs(design, *, source_revision, draft=None, proposed_action
     # Keep the list/version inventory explicit: a future kind or contract must
     # follow ordinary discovery until its source ownership is reviewed.
     source_free_overlays = {
-        ClusterCreateLogEntry: ("cluster_create", (1, 2)),
+        ClusterCreateLogEntry: ("cluster_create", (1, 2, 3)),
         ClusterOpLogEntry: ("cluster_op", (1,)),
         DeformationLogEntry: ("deformation", (1,)),
         OverhangRotationLogEntry: ("overhang_rotation", (1,)),

@@ -2190,7 +2190,17 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   libraries loaded into the current process and expands with additional imports:
   [runtime introspection](https://github.com/joblib/threadpoolctl#python-runtime-programmatic-introspection).
 
-## ISSUE-99 — Ordinary grouping can omit its construction inputs (2026-10-15, FOCUSED FIX VALIDATED; APP OPEN)
+## ISSUE-99 — Ordinary grouping can omit its construction inputs (2026-10-15; RESOLVED 2026-10-27)
+
+Current cluster scope is qualified under FH-18: ordinary sidebar/context creation,
+membership/name/style edits, finite dissolution and component repair are recorded;
+placement, explicit dependency refusal, undo/reopen and cold replay pass in app.
+Make Cluster v3 preserves posed/domain owners; unavailable recovery refuses without
+mutation. Posed/dependent dissolution remains explicitly refused. The historical
+APP OPEN and PartGroup rollout clauses below are superseded by the
+[current handoff](docs/audits/feature_history_20261014/session_handoff.md) and
+[qualification evidence](docs/audits/feature_history_20261014/group_placement_migration_plan.md#fh-18-lifecycle-qualification--october-27-2026).
+MV-48 retains aggregate FH-27 integration/resource debt only.
 
 - The cluster panel and selection menu omit `log`; the ordinary route and
   headless wrapper defaulted it to false. Group membership changed and was

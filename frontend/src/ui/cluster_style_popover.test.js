@@ -395,4 +395,65 @@ describe('initClusterStylePopover', () => {
     expect(onCommit).toHaveBeenCalledTimes(1)
     expect(onCommit).toHaveBeenCalledWith('cA', { color: '#ff0000' })
   })
+
+  it('does not commit the same change again when closed after debounce', () => {
+    pop.openFor('cA', anchor, { color: '#112233', opacity: 1 })
+    colorInput().value = '#ff0000'
+    fire(colorInput(), 'change')
+    vi.advanceTimersByTime(300)
+    pop.close()
+    expect(onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['null', 'throw'])('restores authoritative style after %s refusal', async failure => {
+    pop.destroy()
+    const onError = vi.fn()
+    onCommit.mockImplementation(() => failure === 'null' ? Promise.resolve(null) : Promise.reject(new Error('refused')))
+    pop = initClusterStylePopover({ onPreview, onCommit, onError,
+      getCurrent: () => ({ documentId: 'doc', color: '#112233', opacity: .8 }) })
+    pop.openFor('cA', anchor, { color: '#112233', opacity: .8 })
+    opacityInput().value = '.3'
+    fire(opacityInput(), 'input')
+    fire(opacityInput(), 'change')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(onPreview).toHaveBeenLastCalledWith('cA', { color: '#112233', opacity: .8 }, { color: '#112233', opacity: .8 })
+    expect(opacityInput().value).toBe('0.8')
+    expect(onError).toHaveBeenCalledTimes(1)
+    pop.close()
+    expect(onCommit).toHaveBeenCalledTimes(1)
+  })
+
+  it('an older failed commit cannot replace a newer preview', async () => {
+    let reject
+    onCommit.mockImplementation(() => new Promise((_, fail) => { reject = fail }))
+    pop.openFor('cA', anchor, { color: '#112233', opacity: .8 })
+    opacityInput().value = '.3'
+    fire(opacityInput(), 'change')
+    vi.advanceTimersByTime(300)
+    opacityInput().value = '.5'
+    fire(opacityInput(), 'input')
+    await vi.advanceTimersByTimeAsync(20)
+    onPreview.mockClear()
+    reject(new Error('old refusal'))
+    await Promise.resolve()
+    expect(onPreview).not.toHaveBeenCalled()
+    expect(Number(opacityInput().value)).toBe(.5)
+  })
+  it.each(['document', 'cluster'])('a late refusal does not repaint another %s', async target => {
+    pop.destroy()
+    let reject, documentId = 'original'
+    pop = initClusterStylePopover({ onPreview, onCommit: () => new Promise((_, fail) => { reject = fail }),
+      getCurrent: () => ({ documentId, color: '#112233', opacity: 1 }) })
+    pop.openFor('cA', anchor, { color: '#112233', opacity: 1 })
+    opacityInput().value = '.3'
+    fire(opacityInput(), 'change')
+    vi.advanceTimersByTime(300)
+    if (target === 'document') documentId = 'other'
+    else pop.openFor('cB', anchor, { color: '#112233', opacity: 1 })
+    onPreview.mockClear()
+    reject(new Error('old document refusal'))
+    await Promise.resolve()
+    expect(onPreview).not.toHaveBeenCalled()
+  })
+
 })

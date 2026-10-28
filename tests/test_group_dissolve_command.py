@@ -136,6 +136,19 @@ def test_each_live_incoming_family_reports_typed_owner_and_model_path(family):
     refs = issue["references"]
     assert any(ref["kind"] == "cluster" and ref["identity"] == "group-a"
         and ref["model_path"][0] == field and ref["owner"]["kind"] for ref in refs)
+    assert "Remove or reassign these references first" in issue["detail"]
+    assert refs[0]["owner"].get("name", refs[0]["owner"]["identity"]) in issue["detail"]
+
+
+def test_dissolve_reports_all_incoming_owners_before_any_removal():
+    design = source()
+    for family in ("frame", "child", "joint", "deformation-id"):
+        design, _ = _incoming(design, family)
+    issue = rejected(design)
+    assert {ref["owner"]["kind"] for ref in issue["references"]} == {
+        "lattice_frame", "cluster", "joint", "deformation"}
+    for label in ('lattice frame "frame"', 'child cluster "Second"', 'joint', 'Bend/Twist'):
+        assert label in issue["detail"]
 
 
 @pytest.mark.parametrize("change", [

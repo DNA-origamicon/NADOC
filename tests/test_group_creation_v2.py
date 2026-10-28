@@ -74,7 +74,7 @@ def test_v1_and_unmarked_build_keep_the_exact_legacy_output():
             Design.model_validate_json(candidate.model_dump_json())
 
 
-@pytest.mark.parametrize("version", [None, True, 0, 3, "2", 2.0])
+@pytest.mark.parametrize("version", [None, True, 0, 4, "2", 2.0])
 def test_unsupported_explicit_group_versions_are_rejected_before_building(version):
     original = source()
     params = arguments(grouping(original), version)
@@ -94,7 +94,8 @@ def test_capabilities_advertise_local_group_versions_without_global_upgrade():
     result = capabilities()
     assert result["proof_version"] == 1
     assert result["proof_version_overrides"] == {
-        "cluster_create": {"supported": [1, 2], "authoring": 2},
+        "cluster_create": {"supported": [1, 2, 3], "authoring": 3},
+        "extension-upsert": {"supported": [1, 2], "authoring": 2},
     }
 
 
@@ -161,7 +162,7 @@ def test_native_group_v2_roundtrips_replays_and_edits_without_cached_outputs():
     assert build("cluster_create", original, command_input(edited)[1]).cluster_transforms[0].id == original.cluster_transforms[0].id
 
 
-def test_ordinary_all_members_group_records_v2_with_one_undo_and_valid_serialized_state():
+def test_ordinary_all_members_group_records_v3_with_one_undo_and_valid_serialized_state():
     original = source()
     request_revision = doc_context.current_request_revision()
     request_entry = doc_context.current_request_feature_log_entry_id()
@@ -172,7 +173,7 @@ def test_ordinary_all_members_group_records_v2_with_one_undo_and_valid_serialize
         routes_clusters.add_cluster(routes_clusters.AddClusterBody(
             name="All helices", helix_ids=[helix.id for helix in original.helices]))
         candidate = state.get_or_404()
-        assert candidate.feature_log[-1].proof_version == 2
+        assert candidate.feature_log[-1].proof_version == 3
         assert state.revision() == revision + 1 and state.undo_depth() == depth + 1
         assert Design.model_validate_json(candidate.model_dump_json()) == candidate
         report = assess_part_history(candidate, execute=execute, dependencies=dependencies)
@@ -266,14 +267,14 @@ def test_v2_uuid_group_uses_the_existing_default_owner_identity_factory():
     assert current.model_dump_json() == legacy.model_dump_json()
 
 
-def test_registered_batch_emits_group_v2_and_publication_scope_accepts_it():
+def test_registered_batch_emits_group_v3_and_publication_scope_accepts_it():
     from backend.api.part_batch_publication_scope import admit_batch_source
     from tests.test_part_registered_batch import prepare
 
     result = prepare()
     candidate = result["candidate"]
     group = next(entry for entry in candidate.feature_log if entry.feature_type == "cluster_create")
-    assert group.proof_version == 2
+    assert group.proof_version == 3
     before = deepcopy(candidate.model_dump(mode="json"))
     admit_batch_source(candidate)
     assert candidate.model_dump(mode="json") == before

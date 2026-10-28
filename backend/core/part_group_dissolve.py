@@ -295,6 +295,10 @@ def _inventory(design):
             schema = _schema(record)
             budget.text(record.id)
             owner = {"kind": schema.identity, "identity": record.id}
+            name = getattr(record, "name", None)
+            if name:
+                budget.text(name, identity=False)
+                owner["name"] = name[:96]
             _walk(record, [field, index], owner, budget, incoming)
     return incoming
 
@@ -315,6 +319,32 @@ def _identity_pose(group):
                 or any(type(item) not in {float, int} or not isfinite(item) for item in value)):
             _unsupported("Group pose must be finite and structurally valid.")
     return group.translation == [0, 0, 0] and group.rotation in ([0, 0, 0, 1], [0, 0, 0, -1])
+
+
+def _require_no_dependents(incoming, selected, offsets):
+    references, labels = [], []
+    kinds = {"lattice_frame": "lattice frame", "cluster": "child cluster",
+             "joint": "joint", "join_constraint": "Join constraint",
+             "flexible_connection": "flexible connection", "deformation": "Bend/Twist feature"}
+    seen = set()
+    for identity, owner, path in incoming:
+        if identity not in selected:
+            continue
+        references.append({"kind": "cluster", "identity": identity,
+            "parameter_path": ["cluster_ids", offsets[identity]],
+            "owner": owner, "model_path": path})
+        key = owner["kind"], owner["identity"]
+        if key not in seen:
+            seen.add(key)
+            if len(labels) < 8:
+                label = kinds.get(owner["kind"], owner["kind"].replace("_", " "))
+                labels.append(f'{label} "{owner.get("name", owner["identity"])}"')
+    if references:
+        extra = f"; and {len(seen) - len(labels)} more" if len(seen) > len(labels) else ""
+        raise ReferenceResolutionError(
+            "Cannot dissolve: used by " + "; ".join(labels) + extra
+            + ". Remove or reassign these references first.",
+            code="invalid_selection", references=references)
 
 
 def _scope(group, strands, helices):
@@ -346,9 +376,7 @@ def build(design, params):
             _reference(identity, offset, missing=not matches)
         selected[identity] = matches[0]
     offsets = {identity: index for index, identity in enumerate(identities)}
-    for identity, owner, path in incoming:
-        if identity in selected:
-            _reference(identity, offsets[identity], owner=owner, model_path=path)
+    _require_no_dependents(incoming, selected, offsets)
     strands = {}
     for strand in design.strands:
         strands.setdefault(strand.id, []).append(strand)

@@ -983,7 +983,8 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Assemblies and molecular-engine comparison authorization remain outside this
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
-- **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+- **MV-48 — PENDING — AGGREGATE INTEGRATION/RESOURCE SCOPE (reconciled 2026-10-27).**
+  FH-18 cluster lifecycle and ISSUE-99 are qualified; ordinary Bend/Twist acceptance is complete. The remaining debt is FH-27 aggregate integration/resource acceptance, including broad regression failures and the unrelated Dimensions-save toast seen during visual inspection. Current authority and evidence: [handoff](docs/audits/feature_history_20261014/session_handoff.md). Historical APP OPEN, cluster lifecycle and PartGroup requirements below are superseded.
   **October 16 U15 ordinary patterns (FH-18 checkpoint 13):** after qualified
   organization enablement, select explicit placements and create both Linear
   (including 2D/custom/negative spacing) and Circular patterns (axis/center).

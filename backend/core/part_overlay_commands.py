@@ -1,13 +1,13 @@
 """Authoring inputs for ordinary pose/grouping entries, without recovery data."""
 
 KINDS = frozenset({"deformation", "cluster_op", "cluster_create", "overhang_rotation"})
-GROUP_CREATE_VERSION = 2
+GROUP_CREATE_VERSION = 3
 
 
 def proof_version_supported(kind, version):
     """Local grouping/extension revisions do not upgrade other command kinds."""
     from backend.core.positional_refs import KINDS as POSITIONAL_KINDS
-    versions = ((1, GROUP_CREATE_VERSION) if kind == "cluster_create" else
+    versions = ((1, 2, GROUP_CREATE_VERSION) if kind == "cluster_create" else
                 (1, 2) if kind == "extension-upsert" or kind in POSITIONAL_KINDS else (1,))
     return type(version) is int and version in versions
 
@@ -124,7 +124,7 @@ def build(kind, design, params):
         try:
             default_identity = identity_factory(cluster.id)
         except ValueError:
-            if version != GROUP_CREATE_VERSION:
+            if version == 1:
                 raise  # Saved v1 required a UUID even when a default existed.
             from uuid import NAMESPACE_URL, uuid5
             default_identity = identity_factory(uuid5(
@@ -132,6 +132,9 @@ def build(kind, design, params):
         clusters = with_default_cluster(
             design, identity_factory=default_identity
         ).cluster_transforms
+        if version == 3:
+            from backend.core.part_cluster_creation import creation_clusters
+            return design.copy_with(cluster_transforms=creation_clusters(design, clusters, cluster))
         kept = []
         for existing in clusters:
             if existing.is_default:
@@ -140,7 +143,7 @@ def build(kind, design, params):
                 ]
                 # v1 removes an exhausted default; preserve saved replay exactly.
                 # v2 edits membership without deleting persistent owner identities.
-                if remaining or version == GROUP_CREATE_VERSION:
+                if remaining or version >= 2:
                     kept.append(existing.model_copy(update={"helix_ids": remaining}))
             else:
                 kept.append(existing)

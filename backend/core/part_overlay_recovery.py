@@ -8,6 +8,12 @@ No commands or validation are executed on this recovery path.
 
 
 def restore_authored_fields(design, snapshot):
+    if any(entry.feature_type == "cluster_create" and entry.proof_version == 3
+           for entry in design.feature_log):
+        # V3 transfer decisions depend on the owner's pose and deformation
+        # scope at creation, so reconstruct from this already-decoded baseline.
+        return design.copy_with(cluster_transforms=snapshot.cluster_transforms,
+                                deformations=snapshot.deformations)
     fields = {}
     # Creation transfers helix membership out of the default owner without a
     # separate cluster_op. Restore that implicit setter from the selected

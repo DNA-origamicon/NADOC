@@ -1065,14 +1065,16 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
 
     if (clusterSel.value === '__new__') {
       const n = (design.cluster_transforms?.length ?? 0) + 1
-      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+      const result = await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+      if (!result) showToast(`Could not create cluster: ${store.getState().lastError?.message ?? 'The operation was refused.'}`, { severity: 'error' })
       _dismissMenu()
     } else if (clusterSel.value) {
       const clusterId = clusterSel.value
       const existing = design.cluster_transforms?.find(c => c.id === clusterId)
       if (existing) {
         const merged = [...new Set([...existing.helix_ids, ...helixIds])]
-        await api.patchCluster(clusterId, { helix_ids: merged })
+        const result = await api.patchCluster(clusterId, { helix_ids: merged })
+        if (!result) showToast(`Could not change cluster membership: ${store.getState().lastError?.message ?? 'The operation was refused.'}`, { severity: 'error' })
       }
       _dismissMenu()
     }

@@ -141,8 +141,27 @@ def _admit_organization_recovery(entries):
         _organization_error(str(exc), current)
 
 
+def _admit_cluster_creation_recovery(design, position):
+    if not any(e.feature_type == "cluster_create" and e.proof_version == 3 for e in design.feature_log):
+        return
+    end = len(design.feature_log) - 1 if position == -1 else position
+    payloads = [(i, e) for i, e in enumerate(design.feature_log)
+                if e.feature_type in {"snapshot", "routing-cluster"}]
+    prior = [(i, e) for i, e in payloads if i <= end]
+    entry = prior[-1][1] if prior else payloads[0][1] if payloads else None
+    field = "post_state_gz_b64" if prior else ("pre_state_gz_b64"
+        if entry and entry.feature_type == "routing-cluster" else "design_snapshot_gz_b64")
+    if entry is None or entry.evicted or not getattr(entry, field):
+        raise HTTPException(410, detail={
+            "code": "group_recovery_unavailable",
+            "detail": "Cluster creation recovery data is unavailable. Restore a complete saved copy "
+                "or regenerate from the recorded inputs before seeking this history.",
+        })
+
+
 def prepare_group_seek(design, position):
     _admit_organization_recovery(design.feature_log)
+    _admit_cluster_creation_recovery(design, position)
     if not has_group_dissolution(design.feature_log):
         return {}
     try:

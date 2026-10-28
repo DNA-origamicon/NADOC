@@ -12,8 +12,7 @@
  * So it is keyed by clusterId, positioned once on open from the anchor's rect, and
  * never re-anchored; the panel just tells it to close if its cluster disappears.
  *
- * Commit strategy (mirrors the rename in cluster_panel.js — no undo push for a
- * cosmetic edit):
+ * Commit strategy (persisted edits are recorded in feature history):
  *    'input'  → onPreview only, ZERO network. Patching at frame rate would rebuild
  *               the sidebar ~60×/s under the cursor.
  *    'change' → one onCommit, debounced so keyboard arrow-stepping collapses.
@@ -72,11 +71,14 @@ const LABEL_CSS = 'flex:1;color:#8b949e'
  * @param {(clusterId:string, patch:object) => void} opts.onPreview  live, renderer-only
  * @param {(clusterId:string, patch:object) => void} opts.onCommit   persist (debounced)
  */
-export function initClusterStylePopover({ onPreview = null, onCommit = null } = {}) {
+export function initClusterStylePopover({ onPreview = null, onCommit = null,
+  getCurrent = null, onError = null } = {}) {
   let _clusterId  = null
   let _pending    = null         // accumulated patch awaiting its debounced commit
   let _timer      = null
   let _openedWith = null         // control values at open, for the on-close diff
+  const intents = new Map()
+  let nextIntent = 0
 
   // ── DOM (built once, reused) ────────────────────────────────────────────────
   const el = document.createElement('div')
@@ -133,11 +135,36 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
     const patch = _pending
     const id = _clusterId
     _pending = null
-    onCommit?.(id, patch)
+    const intent = intents.get(id), origin = getCurrent?.(id)
+    const previous = { ..._openedWith }
+    // A dispatched change is already accounted for when close() follows it.
+    // Only mark the dispatched fields; another input may still await change.
+    for (const key of Object.keys(patch)) _openedWith[key] = _uiState()[key]
+    const rejected = error => {
+      if (intents.get(id) !== intent) return
+      const current = getCurrent ? getCurrent(id) : previous
+      if (!current || (origin && current.documentId !== origin.documentId)) return
+      const style = { color: current.color, opacity: current.opacity }
+      if (_clusterId === id) _cancelPreview()
+      if (!_clusterId || _clusterId === id) onPreview?.(id, style, style)
+      if (_clusterId === id) {
+        colorInput.value = normaliseHex(current.color, '#888888')
+        opacityInput.value = String(current.opacity)
+        _setOpacityReadout(current.opacity)
+        _openedWith = _uiState()
+      }
+      onError?.(error)
+    }
+    try {
+      Promise.resolve(onCommit?.(id, patch)).then(result => {
+        if (result === null || result === false) rejected(new Error('Cluster style change was refused'))
+      }, rejected)
+    } catch (error) { rejected(error) }
   }
 
   function _queue(patch) {
     if (!_clusterId) return
+    intents.set(_clusterId, ++nextIntent)
     _pending = { ...(_pending ?? {}), ...patch }
     if (_timer) clearTimeout(_timer)
     _timer = setTimeout(_flush, COMMIT_DEBOUNCE_MS)
@@ -172,6 +199,7 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
 
   function _preview(patch) {
     if (!_clusterId) return
+    intents.set(_clusterId, ++nextIntent)
     _previewPatch = { ...(_previewPatch ?? {}), ...patch }
     if (_previewRaf != null) return
     _previewRaf = _raf(() => {
@@ -290,6 +318,7 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
       _commitOnClose()               // …and so does an edit `change` never queued
       _flush()                       // …and so does a pending commit
       _clusterId = clusterId
+      intents.set(clusterId, ++nextIntent)
       colorInput.value = normaliseHex(color, '#888888')
       const o = typeof opacity === 'number' ? opacity : 1
       opacityInput.value = String(o)

@@ -54,7 +54,9 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   repairBtn?.addEventListener('click', async () => {
     if (repairing || store.getState().assemblyActive || hasOrganization(store.getState().currentDesign)) return
     repairing = true; syncRepair()
-    try { await api.clusterUnassignedComponents() }
+    try {
+      if (!await api.clusterUnassignedComponents()) throw new Error(store.getState().lastError?.message ?? 'The operation was refused.')
+    }
     catch (error) { showToast(`Could not cluster unassigned components: ${error.message}`, { severity: 'error' }) }
     finally { repairing = false; syncRepair() }
   })
@@ -76,6 +78,12 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   const _stylePopover = initClusterStylePopover({
     onPreview: (id, patch, uiState) => onStylePreview?.(id, patch, uiState),
     onCommit:  (id, patch) => api.patchCluster(id, patch),
+    getCurrent: id => {
+      const design = store.getState().currentDesign
+      const cluster = design?.cluster_transforms?.find(c => c.id === id)
+      return cluster ? { documentId: design.id, color: cluster.color, opacity: cluster.opacity } : null
+    },
+    onError: error => showToast(`Could not change cluster style: ${store.getState().lastError?.message ?? error.message}`, { severity: 'error' }),
   })
 
   let _collapsed = getSectionCollapsed('dynamics', 'cluster-panel', false)
@@ -121,13 +129,19 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       const domainIds = domainRefs.map(ref => ({ strand_id: ref.strandId, domain_index: ref.domainIndex }))
       const helixIds  = _helixIdsFromDomainIds(domainIds, currentDesign)
       if (!helixIds.length) return
-      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
+      await createFromSelection({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
     } else if (strandIds.length) {
       const helixIds = _helixIdsFromStrandIds(strandIds, currentDesign)
       if (!helixIds.length) return
-      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+      await createFromSelection({ name: `Cluster ${n}`, helix_ids: helixIds })
     }
   })
+
+  async function createFromSelection(params) {
+    try {
+      if (!await api.createCluster(params)) throw new Error(store.getState().lastError?.message ?? 'The operation was refused.')
+    } catch (error) { showToast(`Could not create cluster: ${error.message}`, { severity: 'error' }) }
+  }
 
   // ── Rebuild list when design or active cluster changes ───────────────────────
   subscriptions.push(store.subscribe((n, p) => {
@@ -259,7 +273,14 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
           editBtn.title = 'Rename cluster'
           editBtn.style.cssText = _editStyle
           editBtn.onclick = _enterEdit
-          if (newName !== cluster.name) await api.patchCluster(cluster.id, { name: newName })
+          if (newName !== cluster.name) {
+            try {
+              if (!await api.patchCluster(cluster.id, { name: newName })) throw new Error(store.getState().lastError?.message ?? 'The operation was refused.')
+            } catch (error) {
+              nameSpan.textContent = cluster.name
+              showToast(`Could not rename cluster: ${error.message}`, { severity: 'error' })
+            }
+          }
         }
         nameInput.addEventListener('keydown', e2 => {
           e2.stopPropagation()

@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from tests.extrude_matrix_fixture import FAMILIES
 from tests.routing_history_fixture import FIXTURES as ROUTING_FIXTURES
 
-FIXTURES = {"unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
+FIXTURES = {"cluster-straight", "cluster-incoming", "cluster-small", "cluster-large", "unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 TRANSFORM_FIXTURES = {"transform-single-posed", "transform-cluster-insert", "transform-organized-insert", "transform-posed-large", "transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
 
 
@@ -25,6 +25,24 @@ def fixture(kind):
     from backend.core.models import DeformationLogEntry, DeformationOp, MinorMutationLogEntry, RoutingClusterLogEntry, SnapshotLogEntry
     from backend.core.part_history_contract import create_empty_part
     from tests.test_part_deformation_preview import _append
+
+    if kind == "cluster-straight":
+        from backend.api.state import encode_design_snapshot
+        source = fixture("unpair")
+        pre, pre_size = encode_design_snapshot(create_empty_part("__e2e__unpair", "HONEYCOMB"))
+        post, post_size = encode_design_snapshot(source)
+        return source.copy_with(feature_log=[source.feature_log[0].model_copy(update={
+            "evicted": False, "design_snapshot_gz_b64": pre, "snapshot_size_bytes": pre_size,
+            "post_state_gz_b64": post, "post_state_size_bytes": post_size})])
+
+    if kind in {"cluster-small", "cluster-large"}:
+        return fixture(kind.replace("cluster-", "transform-"))
+    if kind == "cluster-incoming":
+        from tests.test_group_dissolve_command import source, _incoming
+        design = source()
+        for family in ("frame", "child", "joint", "deformation-id"):
+            design, _ = _incoming(design, family)
+        return design
 
     if kind in ROUTING_FIXTURES:
         from tests.routing_history_fixture import fixture as routing_fixture

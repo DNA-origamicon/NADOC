@@ -68,7 +68,7 @@ def has_authored_group_history(entries):
         version = getattr(entry, "proof_version", None)
         if type(version) is not int:
             continue
-        if entry.feature_type == "cluster_create" and version in (1, 2):
+        if entry.feature_type == "cluster_create" and version in (1, 2, 3):
             return True
         if entry.feature_type == "cluster_op" and version == 1:
             return True
@@ -256,6 +256,10 @@ def apply_cluster_dissolutions(design, position):
 
 
 def restore_cluster_creations(design, position):
+    if any(entry.feature_type == "cluster_create" and entry.proof_version == 3
+           for entry in design.feature_log):
+        from backend.core.part_cluster_creation import restore_creation_history
+        return restore_creation_history(design, position)
     if not has_group_dissolution(design.feature_log):
         return _restore_legacy_creations(design, position)
     budget, creations, active, repeated, dissolved, _, last_payload, imported = _lifecycle(design, position)

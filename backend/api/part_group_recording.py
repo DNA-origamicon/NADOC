@@ -121,8 +121,16 @@ def create_group(body):
             helix_ids=list(body.helix_ids),
             domain_ids=[DomainRef.model_validate(item) for item in body.domain_ids],
         )
-        grouped = build("cluster_create", source, {
-            "cluster": group.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION})
+        _check_input_bounds(source, group, {})
+        _check_members(source, group)
+        params = {"cluster": group.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION}
+        _check_operation(params)
+        try:
+            grouped = build("cluster_create", source, params)
+        except ValueError as exc:
+            detail = exc.as_issue() if hasattr(exc, "as_issue") else {
+                "code": "invalid_group_input", "message": str(exc)}
+            raise HTTPException(409, detail=detail) from exc
         entry = ClusterCreateLogEntry(
             proof_version=GROUP_CREATE_VERSION,
             cluster_snapshot=group,
@@ -265,11 +273,15 @@ def prepare_group_update(source, cluster_id, fields, *, entry_source=None):
     _check_operation(params)
     try:
         grouped = build(kind, source, params)
+        if {"helix_ids", "domain_ids"}.intersection(fields):
+            from backend.core.part_cluster_creation import require_unchanged_arm_scope
+            require_unchanged_arm_scope(source, grouped.cluster_transforms)
         from backend.api.part_cluster_unpair import record_if_separated
         if {"translation", "rotation", "pivot"}.intersection(fields):
             grouped, entry = record_if_separated(source, grouped, entry)
     except ValueError as error:
-        raise HTTPException(422, detail=str(error)) from error
+        detail = error.as_issue() if hasattr(error, "as_issue") else str(error)
+        raise HTTPException(422, detail=detail) from error
     return grouped.copy_with(feature_log=[*source.feature_log, entry]), entry
 
 
@@ -348,14 +360,16 @@ def repair_unassigned_groups():
             "maximum_groups": MAX_COMPONENT_GROUPS})
     prepared, entries = captured, []
     for group in groups:
-        params = {"cluster": group.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION}
+        # Component repair retains its v2 default-owner contract; v3 is the
+        # separate Make Cluster action, whose new owner must start at identity.
+        params = {"cluster": group.model_dump(mode="json"), "_proof_version": 2}
         _check_operation(params)
         try:
             prepared = build("cluster_create", prepared, params)
         except ValueError as exc:
             raise HTTPException(409, detail={"code": "invalid_group_input", "message": str(exc)}) from exc
         entries.append(ClusterCreateLogEntry(
-            proof_version=GROUP_CREATE_VERSION, cluster_snapshot=group,
+            proof_version=2, cluster_snapshot=group,
             cluster_id=group.id, name=group.name, helix_ids=list(group.helix_ids),
             domain_ids=list(group.domain_ids),
         ))

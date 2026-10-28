@@ -17,6 +17,12 @@ Both organization gates stay off. October26: FH-23 closed and transform gates ON
 atomic cluster Apply and authoritative pose recovery are qualified. See the
 [transform plan](../docs/audits/feature_history_20261014/transform_history_editor_plan.md#completion-audit-and-corrective-measures--october-27-2026) for the October27 audit, corrective measures and completed nominal-preview follow-up (`be9fe4aa`); no Move/Rotate performance task remains.
 
+Make Cluster now records v3 placement-preserving intent; native geometry/axes,
+recorded cluster lifecycle, dependency refusals and recovery are qualified under
+FH-18. Posed/dependent dissolution remains an explicit refusal. See the
+[current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
+for closure evidence and the next task; aggregate regression debt remains FH-27.
+
 The [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
 owns progress counts, gate state, qualification evidence and the single next task.
 Its current state supersedes the older S53/S54 queue, C8-open claims,

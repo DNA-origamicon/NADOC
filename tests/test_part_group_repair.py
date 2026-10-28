@@ -200,7 +200,7 @@ def test_published_source_free_overlay_inventory_needs_no_input_serialization(mo
     design = source()
     design.feature_log = [
         entry().model_copy(update={"id": f"group-{version}", "proof_version": version})
-        for version in (None, 1, 2)
+        for version in (None, 1, 2, 3)
     ] + [
         ClusterOpLogEntry(id="pose", cluster_id="group", proof_version=1,
                           translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
@@ -217,7 +217,7 @@ def test_published_source_free_overlay_inventory_needs_no_input_serialization(mo
 
 def test_unknown_overlay_version_keeps_ordinary_source_discovery(monkeypatch):
     design = source()
-    design.feature_log = [entry().model_copy(update={"proof_version": 3})]
+    design.feature_log = [entry().model_copy(update={"proof_version": 4})]
     visited = []
 
     def observe(row):
@@ -226,7 +226,7 @@ def test_unknown_overlay_version_keeps_ordinary_source_discovery(monkeypatch):
 
     monkeypatch.setattr("backend.core.part_repair_capture.command_input", observe)
     capture_draft_inputs(design, source_revision=7)
-    assert visited == [3]
+    assert visited == [4]
 
 
 def draft_request(operation, actions=None, draft=None):

@@ -90,7 +90,7 @@ def test_rootless_group_creation_never_enters_response_default_inference(documen
     candidate = _assert_publication(source, original, depth, revision, response)
     assert candidate.cluster_transforms[0].id == group.id
     assert candidate.cluster_transforms[-1].name == "New authored group"
-    assert candidate.feature_log[-1].proof_version == 2
+    assert candidate.feature_log[-1].proof_version == 3
 
 
 def test_rootless_membership_skip_geometry_still_opts_out_of_inference(document, monkeypatch):

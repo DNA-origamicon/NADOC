@@ -58,7 +58,7 @@ def test_compiled_joined_seed_matches_native_and_maps_only_typed_references(latt
     for group in groups:
         UUID(group.cluster_id)
         assert all(identity.startswith(f"gen_{history.group_id}_") for identity in group.helix_ids)
-        assert group.proof_version == 2
+        assert group.proof_version == 3
         assert "_generated_scope" not in command_input(group)[1]
     rebuilt = source
     for entry in history.design.feature_log:

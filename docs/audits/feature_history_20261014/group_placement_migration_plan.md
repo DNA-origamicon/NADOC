@@ -21,6 +21,22 @@ historical fixture coverage remain where still referenced; they are compatibilit
 and retirement debt, not an active geometry roadmap. Do not migrate user designs
 or change their cluster ownership during cleanup.
 
+## FH-18 lifecycle qualification — October 27, 2026
+Current status and next task: [handoff](session_handoff.md); current cluster scope only.
+Make Cluster v3 adds an identity owner without dropping an existing posed/default or domain owner; creation never moves members. Move/Rotate remains a separate row.
+A partial grouping/membership edit that changes an existing Bend/Twist arm refuses with feature IDs. Native placement formulas, constants and goldens are unchanged.
+Dissolve retains its existing finite admission: posed, special-owned or dependent groups refuse; all incoming owners are listed before any mutation.
+Creation/name/style/membership/dissolution/component repair record one operation; sidebar and context-menu failures explain refusal, and failed style/name edits restore controls/display.
+V3 recovery reconstructs metadata from the selected topology checkpoint. Missing/evicted checkpoints return 410 before mutation; native input proof remains independent of cached bodies.
+App: 9 cluster scenarios qualified (8 in `fh18-app-qualified2.log`, corrected range-input case in `fh18-historical-app.log`); 23 smoke cases pass.
+App coverage: ordinary controls, dependency refusal, exact geometry, real rail seeks, rollback refusals, undo/redo, save/reopen, cold proof and visible six-helix inspection.
+Native fixtures: 6 × 84 bp (1042 rendered nucleotides), 18 × 504 bp (18270); scratch saved `.nadoc` files only. Software GPU raster excluded from latency measurements.
+Small/large Make Cluster 163/734 ms; style Apply 110/600 ms; preview p95 36/132 ms (40 samples, first included); rename Cancel 19/14 ms.
+Focused backend runs pass: 50 reference, 188 lifecycle, 92 placement/recovery, 49 recovery/ownership, final 55 placement/version cases (overlapping scopes).
+Frontend: 9463 pass/1 skip; lint/diff checks pass. FAST: 19521 pass/19 skip/87 fail; four old version assertions corrected and pass in the final 55, remaining 83 match baseline.
+FULL remains deferred by the session gate. Aggregate 387 s, zero per-test violators; no test budget/marker changes. Broad debt stays with FH-27.
+Logs: `.development-artifacts/feature-history-focus/fh18-*`; all owned browser/profile/workspace roots, including review screenshots, verified absent after runs.
+
 ## FH-18 membership recovery — October 27, 2026
 Current scope/status: [handoff](session_handoff.md); the retired migration stays retired.
 Reproduced: create arm → dissolve → create remaining arm → scrub backward leaves the
@@ -34,7 +50,7 @@ rail dragging, undo/redo, save/reopen, repeated seeks, clean console and native 
 FAST: 19505 pass/19 skip/84 fail/1 setup error; 83 known failures plus two capture-budget
 incidents, both passing isolated reruns. FULL deferred; zero per-test timing violators.
 Evidence: `.development-artifacts/feature-history-focus/fh18-*`; three browser roots absent.
-One recovery defect closed; dependent-owner desktop qualification remains next for FH-18.
+This earlier recovery checkpoint is superseded by the qualification evidence and current handoff above.
 
 The remainder is historical implementation evidence, not current requirements.
 

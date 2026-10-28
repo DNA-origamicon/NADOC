@@ -19,6 +19,17 @@ See the [connection plan](docs/audits/feature_history_20261014/ordinary_connecti
 and [current handoff](docs/audits/feature_history_20261014/session_handoff.md)
 for validation, baseline failures and deferred broad coverage. No app claim.
 
+## ISSUE-99 / FH-18 — cluster lifecycle qualification (2026-10-27)
+
+Make Cluster v3 preserves existing placement and records separate creation intent.
+Sidebar/context edits, finite dissolution, component repair, reference diagnostics,
+undo/reopen and cold replay are qualified; missing recovery refuses atomically.
+Failed style/name edits restore display, and style close no longer double-commits.
+Nine cluster app scenarios, 23 smoke cases and 9463 frontend tests pass; focused
+backend coverage and the persistent broad baseline are recorded in the
+[current handoff](docs/audits/feature_history_20261014/session_handoff.md).
+Native geometry formulas/constants/goldens and unrelated production gates are unchanged.
+
 ## Baselines (at loop start, 2026-06-05)
 
 - `frontend/src/main.js` LOC: 9600

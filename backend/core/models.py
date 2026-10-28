@@ -1803,7 +1803,7 @@ class ClusterCreateLogEntry(FeatureLogProvenance):
     graph (the three-layer law), exactly like ``ClusterOpLogEntry``.
     """
 
-    proof_version: Optional[Literal[1, 2]] = None
+    proof_version: Optional[Literal[1, 2, 3]] = None
     feature_type: Literal["cluster_create"] = "cluster_create"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     # Preserve parent/domain ownership for automatically grouped duplexes too.
