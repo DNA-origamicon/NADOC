@@ -113,6 +113,58 @@ def test_ordinary_native_create_dissolve_seek_and_cold_replay(document, optimize
     _verified(live)
 
 
+@pytest.mark.parametrize("optimized", [False, True])
+@pytest.mark.parametrize("dissolve", [False, True])
+def test_creation_transfers_default_membership_on_seek(document, optimized, dissolve):
+    _, first, _ = _create(document)
+    if dissolve:
+        routes.delete_cluster(first.id)
+    dissolved = state.get_or_404()
+    routes.add_cluster(routes.AddClusterBody(
+        name="Remaining arm", helix_ids=[document.helices[1].id]))
+    created = state.get_or_404()
+    _verified(created)
+    undone, _ = state.undo()
+    assert _clusters(undone) == _clusters(dissolved)
+    redone, _ = state.redo()
+    assert _clusters(redone) == _clusters(created)
+    live = Design.from_json(redone.model_dump_json())
+    for position, expected in [
+        (len(dissolved.feature_log) - 1, dissolved), (-1, created),
+        (len(dissolved.feature_log) - 1, dissolved), (-1, created),
+    ]:
+        live = crud._seek_feature_log(live, position, optimized=optimized)
+        assert _clusters(live) == _clusters(expected)
+        live = Design.from_json(live.model_dump_json())
+    _verified(live)
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_later_snapshot_membership_is_not_overwritten_by_creation_transfer(document, optimized):
+    _, first, _ = _create(document)
+    routes.delete_cluster(first.id)
+    routes.add_cluster(routes.AddClusterBody(
+        name="Remaining arm", helix_ids=[document.helices[1].id]))
+    created = state.get_or_404()
+    default = next(c for c in created.cluster_transforms if c.is_default)
+    routes.update_cluster(default.id, routes.PatchClusterBody(
+        helix_ids=[h.id for h in document.helices]))
+    changed = state.get_or_404()
+    domain = document.strands[0].domains[0]
+    crud.add_nick(crud.NickRequest(
+        helix_id=domain.helix_id, bp_index=10, direction=domain.direction))
+    final = state.get_or_404()
+    live = final
+    for position, expected in [
+        (len(created.feature_log) - 1, created), (-1, final),
+        (len(changed.feature_log) - 1, changed), (-1, final),
+    ]:
+        live = crud._seek_feature_log(live, position, optimized=optimized)
+        assert _clusters(live) == _clusters(expected)
+        live = Design.from_json(live.model_dump_json())
+    _verified(live)
+
+
 @pytest.mark.parametrize("version", [1, 2])
 def test_creation_restorer_never_resurrects_an_active_dissolution(version):
     before = _rootless()

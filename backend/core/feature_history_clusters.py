@@ -277,6 +277,11 @@ def restore_cluster_creations(design, position):
         present = any(h in helix_ids for h in entry.helix_ids)
         if not present and not (entry.cluster_snapshot is not None and not entry.helix_ids):
             continue
+        if index > last_payload:
+            # The selected snapshot predates this creation's transfer out of
+            # the default owner. Replay it even if the new group record survived
+            # from the current display; a later payload already owns its result.
+            clusters = _transfer_default_membership(clusters, entry)
         if cid not in existing or (cid in repeated and index > last_payload):
             group = entry.cluster_snapshot or ClusterRigidTransform(
                 id=cid, name=entry.name,
@@ -289,6 +294,15 @@ def restore_cluster_creations(design, position):
                 clusters.append(group)
                 existing.add(cid)
     return design.copy_with(cluster_transforms=clusters)
+
+
+def _transfer_default_membership(clusters, entry):
+    clusters = [c.model_copy(update={
+        "helix_ids": [h for h in c.helix_ids if h not in entry.helix_ids]})
+        if c.is_default else c for c in clusters]
+    if entry.proof_version != 2:
+        clusters = [c for c in clusters if not c.is_default or c.helix_ids]
+    return clusters
 
 
 def _restore_legacy_creations(design, position):
@@ -308,14 +322,15 @@ def _restore_legacy_creations(design, position):
     ]
     existing = {c.id for c in clusters}
     helix_ids = {h.id for h in design.helices}
+    last_payload = max((i for i, entry in enumerate(entries) if i <= end
+        and entry.feature_type in {"snapshot", "routing-cluster"}
+        and not entry.evicted and entry.post_state_gz_b64), default=-1)
     for cid, entry in active.items():
+        if creations[cid][0] > last_payload:
+            clusters = _transfer_default_membership(clusters, entry)
         if cid not in existing and any(h in helix_ids for h in entry.helix_ids):
             # Recreating Make Cluster after an earlier snapshot must also replay
             # its transfer out of the default cluster's helix membership.
-            clusters = [c.model_copy(update={"helix_ids": [h for h in c.helix_ids if h not in entry.helix_ids]})
-                        if c.is_default else c for c in clusters]
-            if entry.proof_version != 2:
-                clusters = [c for c in clusters if not c.is_default or c.helix_ids]
             clusters.append(
                 entry.cluster_snapshot
                 or ClusterRigidTransform(

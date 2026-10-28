@@ -9,6 +9,14 @@ No commands or validation are executed on this recovery path.
 
 def restore_authored_fields(design, snapshot):
     fields = {}
+    # Creation transfers helix membership out of the default owner without a
+    # separate cluster_op. Restore that implicit setter from the selected
+    # topology snapshot before replaying subsequent creations. Otherwise a
+    # future creation's emptied default leaks into an earlier cursor position.
+    if any(entry.feature_type == "cluster_create" for entry in design.feature_log):
+        for group in snapshot.cluster_transforms:
+            if group.is_default:
+                fields.setdefault(group.id, set()).add("helix_ids")
     for entry in design.feature_log:
         if entry.feature_type == "cluster_op" and entry.authored_fields:
             fields.setdefault(entry.cluster_id, set()).update(entry.authored_fields)

@@ -21,6 +21,21 @@ historical fixture coverage remain where still referenced; they are compatibilit
 and retirement debt, not an active geometry roadmap. Do not migrate user designs
 or change their cluster ownership during cleanup.
 
+## FH-18 membership recovery — October 27, 2026
+Current scope/status: [handoff](session_handoff.md); the retired migration stays retired.
+Reproduced: create arm → dissolve → create remaining arm → scrub backward leaves the
+default owner empty; forward recovery also omitted the creation's membership transfer.
+Restore default membership from the selected snapshot, then apply only subsequent
+creation transfers, including when a created record survives from the live display.
+Later snapshot/authored membership wins; no placement formulas or dissolution policy changed.
+`just test-focused tests/test_group_dissolve_recovery.py`: 40 pass; original new case 2 fail.
+App: existing launcher with `NADOC_HISTORY_E2E_GREP='cluster membership survives'`: 1 pass;
+rail dragging, undo/redo, save/reopen, repeated seeks, clean console and native proof.
+FAST: 19505 pass/19 skip/84 fail/1 setup error; 83 known failures plus two capture-budget
+incidents, both passing isolated reruns. FULL deferred; zero per-test timing violators.
+Evidence: `.development-artifacts/feature-history-focus/fh18-*`; three browser roots absent.
+One recovery defect closed; dependent-owner desktop qualification remains next for FH-18.
+
 The remainder is historical implementation evidence, not current requirements.
 
 
