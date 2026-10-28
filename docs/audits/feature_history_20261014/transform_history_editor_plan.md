@@ -1,6 +1,6 @@
 # Move/rotate history editor — FH-23
 
-> **Status reconciliation, October 26, 2026:** Cluster and individual Move/Rotate C1–C9 is complete (October 26 final entry); both gates are ON and MV-52 is closed. Earlier FH-23-open and named-group requirements are historical. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+> **Status reconciliation, October 27, 2026:** Cluster and individual Move/Rotate C1–C9 is complete (October 26 final entry); both gates are ON and MV-52 is closed. The nominal500ms preview follow-up is closed by `be9fe4aa`; see [audit, corrective measures and final qualification](#completion-audit-and-corrective-measures--october-27-2026). Earlier FH-23-open and named-group requirements are historical. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
 
 
 ## Current scope — user decision, October 25, 2026

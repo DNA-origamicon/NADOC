@@ -6,12 +6,23 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
-**Current milestone — October20,2026:** Bend/Twist C8 now passes; FH-20 is complete.
-Together with Extrude/Sweep, four of six primary tools are done (CAD21/34).
-Earlier C8-open and four-tool-only claims below are superseded. Move/Rotate gates remain
-OFF pending large-preview latency and named-member motion; molecular authorization remains.
-The user authorized sustained milestones and a fresh reviewer every30minutes; the earlier
-session stop-loss does not apply. Current evidence and next work: [handoff](../docs/audits/feature_history_20261014/session_handoff.md).
+**User scope decision, October25,2026:** clusters own geometry among grouping
+constructs; Staple Groups organize strands (names/colors/selection). Retire the
+experimental PartGroup / Groups and Placements migration and arbitrary named-group
+Move selected members/compiler/geometry rollout from active requirements. Do not
+revive historical “original full exit” clauses for it. Existing cluster and
+individual-nucleotide Move/Rotate correctness, atomicity and qualification remain.
+Experimental authoring controls are removed; referenced internals remain retirement debt.
+Both organization gates stay off. October26: FH-23 closed and transform gates ON;
+atomic cluster Apply and authoritative pose recovery are qualified. See the
+[transform plan](../docs/audits/feature_history_20261014/transform_history_editor_plan.md#completion-audit-and-corrective-measures--october-27-2026) for the October27 audit, corrective measures and completed nominal-preview follow-up (`be9fe4aa`); no Move/Rotate performance task remains.
+
+The [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
+owns progress counts, gate state, qualification evidence and the single next task.
+Its current state supersedes the older S53/S54 queue, C8-open claims,
+all-gates-off statements, and 38-milestone accounting in historical material.
+The latest continuation request authorizes work; do not infer a recurring reviewer timer.
+
 
 ## Current delivery status (2026-10-17)
 

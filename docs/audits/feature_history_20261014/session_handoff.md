@@ -21,7 +21,9 @@ Corrections: measure the app baseline first; remove repeated representation/vali
 - Apply small/large/posed **442/2488/2689ms**; Cancel **52/55/47ms**. Posed undo2028ms/redo2065ms; exact save/reopen and independent cold replay pass.
 - Final evidence: `.development-artifacts/feature-history-focus/move-audit-qualified.log`. Earlier candidate logs retain the653/611,559/515,534,511 and505ms misses. All browser scratch roots are checked for cleanup; scripts and bulk fixtures are disposable.
 
-This task is complete; no remaining Move/Rotate action or successor CAD task is selected. The local `history: finish Move Rotate nominal preview performance` commit contains only this task's20 paths.
+This task is complete; no remaining Move/Rotate action or successor CAD task is selected. The local `be9fe4aa` (`history: finish Move Rotate nominal preview performance`) commit contains only this task's20 paths.
+
+Plan reconciliation: the feature-log memory entry, FH-23 ledger row and transform-plan introduction now link to the completed October27 qualification. No new milestone or gate credit is claimed.
 
 ## Functional acceptance retained
 - Single/multiple cluster Apply publishes one complete-pose command, feature, revision and undo step; saved individual poses are carried through final cluster frames once. No sequential gizmo PATCH publication remains. Native historical rows dispatch to the enabled editor.
