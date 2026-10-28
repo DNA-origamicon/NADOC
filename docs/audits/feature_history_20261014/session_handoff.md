@@ -25,6 +25,15 @@ This task is complete; no remaining Move/Rotate action or successor CAD task is 
 
 Plan reconciliation: the feature-log memory entry, FH-23 ledger row and transform-plan introduction now link to the completed October27 qualification. No new milestone or gate credit is claimed.
 
+## Continuation scope checkpoint — October 27, 2026
+Latest continuation inspected HEAD `0c5f7494` and confirmed the completed task above.
+No implementation successor is selected. Operating contract §5 requires a scope
+decision after the stop-loss threshold; the last renewal covered Move/Rotate only.
+Recommended next bounded task: check remaining FH-18 cluster membership/deletion
+and incoming-reference gaps, then close one concrete gap with undo/reload/cold replay.
+Await user selection before starting; session counter remains 6 for this stop-loss
+report. No behavior changes or new test results; existing shared-worktree edits retained.
+
 ## Functional acceptance retained
 - Single/multiple cluster Apply publishes one complete-pose command, feature, revision and undo step; saved individual poses are carried through final cluster frames once. No sequential gizmo PATCH publication remains. Native historical rows dispatch to the enabled editor.
 - Existing toolbar/menu/shortcut/history controls, exact Cancel, linked/joint constraints, error/blocked attribution, dependents, cursor refusal, undo/redo/save/reopen and cold replay were qualified at gate-on. C4 retains refuse-with-reason and preserves canonical state/draft; no new failure semantics.
