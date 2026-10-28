@@ -357,6 +357,31 @@ def _first_sub_domain_id(design: Design, overhang_id: str) -> Optional[str]:
     return ov.sub_domains[0].id if ov and ov.sub_domains else None
 
 
+def _transport_duplex_registers(before: Design, after: Design, overhang_id: str) -> Design:
+    """Carry the same paired bases through a backing-domain relocation.
+
+    The native move already determines topology and geometry. Registers merely
+    change coordinates: preserve each base's 5'→3' offset, including when the
+    relocated domain reverses its helix traversal. Restoration uses the inverse.
+    """
+    _, old = _overhang_backing_domain(before, overhang_id)
+    _, new = _overhang_backing_domain(after, overhang_id)
+    if old is None or new is None or abs(old.end_bp - old.start_bp) != abs(new.end_bp - new.start_bp):
+        raise ValueError('Duplex register transport requires unchanged backing-domain length')
+    duplexes = []
+    for duplex in after.duplexes:
+        changes = {}
+        for side in ('left', 'right'):
+            end = getattr(duplex, side)
+            if end.overhang_id == overhang_id:
+                changes[side] = end.model_copy(update={
+                    'start_bp': offset_to_bp(new, bp_to_offset(old, end.start_bp)),
+                    'end_bp': offset_to_bp(new, bp_to_offset(old, end.end_bp)),
+                })
+        duplexes.append(duplex.model_copy(update=changes) if changes else duplex)
+    return after.model_copy(update={'duplexes': duplexes})
+
+
 def relocate_duplex(design: Design, duplex: Duplex, *, identity_seed: Optional[str] = None) -> Design:
     """Phase 4b geometry (#1): relocate the DRIVEN overhang's ENTIRE domain onto the
     DRIVER's helix at the duplex's PAIRED-WINDOW bp range — so a different-length
@@ -399,6 +424,7 @@ def relocate_duplex(design: Design, duplex: Duplex, *, identity_seed: Optional[s
         forced_ligation_id=identifier("duplex-ligation", [duplex.id]) if identifier is not None else None,
     )
     out = apply_bind_topology(design, topo)
+    out = _transport_duplex_registers(design, out, driven_end.overhang_id)
     new_dux = [
         d.model_copy(update={"prior_driven_topology": topo.snapshot, "bound": True})
         if d.id == duplex.id
@@ -455,6 +481,7 @@ def revert_duplex_relocation(design: Design, duplex: Duplex) -> Design:
     if not duplex.prior_driven_topology:
         return design
     out = revert_bind_topology(design, duplex.prior_driven_topology)
+    out = _transport_duplex_registers(design, out, duplex.prior_driven_topology['driven_oh_id'])
     new_dux = [
         d.model_copy(update={"prior_driven_topology": None, "bound": False})
         if d.id == duplex.id

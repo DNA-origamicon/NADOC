@@ -72,7 +72,7 @@ def _generated_sequence(design, spec, length: int, extra_sequences=()):
 
 
 @router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
-def generate_overhang_random_sequence(overhang_id: str) -> dict:
+def generate_overhang_random_sequence(overhang_id: str, preview: bool = False) -> dict:
     """Generate and assign a sequence for one overhang."""
     from backend.api.crud import _design_response
 
@@ -87,6 +87,10 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
         )
 
     sequence, updated = _generated_sequence(design, spec, domain_length)
+    if preview:
+        # Connection creation captures this screened sequence as an authored
+        # input and applies it in its one transaction. No intermediate write.
+        return {"sequence": sequence}
     updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
     updated, report, _ = design_state.mutate_with_feature_log(
         op_kind="overhang-sequence",

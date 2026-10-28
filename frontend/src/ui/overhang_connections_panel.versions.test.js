@@ -11,6 +11,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
     patchConnectionVersion: vi.fn(async () => ({})),
     deleteConnectionVersion: vi.fn(async () => ({})),
     applyConnectionVersion: vi.fn(async () => ({})),
+    disconnectConnectionVersion: vi.fn(async () => ({})),
     createOverhangConnection: vi.fn(async () => ({})),
     createOverhangBinding: vi.fn(async () => ({})),
     deleteOverhangConnection: vi.fn(async () => ({})),
@@ -23,7 +24,7 @@ import { initOverhangConnectionsPanel } from './overhang_connections_panel.js'
 import {
   createConnectionVersion, createAndApplyConnectionVersion,
   patchConnectionVersion, deleteConnectionVersion,
-  applyConnectionVersion, createOverhangConnection, deleteOverhangConnection,
+  applyConnectionVersion, disconnectConnectionVersion, createOverhangConnection, deleteOverhangConnection,
   createOverhangBinding,
 } from '../api/client.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
@@ -64,7 +65,7 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     $('oconn-heading').dispatchEvent(new Event('click'))   // expand
   })
   beforeEach(() => {
-    for (const m of [createConnectionVersion, createAndApplyConnectionVersion, patchConnectionVersion, deleteConnectionVersion, applyConnectionVersion, createOverhangConnection, deleteOverhangConnection, createOverhangBinding]) m.mockClear()
+    for (const m of [createConnectionVersion, createAndApplyConnectionVersion, patchConnectionVersion, deleteConnectionVersion, applyConnectionVersion, disconnectConnectionVersion, createOverhangConnection, deleteOverhangConnection, createOverhangBinding]) m.mockClear()
   })
 
   function pickVariant(id) {
@@ -118,8 +119,9 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     rows().find(r => r.textContent.includes('V1')).dispatchEvent(new Event('click', { bubbles: true }))
     $('oconn-apply').dispatchEvent(new Event('click'))   // "Unapply"
     await new Promise(r => setTimeout(r, 0))
-    expect(deleteOverhangConnection).toHaveBeenCalledWith('conn_ab')        // torn down
-    expect(patchConnectionVersion).toHaveBeenCalledWith('v1', { applied: false })
+    expect(disconnectConnectionVersion).toHaveBeenCalledWith('v1', { deleteVersion: false })
+    expect(deleteOverhangConnection).not.toHaveBeenCalled()
+    expect(patchConnectionVersion).not.toHaveBeenCalled()
   })
 
   it('Apply calls the atomic backend apply endpoint for the selected version', async () => {
@@ -130,17 +132,30 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     expect(applyConnectionVersion).toHaveBeenCalledWith('v2')
   })
 
-  it('Add version creates a version then auto-applies it', async () => {
+  it('keeps the pair target selected after Unapply without a prior row click', async () => {
+    store.setState(design([V('v1', true)]))
+    selectPair(A, B)
+    disconnectConnectionVersion.mockImplementationOnce(async () => {
+      store.setState({ ...design([V('v1', false)]), selection: [] })
+    })
+    $('oconn-apply').dispatchEvent(new Event('click'))
+    await new Promise(r => setTimeout(r, 0))
+    expect($('oconn-apply').textContent).toBe('Apply')
+    expect($('oconn-apply').disabled).toBe(false)
+  })
+
+  it('Add version creates and applies its replacement in one transaction', async () => {
     store.setState(design([V('v1', true)]))
     selectPair(A, B)
     // mock create to add the new version so _captureVersion can find + apply it
-    createConnectionVersion.mockImplementationOnce(async () => {
-      store.setState(design([V('v1', true), { ...V('v2', false), id: 'vNew' }]))
+    createAndApplyConnectionVersion.mockImplementationOnce(async () => {
+      store.setState(design([V('v1', false), { ...V('v2', true), id: 'vNew' }]))
     })
     $('oconn-generate').dispatchEvent(new Event('click'))   // "Add version"
     await new Promise(r => setTimeout(r, 0))
-    expect(createConnectionVersion).toHaveBeenCalled()
-    expect(applyConnectionVersion).toHaveBeenCalledWith('vNew')   // newest auto-applied
+    expect(createAndApplyConnectionVersion).toHaveBeenCalledOnce()
+    expect(createConnectionVersion).not.toHaveBeenCalled()
+    expect(applyConnectionVersion).not.toHaveBeenCalled()
   })
 
   it('Connect delegates conflicting teardown to the atomic Apply endpoint', async () => {

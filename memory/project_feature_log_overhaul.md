@@ -23,6 +23,16 @@ FH-18. Posed/dependent dissolution remains an explicit refusal. See the
 [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
 for closure evidence and the next task; aggregate regression debt remains FH-27.
 
+October28: FH-25 ordinary connection lifecycle and history-editor gates are ON.
+Unequal direct Duplex registers now follow relocation/restoration without changing
+molecular geometry; shared-host same-length sequence assignment preserves topology.
+FH-26 core dependency repair and bounded native DNA candidate comparison are also
+qualified; exact input receipts, prefix rebinding, Cancel and single Apply remain
+mandatory. See the connection/repair plans and handoff for remaining core work.
+FH-28 retained ordinary creation/recovery/publication is also qualified, including
+autosave/disk restoration, post-restore editing and bounded repeated sessions.
+Aggregate FH-27 regression acceptance remains open.
+
 The [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
 owns progress counts, gate state, qualification evidence and the single next task.
 Its current state supersedes the older S53/S54 queue, C8-open claims,

@@ -72,7 +72,7 @@ def try_record(version_id, *, linker_version=None, owner_selection=False):
                     prepared = restored, body, selected
                     materialize = command.materialize
             except CommandContractError as error:
-                if error.code == 'unsupported_connection_application_source':
+                if error.code == 'unsupported_connection_application_source' and not owner_selection:
                     return None
                 raise
 
@@ -142,7 +142,7 @@ def try_record_connect(choices, *, linker_version=None, owner_selection=False):
                     values.update(connection_composition_version=linker_version, connection_id=str(uuid4()))
                 prepared = composition.prepare(source, composition.parse_command(values))
             except CommandContractError as error:
-                if error.code == 'unsupported_connection_application_source':
+                if error.code == 'unsupported_connection_application_source' and not owner_selection:
                     return None
                 raise
 

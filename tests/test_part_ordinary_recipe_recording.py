@@ -97,6 +97,35 @@ def test_edit_rebuilds_evicted_history_once_without_mutating_source(document, wo
     assert document.design.model_dump_json() == before[1]
 
 
+@pytest.mark.parametrize('document', [False], indirect=True, ids=['ordinary'])
+def test_autosave_restores_native_inputs_and_allows_one_undoable_edit(document, worker, tmp_path, monkeypatch):
+    from backend.api import session_cache
+    from backend.api.part_immutable_persistence import StrictPersistence
+
+    doc = doc_context.get_current_doc()
+    monkeypatch.setattr(gate, 'GROUP_ORGANIZATION_ENABLED', False)
+    monkeypatch.setattr(session_cache, '_session_dir', tmp_path / '.session')
+    monkeypatch.setattr(session_cache, '_strict_persistence', StrictPersistence(tmp_path))
+    edit(document)
+    authored = document.design.model_dump(mode='json')
+    revision = document.revision
+    assert session_cache._write_doc(doc)[0] == revision
+    state.drop_doc(doc)
+    assert session_cache.restore() == 1
+    restored = state._sessions[doc]
+    assert restored is not document
+    assert restored.design.model_dump(mode='json') == authored
+    _verified(restored.design)
+    candidate, report, _ = host().edit_extrusion(0, {'length_bp': 20},
+        expected_feature_id=restored.design.feature_log[0].id,
+        expected_design_id=restored.design.id, expected_revision=restored.revision)
+    assert report.passed and candidate.feature_log[0].params['length_bp'] == 20
+    assert len(restored.history) == 1
+    _verified(candidate)
+    state.undo()
+    assert restored.design.model_dump(mode='json') == authored
+
+
 @pytest.mark.parametrize("guard", ["design", "revision", "feature"])
 def test_stale_editor_refuses_before_capture_or_worker(document, worker, monkeypatch, guard):
     before = saved(document)

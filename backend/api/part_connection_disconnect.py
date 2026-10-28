@@ -12,7 +12,7 @@ from backend.core.part_command_errors import CommandContractError, ReferenceReso
 from backend.core.part_operation_input import validate_operation_input
 
 ACTION = 'connection-version-disconnect'
-ENABLED = False
+ENABLED = True
 
 
 class DisconnectRequest(OwnerSelection, common.DirectConflicts):

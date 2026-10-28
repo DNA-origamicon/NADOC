@@ -23,7 +23,7 @@ def source():
               "nested": {"items": [1, 2.0], "enabled": True}}
     design.feature_log = [SnapshotLogEntry(id="feature", op_kind="nanoparticle-patch", label="Feature", params=params),
         RoutingClusterLogEntry(id="group", children=[MinorMutationLogEntry(id="child", op_subtype="nick", label="Child",
-            params={"_proof_version": 1, "helix_id": "missing"})])]
+            params={"_proof_version": 1, "helix_id": "missing", "bp_index": 5, "direction": "FORWARD"})])]
     return design
 
 
@@ -49,7 +49,7 @@ def test_planning_preserves_action_order_and_clones_only_changed_input_definitio
         action(parameter_path=["nested", "enabled"], expected_old=True, value=False)])
     targets = plan_actions(design, request.actions, dependencies=known)
     assert list(targets) == ["child", "feature"]
-    assert targets["child"].params == {"_proof_version": 1, "helix_id": "replacement"}
+    assert targets["child"].params == {"_proof_version": 1, "helix_id": "replacement", "bp_index": 5, "direction": "FORWARD"}
     assert targets["feature"].params == {"_proof_version": 1, "history_seed": "fixed", "selector": "missing",
                                           "nested": {"items": [3, 2.0], "enabled": False}}
     targets["feature"].params["nested"]["items"][1] = 500

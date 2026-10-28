@@ -52,6 +52,17 @@ class ApplyRoute(ConnectRoute):
         return ENABLED or routes.NATIVE_LINKER_V2_ENABLED or routes.NATIVE_DIRECT_APPLY_ENABLED or routes.NATIVE_LINKER_V3_ENABLED or routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED
 
 
+class MetadataRoute(ConnectRoute):
+    policy_operation = 'pending_connection_version'
+    input_prefix = 'connection_metadata'
+    input_label = 'Connection version metadata'
+    allow_empty_delete = True
+
+    def enabled(self):
+        from backend.api.part_connection_version_commands import APPLIED_METADATA_ENABLED
+        return APPLIED_METADATA_ENABLED
+
+
 class DisconnectRoute(ApplyRoute):
     input_prefix = 'connection_disconnect'
     input_label = 'Disconnect connection version'

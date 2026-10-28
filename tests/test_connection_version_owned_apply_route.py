@@ -57,6 +57,7 @@ def document(application_prefix, monkeypatch):
         return result
 
     monkeypatch.setattr(routes, "OWNED_FINITE_CONNECTION_APPLY_ENABLED", True, raising=False)
+    monkeypatch.setattr(routes, "NATIVE_CONNECTION_OWNER_SELECTION_ENABLED", False)
     monkeypatch.setattr(routes, "_design_response_with_geometry", observed_response)
     try:
         with state._lock:

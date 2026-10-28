@@ -1,5 +1,20 @@
 # Standard-part repair implementation plan
 
+
+## Core repair qualification — October 28, 2026
+- FH-26 core repair is delivered. Current status/counters: [handoff](session_handoff.md); historical gap statements below are superseded at the retained native core scope.
+- Reviewed fields reuse ordinary normalization: all Extrude/Sweep families, native Bend/Twist parameters and cluster/strand/domain references, cluster creation/membership, placement and nucleotide transforms, all editable Fine Routing v1/v2 families, and connection inputs. Output IDs, seeds, versions and derived receipts remain protected.
+- Native typed overlays rebuild their actual definitions; changed deformation scopes and routing children bind against their exact replay prefix. Source capture neither serializes nor hashes the source-free overlays under the lock.
+- The existing repair panel keeps exact old-value expectations, source guards, saved proposals, evaluation and one Apply/undo. Earliest failures are visible; later unexecuted rows are marked blocked without claiming they are all geometric dependents.
+- Explicit delete review lists Bend→Sweep→routing dependents, Cancel preserves the full recipe, and confirmed cascade retains the independent later extrusion. Undo/reopen/cold proof pass in the app.
+- Native DNA comparison v2 is ON through the existing worker/viewer; no new host or cache. Authored geometry and candidate are private; repeated Fit/orbit/close/cancel leave canonical design, revision, geometry and stacks unchanged. Unsupported display families/oversize packets refuse the whole comparison; exact input/change review remains available.
+- Focused core matrix 181 pass; larger repair/comparison run 935 pass/7 fail. Incomplete synthetic routing fixtures and old metadata expectations corrected; final host/repair run 408 pass/1 fail exposed an exact-deadline rounding defect, now fixed with absolute expiry and 59 final comparison passes. No tolerance/budget increase.
+- Focused frontend 100 pass/7 files. Three native repair browser cases (Bend, cluster pose, routing) pass with saved proposals, three comparison lifetimes each, Cancel, one Apply/undo and reopen/cold proof; production-default Bend plus explicit cascade 2/2 pass. Two-pane native DNA visually inspected.
+- HTTP comparison 9/9 success; tiny/boundary/six-helix maxima 1486/1613/1673 ms; scalar reads max 22.73 ms, capture lock max 2.52 ms. Child high-water RSS 171196 KiB; source/candidate/catalog cleanup preserved.
+- Natural-GC CPU two-pane construction: 9 repeats across 9 native cases; boundary 1024 nt p95 47.1 ms, six-helix 1008 nt p95 29.1 ms; disposal ≤0.33 ms. Owned resources and inputs preserved; bounds unchanged.
+- App comparison/adopt: production Bend comparison 1143–1244 ms, Apply319 ms; earlier cluster Apply3529 ms (within 2× small allowance), routing Apply776 ms. One first-run comparison outlier4525 ms retained. No performance-improvement claim.
+- Evidence: `.development-artifacts/feature-history-focus/core-*`; exact browser roots `udmzy4x5`/`y3htta6y` removed and independently absent. Full required suites remain FH-27; no broad green claim. Retired PartGroup/legacy migration and parked asset expansion remain excluded.
+
 Audited October 15, 2026. P5a backend repair evaluation/publication and its
 numerical integration regressions pass. P5b has a bounded direct-ID selection
 catalog and isolated nonpublishing job API. P5c has shared schemas and a durable

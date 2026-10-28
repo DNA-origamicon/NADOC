@@ -124,23 +124,42 @@ def test_dedicated_host_fixture_is_recreated_by_actual_native_input(source):
     assert result["checked_commands"] == 3
 
 
-def test_shared_overhang_host_refuses_before_legacy_sequence_resize(native_prefix):
+def test_same_length_sequence_edit_preserves_shared_native_host(native_prefix):
+    from backend.api.overhang_patch import OverhangPatchRequest, _build_overhang_patch
+    from backend.api.crud import _geometry_for_design
+    source = native_prefix
+    assert len({item.helix_id for item in source.overhangs}) == 1
+    spec = source.overhangs[0]
+    result, _, _ = _build_overhang_patch(source, spec.id, OverhangPatchRequest(sequence='A' * 12))
+    assert result.helices == source.helices
+    assert [s.domains for s in result.strands] == [s.domains for s in source.strands]
+    assert result.crossovers == source.crossovers
+    before, after = _geometry_for_design(source), _geometry_for_design(result)
+    for rows in (before, after):
+        for nucleotide in rows:
+            nucleotide.pop('base', None)
+    assert after == before
+
+
+def test_shared_overhang_host_connects_without_resizing_either_endpoint(native_prefix):
     source = _pending(native_prefix.model_copy(deep=True))
     assert len({item.helix_id for item in source.overhangs}) == 1
     before = source.model_dump_json()
-    with pytest.raises(CommandContractError) as caught:
-        _build(source, _params(source))
-    assert caught.value.code == "unsupported_connection_application_source"
+    result = append(source, 'overhang-bulk', _params(source), 'shared-connect')
+    assert proof(result)['status'] == 'verified'
+    assert result.helices[:len(source.helices)] == source.helices
+    for strand in source.strands:
+        assert result.find_strand(strand.id).domains == strand.domains
     assert source.model_dump_json() == before
 
 
-@pytest.mark.parametrize("change", ["larger_host", "additional_owner"])
+@pytest.mark.parametrize("change", ["out_of_bounds", "additional_owner"])
 def test_partial_or_multiply_owned_host_refuses_before_sequence_patch(source, monkeypatch, change):
     from backend.api import overhang_patch
     source = _pending(source)
     selected = source.overhangs[0]
-    if change == "larger_host":
-        source = source.copy_with(helices=[item.model_copy(update={"length_bp": item.length_bp + 1})
+    if change == "out_of_bounds":
+        source = source.copy_with(helices=[item.model_copy(update={"length_bp": item.length_bp - 1})
             if item.id == selected.helix_id else item for item in source.helices])
     else:
         source = source.copy_with(overhangs=[*source.overhangs,

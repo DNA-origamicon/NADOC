@@ -70,6 +70,10 @@ def reference_slot(kind, params, path):
     geometry = reference(kind, params, path)
     if geometry is not None:
         return ReferenceSlot(*geometry)
+    from backend.api.part_core_repair_inputs import reference as core_reference
+    core = core_reference(kind, params, path)
+    if core is not None:
+        return ReferenceSlot(*core)
     values = {key: value for key, value in params.items() if key != "_generator"}
     if kind == "overhang-bulk":
         from backend.api.part_connection_repair_selection import reference_slot as connection_slot
@@ -130,9 +134,11 @@ def resolve_prefix(source, feature_id, child_id):
         if child_id is None:
             if entry.feature_type != "snapshot":
                 from backend.core.part_deformation_repair import require_named_entry
+                from backend.api.part_core_repair_inputs import core_entry
 
                 try:
-                    require_named_entry(entry)
+                    if not core_entry(entry):
+                        require_named_entry(entry)
                 except CommandContractError as error:
                     _unsupported(str(error))
             return entry, prefix
@@ -201,6 +207,8 @@ def _candidates(design, slot, kind, params, request, checkpoint):
         return serial_counts[asset.id].get(serial, 0) == 1
 
     def eligible(record):
+        if slot.family == 'core_input':
+            return True  # Full native replay checks the compound selection.
         if slot.family == 'geometry_source':
             from backend.api.part_geometry_reference_repair import eligible as geometry_eligible
             return geometry_eligible(kind, params, record, design)

@@ -30,6 +30,18 @@ backend coverage and the persistent broad baseline are recorded in the
 [current handoff](docs/audits/feature_history_20261014/session_handoff.md).
 Native geometry formulas/constants/goldens and unrelated production gates are unchanged.
 
+## ISSUE-97 / ISSUE-143 — ordinary connection closure (2026-10-28)
+
+Unequal direct Duplex binding now transports endpoint registers after native bind
+and inverse operations; the isolated A/B comparison preserved every molecular
+coordinate and paired offset. Same-length sequence assignment leaves shared helix
+extent and neighboring domains intact. Atomic Connect/Add version, explicit
+Reapply and native history/removal gates are qualified in the running app.
+Focused backend 560 pass; frontend 93 pass; ordinary family/profile, undo/reopen,
+source-reset and downstream-refusal coverage is linked from the
+[connection plan](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#ordinary-connection-qualification--october-28-2026).
+Broad regression results remain separate in the current handoff.
+
 ## Baselines (at loop start, 2026-06-05)
 
 - `frontend/src/main.js` LOC: 9600

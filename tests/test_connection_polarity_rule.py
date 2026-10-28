@@ -78,7 +78,11 @@ def test_connection_version_routes_refuse_forbidden_pairs_before_anything_else(h
     assert allowed.status_code == 404  # passes the rule; the overhangs simply do not exist
 
 
-def test_apply_refuses_a_stored_forbidden_version(http):
+def test_apply_refuses_a_stored_forbidden_version(http, monkeypatch):
+    # This hand-authored pre-recipe fixture exercises the retained compatibility
+    # implementation; production native contracts have their own replay matrix.
+    from backend.api import routes_connection_versions as routes
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', False)
     client, headers = http
     from backend.core.models import ConnectionVersion
 

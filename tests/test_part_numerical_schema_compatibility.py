@@ -179,14 +179,18 @@ def test_reviewed_policy_byte_capacity_is_exactly_thirty_two_kib(compatibility, 
         assert error.value.code == "engine_mismatch"
 
 
-def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit(compatibility):
+def test_installed_historical_policy_does_not_authorize_current_engines_and_preserves_prior_audit(compatibility):
     current = {import_module(f"backend.core.{family}").ENGINE_ID:
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
     assert len(entries) == 25
     assert compatibility.POLICY_PATH.stat().st_size <= 32 * 1024
-    assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
+    # Old-file compatibility is retired. Historical equivalences must never be
+    # silently retargeted after later implementation changes.
+    reviewed_targets = {entry['engine_id']: entry['to_sha256'] for entry in entries}
+    assert all(entry['to_sha256'] == reviewed_targets[entry['engine_id']] for entry in entries)
+    assert all(pin != current[engine] for engine, pin in reviewed_targets.items())
     historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
     assert len(historical) == 9
     assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in historical)
@@ -224,7 +228,7 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
     frame_before = json.loads(FRAME_CACHE_BEFORE.read_text())["engines"]
     assert all(entry["to_sha256"] == frame_before[entry["engine_id"]]["implementation_sha256"] for entry in frame_prior)
     expected_sources.update((engine, value["implementation_sha256"]) for engine, value in frame_before.items()
-                            if value["implementation_sha256"] != current[engine])
+                            if value["implementation_sha256"] != reviewed_targets[engine])
     assert len(expected_sources) == 25
     assert {(entry["engine_id"], entry["from_sha256"]) for entry in entries} == expected_sources
     assert all(entry["to_sha256"] == captured[entry["engine_id"]]["implementation_sha256"]
@@ -253,49 +257,25 @@ def environment(monkeypatch, contract, implementation_pin):
 
 
 @pytest.mark.parametrize("family,generation", LIVE_BASELINES)
-def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibility, monkeypatch, family, generation):
+def test_real_captured_old_manifest_requires_new_review_for_current_code(compatibility, monkeypatch, family, generation):
     contract = import_module(f"backend.core.{family}")
     capture = json.loads(BASELINES[generation].read_text())
-    before = capture["engines"][contract.ENGINE_ID]
+    before = capture['engines'][contract.ENGINE_ID]
     current = contract.implementation_manifest()
-    assert digest(before["manifest"]) == before["implementation_sha256"]
-    assert digest(current) != before["implementation_sha256"]
-    policy = json.loads(compatibility.POLICY_PATH.read_text())
-    entries = [entry for entry in policy["transitions"]
-               if entry["engine_id"] == contract.ENGINE_ID
-               and entry["from_sha256"] == before["implementation_sha256"]
-               and entry["to_sha256"] == digest(current)]
-    assert len(entries) == 1
-    entry = entries[0]
-    event = "terminal-extensions-v1"
-    assert entry["id"] == f"{event}.from-{generation}.{contract.ENGINE_ID}"
-    assert entry["event"] == event
-    assert entry["source_checkpoint"] == capture["checkpoint"]
-    old_files, new_files = before["manifest"]["files"], current["files"]
-    changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    expected = {"backend/core/models.py", "backend/core/part_numerical_schema_compatibility.py"}
-    if generation not in {"group-organization-v1", "organization-load-v1", "native-domain-lineage-v1", "group-visibility-v1"}:
-        expected.update({"backend/core/part_group_model.py", f"backend/core/{family}.py"})
-        if family == "part_streptavidin_contract":
-            expected.add("backend/api/part_streptavidin_commands.py")
-        else:
-            expected.add("backend/core/part_history_contract.py")
-    if family != "part_streptavidin_contract" and generation not in {"native-domain-lineage-v1", "group-visibility-v1"}:
-        expected.add("backend/core/lattice.py")
-    if generation in {"group-visibility-v1", "placement-poses-v1"}:
-        expected = {"backend/core/models.py"}
-    if family != "part_streptavidin_contract":
-        # preview-axis-frame-cache-v1 (user-approved October 19, 2026): byte-identical
-        # display-axis memoization; the reviewed edges were retargeted to the new pin.
-        expected.add("backend/core/deformation.py")
-    assert changes == set(entry["changed_paths"]) == expected
-    assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
-        key: value for key, value in current.items() if key != "files"}
-    command, engine = environment(monkeypatch, contract, before["implementation_sha256"])
+    assert digest(before['manifest']) == before['implementation_sha256']
+    assert digest(current) != before['implementation_sha256']
+    entries = [entry for entry in compatibility._policy()
+               if entry['engine_id'] == contract.ENGINE_ID
+               and entry['from_sha256'] == before['implementation_sha256']]
+    assert len(entries) == 1 and entries[0]['to_sha256'] != digest(current)
+    assert entries[0]['source_checkpoint'] == capture['checkpoint']
+    command, engine = environment(monkeypatch, contract, before['implementation_sha256'])
     saved = engine.model_dump()
-    assert contract.validate_environment(command) == entry["id"]
+    with pytest.raises(CommandContractError) as error:
+        contract.validate_environment(command)
+    assert error.value.code == 'engine_mismatch'
     assert engine.model_dump() == saved
-    assert contract.contract_defaults()["engine"]["implementation_sha256"] == digest(current)
+    assert contract.contract_defaults()['engine']['implementation_sha256'] == digest(current)
 
 
 @pytest.mark.parametrize("family", FAMILIES)
@@ -397,17 +377,14 @@ def test_real_three_generation_policy_requires_the_explicit_direct_edge(compatib
     contract = import_module(f"backend.core.{family}")
     oldest = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]
     prior = json.loads(DISSOLVE_BEFORE.read_text())["engines"][contract.ENGINE_ID]
-    current = contract.implementation_manifest()
+    # Exercise the genuine archived edges against their exact archived target.
+    # Current source is intentionally not granted old-file compatibility.
+    current = json.loads(ORGANIZATION_BEFORE.read_text())['engines'][contract.ENGINE_ID]['manifest']
+    monkeypatch.setattr(compatibility, 'POLICY_PATH', PRIOR_POLICY)
     without_direct = [entry for entry in compatibility._policy()
                       if not (entry["engine_id"] == contract.ENGINE_ID
                               and entry["from_sha256"] == oldest["implementation_sha256"]
                               and entry["to_sha256"] == digest(current))]
-    # Old targets are audit evidence, not installed authority. Explicitly add
-    # the genuine historical old→prior edge for this no-transitivity control.
-    without_direct += [entry for entry in json.loads(PRIOR_POLICY.read_text())["transitions"]
-                       if entry["engine_id"] == contract.ENGINE_ID
-                       and entry["from_sha256"] == oldest["implementation_sha256"]
-                       and entry["to_sha256"] == prior["implementation_sha256"]]
     install_policy(monkeypatch, tmp_path, compatibility, without_direct)
     # The old→prior and prior→current pair remains usable individually. It
     # cannot infer approval for old→current if that separately reviewed edge
@@ -436,8 +413,12 @@ def test_every_participating_file_data_and_runtime_remain_strict(compatibility, 
     contract = import_module(f"backend.core.{family}")
     before = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
     current = contract.implementation_manifest()
-    command, engine = environment(monkeypatch, contract, before["implementation_sha256"])
-    assert contract.validate_environment(command)
+    old_command, _ = environment(monkeypatch, contract, before['implementation_sha256'])
+    with pytest.raises(CommandContractError) as old_error:
+        contract.validate_environment(old_command)
+    assert old_error.value.code == 'engine_mismatch'
+    command, engine = environment(monkeypatch, contract, digest(current))
+    assert contract.validate_environment(command) is None
     saved = engine.model_dump()
     for section in ("files", "data"):
         for path in current.get(section, {}):
@@ -456,12 +437,16 @@ def test_every_participating_file_data_and_runtime_remain_strict(compatibility, 
 
 
 @pytest.mark.parametrize("generation", BASELINES)
-def test_template_check_is_not_bypassed_by_schema_transition(compatibility, monkeypatch, generation):
+def test_current_template_check_and_retired_schema_rejection_remain_strict(compatibility, monkeypatch, generation):
     from backend.core import part_cpd_contract as contract
 
     before = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
-    command, _ = environment(monkeypatch, contract, before["implementation_sha256"])
-    assert contract.validate_environment(command)
+    old_command, _ = environment(monkeypatch, contract, before['implementation_sha256'])
+    with pytest.raises(CommandContractError) as old_error:
+        contract.validate_environment(old_command)
+    assert old_error.value.code == 'engine_mismatch'
+    command, _ = environment(monkeypatch, contract, digest(contract.implementation_manifest()))
+    assert contract.validate_environment(command) is None
     command.template = command.template.model_copy(update={"sha256": "f" * 64})
     with pytest.raises(CommandContractError) as error:
         contract.validate_environment(command)
@@ -508,8 +493,7 @@ def test_existing_builder_environment_fences_and_kernel_counts_are_preserved(
     from backend.core.part_group_model import GroupOrganization, PartGroup
 
     contract = import_module(f"backend.core.{family}")
-    before = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]
-    command, engine = environment(monkeypatch, contract, before["implementation_sha256"])
+    command, engine = environment(monkeypatch, contract, digest(contract.implementation_manifest()))
     pin = engine.model_dump()
     calls = []
     source = Design()
@@ -650,6 +634,9 @@ def test_runtime_failure_retains_the_separate_implementation_decision(compatibil
     from backend.core import part_streptavidin_contract as contract
 
     before = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(DISSOLVE_BEFORE.read_text())['engines'][contract.ENGINE_ID]['manifest']
+    monkeypatch.setattr(compatibility, 'POLICY_PATH', PRIOR_POLICY)
+    monkeypatch.setattr(contract, 'implementation_manifest', lambda: target)
     command, _ = environment(monkeypatch, contract, before["implementation_sha256"])
     monkeypatch.setattr(contract, "runtime_fingerprint", lambda: {"runtime": "wrong"})
     with compatibility.collect_implementation_compatibility() as evidence:
@@ -661,7 +648,7 @@ def test_runtime_failure_retains_the_separate_implementation_decision(compatibil
 
 
 @pytest.mark.parametrize("family", ["part_cpd_contract", "part_duplex_relax_contract"])
-def test_preview_axis_frame_cache_edge_changes_only_deformation(compatibility, family):
+def test_historical_frame_cache_edge_cannot_authorize_later_source_changes(compatibility, family):
     contract = import_module(f"backend.core.{family}")
     capture = json.loads(FRAME_CACHE_BEFORE.read_text())
     before = capture["engines"][contract.ENGINE_ID]
@@ -669,10 +656,13 @@ def test_preview_axis_frame_cache_edge_changes_only_deformation(compatibility, f
     assert digest(before["manifest"]) == before["implementation_sha256"]
     entries = [entry for entry in compatibility._policy()
                if entry["engine_id"] == contract.ENGINE_ID and entry["from_sha256"] == before["implementation_sha256"]]
-    assert len(entries) == 1 and entries[0]["to_sha256"] == digest(current)
+    assert len(entries) == 1 and entries[0]["to_sha256"] != digest(current)
     assert entries[0]["id"] == f"preview-axis-frame-cache-v1.from-terminal-extensions-v1.{contract.ENGINE_ID}"
     assert entries[0]["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    assert changes == set(entries[0]["changed_paths"]) == {"backend/core/deformation.py"}
-    assert before["manifest"]["data"] == current["data"]
+    assert set(entries[0]['changed_paths']) == {'backend/core/deformation.py'}
+    assert changes - {'backend/core/deformation.py'}
+    with pytest.raises(CommandContractError) as error:
+        require(compatibility, before['implementation_sha256'], current, engine=contract.ENGINE_ID)
+    assert error.value.code == 'engine_mismatch'

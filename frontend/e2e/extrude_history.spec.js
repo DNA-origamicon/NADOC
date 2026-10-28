@@ -126,7 +126,7 @@ for (const mode of ['Tools', 'fresh-Tools', 'empty-context', 'end-context', 'end
 test('Bundle Extrude history Cancel Save and Bend Sweep replay persistence', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const before = await f.checkpoint(), stored = await f.browser()
-    const modal = page.getByRole('dialog', { name: 'Edit Bundle', exact: true })
+    const modal = page.getByRole('dialog', { name: 'Edit Extrude', exact: true })
     const open = async () => {
       await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
       await page.getByTitle('Edit Native bounded bundle parameters', { exact: true }).click()
@@ -207,12 +207,12 @@ test('Bundle Extrude history Cancel Save and Bend Sweep replay persistence', asy
 })
 
 const families = [
-  ['extrude-segment', 'Extrude Segment'],
-  ['extrude-continuation', 'Continuation'],
-  ['extrude-deformed-continuation', 'Deformed Continuation'],
-  ['extrude-frame', 'Frame Extrusion'],
-  ['circle-segment', 'Circle Segment'],
-  ['overhang-extrude', 'Overhang Extrusion'],
+  ['extrude-segment', 'Extrude'],
+  ['extrude-continuation', 'Extrude'],
+  ['extrude-deformed-continuation', 'Extrude'],
+  ['extrude-frame', 'Extrude'],
+  ['circle-segment', 'Circle'],
+  ['overhang-extrude', 'Extrude'],
 ]
 for (const [kind, title] of families) test('Extrude matrix ' + kind + ' controls Cancel Save persistence', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
@@ -354,7 +354,7 @@ test('Extrude late Save response cannot replace a reopened same-ID part', async 
     const before = await f.checkpoint(), stored = await f.browser()
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
     await page.getByTitle('Edit extrude-frame parameters', { exact: true }).click()
-    const modal = page.getByRole('dialog', { name: 'Edit Frame Extrusion', exact: true })
+    const modal = page.getByRole('dialog', { name: 'Edit Extrude', exact: true })
     await modal.getByLabel('Length (bp)', { exact: true }).fill('16')
     await page.evaluate(() => {
       window.__extrudeReplyFinished = false
@@ -391,6 +391,24 @@ test('Extrude late Save response cannot replace a reopened same-ID part', async 
   }, 'extrude-nick-batch')
 })
 
+test('Closing a part retires its background Dimensions read without a save warning', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint()
+    await withHeldResponse(page, '/api/design/dimensions', async ({ ready, release }) => {
+      // Hold the real periodic read after the server answered, then close through
+      // the actual client lifecycle. No failed response or geometry is fabricated.
+      expect((await ready).response.ok()).toBe(true)
+      await page.evaluate(async () => (await import('/src/api/client.js')).closeSession())
+      await release()
+      await expect(page.locator('.toast').filter({ hasText: 'Dimensions could not be saved' })).toHaveCount(0)
+      await page.evaluate(async file => {
+        if (!await (await import('/src/api/client.js')).loadDesign(file)) throw new Error('Reopen failed')
+      }, f.file)
+      expect((await f.checkpoint()).design).toEqual(before.design)
+    })
+  }, 'extrude-nick-batch')
+})
+
 test('Extrude representative 18-helix history Save and Cancel latency', async ({ page, request }) => {
   test.setTimeout(180_000)
   await page.addInitScript(() => {
@@ -405,7 +423,7 @@ test('Extrude representative 18-helix history Save and Cancel latency', async ({
     expect(before.design.helices).toHaveLength(18)
     expect(before.design.helices.every(helix => helix.length_bp === 504)).toBe(true)
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
-    const modal = page.getByRole('dialog', { name: 'Edit Frame Extrusion', exact: true })
+    const modal = page.getByRole('dialog', { name: 'Edit Extrude', exact: true })
     const opening = performance.now()
     await page.getByTitle('Edit extrude-frame parameters', { exact: true }).click()
     await expect(modal).toBeVisible()
@@ -447,7 +465,7 @@ for (const finish of ['Cancel', 'Save retry']) test(`Extrude refuses partial rou
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
     await page.getByTitle('Expand Fine Routing', { exact: true }).click()
     await page.getByTitle('Edit extrude-frame parameters', { exact: true }).click()
-    const modal = page.getByRole('dialog', { name: 'Edit Frame Extrusion', exact: true })
+    const modal = page.getByRole('dialog', { name: 'Edit Extrude', exact: true })
     await expect(modal).toBeVisible()
     await modal.getByLabel('Length (bp)', { exact: true }).fill('5')
     const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit')

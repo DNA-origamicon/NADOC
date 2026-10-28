@@ -102,6 +102,7 @@ def document(application_prefix, monkeypatch):
     with state._lock:
         state._sessions[doc] = session
     monkeypatch.setattr(routes, 'NATIVE_LINKER_V2_ENABLED', True)
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', False)
     try:
         yield SimpleNamespace(source=source, session=session)
     finally:

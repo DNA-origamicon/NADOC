@@ -46,7 +46,7 @@ class RepairTarget:
     upgrade: UpgradeNumericalContract | None = None
     owner_upgrade: dict | None = None
     structural_replacement: ClusterCreateLogEntry | None = None
-    definition_replacement: DeformationLogEntry | None = None
+    definition_replacement: object | None = None
 
 
 def same_input(left, right):
@@ -91,6 +91,7 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
     if check_expectations and empty_groups:
         raise CommandContractError("Empty routing groups have no replay contract", code="empty_routing_cluster")
     targets, paths = {}, {}
+    from backend.api.part_core_repair_inputs import core_entry
     for action in actions:
         if not isinstance(action, (SetInput, UpgradeNumericalContract, UpgradeClusterCreation, UpgradeConnectionOwners)):
             raise TypeError("Repair planning requires parsed repair actions")
@@ -104,10 +105,16 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
             if entry is None:
                 raise error_type("The selected routing child no longer exists in this group", code="missing_feature", action=action)
         elif (entry.feature_type != "snapshot" and not isinstance(action, UpgradeClusterCreation)
-              and not (type(entry) is DeformationLogEntry and isinstance(action, SetInput))):
+              and not ((type(entry) is DeformationLogEntry or core_entry(entry)) and isinstance(action, SetInput))):
             raise error_type("This repair version edits snapshot or explicit routing-child definitions",
                              code="unsupported_repair_target", action=action)
-        if type(entry) is DeformationLogEntry and isinstance(action, SetInput):
+        if core_entry(entry) and isinstance(action, SetInput) and not check_expectations:
+            # These typed overlays have no byte sources. Leave complete input
+            # serialization/validation to final planning outside source capture.
+            targets[entry.id] = RepairTarget(entry, entry.feature_type, None, action,
+                                            definition_replacement=copy_value(entry))
+            continue
+        if type(entry) is DeformationLogEntry and not core_entry(entry) and isinstance(action, SetInput):
             from backend.core.part_deformation_repair import reference_index, replace_reference, require_named_entry
 
             try:
@@ -197,7 +204,17 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
                 raise error_type("A definition can be upgraded only once per repair", code="duplicate_numerical_upgrade", action=action)
             target.upgrade = action
     for target in targets.values():
+        from backend.api.part_core_repair_inputs import supported, validate_paths, replacement
+        if check_expectations and isinstance(target.action, SetInput) and supported(target.kind, target.params):
+            try:
+                validate_paths(target.kind, command_input(target.entry)[1], target.params, paths[target.entry.id])
+                if core_entry(target.entry):
+                    target.definition_replacement = replacement(target.entry, target.params)
+            except CommandContractError as exc:
+                raise error_type(str(exc), code=exc.code, action=target.action) from exc
         if target.definition_replacement is not None:
+            if core_entry(target.entry):
+                continue
             from backend.core.part_deformation_repair import require_named_entry
 
             try:

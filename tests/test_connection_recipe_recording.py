@@ -42,24 +42,9 @@ def test_owned_apply_disconnect_one_undo_and_replay(document, worker, direct_sou
         assert error.value.detail['code'] == 'nucleotide_double_occupancy'
         unchanged(document, before)
         return
-    lengths = [o.sub_domains[0].length_bp for o in document.design.overhangs[:2]]
-    if family in {'root-to-root', 'end-to-root'} and lengths[0] != lengths[1]:
-        # ISSUE-143: native relocation leaves the Duplex register at the old
-        # address. Prove the unorganized oracle fails too; never certify parity.
-        from backend.api.part_proof_commands import execute
-        from backend.core.models import Design
-        from pydantic import ValidationError
-        from fastapi import HTTPException
-        native = execute('overhang-bulk', document.design.copy_with(group_organization=None),
-                         application(document.design, family))
-        with pytest.raises(ValidationError, match='outside overhang'):
-            Design.model_validate(native.model_dump(mode='json'))
-        with pytest.raises(HTTPException) as error:
-            create(document, organized(application(document.design, family)))
-        assert error.value.detail['code'] == 'invalid_connection_output'
-        unchanged(document, before)
-        return
     result, report, entry, _ = create(document, organized(application(document.design, family)))
+    from backend.core.models import Design
+    assert Design.model_validate_json(result.model_dump_json()) == result
     assert result is document.design and entry is result.feature_log[-1]
     assert document.revision == before[2] + 1 and len(document.history) == len(before[3]) + 1
     assert proof(result)['status'] == 'verified'

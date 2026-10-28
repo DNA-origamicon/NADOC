@@ -73,7 +73,7 @@ def test_endpoint_repair_uses_prefix_and_excludes_other_end(application_prefix, 
     assert proof(candidate)['status'] == 'verified'
     description = describe_inputs('overhang-bulk', broken.feature_log[-1].params)
     assert description['definition_supported']
-    assert {tuple(f['parameter_path']) for f in description['fields']} == {('overhang_a_id',), ('overhang_b_id',)}
+    assert {tuple(f['parameter_path']) for f in description['fields'] if f['input_type'] == 'reference'} == {('overhang_a_id',), ('overhang_b_id',)}
 
 
 @pytest.mark.parametrize('path', [['history_seed'], ['connection_id'], ['conflict_duplex_ids', 0],
@@ -216,7 +216,7 @@ def test_metadata_exposes_only_reviewed_slots_for_each_native_action(application
     result = describe_inputs('overhang-bulk', params)
     assert result['definition_supported'], result
     expected = {('overhang_a_id',), ('overhang_b_id',)} if action in {'create', 'connect'} else {('version_id',)}
-    assert {tuple(field['parameter_path']) for field in result['fields']} == expected
+    assert {tuple(field['parameter_path']) for field in result['fields'] if field['input_type'] == 'reference'} == expected
 
 
 def test_broken_prefix_stops_before_candidate_scan(application_prefix):
@@ -251,3 +251,10 @@ def test_candidate_inventory_refuses_duplicates_and_oversize_before_iteration(ap
     with pytest.raises(CommandContractError) as error:
         adapter.candidates(source.copy_with(overhangs=Unvisited(source.overhangs)), slot, target.params, request, lambda: None)
     assert error.value.code == 'connection_selection_limit'
+
+
+def test_saved_connection_inputs_expose_only_reviewed_scalar_fields(application_prefix):
+    source = pending(application_prefix)
+    result = describe_inputs('overhang-bulk', source.feature_log[-1].params)
+    assert {tuple(field['parameter_path']) for field in result['fields'] if field['input_type'] != 'reference'} == {
+        ('name',), ('overhang_a_seq',), ('overhang_b_seq',), ('bridge_seq',), ('bridge_length',)}

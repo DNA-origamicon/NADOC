@@ -1,5 +1,23 @@
 # Standard part feature history implementation
 
+## Aggregate integration qualification — October 28, 2026
+- FH-25/26/28 close at their reviewed ordinary core scope; FH-27 remains open pending regression acceptance. Tool C1–C9 qualification and excluded scope are unchanged; current counts live in the handoff.
+- New running-app coverage joins connection lifecycle/sequence/history, core repair/candidate comparison/dependent cascade, Bundle→Bend→Sweep replay, source reset and durable ordinary recovery. The proven unused multi-request Connect helper chain was removed; no new host or sealed rollout was introduced.
+- Dimensions' real stale-read `AbortError` was misreported as a failed save. A red client test reproduced it; retired GETs now return quietly while real failures remain errors. Actual periodic-read/Close/reopen browser case passes; owned root independently absent.
+- Full frontend: 790 files, 9480 pass/1 skip, 344.68 s. Ruff and whitespace checks pass; `main.js` delta remains zero.
+- First required FAST: 19594 pass/19 skip/88 fail/3175 warnings, 367.19 s. Exact baseline comparison: the previous 83 plus five stale gate/editor fixture expectations, all five subsequently passing in an 82-case focused run.
+- Retired numerical compatibility assertions now reject old pins against current source, retain archived exact-edge/non-transitive checks, and exercise current source/data/runtime/template fences. 184 pass; production numerical policy, pins and geometry unchanged. An initial focused invocation lacked the outer serialization wrapper and overlapped frontend briefly; its failed result is superseded by the guarded 184-case pass.
+- Guard triage: confirmed FAST has no individual test over five seconds (max3.89 s); 19702 collected outcomes/1205.5 aggregate worker-seconds. Largest files exercise real worker lifecycles; no identified shared host-probe/sleep defect, marker change or raised budget. Overall runtime warning remains explicit.
+- Confirmed FAST: 19670 pass/19 skip/13 fail/3177 warnings, 330.18 s (366 s guarded wall time). All 13 match documented baseline: 11 excluded sealed-mode routing expectations and two unchanged junction-balance oracles. FULL remains DEFERRED under the test-session policy; neither focused tests nor a deadline clears that debt. Evidence logs live under `.development-artifacts/feature-history-focus/`.
+
+> **Status reconciliation, October 26, 2026:** This is a historical implementation journal through S53, not an active queue. Later tool acceptance and scope decisions supersede its counts, gates, open-item claims and suggested successors. Current counts, scope and next task: [handoff](session_handoff.md). Dated entries below retain their original evidence, not current instructions.
+
+
+Current progress, production gates and the next task are maintained only in the
+[current handoff](session_handoff.md). The October 18 S53/S54 successor and
+all-gates-off summaries are superseded by its October 22 state. Historical
+implementation sections below retain their original evidence and limits.
+
 Scope approved October 14, 2026: implement standard-part validation, editability and agent enforcement first. [Assembly work is deferred](assembly_deferred.md). Part-local proteins, nanoparticles, duplexes, attachments and imports remain in scope; they are not assemblies merely because they contain multiple components.
 
 October 15 resumption: the user explicitly deferred VR/headset validation to a

@@ -34,14 +34,16 @@ from backend.core.render_diff import _local_changed_helices, _strand_occupancy
 # Compatibility for existing headless Python callers.
 _cv_create_bound_binding = create_bound_binding
 
-router = APIRouter()
+from backend.api.part_connection_composition_route import MetadataRoute
+
+router = APIRouter(route_class=MetadataRoute)
 
 # Internal rollout only; whole-request latency must be qualified before enabling.
 OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
 OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
 NATIVE_LINKER_V2_ENABLED = False
 NATIVE_LINKER_V3_ENABLED = False
-NATIVE_CONNECTION_OWNER_SELECTION_ENABLED = False
+NATIVE_CONNECTION_OWNER_SELECTION_ENABLED = True
 NATIVE_DIRECT_APPLY_ENABLED = False
 NATIVE_DIRECT_CONNECT_ENABLED = False
 

@@ -329,10 +329,10 @@ def test_mid_group_prefix_resolver_keeps_only_preceding_children_and_stable_ids(
         if child_index:
             assert log[-1].id == "group" and log[-1].label == "Routing"
     assert design.model_dump_json() == before
-    # No admitted NP/protein/copy operation currently belongs to MinorOpSubtype.
-    # Report that boundary honestly, rather than forging a child kind to pass.
+    # Routing is admitted, but this ordering-only fixture lacks native inputs.
+    # Refuse its incomplete schema before inspecting prefix candidates.
     unsupported = evaluate(design, request(feature_id="group", child_id="child-1", parameter_path=["helix_id"]))
-    assert unsupported["issues"][0]["code"] == "unsupported_reference_slot"
+    assert unsupported["issues"][0]["code"] == "invalid_routing_input"
 
 
 @pytest.mark.parametrize("body,code", [(request(feature_id="gone"), "missing_feature"),

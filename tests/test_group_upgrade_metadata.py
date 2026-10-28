@@ -111,7 +111,7 @@ def test_metadata_hashes_and_serializes_only_detached_definition_outside_lock(do
     assert document.feature_log[-1].cluster_snapshot.helix_ids
 
 
-@pytest.mark.parametrize("version", [None, 2, 3, True])
+@pytest.mark.parametrize("version", [None, 2, 4, True])
 def test_current_unversioned_and_unknown_rows_do_not_get_upgrade_actions(document, version):
     document.feature_log[-1] = document.feature_log[-1].model_copy(update={"proof_version": version})
     result = metadata.inspect_inputs(selection())
@@ -145,12 +145,14 @@ def test_overlay_definition_capture_refuses_before_hash_when_over_budget(documen
     assert error.value.detail["code"] == "repair_input_capture_limit"
 
 
-def test_other_overlay_kinds_still_require_reviewed_input_editor(document):
+def test_native_cluster_overlay_uses_reviewed_inputs_without_upgrade_actions(document):
     document.feature_log[-1] = ClusterOpLogEntry(id="old-group", cluster_id="owner", proof_version=1,
         translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
-    with pytest.raises(HTTPException) as error:
-        metadata.inspect_inputs(selection())
-    assert error.value.status_code == 422
+    result = metadata.inspect_inputs(selection())
+    assert result['definition_supported'] is True and result['upgrades'] == []
+    assert {tuple(field['parameter_path']) for field in result['fields']} == {
+        ('cluster_id',), *(('translation', i) for i in range(3)),
+        *(('rotation', i) for i in range(4)), *(('pivot', i) for i in range(3))}
 
 
 def test_group_upgrade_cannot_be_selected_as_a_routing_child(document):

@@ -1,5 +1,7 @@
 # Complete authored DNA comparison: next increment
 
+> October28: the bounded native DNA comparison gate is ON after HTTP/resource and production browser qualification. See [core repair evidence](repair_plan.md#core-repair-qualification--october-28-2026). Historical disabled-gate and pending ordinary-DNA claims below are superseded; excluded display families and unchanged limits remain explicit.
+
 2026-10-15. The first pure DNA projection/admission and version-two worker
 integration are implemented for qualification. `DNA_COMPARISON_ENABLED = False`
 keeps the public route unavailable before any source capture. Existing version

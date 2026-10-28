@@ -209,7 +209,13 @@ def test_patch_overhang_after_connect_still_re_derives_complement():
     assert _seq("unrelated") == MANUAL_SEQ
 
 
-def test_apply_connection_version_does_not_touch_unrelated_strand():
+def test_apply_connection_version_does_not_touch_unrelated_strand(monkeypatch):
+    # This hand-authored pre-recipe fixture exercises the retained compatibility
+    # implementation; production native contracts have their own replay matrix.
+    from backend.api import routes_connection_versions as routes
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', False)
+    from backend.api import part_connection_version_commands as metadata
+    monkeypatch.setattr(metadata, 'APPLIED_METADATA_ENABLED', False)
     design_state.close_session()
     design_state.set_design(_seed())
     r = client.post(

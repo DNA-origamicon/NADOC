@@ -93,3 +93,66 @@ def test_direct_type_and_length_edits_preserve_common_output_identities(direct_s
         assert original_ids
         assert edited_ids == original_ids
     assert original.duplexes[0].created_at == edited.duplexes[0].created_at == 12.0
+
+
+@pytest.mark.parametrize('connection_type', ['root-to-root', 'end-to-root'])
+def test_direct_relocation_preserves_paired_bases_and_roundtrips(direct_source, connection_type):
+    from backend.core.duplex import bp_to_offset, connect_register
+    from backend.core.models import Design, _overhang_backing_domain
+
+    source = direct_source
+    a, b = source.overhangs[:2]
+    before = connect_register(source, a.id, 'root' if connection_type == 'root-to-root' else 'free_end',
+                              b.id, 'root')
+    result = _build(source, connection_type)
+    # Persistence must validate the actual native output, not only compare two
+    # executions that can share the same stale-address defect (ISSUE-143).
+    assert Design.model_validate_json(result.model_dump_json()) == result
+    duplex = result.duplexes[0]
+    for original, end in zip(before, (duplex.left, duplex.right), strict=True):
+        old_domain = _overhang_backing_domain(source, original.overhang_id)[1]
+        new_domain = _overhang_backing_domain(result, end.overhang_id)[1]
+        assert end.overhang_id == original.overhang_id
+        assert [bp_to_offset(new_domain, bp) for bp in (end.start_bp, end.end_bp)] == [
+            bp_to_offset(old_domain, bp) for bp in (original.start_bp, original.end_bp)]
+        assert abs(new_domain.end_bp - new_domain.start_bp) == abs(old_domain.end_bp - old_domain.start_bp)
+    assert duplex.left.start_bp == duplex.right.end_bp
+    assert duplex.left.end_bp == duplex.right.start_bp
+
+
+@pytest.mark.parametrize('connection_type', ['root-to-root', 'end-to-root'])
+def test_unequal_relocation_revert_restores_register_and_reapply(direct_source, connection_type):
+    from backend.core.duplex import connect_register, relocate_duplex, revert_duplex_relocation
+    from backend.core.models import Design
+
+    result = _build(direct_source, connection_type)
+    duplex = result.duplexes[0]
+    if duplex.prior_driven_topology is None:
+        return  # Equal-length restoration belongs to the binding.
+    restored = revert_duplex_relocation(result, duplex)
+    assert Design.model_validate_json(restored.model_dump_json()) == restored
+    a, b = direct_source.overhangs[:2]
+    ends = connect_register(direct_source, a.id,
+        'root' if connection_type == 'root-to-root' else 'free_end', b.id, 'root')
+    assert (restored.duplexes[0].left, restored.duplexes[0].right) == ends
+    reapplied = relocate_duplex(restored, restored.duplexes[0], identity_seed=SEED)
+    assert authored(reapplied) == authored(result)
+
+
+@pytest.mark.parametrize('connection_type', ['root-to-root', 'end-to-root'])
+def test_register_transport_preserves_native_geometry(direct_source, connection_type):
+    from backend.api.crud import _geometry_for_design
+    from backend.core.duplex import connect_register
+
+    result = _build(direct_source, connection_type)
+    if result.duplexes[0].prior_driven_topology is None:
+        return
+    a, b = direct_source.overhangs[:2]
+    left, right = connect_register(direct_source, a.id,
+        'root' if connection_type == 'root-to-root' else 'free_end', b.id, 'root')
+    # Recreate precisely the old stale-register output while keeping every
+    # native topology, sequence, pose and restoration field unchanged.
+    stale = result.copy_with(duplexes=[result.duplexes[0].model_copy(update={'left': left, 'right': right})])
+    native = _geometry_for_design(result)
+    assert native
+    assert native == _geometry_for_design(stale)

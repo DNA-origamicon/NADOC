@@ -1242,8 +1242,16 @@ export function captureDimensionContext() { return { docId: docHeaders()['X-NADO
 
 async function _dimensionsRequest(method, kind, id, changes, context = {}) {
   const revision = currentRevisionWatermark()
-  const json = await _request(method, `/${kind}/dimensions${method === 'GET' ? `?document_id=${encodeURIComponent(id)}` : ''}`,
-    changes, { suppressBusy: true, ...context })
+  let json
+  try {
+    json = await _request(method, `/${kind}/dimensions${method === 'GET' ? `?document_id=${encodeURIComponent(id)}` : ''}`,
+      changes, { suppressBusy: true, ...context })
+  } catch (error) {
+    // Retired passive reads are normal on edit/reopen. Failed writes and real
+    // transport errors must still reach persistence's retry/error handling.
+    if (method === 'GET' && error?.name === 'AbortError') return null
+    throw error
+  }
   // A passive load superseded by a newer design revision is discarded by the
   // request scheduler; the next poll reads the new revision. Not a failure.
   if (!json && method === 'GET' && revision !== currentRevisionWatermark()) return null
@@ -3722,10 +3730,11 @@ export const createCircularPattern = (body, context) => _patterns.create('circul
 export const editPatternFeatureInputs = (index, params, context, featureId) => _patterns.edit(index, params, context, featureId)
 
 const _featureInputs = createSourceBoundRequests({ store, request: _request, syncDesign: _syncFromDesignResponse,
-  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests, label: 'extrusion' })
+  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests, label: 'feature' })
 export const captureFeatureEditContext = state => _featureInputs.capture(state)
 export const isFeatureEditContextCurrent = (context, state) => _featureInputs.isCurrent(context, state)
 export const editNativeExtrusionFeature = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
+export const editFeatureInputs = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
 
 export async function getFeatureDependencies() {
   const context = _featureInputs.capture()

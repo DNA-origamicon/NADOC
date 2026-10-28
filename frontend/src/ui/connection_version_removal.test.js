@@ -11,7 +11,7 @@ function setup(enabled = true) {
 }
 
 describe('connection version removal', () => {
-  it('keeps unqualified native rollout disabled', () => expect(nativeConnectionRemovalEnabled()).toBe(false))
+  it('uses the qualified native lifecycle in production', () => expect(nativeConnectionRemovalEnabled()).toBe(true))
   it.each(['unapply', 'remove'])('uses one atomic request for %s', async action => {
     const d = setup()
     expect(await d.api[action](version)).toBe('done')

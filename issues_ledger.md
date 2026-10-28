@@ -2156,7 +2156,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   molecular placement, optimizer, test expectation or numerical pin was changed.
   Diagnose the actual collision before any proposed scientific correction.
 
-## ISSUE-97 — Sequence application truncates a shared overhang host (2026-10-15, REPRODUCED; OPEN)
+## ISSUE-97 — Sequence application truncates a shared overhang host (2026-10-15; FIXED 2026-10-28)
 
 - Two native 12-base overhangs can reuse the same 42-base helix, with reverse
   domains 41→30 and 11→0. The existing connection-version Apply path normalizes
@@ -2170,6 +2170,12 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   and a backing domain spanning that host. Shared/partial hosts must refuse
   explicitly before sequence or topology work. Existing native kernels remain
   unchanged; correcting the general shared-host sequence operation is open.
+
+October28 correction: same-length sequence assignment retains the host bounds and
+backing domain addresses. Native shared/partial-host finite connection admission
+now validates actual backing domains; cold replay and the ordinary shared-host
+browser workflow pass. This fixes the connection normalization defect; it does
+not authorize arbitrary shared-host length changes. See FH-25 acceptance.
 
 ## ISSUE-98 — Cold coating tests author numerical pins in the wrong process (2026-10-15, FOCUSED TEST FIX VALIDATED)
 
@@ -3112,7 +3118,15 @@ and third-endpoint preservation pass. Both rollout gates remain disabled;
 MV-54 desktop/latency acceptance is outstanding, so the public defect is not
 claimed resolved. Existing metadata-only API semantics remain unchanged.
 
-## ISSUE-143 — Unequal direct relocation leaves stale Duplex registers (2026-10-17, OPEN)
+## ISSUE-143 — Unequal direct relocation leaves stale Duplex registers (2026-10-17; FIXED 2026-10-28)
+
+October28: endpoint registers now transport through the existing domain offset
+mapping on relocation and inverse restoration. All four unequal cases preserve
+pairing offsets and exact full geometry in isolated A/B evidence, pass schema,
+reapply, save/reopen and independent cold replay; production browser profiles pass.
+No clamping, dropped Duplex, molecular placement or phase-constant change.
+Historical reproduction below is retained; its open-status statements are superseded.
+See [FH-25 acceptance](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#ordinary-connection-qualification--october-28-2026).
 
 U41's owned connection matrix proves both direct types with A-longer/B-longer
 endpoints reproduce native output that fails `Design.model_validate`: a Duplex

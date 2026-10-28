@@ -174,7 +174,7 @@ def test_exact_expectations_and_recognized_typed_definitions_are_required(change
     elif change == "empty":
         row.op_snapshot.targets = []
     elif change == "namespace":
-        row.op_snapshot.targets = [{"kind": "cluster", "id": "missing"}]
+        row.op_snapshot.targets = [{"kind": "unknown-namespace", "id": "missing"}]
     elif change == "version":
         row.proof_version = True
     elif change == "empty-operation-id":

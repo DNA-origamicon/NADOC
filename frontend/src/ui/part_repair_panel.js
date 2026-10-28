@@ -9,6 +9,7 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import './part_repair_panel.css'
+import { createFeatureHistoryFeedback } from '../features/feature_history_feedback.js'
 
 const targetKey = target => JSON.stringify([target.feature_id, target.child_id ?? null])
 const publishedLabels = { unchecked: 'Published geometry: not checked', checking: 'Checking published geometry',
@@ -34,7 +35,10 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   }
   const controller = createPartRepairController({ api: api.partRepairAPI, getContext,
     subscribeContext: callback => store.subscribe(callback) })
-  const comparison = createPartComparisonController({ api: api.partRepairAPI, repair: controller })
+  const feedback = createFeatureHistoryFeedback(store)
+  let feedbackIssue = null, feedbackSource = null
+  const comparison = createPartComparisonController({ api: api.partRepairAPI, repair: controller,
+    getProjectionVersion: () => getDesign()?.helices?.length ? 2 : 1 })
   const comparisonHost = el('div')
   const comparisonSurface = createPartComparisonSurface({ host: comparisonHost, controller: comparison,
     ...(createComparisonViewer ? { createViewer: createComparisonViewer } : {}) })
@@ -166,6 +170,13 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     launcher.hidden = !next.context
     launcher.textContent = next.summary ? 'Repair · saved proposal' : 'Check / repair recipe'
     if (!modal?.isOpen() || closing) return
+    const failed = next.issues.find(issue => issue.feature_id)
+    if (failed !== feedbackIssue || getDesign() !== feedbackSource) {
+      feedbackIssue = failed; feedbackSource = getDesign()
+      if (failed) feedback.update({ message: failed.detail ?? failed.code,
+        detail: { feature_id: failed.feature_id } }, feedbackSource)
+      else feedback.clear()
+    }
     if (!next.context || (!next.loaded && (previous.loaded || !sameRepairContext(previous.context, next.context)))) {
       selectedTarget = null; modal.close(); return
     }
@@ -187,7 +198,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     }
     const changed = next.result?.repair?.authoring_changes?.changed_fields
     if (next.requiresReview) changes.textContent = 'Numerical contract changes need the separate atom and junction comparison review before evaluation or Apply.'
-    else if (changed) changes.textContent = `Evaluated changes: ${changed.join(', ') || 'none'}. Comparison covers complete uncoated gold/quantum-dot and free protein models; other geometry is explicitly unavailable.`
+    else if (changed) changes.textContent = `Evaluated changes: ${changed.join(', ') || 'none'}. Review the proposal before Apply. Unsupported comparison geometry is reported explicitly.`
     else if (next.result?.repair?.not_evaluated?.length) changes.textContent = `${next.result.repair.not_evaluated.length} later feature(s) were not evaluated after the failure.`
     else changes.textContent = note
     buttons.check.disabled = busy || !current || publicationPending
@@ -215,7 +226,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     actions: [buttons.save, buttons.rebase, buttons.discard, buttons.evaluate, buttons.cancel, buttons.apply, buttons.refresh, buttons.resolve],
     onClose: () => {
       closing = true
-      try { sourceWork++; sourceBusy = false; comparison.close(); controller.cancel(); pendingFiles.clear(); dirty = false; clearNotice(); return true }
+      try { sourceWork++; sourceBusy = false; comparison.close(); controller.cancel(); feedback.clear(); feedbackIssue = null; pendingFiles.clear(); dirty = false; clearNotice(); return true }
       finally { closing = false }
     } })
   const unsubscribe = controller.subscribe(renderState)
@@ -228,7 +239,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     void controller.inspect()
   }
   return { open, controller, dispose() {
-    modal.close(); unsubscribe(); comparisonSurface.dispose(); comparison.dispose(); controller.dispose(); launcher.remove(); pendingFiles.clear()
+    modal.close(); unsubscribe(); comparisonSurface.dispose(); comparison.dispose(); controller.dispose(); feedback.dispose(); launcher.remove(); pendingFiles.clear()
     window.removeEventListener('nadoc:document-reset', resetView)
   } }
 }

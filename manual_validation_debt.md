@@ -1329,7 +1329,8 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   This is the existing FH-27 qualification allocation, not new counted scope.
   Editor rollout remains off; assembly and machine-specific VR stay deferred.
 
-- **MV-54 — PENDING — Atomic ordinary connection removal (2026-10-16).**
+- **MV-54 — DONE — Ordinary connection lifecycle/removal (reconciled 2026-10-28).**
+  Production Unapply/delete, source guards, failed-operation atomicity, undo/reopen and cold replay are qualified across direct, finite and indirect ordinary DNA connections. [FH-25 acceptance](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#ordinary-connection-qualification--october-28-2026). Aggregate FH-27 regression/resource debt remains separate. Gate-OFF statements below are historical.
   **October 26 scope/defect update:** ISSUE-126 is corrected by native and
   publication occupancy refusal; incompatible dsDNA choices must fail atomically,
   not be qualified as successful connections. ISSUE-143 and ordinary desktop/

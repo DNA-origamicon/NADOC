@@ -317,7 +317,7 @@ def test_ordinary_pending_routes_record_create_patch_delete_once_with_undo(docum
     assert (row.op_kind, row.params["action"]) == ("overhang-bulk", CREATE)
     assert row.params["version_id"] == version.id
     assert row.params["created_at"] == version.created_at
-    assert row.params["connection_version_contract"] == 1
+    assert row.params["connection_version_contract"] == 2
     assert (version.name, version.overhang_a_seq, version.bridge_length) == ("V1", "ACGT", 7)
     assert state.revision() == revision + 1 and state.undo_depth() == depth + 1
     routes.patch_connection_version(version.id, routes.ConnectionVersionPatchRequest(name="Chosen", bridge_length=9))

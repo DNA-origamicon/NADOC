@@ -20,7 +20,7 @@ from backend.core.part_command_errors import CommandContractError, ReferenceReso
 from backend.core.part_operation_input import MAX_OPERATION_BYTES, MAX_OPERATION_NODES, validate_operation_input
 
 
-APPLIED_METADATA_ENABLED = False
+APPLIED_METADATA_ENABLED = True
 
 CREATE = "connection-version-create"
 PATCH = "connection-version-patch"
@@ -334,9 +334,11 @@ def try_record(action, choices, *, version_id=None):
     """
     from backend.api import state
     from backend.api.feature_recording import record_feature
+    from backend.api.part_source_bound_route import require_current
 
     try:
         with state._lock:
+            require_current()
             state._require_compatibility_write("pending_connection_version")
             session = state._session()
             source = session.design
@@ -347,6 +349,8 @@ def try_record(action, choices, *, version_id=None):
             except ReferenceResolutionError:
                 raise
             except CommandContractError:
+                if APPLIED_METADATA_ENABLED:
+                    raise
                 return None
             version = None if action == CREATE else _resolve(
                 inventory.versions, version_id, "connection_version", "version_id")
@@ -373,10 +377,15 @@ def try_record(action, choices, *, version_id=None):
             try:
                 body = parse_command(values)
             except ValueError:
+                if APPLIED_METADATA_ENABLED:
+                    raise
                 return None
             if any(inventory.overhangs.get(values[field]) is not None
                    and inventory.overhangs[values[field]].auxiliary_endpoint
                    for field in ("overhang_a_id", "overhang_b_id")):
+                if APPLIED_METADATA_ENABLED:
+                    raise CommandContractError("Connection metadata requires ordinary DNA endpoints",
+                                               code="unsupported_connection_version_source")
                 return None
             state._assert_active_loadout_editable(source)
             selected = _select(source, body, inventory)
@@ -386,6 +395,7 @@ def try_record(action, choices, *, version_id=None):
             prepared = _bind(body, selected, inventory)
 
             def native(design):
+                require_current()
                 if session.design is not source or design is not source:
                     raise HTTPException(409, detail="Pending connection source changed before recording.")
                 return _build(design, prepared).copy_with(feature_log=list(design.feature_log))

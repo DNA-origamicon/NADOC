@@ -121,6 +121,7 @@ def document(application_prefix, monkeypatch):
     token = doc_context.set_current_doc(doc)
     prior = doc_context.current_request_revision(), doc_context.current_request_feature_log_entry_id()
     monkeypatch.setattr(routes, 'OWNED_COMBINED_CONNECTION_APPLY_ENABLED', True)
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', False)
     with state._lock:
         state._sessions[doc] = session
     try:

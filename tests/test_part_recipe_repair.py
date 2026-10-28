@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from backend.api import part_recipe_repair as repair
 from backend.api.part_nanoparticle_commands import build as gold_build
-from backend.core.models import MinorMutationLogEntry, Nanoparticle, OverhangRotationLogEntry, RoutingClusterLogEntry, SnapshotLogEntry
+from backend.core.models import Nanoparticle, OverhangRotationLogEntry, SnapshotLogEntry
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_dependencies import Dependencies
 from backend.core.part_history_contract import create_empty_part
@@ -205,25 +205,28 @@ def test_legacy_target_cannot_be_promoted_by_a_repair_patch():
 
 
 def test_routing_child_identity_labels_and_poisoned_diffs_survive_repair():
-    design = source()
-    child = MinorMutationLogEntry(id="child", op_subtype="nick", label="Keep child", timestamp="then",
-        params={"_proof_version": 1, "helix_id": "old", "_strand_id": "stable-output"},
-        diff_added_b64="poisoned child", diff_removed_b64="poisoned child", diff_modified_b64="poisoned child")
-    design.feature_log = [design.feature_log[0], RoutingClusterLogEntry(id="group", label="Keep group",
-        children=[child], pre_state_gz_b64="poisoned group", post_state_gz_b64="poisoned group")]
-
-    def execute(kind, current, params):
-        return gold_build(kind, current, params) if kind == "nanoparticle-create" else current
-
-    result = evaluate(design, request(set_input(feature="group", child_id="child", path=["helix_id"], expected="old", value="new")), executor=execute)
-    assert result["status"] == "ready", result
-    group = result["candidate"].feature_log[1]
+    from backend.api.part_proof_commands import execute, dependencies
+    from tests.test_part_routing_edit_native_matrix import prepared_case, parent
+    prefix, params, _ = prepared_case('crossover-place', False)
+    design = parent(prefix, [('crossover-place', params, 'child')], identity='group')
+    group = design.feature_log[-1]
+    group.label = 'Keep group'
+    child = group.children[0]
+    child.label, child.timestamp = 'Keep child', 'then'
+    old = child.params['half_a']['helix_id']
+    child.params['half_a']['helix_id'] = 'missing'
+    result = evaluate(design, request(set_input(feature='group', child_id='child',
+        path=['half_a', 'helix_id'], expected='missing', value=old), expected_design_id=design.id),
+        executor=execute, dependency_resolver=dependencies)
+    assert result['status'] == 'ready', result
+    group = result['candidate'].feature_log[-1]
     rebuilt = group.children[0]
-    assert group.id == "group" and group.label == "Keep group"
-    assert (rebuilt.id, rebuilt.label, rebuilt.timestamp) == ("child", "Keep child", "then")
-    assert rebuilt.params["_strand_id"] == "stable-output" and rebuilt.params["helix_id"] == "new"
-    assert rebuilt.diff_added_b64 != "poisoned child" and group.post_state_gz_b64 != "poisoned group"
-    assert result["repair"]["completed_prefix"] == ["create", "child"]
+    assert group.id == 'group' and group.label == 'Keep group'
+    assert (rebuilt.id, rebuilt.label, rebuilt.timestamp) == ('child', 'Keep child', 'then')
+    assert rebuilt.params['crossover_id'] == params['crossover_id']
+    assert rebuilt.params['half_a']['helix_id'] == old
+    assert rebuilt.diff_added_b64 != 'poisoned-diff' and group.post_state_gz_b64 != 'poisoned-post'
+    assert result['repair']['completed_prefix'] == ['bundle', 'child']
 
 
 def test_unchanged_supported_overlay_replays_but_overlay_definition_edit_is_deferred():

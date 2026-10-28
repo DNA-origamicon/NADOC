@@ -8,6 +8,7 @@ import { createFeatureHistoryFeedback, historyFailureStatus } from '../features/
 import { createRoutingEditAction, ROUTING_HISTORY_EDITOR_ENABLED } from './routing_feature_editor.js'
 import { isNativeSweepFeature, SWEEP_HISTORY_EDITOR_ENABLED } from '../app/sweep_history_editor.js'
 import { isNativeTransformFeature, TRANSFORM_HISTORY_EDITOR_ENABLED } from '../app/transform_history_editor.js'
+import { connectionFeatureFields, createConnectionEditAction, CONNECTION_HISTORY_EDITOR_ENABLED } from './connection_feature_editor.js'
 /**
  * Feature Log panel — unified timeline of geometry operations with a vertical
  * notch slider for seeking to any prior feature state.
@@ -60,6 +61,7 @@ const REPLAYABLE_SUBTYPES = new Set([
 ])
 
 export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED, transformHistoryEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED, routingHistoryEnabled = ROUTING_HISTORY_EDITOR_ENABLED }) {
+  const editConnection = createConnectionEditAction({ api, store })
   const historyMenu = createFeatureLogContextMenu({ store, api })
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
@@ -1468,6 +1470,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const nativeExtrusion = isNativeExtrusionFeature(entry)
         const nativeSweep = sweepHistoryEnabled && isNativeSweepFeature(entry)
         const nativeTransform = transformHistoryEnabled && isNativeTransformFeature(entry)
+        const nativeConnection = CONNECTION_HISTORY_EDITOR_ENABLED && connectionFeatureFields(entry).length > 0
         const latestInputs = (store.getState().currentDesign?.feature_log_cursor ?? -1) === -1
           && store.getState().currentDesign?.feature_log_sub_cursor == null
         const ownedPattern = isPattern && !!store.getState().currentDesign?.group_organization
@@ -1475,15 +1478,15 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
         const isGenerated = entry.params?._generator?.version === 1
-        const isEditable = (isGenerated || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion || nativeSweep || nativeTransform)
-          && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep || nativeTransform)
+        const isEditable = (isGenerated || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion || nativeSweep || nativeTransform || nativeConnection)
+          && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep || nativeTransform || nativeConnection)
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && (nativeExtrusion || nativeSweep || nativeTransform ? latestInputs : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
+        const editAllowed = isEditable && (nativeExtrusion || nativeSweep || nativeTransform || nativeConnection ? latestInputs : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
@@ -1494,10 +1497,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 ? `Open Overhangs Manager for this linker`
                 : isNanoparticle
                   ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
-                  : isPattern || nativeExtrusion || nativeTransform ? `Edit ${entry.label} parameters`
+                  : isPattern || nativeExtrusion || nativeTransform || nativeConnection ? `Edit ${entry.label} parameters`
                   : entry.op_kind === 'sweep' ? `Edit sweep path (${entry.params?.points_nm?.length ?? 0} points)`
                   : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
-            : nativeExtrusion || nativeSweep || nativeTransform ? 'Return to the latest history position before editing feature inputs.'
+            : nativeExtrusion || nativeSweep || nativeTransform || nativeConnection ? 'Return to the latest history position before editing feature inputs.'
               : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
@@ -1514,6 +1517,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           if (editAllowed) {
             editBtn.addEventListener('click', async e => {
               e.stopPropagation()
+              if (nativeConnection) { await editConnection(entry, i); return }
               if (nativeExtrusion) {
                 const context = api.captureFeatureEditContext()
                 const feedback = createFeatureHistoryFeedback(store)

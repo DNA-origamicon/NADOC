@@ -174,6 +174,9 @@ def _build_overhang_patch(
     # ── Resize helix + domain when sequence length changes ───────────────────
     new_helices = list(design.helices)
     new_strands = list(design.strands)
+    backing = next((domain for strand in design.strands for domain in strand.domains
+                    if domain.overhang_id == overhang_id), None)
+    resize_required = backing is None or new_length_bp != abs(backing.end_bp - backing.start_bp) + 1
 
     # For extrude-style overhangs we need the junction bp on the dedicated
     # helix. The junction can be at the helix's low (+Z extrude) OR high
@@ -185,7 +188,7 @@ def _build_overhang_patch(
         extrude_junction_bp = _overhang_junction_bp(design, spec.helix_id)
 
     if new_length_bp is not None:
-        if not is_inline:
+        if not is_inline and resize_required:
             # ── Extrude-style: resize the dedicated overhang helix ────────────
             # Keep the junction's world-space position fixed; move axis_start
             # inward/outward on the tip side. Correct for both +Z and −Z
@@ -260,7 +263,11 @@ def _build_overhang_patch(
 
                 is_fwd = domain.direction == Direction.FORWARD
 
-                if is_inline:
+                if abs(domain.end_bp - domain.start_bp) + 1 == new_length_bp:
+                    # A sequence-content edit keeps native addresses and the
+                    # complete shared helix intact; its length is not the OH's.
+                    new_domain = domain
+                elif is_inline:
                     # Junction end (adjacent to scaffold) is fixed; free end moves.
                     # inline_end tells us which terminus is the free (dragged) end.
                     if inline_end == "3p":

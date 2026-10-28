@@ -111,7 +111,10 @@ def test_display_lease_uses_remaining_lifetime_after_projection_not_a_new_ttl(re
     assert ready.job.result["status"] == "ready" and ready.closed == 1
 
 
-def test_expiry_at_the_final_guard_returns_no_display_lease(ready, monkeypatch):
+@pytest.mark.parametrize('created', [.1, 3600.01, 100000.1234567])
+def test_expiry_at_the_final_guard_returns_no_display_lease(ready, monkeypatch, created):
+    ready.job.created = created
+    monkeypatch.setattr(jobs, 'monotonic', lambda: created + 1)
     original = comparison._final_source_guard
     def expire_after_guard(job, request):
         original(job, request)

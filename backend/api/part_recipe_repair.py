@@ -190,11 +190,18 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
 
         changed = {action.feature_id for action in request.actions
                    if isinstance(action, SetInput) and action.child_id is None}
+        changed_children = {action.child_id for action in request.actions
+                            if isinstance(action, SetInput) and action.child_id is not None}
+        originals = {item.id: item for entry in source.feature_log
+                     for item in ([entry, *entry.children] if entry.feature_type == 'routing-cluster' else [entry])
+                     if item.id in changed | changed_children}
 
         def bind(entry, current):
             from backend.api.part_geometry_reference_repair import bind_entry
+            from backend.api.part_core_repair_inputs import bind_entry as bind_core
             try:
-                return bind_entry(entry, current, changed)
+                updated = bind_core(entry, current, originals)
+                return bind_entry(entry, current, changed) if updated is entry else updated
             except CommandContractError as error:
                 raise _ReplayStopped(error.status, {**error.as_issue(),
                     'feature_id': entry.id, 'kind': getattr(entry, 'op_kind', entry.feature_type)}) from error

@@ -13,12 +13,41 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 from tests.routing_history_fixture import FIXTURES as ROUTING_FIXTURES
+from tests import connection_history_fixture as connection_fixture
 
 FIXTURES = {"cluster-straight", "cluster-incoming", "cluster-small", "cluster-large", "unpair", "sweep-separated", "bend-small", "twist-small", "twist-large", "repair-sweep-source", "repair-extrude-source", "history-scoped-order", "history-reorder","extrude-large", "extrude-blocked", "sweep-large", "extrude-nick-batch", "routing", "bend-large", "bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "sweep-nick", "sweep-nick-batch", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 TRANSFORM_FIXTURES = {"transform-single-posed", "transform-cluster-insert", "transform-organized-insert", "transform-posed-large", "transform-posed-insert", "transform-failure", "transform-owner", "transform-joint", "transform-linked", "transform-small", "transform-large"}
+CORE_REPAIR_FIXTURES = {'repair-core-bend', 'repair-core-twist', 'repair-core-cluster_create',
+                       'repair-core-cluster_op', 'repair-core-nucleotide-transform', 'repair-core-routing',
+                       'repair-core-cascade'}
+FIXTURES.update(CORE_REPAIR_FIXTURES)
 
 
 def fixture(kind):
+    if kind in CORE_REPAIR_FIXTURES:
+        from tests.test_part_core_repair import core_fixture, changed
+        if kind == 'repair-core-cascade':
+            from tests.test_part_transform_preview import snapshot
+            from uuid import uuid4
+            source = fixture('bend-sweep')
+            source = snapshot(source, 'nick', {'helix_id': source.helices[0].id,
+                'bp_index': 7, 'direction': 'FORWARD'}, 'later-routing')
+            return snapshot(source, 'extrude-segment', {'cells': [[8, 8]], 'length_bp': 3,
+                'plane': 'XY', 'history_seed': str(uuid4())}, 'independent-extrusion')
+        if kind != 'repair-core-routing':
+            source = core_fixture(kind.removeprefix('repair-core-'))[1]
+            if kind in {'repair-core-bend', 'repair-core-twist', 'repair-core-cluster_create'}:
+                from tests.test_part_transform_preview import snapshot
+                source = snapshot(source, 'nick', {'helix_id': source.helices[0].id,
+                    'bp_index': 7, 'direction': 'FORWARD'}, 'later-routing')
+            return source.copy_with(name='__e2e__' + kind)
+        from tests.test_part_routing_edit_native_matrix import prepared_case, parent, with_suffix
+        prefix, params, _ = prepared_case('nick', False)
+        source = with_suffix(parent(prefix, [('nick', params, 'repair-child')]))
+        source.feature_log[-3].children[0].params = changed(params, ['helix_id'], 'missing-core-target')
+        return source.copy_with(name='__e2e__' + kind)
+    if kind in connection_fixture.FIXTURES:
+        return connection_fixture.fixture(kind)
     from uuid import uuid4
 
     from backend.api.crud import BundleRequest
@@ -315,6 +344,7 @@ def cold_replay(source):
 def create_app():
     sealed = os.environ.get("NADOC_HISTORY_E2E_SEALED") == "1"
     transforms = os.environ.get("NADOC_HISTORY_E2E_TRANSFORMS") == "1"
+    connections = os.environ.get("NADOC_HISTORY_E2E_CONNECTIONS") == "1"
     from tests import sealed_history_fixture as sealed_fixture
 
     from backend.api import assembly, doc_context, main, state
@@ -326,6 +356,9 @@ def create_app():
 
     @asynccontextmanager
     async def lifespan(_app):
+        from backend.api import part_evaluation_comparison as comparison
+        if os.environ.get('NADOC_HISTORY_E2E_REPAIR') == '1':
+            assert comparison.DNA_COMPARISON_ENABLED, 'DNA comparison must use the production gate'
         assert sweep_routes.SWEEP_PREVIEW_ENABLED, "Sweep production preview must be enabled"
         previous = routes.DEFORMATION_PREVIEW_ENABLED
         assert transform_routes.TRANSFORM_PREVIEW_ENABLED, "Transform production preview must be enabled"
@@ -334,7 +367,7 @@ def create_app():
         if transforms:
             group_gate.GROUP_ORGANIZATION_ENABLED = True
         try:
-            with sealed_fixture.enabled() if sealed else nullcontext():
+            with (sealed_fixture.enabled() if sealed else nullcontext()):
                 yield
         finally:
             host.clear_for_testing()
@@ -363,7 +396,7 @@ def create_app():
     @app.post("/api/__e2e__/history/seed/{kind}")
     def seed(kind: str):
         require_doc()
-        if kind not in FIXTURES | ROUTING_FIXTURES | {"routing-refusal", "routing-large", "routing-visual"} and not (transforms and kind in TRANSFORM_FIXTURES):
+        if kind not in FIXTURES | ROUTING_FIXTURES | {"routing-refusal", "routing-large", "routing-visual"} and not (transforms and kind in TRANSFORM_FIXTURES) and not (connections and kind in connection_fixture.FIXTURES):
             raise HTTPException(422, "Unknown fixture")
         if sealed:
             if kind not in {"bend", "twist"}:

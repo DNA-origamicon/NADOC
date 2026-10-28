@@ -6468,6 +6468,13 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
         return response
 
     from backend.api.part_recipe_edit import supports_recipe_edit, change_recipe
+    if (getattr(entry, "op_kind", None) == "overhang-bulk" and
+            any(value is not None for value in (body.expected_design_id, body.expected_revision, body.expected_feature_id))):
+        if not supports_recipe_edit(design, entry):
+            raise HTTPException(409, detail="Return to a complete native recipe before editing connection inputs.")
+        return change_recipe(index, params=body.params, sub_index=sub_index,
+            expected_design_id=body.expected_design_id, expected_revision=body.expected_revision,
+            expected_feature_id=body.expected_feature_id, complete_geometry=True)
     if supports_recipe_edit(design, entry):
         return change_recipe(index, params=body.params, sub_index=sub_index)
 

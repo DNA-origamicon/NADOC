@@ -7,11 +7,17 @@ import { preparedSharePlugin } from '../prepared_share_server.js'
 const sweepEditor = fileURLToPath(new URL('../src/app/sweep_history_editor.js', import.meta.url))
 const editor = fileURLToPath(new URL('../src/app/feature_editor.js', import.meta.url))
 const transformEditor = fileURLToPath(new URL('../src/app/transform_history_editor.js', import.meta.url))
+const connectionEditor = fileURLToPath(new URL('../src/ui/connection_feature_editor.js', import.meta.url))
+const connectionRemoval = fileURLToPath(new URL('../src/ui/connection_version_removal.js', import.meta.url))
 export function historyGatePlugin({ transforms = process.env.NADOC_HISTORY_E2E_TRANSFORMS === '1' } = {}) {
   return {
     name: 's03-history-test-gates', enforce: 'pre',
     transform(source, id) {
       const target = id.split('?')[0]
+      if (process.env.NADOC_HISTORY_E2E_CONNECTIONS === '1') {
+        if (target === connectionEditor && !source.includes('CONNECTION_HISTORY_EDITOR_ENABLED = true')) throw new Error('Missing enabled connection editor gate')
+        if (target === connectionRemoval && !source.includes('nativeConnectionRemovalEnabled() { return true }')) throw new Error('Missing enabled connection removal gate')
+      }
       if (target === transformEditor && transforms) {
         if (source.split('export const TRANSFORM_HISTORY_EDITOR_ENABLED = true').length !== 2)
           throw new Error('Missing unique enabled transform gate')

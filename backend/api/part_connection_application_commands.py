@@ -272,9 +272,13 @@ def _target(design, index, backings, host_owners, identity, path):
             or owned[0][1].binds_overhang_id or strand.is_reference):
         _fail("Application requires one consistent ordinary overhang backing domain", "overhang", identity, path)
     domain = owned[0][1]
-    if (host_owners.get(helix.id) != [identity]
-            or sorted((domain.start_bp, domain.end_bp)) != [helix.bp_start, helix.bp_start + helix.length_bp - 1]):
-        _unsupported("Finite linker application requires dedicated full-span overhang hosts; shared or partial hosts are not admitted")
+    lo, hi = sorted((domain.start_bp, domain.end_bp))
+    if lo < helix.bp_start or hi >= helix.bp_start + helix.length_bp:
+        _unsupported("Connection endpoint lies outside its native host")
+    for peer_id in host_owners.get(helix.id, ()):
+        peer_backings = backings.get(peer_id, ())
+        if len(peer_backings) != 1 or peer_backings[0][1].helix_id != helix.id:
+            _unsupported("Shared connection host has an unresolved overhang owner")
     from backend.core.overhang_ops import SubDomainTilingError, validate_sub_domain_tiling
     try:
         validate_sub_domain_tiling(design, identity)

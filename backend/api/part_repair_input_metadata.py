@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 from backend.core.part_command_errors import CommandContractError
-from backend.core.models import ClusterCreateLogEntry, DeformationLogEntry
+from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, DeformationLogEntry
 from backend.core.part_repair_capture import _Copier
 from backend.core.part_repair_inputs import RepairIdentity
 from backend.core.part_repair_expectations import encode_expected_old
@@ -53,7 +53,7 @@ def _capture(source, selection):
         if entry.id != selection.feature_id:
             continue
         if selection.child_id is None:
-            if entry.feature_type != "snapshot" and type(entry) not in {ClusterCreateLogEntry, DeformationLogEntry}:
+            if entry.feature_type != "snapshot" and type(entry) not in {ClusterCreateLogEntry, ClusterOpLogEntry, DeformationLogEntry}:
                 _error("unsupported_repair_target", "Select a snapshot, explicit routing child, or grouping upgrade")
             selected = entry
         else:
@@ -69,6 +69,8 @@ def _capture(source, selection):
         return "cluster_create", copier.clone(selected)
     if selection.child_id is None and type(selected) is DeformationLogEntry:
         return "deformation", copier.clone(selected)
+    if selection.child_id is None and type(selected) is ClusterOpLogEntry:
+        return 'cluster_op', copier.clone(selected)
     kind = getattr(selected, "op_kind", None) or getattr(selected, "op_subtype", None)
     if selection.child_id is not None:
         if kind not in PROOF_MINOR_KINDS:
@@ -90,6 +92,30 @@ def describe_inputs(kind, params, *, feature_id=None, child_id=None):
     def unsupported(code, detail):
         result.update(reason={"code": code, "detail": detail}, fields=[])
         return result
+
+    from backend.api.part_core_repair_inputs import core_entry, supported, fields as core_fields
+    from backend.core.part_overlay_commands import command_input
+    if core_entry(params):
+        params = command_input(params)[1]
+    if type(params) is dict and supported(kind, params):
+        try:
+            if {'_generated_scope', '_generator'} & params.keys():
+                raise CommandContractError('Generated scopes require a separate input editor')
+            for path, input_type, resource, nullable in core_fields(kind, params):
+                old = params
+                for token in path:
+                    old = old[token]
+                field = {'parameter_path': path, 'expected_old': old,
+                         'expected_old_json': encode_expected_old(old),
+                         'label': ' / '.join(str(token).replace('_', ' ') for token in path),
+                         'input_type': input_type, 'nullable': nullable}
+                if resource:
+                    field['reference_selection'] = {'resource_kind': resource, 'max_candidates': 100}
+                result['fields'].append(field)
+            result.update(definition_supported=bool(result['fields']), inputs_valid=True)
+            return result
+        except (ValueError, KeyError, TypeError, CommandContractError) as error:
+            return unsupported('unsupported_repair_inputs', str(error)[:512])
 
     if kind == "cluster_create":
         from backend.core.part_group_repair import upgrade_action
@@ -163,6 +189,21 @@ def describe_inputs(kind, params, *, feature_id=None, child_id=None):
                                 ("version_id", "Connection version")):
                 if name in slots:
                     reference([name], label, slots[name])
+            if slots:
+                patch = values.get('action') == 'connection-version-patch'
+                inputs = values.get('patch', {}) if patch else values
+                for name, label, input_type in (
+                    ('name', 'Connection name', 'string'),
+                    ('overhang_a_seq', 'Overhang A sequence', 'string'),
+                    ('overhang_b_seq', 'Overhang B sequence', 'string'),
+                    ('bridge_seq', 'Bridge sequence', 'string'),
+                    ('bridge_length', 'Bridge length (bp)', 'integer')):
+                    if name in inputs:
+                        old = inputs[name]
+                        fields.append({'parameter_path': ['patch', name] if patch else [name],
+                            'expected_old': old, 'expected_old_json': encode_expected_old(old),
+                            'label': label, 'input_type': input_type,
+                            **({'minimum': 0, 'maximum': 4096} if input_type == 'integer' else {'max_length': 4096})})
         elif kind in {"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"} and not {
                 "coating_version", "thiol_version"}.intersection(values):
             from backend.api.part_nanoparticle_commands import parse_command

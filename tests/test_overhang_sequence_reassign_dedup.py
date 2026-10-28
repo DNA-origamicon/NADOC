@@ -80,9 +80,15 @@ def test_defer_reassign_skips_the_staple_re_derivation(_counter):
     assert _counter["n"] == 1
 
 
-def test_connection_creation_flow_re_derives_once_not_thrice(_counter):
+def test_connection_creation_flow_re_derives_once_not_thrice(_counter, monkeypatch):
     """End-to-end: set both overhang sequences (deferred) then apply — the whole
     connection creation re-derives staples EXACTLY once (the apply), not once per set."""
+    # This hand-authored pre-recipe fixture exercises the retained compatibility
+    # implementation; production native contracts have their own replay matrix.
+    from backend.api import routes_connection_versions as routes
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', False)
+    from backend.api import part_connection_version_commands as metadata
+    monkeypatch.setattr(metadata, 'APPLIED_METADATA_ENABLED', False)
     d, a, b = _sequenced_two_overhang_design()
     design_state.set_design(d)
     client = TestClient(app)

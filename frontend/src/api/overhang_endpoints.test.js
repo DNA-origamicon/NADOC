@@ -19,6 +19,22 @@ describe('overhang sequence endpoints', () => {
     })
   })
 
+  it('returns a screened draft without synchronizing or announcing a canonical edit', async () => {
+    const before = store.getState(), generated = vi.fn(), calls = []
+    const unsubscribe = onOverhangSequencesGenerated(generated)
+    global.fetch = vi.fn(async url => {
+      calls.push(url)
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ sequence: 'ACGT' }) }
+    })
+    try {
+      expect(await generateOverhangRandomSequence('oh1', { preview: true })).toBe('ACGT')
+      expect(calls).toEqual(['/api/design/overhang/oh1/generate-random?preview=true'])
+      expect(store.getState().currentDesign).toBe(before.currentDesign)
+      expect(store.getState().currentGeometry).toBe(before.currentGeometry)
+      expect(generated).not.toHaveBeenCalled()
+    } finally { unsubscribe() }
+  })
+
   it('does not recompute geometry after generating a same-length sequence', async () => {
     const geometry = store.getState().currentGeometry
     const axes = store.getState().currentHelixAxes

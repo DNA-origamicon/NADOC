@@ -1,5 +1,5 @@
-/** Private rollout: native removal and its backend gate must be qualified together. */
-export function nativeConnectionRemovalEnabled() { return false }
+/** Ordinary removal publishes one recorded native disconnect. */
+export function nativeConnectionRemovalEnabled() { return true }
 
 export function createConnectionVersionRemoval({ enabled, disconnect, patchVersion, deleteVersion,
   connections, bindings, deleteConnection, deleteBinding }) {

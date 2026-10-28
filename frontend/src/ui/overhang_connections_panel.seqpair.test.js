@@ -14,7 +14,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
 })
 
 import { initOverhangConnectionsPanel } from './overhang_connections_panel.js'
-import { patchOverhang, generateOverhangRandomSequence, createOverhangBinding } from '../api/client.js'
+import { patchOverhang, generateOverhangRandomSequence, createOverhangBinding, createAndApplyConnectionVersion } from '../api/client.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds } from '../test-helpers/factory_dom.js'
 
@@ -63,7 +63,7 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     const variant = direct ? 'root-to-root' : 'root-to-root-ssdna-linker'
     document.querySelector(`#oconn-popover [data-variant="${variant}"]`).dispatchEvent(new Event('click'))
   }
-  beforeEach(() => { patchOverhang.mockClear(); generateOverhangRandomSequence.mockClear(); createOverhangBinding.mockClear() })
+  beforeEach(() => { patchOverhang.mockClear(); generateOverhangRandomSequence.mockClear(); createOverhangBinding.mockClear(); createAndApplyConnectionVersion.mockClear() })
 
   it('warns ONLY when the two overhangs share NO complementary region', () => {
     setup('AAAA', 'GGGG')   // RC(AAAA)=TTTT vs GGGG → 0 complementary bases
@@ -110,10 +110,9 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     setup('AAAA', null)
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    // Connect defers the staple re-derivation (apply re-derives once with the final topology).
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
-    // Connect now creates a version + APPLIES it (backend makes the OverhangBinding
-    // at the root sub-domains) — same path as end-to-root, not _createBindingForPair.
+    expect(createAndApplyConnectionVersion).toHaveBeenCalledWith(expect.objectContaining({
+      overhang_a_seq: 'AAAA', overhang_b_seq: 'TTTT' }))
+    expect(patchOverhang).not.toHaveBeenCalled()
     expect(createOverhangBinding).not.toHaveBeenCalled()
   })
 
@@ -121,18 +120,18 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     setup('AAAA', 'GGGG')
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
+    expect(createAndApplyConnectionVersion).toHaveBeenCalledWith(expect.objectContaining({ overhang_b_seq: 'TTTT' }))
+    expect(patchOverhang).not.toHaveBeenCalled()
   })
 
   it('Pair with neither present generates A then sets B = RC(A)', async () => {
-    // mock the random gen to actually assign A so _pair can read it back + RC it
-    generateOverhangRandomSequence.mockImplementationOnce(async () => {
-      store.setState(design('AAAA', null))
-    })
+    generateOverhangRandomSequence.mockResolvedValueOnce('AAAA')
     setup(null, null)
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    expect(generateOverhangRandomSequence).toHaveBeenCalledWith(IDA, { deferReassign: true })
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
+    expect(generateOverhangRandomSequence).toHaveBeenCalledWith(IDA, { preview: true })
+    expect(createAndApplyConnectionVersion).toHaveBeenCalledWith(expect.objectContaining({
+      overhang_a_seq: 'AAAA', overhang_b_seq: 'TTTT' }))
+    expect(patchOverhang).not.toHaveBeenCalled()
   })
 })

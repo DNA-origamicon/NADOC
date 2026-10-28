@@ -64,11 +64,15 @@ export async function patchOverhangRotationsBatch(ops) {
   return _syncFromDesignResponse(json)
 }
 
-export async function generateOverhangRandomSequence(overhangId, { deferReassign } = {}) {
-  const q = deferReassign ? '?defer_reassign=true' : ''
+export async function generateOverhangRandomSequence(overhangId, { deferReassign, preview } = {}) {
+  const q = preview ? '?preview=true' : deferReassign ? '?defer_reassign=true' : ''
   const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`)
   if (!json) {
     throw new Error(store.getState().lastError?.message ?? 'Sequence generation failed; the existing sequence was preserved.')
+  }
+  if (preview) {
+    if (typeof json.sequence !== 'string' || !json.sequence) throw new Error('Sequence generation returned no draft.')
+    return json.sequence
   }
   // This endpoint deliberately preserves the overhang's domain length: it only
   // fills sequence fields (and their feature-log / derived-strand metadata).

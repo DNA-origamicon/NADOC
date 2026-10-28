@@ -92,7 +92,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
         try:
             return executor(kind, current, arguments)
         except (ValueError, HTTPException) as exc:
-            if (isinstance(exc, CommandContractError) and exc.status == "unverified") or not (
+            if (isinstance(exc, CommandContractError) and exc.status == "unverified" and not attribute_failures) or not (
                 identify_failures or attribute_failures
             ) or (
                 isinstance(exc, HTTPException) and exc.status_code in {408, 413, 429}
@@ -130,6 +130,8 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
             children = []
             for child in entry.children:
                 checkpoint()
+                if entry_binder is not None:
+                    child = entry_binder(child, current)
                 updated = run(child, current, parent_suppressed=entry.suppressed)
                 a, r, m, size = encode_child_diff(current, updated)
                 budget.charge(a, r, m)
@@ -403,14 +405,36 @@ def _fine_routing_removal(log, exc):
             "reason": exc.reason}
 
 
-def change_recipe(index, *, params=None, sub_index=None, cascade=False):
-    from backend.api.crud import _design_replace_response
+def change_recipe(index, *, params=None, sub_index=None, cascade=False,
+                  expected_design_id=None, expected_revision=None, expected_feature_id=None,
+                  complete_geometry=False):
+    from backend.api.crud import _design_replace_response, _design_response_with_geometry
     from backend.api.part_history_verification import _slot
+    from backend.api.part_source_bound_route import require_current
+    from backend.api.part_publication_policy import resolve as publication_policy
+    from backend.api.doc_context import get_current_doc
 
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
     try:
+        with state._lock:
+            require_current()
+            session = state._session()
+            selected_source, selected_revision = session.design, session.revision
+            session_identity = session.identity
+            policy_generation = publication_policy(get_current_doc()).generation
+            if complete_geometry:
+                if (selected_source is None or selected_source.id != expected_design_id
+                        or type(expected_revision) is not int or selected_revision != expected_revision
+                        or not 0 <= index < len(selected_source.feature_log)
+                        or selected_source.feature_log[index].id != expected_feature_id):
+                    raise HTTPException(409, detail="The selected feature, part or revision changed. Reopen the editor.")
+                state._assert_active_loadout_editable(selected_source)
+                if selected_source.feature_log_cursor != -1 or selected_source.feature_log_sub_cursor is not None:
+                    raise HTTPException(409, detail="Return to the latest feature before editing inputs.")
         source, captured, revision = state.capture_design_for_verification()
+        if source is not selected_source or revision != selected_revision:
+            raise HTTPException(409, detail="The part changed during recipe capture.")
         deadline = monotonic() + 5
 
         def checkpoint():
@@ -422,8 +446,11 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
         if isinstance(prepared, dict):
             return prepared
         candidate, report = prepared
-        state.set_design(candidate, expected_revision=revision, expected_source=source)
-        response = _design_replace_response(source, candidate, report)
+        state.set_design(candidate, expected_revision=revision, expected_source=source,
+            expected_session_identity=session_identity, expected_policy_generation=policy_generation)
+        response = (_design_response_with_geometry(candidate, report, embed_straight=True,
+                    normalize_legacy=False, full_feature_log=True) if complete_geometry else
+                    _design_replace_response(source, candidate, report))
         removed = getattr(report, "auto_removed_features", [])
         if removed:
             response["removed_features"] = removed

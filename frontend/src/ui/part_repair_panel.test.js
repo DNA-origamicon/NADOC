@@ -159,7 +159,7 @@ describe('desktop part recipe repair panel', () => {
     await evaluateReady(h)
     expect(h.endpoints.apply).not.toHaveBeenCalled()
     expect(document.querySelector('.part-repair__muted').textContent).toBeTruthy()
-    expect(document.body.textContent).toContain('Comparison covers complete uncoated')
+    expect(document.body.textContent).toContain('Review the proposal before Apply')
     expect(button('Compare authored geometry').disabled).toBe(false)
     expect(button('Apply evaluated proposal').disabled).toBe(false)
     await click('Apply evaluated proposal')

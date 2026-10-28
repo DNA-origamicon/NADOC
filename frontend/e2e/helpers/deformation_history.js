@@ -84,7 +84,7 @@ export async function withHistoryFixture({ page, request }, kind, run, seed = ki
   try {
     const seeded = await request.post(`http://127.0.0.1:8004/api/__e2e__/history/seed/${seed}`, { headers })
     expect(seeded.ok(), await seeded.text()).toBe(true)
-    if (pauseRendering && (kind === 'transform' || seed.startsWith('cluster-'))) {
+    if (pauseRendering && (kind === 'transform' || seed.startsWith('cluster-') || seed.startsWith('connection-') || seed.startsWith('repair-core-'))) {
       // C8 measures this tool, not background simulation/readiness work (§4).
       // Preserve a genuine fixture report for boot navigation; no transform,
       // geometry, history, publication or recovery route is intercepted.

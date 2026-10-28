@@ -33,11 +33,11 @@
 
 import {
   CT_VARIANTS, ctTileSvg, ctIsForbidden, ctForbiddenReason, endOf,
-  ctAttachPair, ctIsDirect, ctIsIndirect, ctLinkerType, ctVariantForConnection,
+  ctAttachPair, ctIsDirect, ctIsIndirect, ctVariantForConnection,
 } from './ct_icons.js'
 import {
-  createOverhangConnection, deleteOverhangConnection, patchOverhangConnection,
-  createOverhangBinding, deleteOverhangBinding, patchOverhangBinding, patchOverhang,
+  deleteOverhangConnection, patchOverhangConnection,
+  deleteOverhangBinding, patchOverhangBinding, patchOverhang,
   generateRandomSequence, generateOverhangRandomSequence, relaxLinker,
   relaxOverhangBinding,
   createConnectionVersion, createAndApplyConnectionVersion,
@@ -51,7 +51,7 @@ import { showConfirm } from './primitives/confirm.js'
 import { runOverhangGen } from './overhang_gen.js'
 import {
   assembleOverhangSequence, overhangDomainLength, pairingSegments,
-  overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner,
+  overhangHasDuplex, overhangDuplexSegments, overhangRcOfPartner,
 } from '../scene/design_queries.js'
 import { selectedOverhangIds, selectedStrandIds } from '../scene/selection_model.js'
 import {
@@ -60,6 +60,7 @@ import {
 } from './hairpin_dimer_report.js'
 import { openHairpinDimerWindow } from './hairpin_dimer_window.js'
 import { createConnectionVersionRemoval, nativeConnectionRemovalEnabled } from './connection_version_removal.js'
+import { connectionSequenceDraft } from './connection_sequence_draft.js'
 
 const _versionRemoval = createConnectionVersionRemoval({
   enabled: nativeConnectionRemovalEnabled, disconnect: disconnectConnectionVersion,
@@ -958,19 +959,6 @@ async function _onPrimary() {
 async function _onConnect() {
   if (_genBtn) _genBtn.disabled = true
   try {
-    if (ctIsDirect(_typeId)) {
-      await _ensureComplementarySequences(true)    // defer re-derive; apply does it once
-      // root-to-root binds two sub-domains; without them apply can't create the
-      // binding (end-to-root splices instead, so it needs none). Warn like the old
-      // Pair path rather than silently materializing an empty connection.
-      if (_typeId !== 'end-to-root') {
-        const [attachA, attachB] = ctAttachPair(_typeId)
-        if (!_subDomainAtAttach(_selA, attachA) || !_subDomainAtAttach(_selB, attachB)) {
-          showToast('Sequences set. Binding needs sub-domains defined on both overhangs.')
-          return
-        }
-      }
-    }
     await _captureVersion({ applied: true, applyNow: true })
   } catch (err) {
     showToast(err?.message ?? String(err))
@@ -986,8 +974,7 @@ async function _onAddVersion() {
   if (!_selA || !_selB) return
   if (_genBtn) _genBtn.disabled = true
   try {
-    await _captureVersion({ applied: false })       // creates + selects the new version
-    if (_selRow?.kind === 'version') await applyConnectionVersion(_selRow.id)
+    await _captureVersion({ applied: true, applyNow: true })
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {
@@ -1013,6 +1000,13 @@ async function _captureVersion({ applied, applyNow = false }) {
     bridge_seq:     applied ? (conn?.bridge_sequence ?? null) : null,
     applied,
   }
+  if (direct && applyNow) {
+    const source = _design()
+    Object.assign(payload, await connectionSequenceDraft(source, _selA, _selB,
+      id => generateOverhangRandomSequence(id, { preview: true })))
+    if (_design() !== source || _selA !== payload.overhang_a_id || _selB !== payload.overhang_b_id
+        || _typeId !== payload.connection_type) throw new Error('The part or selection changed. Try Connect again.')
+  }
   if (applyNow) await createAndApplyConnectionVersion(payload)
   else await createConnectionVersion(payload)
   const newV = _versions().find(v => !before.has(v.id))
@@ -1023,12 +1017,13 @@ async function _captureVersion({ applied, applyNow = false }) {
  *  sequences + resizes overhangs + recreates the connection type + marks applied).
  *  Unapply → tear down the pair's materialization + clear the version's applied
  *  flag, leaving the overhangs in a free (unconnected) state. */
-async function _onApply() {
+async function _onApply(reapply = false) {
   const v = _applyTargetVersion()
   if (!v) return
+  _selRow = { kind: 'version', id: v.id }
   if (_applyBtn) _applyBtn.disabled = true
   try {
-    if (v.applied) {
+    if (v.applied && !reapply) {
       await _versionRemoval.unapply(v)
     } else {
       const beforeIds = new Set((_store.getState().currentDesign?.cluster_transforms ?? [])
@@ -1051,123 +1046,6 @@ function _gcPercent(seq) {
   if (!seq) return null
   const gc = (seq.match(/[GC]/gi) ?? []).length
   return Math.round((gc / seq.length) * 100)
-}
-
-async function _onGenerate() {
-  if (!_selA || !_selB) return
-  if (ctIsDirect(_typeId)) { await _pair(); return }
-  const indirect = ctIsIndirect(_typeId)
-  let lengthValue = 0
-  if (!indirect) {
-    lengthValue = parseFloat(_lengthInput?.value ?? '')
-    if (!Number.isFinite(lengthValue) || lengthValue <= 0) {
-      showToast('Linker length must be a positive number.')
-      return
-    }
-  }
-  const [attachA, attachB] = ctAttachPair(_typeId)
-  const payload = {
-    overhang_a_id:     _selA,
-    overhang_a_attach: attachA,
-    overhang_b_id:     _selB,
-    overhang_b_attach: attachB,
-    linker_type:       ctLinkerType(_typeId),
-    length_value:      lengthValue,
-    length_unit:       'bp',
-  }
-  if (_genBtn) _genBtn.disabled = true
-  const before = new Set(_connections().map(c => c.id))
-  try {
-    await createOverhangConnection(payload)   // syncs design → subscriber → _refresh
-    const newConn = _connections().find(c => !before.has(c.id))
-    if (newConn) _selRow = { kind: 'conn', id: newConn.id }
-  } catch (err) {
-    showToast(err?.message ?? String(err))
-  } finally {
-    _render()
-  }
-}
-
-/** "Pair" (direct variants): ensure the two overhangs have complementary
- *  sequences, then bind them. Sequence rules:
- *   - neither has a sequence → generate a random one for A, then B = RC(A);
- *   - exactly one missing     → fill the missing one with RC(the present one);
- *   - both present, not complementary → A drives: overwrite B with RC(A);
- *   - both present + already complementary → no sequence change.
- *  Then create the OverhangBinding at each side's attach-end tip sub-domain. */
-async function _pair() {
-  if (!_selA || !_selB) return
-  if (_genBtn) _genBtn.disabled = true
-  try {
-    await _ensureComplementarySequences()
-    await _createBindingForPair()
-  } catch (err) {
-    showToast(err?.message ?? String(err))
-  } finally {
-    _render()
-  }
-}
-
-/** Make the two overhangs' sequences reverse-complementary (A drives B):
- *   - neither has a sequence → generate a random one for A, then B = RC(A);
- *   - exactly one missing     → fill the missing one with RC(the present one);
- *   - both present, not complementary → A drives: overwrite B with RC(A);
- *   - both present + already complementary → no change.
- *  Leaves A with a sequence in every branch (the end-to-root binder reads RC(A)). */
-async function _ensureComplementarySequences(deferReassign = false) {
-  // deferReassign: skip the per-write staple re-derivation on the sequence sets below —
-  // the CONNECT flow applies the connection right after, which re-derives once with the
-  // final topology, so the intermediate re-derivations are redundant. Standalone callers
-  // (the Pair path) leave it false so the complements are simulation-ready immediately.
-  const aSeq = _seqOf(_selA)
-  const bSeq = _seqOf(_selB)
-  // Cap the RC to the TARGET overhang's current length so the sequence write
-  // never resizes it — different-length overhangs keep their lengths (the longer
-  // one keeps its toehold) instead of the shorter being grown to match.
-  const rcCapped = (srcSeq, targetId) =>
-    capSequenceToLength(_reverseComplement(srcSeq).toUpperCase(),
-                        overhangDomainLength(_design(), targetId) ?? undefined)
-  const dr = deferReassign ? { deferReassign: true } : {}
-  if (!aSeq && !bSeq) {
-    await generateOverhangRandomSequence(_selA, dr)                   // new random for A
-    const newA = _seqOf(_selA)
-    if (newA) await patchOverhang(_selB, { sequence: rcCapped(newA, _selB), ...dr })
-  } else if (aSeq && !bSeq) {
-    await patchOverhang(_selB, { sequence: rcCapped(aSeq, _selB), ...dr })
-  } else if (!aSeq && bSeq) {
-    await patchOverhang(_selA, { sequence: rcCapped(bSeq, _selA), ...dr })
-  } else if (_reverseComplement(aSeq).toUpperCase() !== bSeq.toUpperCase()) {
-    await patchOverhang(_selB, { sequence: rcCapped(aSeq, _selB), ...dr })   // A drives B
-  }
-}
-
-/** Create the OverhangBinding at each side's attach-end tip sub-domain (after
- *  _pair has made the sequences complementary). */
-async function _createBindingForPair() {
-  const [attachA, attachB] = ctAttachPair(_typeId)
-  const sdAId = _subDomainAtAttach(_selA, attachA)
-  const sdBId = _subDomainAtAttach(_selB, attachB)
-  if (!sdAId || !sdBId) {
-    showToast('Sequences set. Binding needs sub-domains defined on both overhangs.')
-    return
-  }
-  const sdA = (_overhangs().find(o => o.id === _selA)?.sub_domains ?? []).find(sd => sd.id === sdAId)
-  const sdB = (_overhangs().find(o => o.id === _selB)?.sub_domains ?? []).find(sd => sd.id === sdBId)
-  if (sdA && sdB && sdA.length_bp !== sdB.length_bp) {
-    showToast(`Sequences set. Binding not created — tip sub-domains differ (${sdA.length_bp} vs ${sdB.length_bp} bp).`)
-    return
-  }
-  const dup = _bindings().find(b =>
-    (b.overhang_a_id === _selA && b.overhang_b_id === _selB) ||
-    (b.overhang_a_id === _selB && b.overhang_b_id === _selA))
-  if (dup) {
-    showToast(`Pair already bound (${dup.name ?? dup.id.slice(0, 6)}).`)
-    return
-  }
-  const before = new Set(_bindings().map(b => b.id))
-  await createOverhangBinding({ sub_domain_a_id: sdAId, sub_domain_b_id: sdBId })
-  const newB = _bindings().find(b => !before.has(b.id))
-  if (newB) _selRow = { kind: 'binding', id: newB.id }
 }
 
 // ── Per-side sequence rows (edit + Gen) ───────────────────────────────────────
@@ -1457,12 +1335,13 @@ function _renderVersionDetails(v) {
     }
   }
 
-  const _seqInput = (value, placeholder, onCommit) => {
+  const _seqInput = (value, placeholder, onCommit, label) => {
     const input = document.createElement('input')
     input.type = 'text'; input.spellcheck = false
     input.value = value ?? ''
     input.placeholder = placeholder ?? ''
     input.dataset.vseq = '1'
+    input.setAttribute('aria-label', label)
     input.style.cssText = 'flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px;outline:none'
     let last = (input.value || '').toUpperCase()
     input.addEventListener('focus', () => { last = input.value.trim().toUpperCase() })
@@ -1488,7 +1367,7 @@ function _renderVersionDetails(v) {
     const lab = document.createElement('span')
     lab.style.cssText = `color:${color};font-size:11px;width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
     lab.textContent = nameById.get(ovId) ?? side
-    row.append(lab, _seqInput(v[seqKey], 'sequence…', (next) => patchConnectionVersion(v.id, { [seqKey]: next })))
+    row.append(lab, _seqInput(v[seqKey], 'sequence…', (next) => patchConnectionVersion(v.id, { [seqKey]: next }), `Version overhang ${side} sequence`))
     _detailsEl.appendChild(row)
   }
 
@@ -1498,16 +1377,22 @@ function _renderVersionDetails(v) {
     const lab = document.createElement('span')
     lab.style.cssText = 'color:#8b949e;font-size:11px;width:64px'
     lab.textContent = 'Bridge'
-    row.append(lab, _seqInput(v.bridge_seq, v.bridge_length ? `${v.bridge_length} nt` : '', (next) => patchConnectionVersion(v.id, { bridge_seq: next })))
+    row.append(lab, _seqInput(v.bridge_seq, v.bridge_length ? `${v.bridge_length} nt` : '', (next) => patchConnectionVersion(v.id, { bridge_seq: next }), 'Version bridge sequence'))
     _detailsEl.appendChild(row)
   }
 
   const hint = document.createElement('div')
   hint.style.cssText = 'color:#6e7681;font-size:10px;margin-top:2px'
   hint.textContent = v.applied
-    ? 'Applied. Edit then click Apply to update the model.'
+    ? 'Saved changes take effect when you click Reapply.'
     : 'Draft — click Apply to materialize this version.'
   _detailsEl.appendChild(hint)
+  if (v.applied) {
+    const reapply = document.createElement('button')
+    reapply.type = 'button'; reapply.textContent = 'Reapply'
+    reapply.addEventListener('click', async () => { reapply.disabled = true; await _onApply(true) })
+    _detailsEl.appendChild(reapply)
+  }
 }
 
 function _renderLinkerDetails(conn) {
@@ -1701,13 +1586,6 @@ function _linkerStrandSegments(conn) {
 
 // ── Small pure helpers (mirror the manager) ───────────────────────────────────
 
-function _subDomainAtAttach(ovhgId, attach /* 'root' | 'free_end' */) {
-  const ov = _overhangs().find(o => o.id === ovhgId)
-  if (!ov || !ov.sub_domains?.length) return null
-  const sorted = [...ov.sub_domains].sort((x, y) => (x.start_bp_offset ?? 0) - (y.start_bp_offset ?? 0))
-  return attach === 'root' ? sorted[0].id : sorted[sorted.length - 1].id
-}
-
 // ── Sequence-preview rendering (N-padding + complementary coloring) ────────────
 
 /** Full assembled bases of an overhang, 5'→3', N-padded to its CURRENT backing-
@@ -1878,13 +1756,14 @@ function _selectedOverhangIds(state) {
  *   - 0 selected → no pick (a transient deselect leaves the slots alone). */
 function _onSelectionChange(state) {
   const cur = _selectedOverhangIds(state)
+  if (cur.length === _selPrev.length && cur.every((id, index) => id === _selPrev[index])) return
   let picks
   if (cur.length === 1) picks = cur
   else if (cur.length >= 2) picks = cur.filter(id => !_selPrev.includes(id))
   else picks = []
   for (const id of picks) _placePick(id)
   _selPrev = cur
-  if (_collapsed) return   // only drive the dropdowns while the section is open
+  if (_collapsed || !picks.length) return   // deselection preserves the chosen version
   _applySlotsToDropdowns()
 }
 

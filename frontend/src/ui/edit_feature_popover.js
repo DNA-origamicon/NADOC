@@ -80,21 +80,23 @@ export function isEditable(opKind) {
 /**
  * Open the popover and resolve with a new params object, or null on cancel.
  */
-export function editFeature({ title, opKind, currentParams = {}, schema: fieldSchema }) {
+export function editFeature({ title, opKind, currentParams = {}, schema: fieldSchema, onSave, isCurrent = () => true }) {
   const schema = fieldSchema ?? OP_SCHEMAS[opKind]
   if (!schema) {
     showToast(`Edit not supported for ${opKind}.`, { severity: 'error' })
     return Promise.resolve(null)
   }
   return new Promise((resolve) => {
-    let resolved = false
+    let resolved = false, saving = false, retired = false
     const inputs = new Map()  // key → input element
 
     function _resolveOnce(value) {
       if (resolved) return
       resolved = true
+      window.removeEventListener('nadoc:document-reset', reset)
       resolve(value)
     }
+    const reset = () => { retired = true; modal.close() }
 
     // Build the body: one labelled row per field.
     const body = document.createElement('div')
@@ -157,8 +159,8 @@ export function editFeature({ title, opKind, currentParams = {}, schema: fieldSc
       const inp = inputs.get(field.key)
       const raw = inp.value
       if (field.type === 'number') {
-        const n = field.integer ? parseInt(raw, 10) : parseFloat(raw)
-        if (!Number.isFinite(n)) return { error: `${field.label} must be a number.` }
+        const n = raw.trim() === '' ? NaN : Number(raw)
+        if (!Number.isFinite(n) || (field.integer && !Number.isSafeInteger(n))) return { error: `${field.label} must be ${field.integer ? 'an integer' : 'a number'}.` }
         if (field.min != null && n < field.min) return { error: `${field.label} must be ≥ ${field.min}.` }
         if (field.max != null && n > field.max) return { error: `${field.label} must be ≤ ${field.max}.` }
         return { value: n }
@@ -173,7 +175,12 @@ export function editFeature({ title, opKind, currentParams = {}, schema: fieldSc
       return { value: t === '' ? null : t }
     }
 
-    function _onSave() {
+    const error = document.createElement('p')
+    error.setAttribute('role', 'alert'); error.hidden = true
+    body.appendChild(error)
+    async function _onSave() {
+      if (saving || resolved) return
+      if (!isCurrent()) { error.textContent = 'The part changed. Reopen this editor.'; error.hidden = false; return }
       const out = {}
       for (const field of schema) {
         const r = _readField(field)
@@ -183,6 +190,21 @@ export function editFeature({ title, opKind, currentParams = {}, schema: fieldSc
           return
         }
         out[field.key] = r.value
+      }
+      if (onSave) {
+        saving = true
+        const controls = [...modal.root.querySelectorAll('input, select, button')]
+        const disabled = controls.map(control => control.disabled)
+        controls.forEach(control => { control.disabled = true })
+        try {
+          if (!await onSave(out)) throw new Error('The edit was not accepted. Your draft is unchanged.')
+          if (resolved) return
+        } catch (failure) {
+          if (resolved) return
+          controls.forEach((control, index) => { control.disabled = disabled[index] })
+          error.textContent = failure?.message || 'The edit failed.'; error.hidden = false
+          return
+        } finally { saving = false }
       }
       _resolveOnce(out)
       modal.close()
@@ -204,9 +226,10 @@ export function editFeature({ title, opKind, currentParams = {}, schema: fieldSc
       size: 'sm',
       body,
       actions: [cancelBtn, saveBtn],
-      onClose: () => { _resolveOnce(null) },
+      onClose: () => { if (saving && !retired) return false; _resolveOnce(null) },
     })
     modal.open()
+    window.addEventListener('nadoc:document-reset', reset)
 
     // Focus the first input.
     setTimeout(() => {

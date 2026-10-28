@@ -20,9 +20,9 @@ from backend.core.part_repair_capture import _Copier
 from backend.core.part_verification_capture import CaptureLimit, capture
 
 
-# Fixed host gate: native DNA projection remains a qualification-only path.
+# Fixed host gate: the bounded native DNA projection is qualified.
 # Client parameters and environment variables cannot enable it.
-DNA_COMPARISON_ENABLED = False
+DNA_COMPARISON_ENABLED = True
 TIME_BUDGET = 5.0
 CAPTURE_SECONDS = 0.025
 CAPTURE_BYTES = 2_000_000
@@ -144,7 +144,7 @@ def compare(identity, value):
         # cannot overwrite the original job's candidate/readiness metadata.
         read = Job(job.doc, job.source, job.revision, cancelled=job.cancelled)
         read.session_identity, read.policy_generation = job.session_identity, job.policy_generation
-        remaining = min(TIME_BUDGET, max(0, owner.RESULT_TTL - (owner.monotonic() - job.created)))
+        remaining = min(TIME_BUDGET, max(0, job.created + owner.RESULT_TTL - owner.monotonic()))
         supervision_started = True  # supervise releases admission only after reaping
         worker = (lambda captured: ComparisonWorker(captured, candidate)) if request.projection_version == 1 else (
             lambda captured: ComparisonWorker(captured, candidate, projection_version=request.projection_version))
@@ -168,7 +168,7 @@ def compare(identity, value):
         with owner._lock:
             _admit(owner, identity, request, expected_job=job, expected_candidate=candidate)
             _final_source_guard(job, request)
-            expires_in = min(owner.RESULT_TTL, owner.RESULT_TTL - (owner.monotonic() - job.created))
+            expires_in = min(owner.RESULT_TTL, job.created + owner.RESULT_TTL - owner.monotonic())
             if expires_in <= 0:
                 raise HTTPException(410, detail={"code": "comparison_expired", "detail": "The evaluated repair expired"})
         return {**result, "job_id": identity, "design_id": request.expected_design_id,

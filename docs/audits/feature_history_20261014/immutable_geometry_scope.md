@@ -1,5 +1,15 @@
 # Private immutable extrusion storage prerequisite
 
+## Retained production lifecycle qualification — October 28, 2026
+- FH-28 qualification follows the current operating-contract scope: ordinary recipe recording and deformation preview sessions. The sealed immutable host below is historical and remains excluded/gated.
+- Existing host/resource/transport coverage: 408 focused passes, with one exact comparison-expiry failure subsequently fixed and rechecked in 59 passes; hard limits and recovery budgets unchanged.
+- Production browser: repeated 16-helix Bend sessions, historical Open/edit/Cancel/Apply, and fresh Tools Extrude creation/cancel/save/reopen/rollback refusal passed. Three cycles ended with zero preview/document sessions, 1–3 bounded tombstones and RSS 230,883,328→230,965,248 bytes; concurrent revision reads 7–15 ms.
+- The resource test's 1.87–1.90 s `cancel_ms` includes remote resource/checkpoint reads; it is not a user Cancel latency measurement and does not replace the tool's prior C8 qualification.
+- A stale dialog-name selector initially timed out. Corrected selectors then qualified Bundle→Bend→Sweep editing/replay/save/reopen and late Extrude Save delivery after same-ID reopen (2/2 passes, 33.2 s). No production change was needed for those cases.
+- Evidence: `.development-artifacts/feature-history-focus/retained-host-browser.log`, `retained-host-stale-reply.log`, `core-repair-host-final.log`, `core-comparison-expiry.log`. Both owned browser roots were independently verified absent; no original workspace files changed.
+- FH-28 closes at the retained ordinary scope. The real autosave writer with its production persistence owner, session destruction, disk restore, independent cold proof and a subsequent one-undo edit pass with organization gates OFF. Final focused regression 82 pass/17 warnings/4.29 s; the first run's additional excluded organization case refused its closed live gate, and was removed from this scope rather than enabling that gate.
+- Aggregate regressions and final acceptance remain FH-27; no broad green or new immutable/sealed rollout is claimed.
+
 U45, October 17, 2026. FH-28 checkpoint 1. No milestone closed, no public gate
 opened, and no capture latency improvement claimed. The ordinary editor still
 uses mutable capture. This checkpoint supplies its missing storage prerequisite.
