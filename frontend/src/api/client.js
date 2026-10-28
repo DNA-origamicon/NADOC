@@ -1242,6 +1242,7 @@ export function captureDimensionContext() { return { docId: docHeaders()['X-NADO
 
 async function _dimensionsRequest(method, kind, id, changes, context = {}) {
   const revision = currentRevisionWatermark()
+  const generation = _documentRequests.capture()
   let json
   try {
     json = await _request(method, `/${kind}/dimensions${method === 'GET' ? `?document_id=${encodeURIComponent(id)}` : ''}`,
@@ -1252,9 +1253,10 @@ async function _dimensionsRequest(method, kind, id, changes, context = {}) {
     if (method === 'GET' && error?.name === 'AbortError') return null
     throw error
   }
-  // A passive load superseded by a newer design revision is discarded by the
-  // request scheduler; the next poll reads the new revision. Not a failure.
-  if (!json && method === 'GET' && revision !== currentRevisionWatermark()) return null
+  // Reset may keep the same document ID and revision. Retire that generation's
+  // reads whether the transport reports cancellation by null or AbortError.
+  if (method === 'GET' && (!_documentRequests.isCurrent(generation)
+      || (!json && revision !== currentRevisionWatermark()))) return null
   if (!json) throw new Error('Could not save or load dimensions')
   const field = kind === 'assembly' ? 'currentAssembly' : 'currentDesign'
   const current = store.getState()[field]
