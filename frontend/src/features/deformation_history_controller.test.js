@@ -763,3 +763,39 @@ it('charges local display validation time against the final response lease', asy
   expect(f.controller.getState().expired).toBe(true)
   expect(f.applyPublished).not.toHaveBeenCalled()
 })
+
+it('negotiates topology deltas and restores only the immutable topology of its own lease', async () => {
+  const rows = [['native-owner']], topology = { strands: [{ id: 'original' }], cluster_transforms: [] }
+  const candidate = reference => ({ topology_ref: reference, display_topology: { cluster_transforms: [{ id: 'moved' }] },
+    nucleotides: { encoding: 'f64-block-v1', count: 1, rows_ref: LEASE, f64: 'coordinates' } })
+  const f = await transformFixture('cluster_op', {
+    prepare: vi.fn(async body => transformPacket(body, 'cluster_op', {
+      before: { nucleotides: { rows }, display_topology: topology } })),
+    evaluate: vi.fn(async body => transformPacket(body, 'cluster_op', { candidate: candidate(LEASE) })),
+  })
+  await f.controller.open('feature')
+  expect(() => { topology.strands[0].id = 'mutated' }).toThrow(TypeError)
+  const result = await f.controller.update({ translation: [1, 2, 3] })
+  expect(f.api.evaluate.mock.lastCall[0]).toMatchObject({ reuse_rows: true, reuse_topology: true })
+  expect(result.candidate.display_topology).toEqual({ strands: [{ id: 'original' }], cluster_transforms: [{ id: 'moved' }] })
+  expect(result.candidate).not.toHaveProperty('topology_ref')
+  expect(result.candidate.display_topology.strands).toBe(topology.strands)
+  f.api.evaluate.mockImplementationOnce(async body => transformPacket(body, 'cluster_op', { candidate: candidate(PREVIEW) }))
+  expect(await f.controller.update({ translation: [2, 2, 3] })).toBeNull()
+  expect(f.controller.getState().error.message).toMatch(/another session/)
+  expect(f.applyPublished).not.toHaveBeenCalled()
+})
+
+it('rejects a control-state reference from another lease before display adoption', async () => {
+  const topology = { strands: [], cluster_transforms: [] }
+  const f = await transformFixture('cluster_op', {
+    prepare: vi.fn(async body => transformPacket(body, 'cluster_op', {
+      before: { display_topology: topology } })),
+    evaluate: vi.fn(async body => transformPacket(body, 'cluster_op', {
+      control_state_ref: PREVIEW, control_state: {} })),
+  })
+  await f.controller.open('feature')
+  expect(await f.controller.update({ translation: [1, 2, 3] })).toBeNull()
+  expect(f.controller.getState().error.message).toMatch(/controls belong to another session/)
+  expect(f.applyPublished).not.toHaveBeenCalled()
+})

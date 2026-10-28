@@ -83,12 +83,13 @@ def prepare_display(family, prepared, evaluated, *, envelope, display_cache=None
     return display.prepare_display(prepared.copy_prefix(), evaluated, envelope=envelope, **options)
 
 
-def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope, display_cache=None):
+def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope, display_cache=None, reuse_topology=False):
     display = _display(family)
     options = {"creation": _creation(family, prepared), "display_cache": display_cache} if family == "deformation" else {}
     if family == "transform":
         options["source_entry"] = prepared._entry
         options["display_cache"] = display_cache
+        options["reuse_topology"] = reuse_topology
     prefix = (prepared.display_prefix() if hasattr(prepared, "display_prefix")
               else prepared.copy_prefix())
     return display.evaluate_display(prefix, evaluated,

@@ -1,3 +1,4 @@
+import { retainTransformPreviewData } from './transform_preview_display.js'
 import { validatePreviewComputation } from '../api/preview_computation.js'
 import { cloneRepairInput, sameRepairContext } from './part_repair_model.js'
 import { DeformationPreviewRequestError, previewFamilyIdentity, previewPublicationReceipt } from '../api/deformation_preview_endpoints.js'
@@ -189,6 +190,10 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
       if ((family === 'deformation' || family === 'transform') && Array.isArray(response.before?.nucleotides?.rows)) {
         b.displayRows = response.before.nucleotides.rows
       }
+      if (family === 'transform' && response.before?.display_topology) {
+        b.displayTopology = retainTransformPreviewData(response.before.display_topology)
+        b.displayControls = retainTransformPreviewData(response.control_state)
+      }
       leaseDeadline(b, response, started, tracking.timing)
       state = { ...state, computation: null, ...(family === 'transform' ? { commandKind: b.identity.command_kind } : { deformationId: b.identity.deformation_id }),
         projection: response, controls: response.control_context, error: null }
@@ -227,9 +232,10 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
     requests.add(abort)
     state = { ...state, busy: applying ? 'apply' : 'evaluate' }; emit()
     try {
-      const response = await api.evaluate({ ...body(b), request_sequence: nextSequence(b),
+      let response = await api.evaluate({ ...body(b), request_sequence: nextSequence(b),
         params: entry.draft, include_geometry: entry.includeGeometry,
-        ...((family === 'deformation' || family === 'transform') && b.displayRows ? { reuse_rows: true } : {}) }, options(b, abort))
+        ...((family === 'deformation' || family === 'transform') && b.displayRows ? { reuse_rows: true } : {}),
+        ...(family === 'transform' && b.displayTopology ? { reuse_topology: true } : {}) }, options(b, abort))
       if (!current(b) || state.expired || entry.version !== draftVersion) return null
       envelope(b, response, b.sequence)
       displayMode(b, response, false)
@@ -243,6 +249,23 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
         }
         const { rows_ref, ...coordinates } = packed
         response.candidate.nucleotides = { ...coordinates, rows: b.displayRows }
+      }
+      if (family === 'transform' && Object.hasOwn(response.candidate ?? {}, 'topology_ref')) {
+        const { topology_ref, ...candidate } = response.candidate
+        if (topology_ref !== b.lease || !b.displayTopology
+            || !candidate.display_topology || Object.getPrototypeOf(candidate.display_topology) !== Object.prototype) {
+          throw error('The preview topology belongs to another session', 422)
+        }
+        response.candidate = { ...candidate,
+          display_topology: { ...b.displayTopology, ...candidate.display_topology } }
+      }
+      if (family === 'transform' && Object.hasOwn(response, 'control_state_ref')) {
+        const { control_state_ref, ...display } = response
+        if (control_state_ref !== b.lease || !b.displayControls
+            || !display.control_state || Object.getPrototypeOf(display.control_state) !== Object.prototype) {
+          throw error('The preview controls belong to another session', 422)
+        }
+        response = { ...display, control_state: { ...b.displayControls, ...display.control_state } }
       }
       validateDisplay(response, { prepare: false })
       evaluatedRole(response, entry.draft)

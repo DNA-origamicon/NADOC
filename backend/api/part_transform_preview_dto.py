@@ -162,10 +162,10 @@ def _controls(design, params, check, gate_cache=None):
     return result
 
 
-def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_entry=None, display_cache=None):
+def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_entry=None, display_cache=None, reuse_topology=False):
     from backend.api.part_transform_projection import project_admitted
 
-    if type(include_geometry) is not bool:
+    if type(include_geometry) is not bool or type(reuse_topology) is not bool:
         reject("Transform geometry choice must be boolean", "invalid_preview_definition")
     check = checkpoint()
     kind = _inputs(prefix, evaluated)
@@ -183,7 +183,8 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
     # Evaluation emits only the independently owned candidate. Admit the
     # historical prefix when it actually supplies a before pane at preparation.
     before = inventory(prefix, check) if prepare else None
-    after = inventory(evaluated.design, check)
+    after = inventory(evaluated.design, check,
+        previous=display_cache.get("inventory") if cache_owned and not prepare else None)
     native_work = _control_cost(evaluated.design, after) + (before.work * 2 if prepare else 0) + (after.work * 2 if include_geometry else 0)
     limit(native_work, MAX_CONTROL_WORK, "cumulative native display/control work")
     result = {"projection_version": 1, "family": "transform", "command_kind": source_kind,
@@ -207,13 +208,30 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
         if packed["rows"] == display_cache.get("rows"):
             packed.pop("rows")
             packed["rows_ref"] = envelope["lease_id"]
+        baseline = display_cache.get("topology")
+        if reuse_topology and baseline is not None and baseline.keys() == result["candidate"]["display_topology"].keys():
+            candidate = result["candidate"]
+            topology = candidate["display_topology"]
+            changed = {name: value for name, value in topology.items() if value != baseline.get(name)}
+            if len(changed) < len(topology):
+                candidate["display_topology"] = changed
+                candidate["topology_ref"] = envelope["lease_id"]
+        baseline_controls = display_cache.get("controls")
+        controls = result["control_state"]
+        if reuse_topology and baseline_controls is not None and baseline_controls.keys() == controls.keys():
+            changed = {name: value for name, value in controls.items() if value != baseline_controls[name]}
+            if len(changed) < len(controls):
+                result["control_state"] = changed
+                result["control_state_ref"] = envelope["lease_id"]
     check()
     result = _bounded({**result, **envelope})
     if prepare and display_cache is not None:
         display_cache.clear()
         if result.get("lease_id") and result["before"]["component_version"] == 2:
             display_cache.update(lease_id=result["lease_id"],
-                                 rows=deepcopy(result["before"]["nucleotides"]["rows"]))
+                                 rows=deepcopy(result["before"]["nucleotides"]["rows"]),
+                                 topology=deepcopy(result["before"]["display_topology"]),
+                                 controls=deepcopy(result["control_state"]), inventory=deepcopy(before))
     if cache_owned and display_cache.get("lease_id") == envelope["lease_id"]:
         # Publish only after whole-response admission. The response and lease
         # never share mutable native gate values.
@@ -221,11 +239,11 @@ def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_e
     return result
 
 
-def prepare_display(prefix, evaluated, *, envelope=None, source_entry=None, display_cache=None):
+def prepare_display(prefix, evaluated, *, envelope=None, source_entry=None, display_cache=None, reuse_topology=False):
     return _display(prefix, evaluated, prepare=True, include_geometry=True, envelope=envelope,
-                    source_entry=source_entry, display_cache=display_cache)
+                    source_entry=source_entry, display_cache=display_cache, reuse_topology=reuse_topology)
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, source_entry=None, display_cache=None):
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, source_entry=None, display_cache=None, reuse_topology=False):
     return _display(prefix, evaluated, prepare=False, include_geometry=include_geometry, envelope=envelope,
-                    source_entry=source_entry, display_cache=display_cache)
+                    source_entry=source_entry, display_cache=display_cache, reuse_topology=reuse_topology)

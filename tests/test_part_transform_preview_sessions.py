@@ -310,3 +310,18 @@ def test_historical_constraints_are_previewed_then_downstream_edits_rebuild_on_a
     verified(Design.from_json(candidate.to_json()))
     state.undo()
     assert state.get_or_404().model_dump(mode="json") == before["json"]
+
+
+def test_topology_delta_requires_negotiation_and_retains_complete_candidate(document):
+    opened = host.prepare(opening(), family=FAMILY)
+    full = host.evaluate(update(opened), family=FAMILY)['candidate']
+    rows_only = host.evaluate(update(opened, sequence=2) | {'reuse_rows': True}, family=FAMILY)['candidate']
+    assert 'topology_ref' not in rows_only
+    assert rows_only['display_topology'] == full['display_topology']
+    delta = host.evaluate(update(opened, sequence=3) | {
+        'reuse_rows': True, 'reuse_topology': True}, family=FAMILY)['candidate']
+    assert delta.pop('topology_ref') == opened['lease_id']
+    delta['display_topology'] = {**opened['before']['display_topology'], **delta['display_topology']}
+    assert delta['nucleotides'].pop('rows_ref') == opened['lease_id']
+    delta['nucleotides']['rows'] = opened['before']['nucleotides']['rows']
+    assert delta == full

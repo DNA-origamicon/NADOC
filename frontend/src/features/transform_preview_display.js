@@ -3,7 +3,7 @@
 import { finite, integer, text, shape, vector, list } from './part_comparison_validation.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 import { linkerLengthToBases } from '../scene/overhang_link_arcs.js'
-import { visitDnaComparisonScalars, SCALAR_COLUMNS } from './part_dna_comparison_codec.js'
+import { visitDnaComparisonScalars, visitDnaComparisonFrames, SCALAR_COLUMNS } from './part_dna_comparison_codec.js'
 import { TRANSFORM_DISPLAY_LIMITS as limits } from './transform_preview_limits.js'
 
 const fail = message => { throw new Error(`Transform preview unavailable: ${message}`) }
@@ -260,34 +260,47 @@ function component(value) {
   } else list(value.nucleotides, limits.records)
   const recordCount = compact ? value.nucleotides.count : value.nucleotides.length
   const t = value.display_topology; shape(t, [...Object.keys(schemas), 'group_organization'])
-  const indices = inventories(t), expected = new Map(), extensions = new Map(), changes = new Map()
-  for (const h of t.helices) for (const mark of h.loop_skips) {
-    if (mark.bp_index < h.bp_start || mark.bp_index >= h.bp_start + h.length_bp) fail('out-of-range loop/skip')
-    const k = JSON.stringify([h.id, mark.bp_index]); changes.set(k, (changes.get(k) ?? 0) + mark.delta)
-  }
-  const occupied = new Set()
-  for (const s of t.strands) s.domains.forEach((d, ordinal) => {
-    for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
-      const address = key(d.helix_id, bp, d.direction)
-      if (occupied.has(address)) fail('ambiguous directional occupancy'); occupied.add(address)
-      if (d.helix_id.startsWith('__lnk__')) {
-        const conn = indices.overhang_connections.get(d.helix_id.slice(7))
-        if (!conn) fail('missing linker owner')
-        if (conn.linker_type === 'ss') continue
-      }
-      const copies = Math.max(0, 1 + (changes.get(JSON.stringify([d.helix_id, bp])) ?? 0))
-      if (copies + expected.size > limits.records) fail('record allowance exceeded')
-      for (let copy = 0; copy < copies; copy++) expected.set(key(d.helix_id, bp, d.direction, copy), { s, d, ordinal })
+  const indices = inventories(t)
+  // The controller retains deeply frozen scalar rows for this exact lease.
+  // Reuse their ownership proof only when every source of occupancy is equal;
+  // coordinates, axes, controls and all current topology schemas remain fresh.
+  const accounting = compact && immutableJsonBounds.get(value.nucleotides.rows)
+  const source = accounting ? JSON.stringify([t.helices, t.strands, t.extensions, t.overhang_connections]) : null
+  const proof = accounting?.records?.source === source ? accounting.records : null
+  const expected = proof?.expected ?? new Map(), extensions = new Map(), changes = new Map()
+  if (!proof) {
+    for (const h of t.helices) for (const mark of h.loop_skips) {
+      if (mark.bp_index < h.bp_start || mark.bp_index >= h.bp_start + h.length_bp) fail('out-of-range loop/skip')
+      const k = JSON.stringify([h.id, mark.bp_index]); changes.set(k, (changes.get(k) ?? 0) + mark.delta)
     }
-  })
-  for (const e of t.extensions) {
-    const s = indices.strands.get(e.strand_id), d = e.end === 'five_prime' ? s.domains[0] : s.domains.at(-1)
-    const count = (e.sequence?.length ?? 0) + Number(!!e.modification)
-    if (count + expected.size + extensions.size > limits.records) fail('extension allowance exceeded')
-    for (let i = 0; i < count; i++) extensions.set(key(`__ext_${e.id}`, i, d.direction), e)
+    const occupied = new Set()
+    for (const s of t.strands) s.domains.forEach((d, ordinal) => {
+      for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
+        const address = key(d.helix_id, bp, d.direction)
+        if (occupied.has(address)) fail('ambiguous directional occupancy'); occupied.add(address)
+        if (d.helix_id.startsWith('__lnk__')) {
+          const conn = indices.overhang_connections.get(d.helix_id.slice(7))
+          if (!conn) fail('missing linker owner')
+          if (conn.linker_type === 'ss') continue
+        }
+        const copies = Math.max(0, 1 + (changes.get(JSON.stringify([d.helix_id, bp])) ?? 0))
+        if (copies + expected.size > limits.records) fail('record allowance exceeded')
+        for (let copy = 0; copy < copies; copy++) expected.set(key(d.helix_id, bp, d.direction, copy), { s, d, ordinal })
+      }
+    })
+    for (const e of t.extensions) {
+      const s = indices.strands.get(e.strand_id), d = e.end === 'five_prime' ? s.domains[0] : s.domains.at(-1)
+      const count = (e.sequence?.length ?? 0) + Number(!!e.modification)
+      if (count + expected.size + extensions.size > limits.records) fail('extension allowance exceeded')
+      for (let i = 0; i < count; i++) extensions.set(key(`__ext_${e.id}`, i, d.direction), e)
+    }
   }
-  const seen = new Set(), bridgeBoundaries = new Set()
-  let rigidCount = 0
+  const seen = new Set(), bridgeBoundaries = proof?.bridgeBoundaries ?? new Set()
+  let rigidCount = proof?.rigidCount ?? 0
+  const checkFrame = (floats, offset) => {
+    if (Math.abs(Math.hypot(floats[offset + 15], floats[offset + 16], floats[offset + 17], floats[offset + 18]) - 1) > 1e-5
+        || Math.abs(Math.hypot(floats[offset + 9], floats[offset + 10], floats[offset + 11]) - 1) > 1e-5) fail('invalid native frame')
+  }
   const visitRecord = (n, floats = null, offset = 0) => {
     if (floats) {
       for (const [k, check] of compactRecordChecks) check(n[k])
@@ -307,18 +320,18 @@ function component(value) {
       if (floats) {
         // The codec validates all 28 doubles and fixes every vector/site shape.
         // Retain this validator's native quaternion/axis unit-length checks.
-        if (Math.abs(Math.hypot(floats[offset + 15], floats[offset + 16], floats[offset + 17], floats[offset + 18]) - 1) > 1e-5
-            || Math.abs(Math.hypot(floats[offset + 9], floats[offset + 10], floats[offset + 11]) - 1) > 1e-5) fail('invalid native frame')
+        checkFrame(floats, offset)
       } else {
         recordOptional.helical_site(n.helical_site); vec(3)(n.slab_position); vec(4)(n.slab_quaternion)
         if (Math.abs(Math.hypot(...n.slab_quaternion) - 1) > 1e-5 || Math.abs(Math.hypot(...n.axis_tangent) - 1) > 1e-5) fail('invalid native frame')
       }
     }
   }
-  if (compact) visitDnaComparisonScalars(value.nucleotides, visitRecord)
+  if (proof) visitDnaComparisonFrames(value.nucleotides, checkFrame)
+  else if (compact) visitDnaComparisonScalars(value.nucleotides, visitRecord)
   else for (const n of value.nucleotides) visitRecord(n)
   renderWork(rigidCount, t)
-  if (seen.size !== expected.size + extensions.size) fail('omitted occupied records')
+  if (!proof && seen.size !== expected.size + extensions.size) fail('omitted occupied records')
   for (const c of t.overhang_connections) if (c.linker_type === 'ds' && linkerLengthToBases(c) > 0) {
     // The existing DS companion deliberately omits zero-length connector arcs.
     // Require its actual bridge endpoints rather than inventing replacement
@@ -358,6 +371,7 @@ function component(value) {
     object({ minimum: vec(3), maximum: vec(3) })(value.bounds_nm)
     if (value.bounds_nm.minimum.some((v, i) => v > value.bounds_nm.maximum[i])) fail('invalid component bounds')
   } else if (recordCount || value.helix_axes.length) fail('missing component bounds')
+  if (accounting && !proof) accounting.records = { source, expected: new Set(expected.keys()), bridgeBoundaries, rigidCount }
   return indices
 }
 
@@ -631,5 +645,20 @@ export function validateTransformPreviewDisplay(value, { prepare, requireEnvelop
   }
   if (prepare) checkedComponents.add(value.before)
   if (value.candidate !== null) checkedComponents.add(value.candidate)
+  return value
+}
+
+/** Retain one immutable topology in the existing editor lease. Run only after
+ * complete preparation validation; bounds also guard standalone callers before
+ * freezing. Accounting can then reuse unchanged subtrees of later deltas. */
+export function retainTransformPreviewData(value) {
+  boundedJson(value)
+  const freeze = v => {
+    if (!v || typeof v !== 'object') return
+    for (const child of Object.values(v)) freeze(child)
+    Object.freeze(v)
+  }
+  freeze(value)
+  boundedJson(value)
   return value
 }

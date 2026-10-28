@@ -2774,6 +2774,7 @@ def _apply_clusters_to_seg_point(
     seg: dict,
     helix_id: str,
     clusters_with_keys: list[tuple],
+    frames: dict | None = None,
 ) -> list[float]:
     """Apply each cluster's rigid transform to *point* if seg's domain key is in
     that cluster's moving set. Skips clusters whose helix_ids don't include
@@ -2788,23 +2789,29 @@ def _apply_clusters_to_seg_point(
             continue
         if seg_keys.isdisjoint(moving_keys):
             continue
-        R = _rot_from_quaternion(*cluster.rotation)
-        pivot = np.array(cluster.pivot, dtype=float)
-        trans = np.array(cluster.translation, dtype=float)
+        frame = frames.get(id(cluster)) if frames is not None else None
+        if frame is None:
+            frame = (_rot_from_quaternion(*cluster.rotation),
+                     np.array(cluster.pivot, dtype=float), np.array(cluster.translation, dtype=float))
+            if frames is not None:
+                frames[id(cluster)] = frame
+        R, pivot, trans = frame
         p = R @ (p - pivot) + pivot + trans
     return p.tolist()
 
 
-def _seg_endpoints_straight(h: "Helix", seg: dict) -> tuple[list[float], list[float]]:
-    """Compute a segment's straight-axis world endpoints from helix.axis_start/end
-    and the segment's bp range. Caller applies cluster transforms after."""
-    s = h.axis_start.to_array()
-    e = h.axis_end.to_array()
+def _straight_segment_axis(h):
+    s, e = h.axis_start.to_array(), h.axis_end.to_array()
     aVec = e - s
     aLen = float(np.linalg.norm(aVec))
-    if aLen < 1e-9:
+    return s, e, None if aLen < 1e-9 else aVec / aLen
+
+
+def _seg_endpoints_straight(h: "Helix", seg: dict, axis=None) -> tuple[list[float], list[float]]:
+    """Compute native straight endpoints, reusing only this helix's axis inputs."""
+    s, e, aDir = _straight_segment_axis(h) if axis is None else axis
+    if aDir is None:
         return s.tolist(), e.tolist()
-    aDir = aVec / aLen
     tS = (seg["bp_lo"] - h.bp_start) * BDNA_RISE_PER_BP
     tE = (seg["bp_hi"] - h.bp_start + 1) * BDNA_RISE_PER_BP
     return (s + aDir * tS).tolist(), (s + aDir * tE).tolist()
@@ -2896,6 +2903,8 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         else []
     )
 
+    # Reuse identical matrix inputs within this one projection, never across edits.
+    segment_frames = {}
     # One index per calculation, rather than a full domain scan for every helix.
     domains_by_helix = {}
     for strand in design.strands:
@@ -2909,9 +2918,10 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         for h in real_helices:
             s = h.axis_start.to_array().tolist()
             e = h.axis_end.to_array().tolist()
+            straight_axis = _straight_segment_axis(h)
             seg_geoms = []
             for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
-                ss, ee = _seg_endpoints_straight(h, seg)
+                ss, ee = _seg_endpoints_straight(h, seg, straight_axis)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             out.append(
                 {
@@ -2936,11 +2946,12 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
                     _apply_cluster_transforms_to_point(pt, clusters, h, design)
                     for pt in samples
                 ]
+            straight_axis = _straight_segment_axis(h)
             seg_geoms = []
             for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
-                ss, ee = _seg_endpoints_straight(h, seg)
-                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
-                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
+                ss, ee = _seg_endpoints_straight(h, seg, straight_axis)
+                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
+                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             axes.append(
                 {
@@ -2973,11 +2984,12 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
                     _apply_cluster_transforms_to_point(pt, clusters, h, design)
                     for pt in samples
                 ]
+            straight_axis = _straight_segment_axis(h)
             seg_geoms = []
             for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
-                ss, ee = _seg_endpoints_straight(h, seg)
-                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
-                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
+                ss, ee = _seg_endpoints_straight(h, seg, straight_axis)
+                ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
+                ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
                 seg_geoms.append({**seg, "start": ss, "end": ee})
             result.append(
                 {
@@ -3052,8 +3064,8 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         seg_geoms = []
         for seg in _segments_for_helix(design, h, domains_by_helix.get(h.id, [])):
             ss, ee = _seg_endpoints_curve(sample_local, samples_pre, seg, h)
-            ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys)
-            ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys)
+            ss = _apply_clusters_to_seg_point(ss, seg, h.id, clusters_with_keys, segment_frames)
+            ee = _apply_clusters_to_seg_point(ee, seg, h.id, clusters_with_keys, segment_frames)
             seg_geoms.append({**seg, "start": ss, "end": ee})
         samples = (
             [

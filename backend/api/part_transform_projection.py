@@ -28,7 +28,7 @@ def point(value, length=3):
         reject("Malformed native transform display coordinates", "invalid_preview_geometry")
 
 
-def _check_slab_block(records, block):
+def _check_slab_block(records, block, *, native_directions=None):
     """Validate an already checked codec block with unchanged native arithmetic.
 
     This private adapter consumes only the block collected from these records.
@@ -42,11 +42,13 @@ def _check_slab_block(records, block):
         _native_registration, _native_slab_array_poses, authoritative_slab_poses,
     )
 
-    if records and block.size == len(records) * 28:
+    count = len(records) if native_directions is None else len(native_directions)
+    if count and block.size == count * 28:
         try:
             registration = _native_registration()
-            if len(registration) == 2 and all(
-                    r.get("placement_source") == SOURCE and r.get("direction") in registration for r in records):
+            sources_valid = native_directions is not None or all(r.get("placement_source") == SOURCE for r in records)
+            record_directions = native_directions if native_directions is not None else [r.get("direction") for r in records]
+            if len(registration) == 2 and sources_valid and all(d in registration for d in record_directions):
                 values = block.reshape((-1, 28))
                 # Match the original contiguous array layout, including at
                 # acceptance boundaries; avoid Python per-record extraction.
@@ -56,8 +58,8 @@ def _check_slab_block(records, block):
                 # every nucleotide. The arithmetic and contiguous inputs below
                 # remain those of the native authority.
                 directions = tuple(registration)
-                selector = np.fromiter((r["direction"] == directions[1] for r in records),
-                                       dtype=np.intp, count=len(records))
+                selector = np.fromiter((d == directions[1] for d in record_directions),
+                                       dtype=np.intp, count=count)
                 offsets = np.asarray([registration[d] for d in directions])[selector]
                 poses = _native_slab_array_poses(*arrays,
                     np.ascontiguousarray(offsets[:, 0]), np.ascontiguousarray(offsets[:, 1]))
@@ -67,10 +69,13 @@ def _check_slab_block(records, block):
                     frames = Rotation.from_quat(quaternions).as_matrix()
                     if (np.allclose(values[:, 12:15], poses[0], rtol=0, atol=1e-7)
                             and np.allclose(frames, poses[1], rtol=0, atol=1e-7)):
-                        return
+                        return True
         except (TypeError, ValueError, OverflowError):
             pass
+    if native_directions is not None:
+        return not count  # Caller falls back to the complete record diagnostics.
     authoritative_slab_poses(records)
+    return True
 
 
 def _records(records, expected):
@@ -214,9 +219,14 @@ def project_admitted(design, expected, check, *, compact=False):
 
     check()
     try:
-        records = _geometry_for_design(design)
+        from backend.api.part_transform_compact_projection import compact_native
+        try:
+            direct = compact_native(design, expected, check) if compact else None
+        except NativePlacementError:
+            direct = None  # Preserve general-path residue identities in diagnostics.
+        records = [] if direct is not None else _geometry_for_design(design)
         check()
-        coordinates = _records(records, expected)
+        coordinates = direct[1] if direct is not None else _records(records, expected)
         axes = deformed_helix_axes(design)
         check()
         axes = _apply_ovhg_rotations_to_axes(design, axes, records)
@@ -235,7 +245,7 @@ def project_admitted(design, expected, check, *, compact=False):
     # record schema. Companions with extra fields or slabless/flexible records
     # keep the complete object transport; never drop fields to make them fit.
     compact_fields = frozenset(RECORD_COLUMNS)
-    packed = compact and all(n.keys() == compact_fields and n["is_flexible_segment"] is False
+    packed = direct is not None or compact and all(n.keys() == compact_fields and n["is_flexible_segment"] is False
                             and n["slab_position"] is not None and n["slab_quaternion"] is not None
                             for n in records)
     points = [] if packed else [n[name] for n in records for name in ("backbone_position", "base_position")]
@@ -248,13 +258,13 @@ def project_admitted(design, expected, check, *, compact=False):
         for value in axis.get("ovhg_axes", {}).values():
             points.extend((value["start"], value["end"]))
     bounds = None
-    if points or (packed and records):
+    if points or (packed and coordinates.size):
         import numpy as np
         # Bounds use precisely the same bead/base/slab points as the object
         # path. The checked block already owns these doubles; avoid converting
         # tens of thousands of small lists back into an array.
         blocks = []
-        if packed and records:
+        if packed and coordinates.size:
             values = coordinates.reshape((-1, 28))
             blocks.extend((values[:, :6].reshape((-1, 3)), values[:, 12:15]))
         if points:
@@ -263,7 +273,7 @@ def project_admitted(design, expected, check, *, compact=False):
         bounds = {"minimum": block.min(axis=0).tolist(), "maximum": block.max(axis=0).tolist()}
     check()
     return {"component_kind": "transform-preview-dna", "component_version": 2 if packed else 1, "representation": "native-full-v1",
-            "units": "nm", "nucleotides": pack_records_compact(records, coordinate_values=coordinates) if packed else records, "helix_axes": axes, "display_topology": display,
+            "units": "nm", "nucleotides": direct[0] if direct is not None else pack_records_compact(records, coordinate_values=coordinates) if packed else records, "helix_axes": axes, "display_topology": display,
             "required_renderers": companions, "bounds_nm": bounds}
 
 

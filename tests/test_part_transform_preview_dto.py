@@ -66,16 +66,29 @@ def test_compact_delta_is_exact_and_bound_to_validated_lease_rows():
     cache = {}
     preparation = dto().prepare_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache)
     full = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"})
-    delta = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache)
+    delta = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache, reuse_topology=True)
     assert delta["candidate"]["nucleotides"].pop("rows_ref") == "owned"
     delta["candidate"]["nucleotides"]["rows"] = cache["rows"]
+    assert delta["candidate"].pop("topology_ref") == "owned"
+    delta["candidate"]["display_topology"] = {**cache["topology"], **delta["candidate"]["display_topology"]}
+    assert delta.pop("control_state_ref") == "owned"
+    delta["control_state"] = {**cache["controls"], **delta["control_state"]}
     assert delta == full
     preparation["before"]["nucleotides"]["rows"][0][0] = "mutated-response"
     assert cache["rows"] == full["candidate"]["nucleotides"]["rows"]
+    preparation["before"]["display_topology"]["strands"][0]["id"] = "mutated-response"
+    preparation["control_state"]["strands"][0]["id"] = "mutated-response"
+    assert cache["topology"]["strands"][0]["id"] != "mutated-response"
+    assert cache["controls"]["strands"][0]["id"] != "mutated-response"
     wrong_lease = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "other"}, display_cache=cache)
     assert "rows" in wrong_lease["candidate"]["nucleotides"]
     cache["rows"][0][0] = "different-ownership"
-    assert dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache) == full
+    changed = dto().evaluate_display(prefix, evaluated, envelope={"lease_id": "owned"}, display_cache=cache, reuse_topology=True)
+    assert changed["candidate"].pop("topology_ref") == "owned"
+    changed["candidate"]["display_topology"] = {**cache["topology"], **changed["candidate"]["display_topology"]}
+    assert changed.pop("control_state_ref") == "owned"
+    changed["control_state"] = {**cache["controls"], **changed["control_state"]}
+    assert changed == full
     assert dto().evaluate_display(prefix, evaluated, include_geometry=False,
         envelope={"lease_id": "owned"}, display_cache=cache)["candidate"] is None
 

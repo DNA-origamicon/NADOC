@@ -109,6 +109,7 @@ class Cancel(Origin):
 class Evaluation(Change):
     include_geometry: StrictBool = True
     reuse_rows: StrictBool = False
+    reuse_topology: StrictBool = False
 
 
 class Status(Cancel):
@@ -455,7 +456,8 @@ def evaluate(value, *, family="deformation"):
                 payload = family_work.evaluate_display(family, prepared, evaluated,
                     include_geometry=request.include_geometry,
                     envelope=_envelope(entry, request.request_sequence),
-                    display_cache=entry.display_cache if request.reuse_rows else None)
+                    display_cache=entry.display_cache if request.reuse_rows else None,
+                    reuse_topology=request.reuse_topology)
             return _finish(entry, request.request_sequence, payload)
     finally:
         _work_slot.release()

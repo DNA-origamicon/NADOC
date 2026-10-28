@@ -262,3 +262,26 @@ describe('closed native transform display', () => {
     expect(() => validateTransformPreviewComponent(component)).toThrow()
   })
 })
+
+it('reuses frozen row ownership only for the exact admitted source and checks fresh frames', () => {
+  const c = compactTransformComponent()
+  c.nucleotides.rows.forEach(Object.freeze); Object.freeze(c.nucleotides.rows)
+  expect(() => validateTransformPreviewComponent(c)).not.toThrow()
+  expect(() => validateTransformPreviewComponent(c)).not.toThrow()
+  const changed = structuredClone(c)
+  changed.nucleotides.rows = c.nucleotides.rows
+  changed.display_topology.strands[0].id = 'other-owner'
+  expect(() => validateTransformPreviewComponent(changed)).toThrow()
+  const bytes = Uint8Array.from(atob(c.nucleotides.f64), c => c.charCodeAt(0))
+  new DataView(bytes.buffer).setFloat64(15 * 8, 9, true)
+  c.nucleotides.f64 = btoa(String.fromCharCode(...bytes))
+  expect(() => validateTransformPreviewComponent(c)).toThrow(/frame/)
+})
+
+it('does not reuse ownership when only the outer rows array is frozen', () => {
+  const c = compactTransformComponent()
+  Object.freeze(c.nucleotides.rows)
+  validateTransformPreviewComponent(c)
+  c.nucleotides.rows[0][5] = 'other-owner'
+  expect(() => validateTransformPreviewComponent(c)).toThrow()
+})

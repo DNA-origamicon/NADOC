@@ -65,3 +65,19 @@ def test_ordinary_shared_coordinate_vectors_remain_supported():
     point = [1.0, 2.0, 3.0]
     value = {"start": point, "end": point, "samples": [point, point]}
     assert bounded(value) is value
+
+
+@pytest.mark.parametrize('block', ['aZ09+/=' * 1000, 'x' * 1100 + '\n', 'x' * 1100 + '\\',
+                                  'x' * 1100 + '"', 'x' * 1100 + 'é', 'x' * 1100 + '\x7f'])
+def test_compact_size_shortcut_matches_exact_json_without_mutating_aliases(block):
+    from copy import deepcopy
+    from backend.api.part_transform_display_contract import _encoded_size
+    pane = {'nucleotides': {'f64': block, 'count': 1}, 'other': [3.25, '😀']}
+    value = {'before': pane, 'candidate': pane, 'also': pane}
+    original = deepcopy(value)
+    expected = len(json.dumps(value, allow_nan=False, separators=(',', ':')).encode('utf-8'))
+    assert _encoded_size(value) == expected
+    assert value == original and value['before'] is value['candidate'] is value['also']
+    value['candidate']['other'].append(float('nan'))
+    with pytest.raises(ValueError):
+        _encoded_size(value)

@@ -80,13 +80,19 @@ function decodeCompact(value, reuse = null, checked = null) {
   if (matching) {
     for (let i = 0; i < count; i++) {
       const record = reuse[i]
-      let offset = i * STRIDE
-      for (const [field, length] of VECTOR_FIELDS)
-        for (let j = 0; j < length; j++) record[field][j] = floats[offset++]
-      for (const [field, length] of SITE_FIELDS) {
-        if (length) for (let j = 0; j < length; j++) record.helical_site[field][j] = floats[offset++]
-        else record.helical_site[field] = floats[offset++]
-      }
+      // Fixed codec layout: avoid dynamic field lookup for every coordinate.
+      const o = i * STRIDE, f = floats, site = record.helical_site
+      record.backbone_position[0] = f[o + 0]; record.backbone_position[1] = f[o + 1]; record.backbone_position[2] = f[o + 2]
+      record.base_position[0] = f[o + 3]; record.base_position[1] = f[o + 4]; record.base_position[2] = f[o + 5]
+      record.base_normal[0] = f[o + 6]; record.base_normal[1] = f[o + 7]; record.base_normal[2] = f[o + 8]
+      record.axis_tangent[0] = f[o + 9]; record.axis_tangent[1] = f[o + 10]; record.axis_tangent[2] = f[o + 11]
+      record.slab_position[0] = f[o + 12]; record.slab_position[1] = f[o + 13]; record.slab_position[2] = f[o + 14]
+      record.slab_quaternion[0] = f[o + 15]; record.slab_quaternion[1] = f[o + 16]; record.slab_quaternion[2] = f[o + 17]; record.slab_quaternion[3] = f[o + 18]
+      site.axis_point[0] = f[o + 19]; site.axis_point[1] = f[o + 20]; site.axis_point[2] = f[o + 21]
+      site.radial_hat[0] = f[o + 22]; site.radial_hat[1] = f[o + 23]; site.radial_hat[2] = f[o + 24]
+      site.azimuth_rad = f[o + 25]
+      site.groove_offset_rad = f[o + 26]
+      site.phase_roll_rad = f[o + 27]
     }
     return reuse
   }
@@ -130,6 +136,14 @@ export function visitDnaComparisonScalars(value, visit) {
     for (let i = 0; i < SCALAR_COLUMNS.length; i++) record[SCALAR_COLUMNS[i]] = row[i]
     visit(record, block.floats, index * STRIDE)
   }
+  decodedCompact.delete(value)
+  checkedBlocks.set(value, block)
+}
+
+/** Recheck every new coordinate after immutable scalar ownership was proved. */
+export function visitDnaComparisonFrames(value, visit) {
+  const block = readCompact(value)
+  for (let index = 0; index < block.count; index++) visit(block.floats, index * STRIDE)
   decodedCompact.delete(value)
   checkedBlocks.set(value, block)
 }

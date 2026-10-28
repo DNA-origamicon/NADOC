@@ -61,6 +61,29 @@ def checkpoint():
     return check
 
 
+
+def _encoded_size(result):
+    """Exact stdlib JSON byte count without re-escaping large safe ASCII blocks.
+
+    Graph/alias admission still sees the complete original packet first. Only a
+    proved escape-free string is replaced in this temporary shallow envelope;
+    all other values keep allow_nan=False and the original encoder semantics.
+    """
+    reduced, omitted = result, 0
+    if type(result) is dict:
+        for name in ('before', 'candidate'):
+            pane = result.get(name)
+            packed = pane.get('nucleotides') if type(pane) is dict else None
+            block = packed.get('f64') if type(packed) is dict else None
+            if (type(block) is str and len(block) > 1024 and block.isascii()
+                    and block.isprintable() and '"' not in block and '\\' not in block):
+                if reduced is result:
+                    reduced = dict(result)
+                reduced[name] = {**pane, 'nucleotides': {**packed, 'f64': ''}}
+                omitted += len(block)
+    return omitted + len(json.dumps(reduced, allow_nan=False, separators=(',', ':')).encode('utf-8'))
+
+
 def bounded(result, *, max_nodes=MAX_OUTPUT_NODES, max_bytes=MAX_OUTPUT_BYTES):
     try:
         aliases = []
@@ -84,7 +107,7 @@ def bounded(result, *, max_nodes=MAX_OUTPUT_NODES, max_bytes=MAX_OUTPUT_BYTES):
         # allocation bounds. dumps uses the C encoder; iterencode's Python
         # per-scalar loop dominated real-part previews. The wire-size policy
         # and rejection of nonfinite floats remain identical.
-        size = len(json.dumps(result, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        size = _encoded_size(result)
         limit(size, max_bytes, "combined response bytes")
     except CaptureLimit as error:
         reject(str(error), "preview_limit")
@@ -109,7 +132,7 @@ class Inventory:
     work: int
 
 
-def inventory(design, check):
+def inventory(design, check, *, previous=None):
     from backend.api.part_group_geometry_budget import require_group_geometry_budget
     from backend.core.part_dna_display_scope import deformation_references, organization_index
     from backend.core.part_scope_references import COLLECTIONS, referenced_resources
@@ -209,6 +232,11 @@ def inventory(design, check):
                 or not min(domain.start_bp, domain.end_bp) <= anchor.bp_index <= max(domain.start_bp, domain.end_bp)):
             reject("Transform display has an unresolved flexible anchor", "invalid_preview_reference")
 
+    # As in the Bend/Twist inventory, reuse only topology occupancy when the
+    # complete typed source collections match. All current admission, references,
+    # domain types, pose targets and emitted geometry checks still run.
+    reuse_sites = previous is not None and all(indices[name] == previous.indices[name]
+        for name in ("helices", "strands", "overhang_connections", "extensions"))
     deltas, sites, occupied = {}, {}, set()
     for helix in design.helices:
         if helix.native_source or helix.native_residues or helix.id.startswith(("__np__", "__strep_dna__")):
@@ -226,8 +254,12 @@ def inventory(design, check):
         for ordinal, domain in enumerate(strand.domains):
             if type(domain.direction) is not m.Direction:
                 reject("Transform display requires typed domain directions", "invalid_preview_reference")
+            if reuse_sites:
+                continue
+            hid, direction = domain.helix_id, domain.direction.value
+            owner = strand.id, ordinal, domain.overhang_id, strand.is_reference
             for bp in range(min(domain.start_bp, domain.end_bp), max(domain.start_bp, domain.end_bp) + 1):
-                key = domain.helix_id, bp, domain.direction.value
+                key = hid, bp, direction
                 if key in occupied:
                     reject("Transform display has overlapping directional occupancy", "invalid_preview_reference")
                 occupied.add(key)
@@ -237,9 +269,17 @@ def inventory(design, check):
                         reject("Linker domain has no exact connection owner", "invalid_preview_reference")
                     if connection.linker_type == "ss":
                         continue  # Explicit ss-linker companion topology, not a native Full record.
-                for copy_k in range(max(0, 1 + deltas.get((domain.helix_id, bp), 0))):
-                    sites[(*key, copy_k)] = strand.id, ordinal, domain.overhang_id, strand.is_reference
+                delta = deltas.get((hid, bp), 0)
+                if delta == 0:
+                    sites[(*key, 0)] = owner
                     limit(len(sites), MAX_RECORDS, "emitted sites")
+                else:
+                    for copy_k in range(max(0, 1 + delta)):
+                        sites[(*key, copy_k)] = owner
+                        limit(len(sites), MAX_RECORDS, "emitted sites")
+    if reuse_sites:
+        sites = previous.sites
+    limit(len(sites), MAX_RECORDS, "emitted sites")
     extensions = {}
     for extension in design.extensions:
         strand = indices["strands"][extension.strand_id]

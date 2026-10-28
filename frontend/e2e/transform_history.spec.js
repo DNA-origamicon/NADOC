@@ -279,7 +279,8 @@ test(`Move Rotate ${size} preview Apply and Cancel latency`, async ({ page, requ
     expect(await f.browser()).toEqual(browser)
     expect(f.writes.slice(writes).every(r => r.path === `${previewPath}/cancel`)).toBe(true)
     console.log(`C8 transform-${size} apply_ms=${applyMs} cancel_ms=${cancelMs}`)
-    for (const { tool, p95 } of p95s) expect.soft(p95, `${tool} preview p95 including 2x allowance`).toBeLessThanOrEqual(1000)
+    const previewBudget = process.env.NADOC_TRANSFORM_NOMINAL === '1' ? 500 : 1000
+    for (const { tool, p95 } of p95s) expect.soft(p95, `${tool} preview p95 (${previewBudget} ms)`).toBeLessThanOrEqual(previewBudget)
     expect.soft(applyMs, 'Apply including 2x allowance').toBeLessThanOrEqual(size.endsWith('large') ? 20000 : 6000)
     expect.soft(cancelMs, 'Cancel including 2x allowance').toBeLessThanOrEqual(400)
   }, `transform-${size}`, { pauseRendering: true })
@@ -688,13 +689,13 @@ test('Move Rotate mid-log creation refusal preserves history and Cancel restores
     await page.locator('#mr-rz').fill('45')
     await page.locator('#mr-rz').press('Tab')
     expect(await f.checkpoint()).toEqual(before)
-    const applied = page.waitForResponse(r => new URL(r.url()).pathname === `/api/design/cluster/${id}`
-      && r.request().method() === 'PATCH')
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/clusters/poses'
+      && r.request().method() === 'POST')
     await page.locator('#mr-apply-btn').click()
     const response = await applied
     expect(response.status()).toBe(409)
     expect((await response.json()).detail.code).toBe('historical_cursor')
-    await expect(page.locator('.toast-message').filter({ hasText: 'A placement was not accepted. Unapplied movement has been retained.' })).toBeVisible()
+    await expect(page.locator('.toast-message').filter({ hasText: 'The move was not accepted. Pending movement has been retained.' })).toBeVisible()
     expect(await page.evaluate(() => window.__nadocTest.store.getState().lastError)).toEqual({
       status: 409, message: 'Return to the latest history position before editing a group.',
     })
