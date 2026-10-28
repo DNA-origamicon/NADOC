@@ -1,4 +1,5 @@
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
+import { store } from '../state/store.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 /**
  * oxDNA relaxation jobs panel (Dynamics tab).
@@ -21,7 +22,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
-import { createOxdnaJobSettings, relaxationElementsSettings, relaxationElementsSignature } from './oxdna_job_settings.js'
+import { createOxdnaJobSettings, continuationElementsSettings, relaxationElementsSettings, relaxationElementsSignature } from './oxdna_job_settings.js'
 import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
@@ -696,6 +697,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const seedStatus    = document.getElementById('oxdna-jobs-seed-status')
   const trajToggle    = document.getElementById('oxdna-jobs-traj-toggle')
   const trajFullToggle = document.getElementById('oxdna-jobs-traj-full-toggle')
+  const trajInterval = document.getElementById('oxdna-jobs-traj-interval')
   const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
   const trajLoadProgress = document.getElementById('oxdna-jobs-traj-load-progress')
   const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
@@ -1273,6 +1275,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     prevBtn: trajPrev, nextBtn: trajNext,
     interpolationToggle: document.getElementById('oxdna-jobs-traj-interpolate'),
     preparationKey: () => `${oxdnaDisplay?.trajectoryPreparationKey?.()}|${_lammpsMode}`,
+    previewReady: () => !_lammpsMode && !!oxdnaDisplay?.hasInteractivePreview?.(),
+    onPreview: i => { const shown = oxdnaDisplay?.showTrajectoryPreview?.(i); if (shown) _applyTrajField(Math.floor(i)); return shown },
+    onBeforeSeek: i => _lammpsMode ? true : oxdnaDisplay?.ensureTrajectoryFrame?.(i),
+    onExactSeek: (i, live) => oxdnaDisplay?.showExactTrajectoryFrame?.(i, live),
     onBeforeInterpolate: (from, to, neighbors) => _lammpsMode
       ? true : oxdnaDisplay?.ensureInterpolationFrames?.(from, to, neighbors),
     onInterpolate: (from, to, t, neighbors) => {
@@ -1282,10 +1288,19 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     onSeek: (i) => {
       if (_lammpsMode) { lammpsDisplay?.showFrame(i); return }   // CG only — no field arrow
       oxdnaDisplay?.showFrame(i); _applyTrajField(i)
+      oxdnaDisplay?.prefetchPlaybackFrames?.(i)
     },
     onBeforePlay: async () => {
       if (_lammpsMode) return true   // LAMMPS is CG — no heavy-rep prebuild
       if (!oxdnaDisplay) return true
+      const preview = await oxdnaDisplay.prepareInteractivePreview?.((done, total) => {
+        trajPlayer.setLoading({ phase: 'preview', done, total, label: 'Prepare interactive preview' })
+      })
+      if (preview) {
+        if (preview.ok === false) return false
+        return await (oxdnaDisplay.preparePlaybackFrames?.(trajPlayer.current())
+          ?? oxdnaDisplay.ensureTrajectoryFrame?.(trajPlayer.current())) !== false
+      }
       const r = await oxdnaDisplay.prebuildHeavy((done, total) => {
         _trajPrep = total > 1 ? { done, total } : null   // total≤1 = CG (instant) → no notice
         trajPlayer.setLoading({ phase: 'atoms', done, total, label: 'Prepare visible trajectory frames' })
@@ -1297,6 +1312,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     },
     onPlayStateChange: (playing) => {
       oxdnaDisplay?.setPlaying(playing)
+      if (playing) oxdnaDisplay?.prefetchPlaybackFrames?.(trajPlayer.current())
       if (!playing) { _trajPrep = null; _renderTrajStatus() }
     },
   })
@@ -1433,7 +1449,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
       window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     },
-    onError: () => showToast(api.lastErrorMessage?.() || 'Surface/anchor settings were not saved. Retry before running.', 'error'),
+    onError: () => showToast(api.lastErrorMessage?.() || 'Field/surface/anchor settings were not saved. Retry before running.', 'error'),
   })
   function _runElementsChanged() {
     if (!getRunElements || _applyingRunControls || _controlsJobId !== _selectedId) return
@@ -1441,7 +1457,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!oxdnaJobEditable(job)) return
     const kind = job.run_config?.kind || 'relax'
     if (!['relax', 'run', 'surface_deposition'].includes(kind)) return
-    const patch = relaxationElementsSettings(getRunElements())
+    const patch = job.parent_job_id
+      ? continuationElementsSettings(getRunElements())
+      : relaxationElementsSettings(getRunElements())
     if (job.parent_job_id) patch.surface_deposition = !!depositionBtn?.checked
     const saved = _jobSettings.overlay(job).run_config
     if (relaxationElementsSignature(patch) === relaxationElementsSignature(saved) &&
@@ -1694,9 +1712,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     launch: payload => _launchRelax(payload),
     spawnProduction: (parentJobId, payload) => _launchProduction(parentJobId, payload),
     getJobs: () => _jobs,
+    getParentLabels: () => {
+      const ctx = _rowCtx()
+      // Use the exact displayed numbering; retain labels for eligible parents
+      // outside the current list filter as well.
+      const rows = [
+        ...buildJobListModel(_jobs, ctx).rows,
+        ...buildJobListModel(_visibleJobs(), ctx).rows,
+      ]
+      return new Map(rows.map(row => [row.jobId, row.label]))
+    },
     getPartPath: () => _currentPartPath(),
     estimateRunSize: (steps, stepsPerFrame, parentJobId) =>
-      trajectoryFrameEstimate(steps, stepsPerFrame, _jobs.find(j => j.job_id === parentJobId)?.n_nucleotides),
+      trajectoryFrameEstimate(steps, stepsPerFrame, parentJobId
+        ? _jobs.find(j => j.job_id === parentJobId)?.n_nucleotides
+        : store.getState().currentGeometry?.length),
     // The wizard's "Continue from" parent is independent of whatever's selected in the
     // main list — re-sync the shared Anchors/Electric-field/Hard-surface/PEG panels to
     // it (same as clicking that row) so _launchProduction's getRunElements() reflects
@@ -1842,7 +1872,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // Select a job by id and render its ordinary detail. Only a running selection may
   // update the visualization controls or follow the live display; historical rows
   // are observational and leave the existing visualization state intact.
-  async function _selectJob(jobId, { confirmTrajUnload = false } = {}) {
+  const pendingSelections = new Map()
+  function _selectJob(jobId, options = {}) {
+    // A second selection dispatch can arrive while the first is awaiting the
+    // unload dialog. Share the whole operation, including cancellation, so one
+    // user action cannot stack confirmations or unload the trajectory twice.
+    if (pendingSelections.has(jobId)) return pendingSelections.get(jobId)
+    const pending = _performSelectJob(jobId, options).finally(() => pendingSelections.delete(jobId))
+    pendingSelections.set(jobId, pending)
+    return pending
+  }
+
+  async function _performSelectJob(jobId, { confirmTrajUnload = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return
     if (_lammpsMode) {   // leaving LAMMPS-viz mode → tear down its overlay, re-enable oxDNA gating
@@ -2361,6 +2402,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // anchors).  Each is optional — with none enabled this is a plain production.
     const el = getRunElements?.() || {}
     const body = { steps, steps_per_frame: stepsPerFrame }
+    if (wizardPayload?.stage_overrides) body.stage_overrides = wizardPayload.stage_overrides
     if (el.field?.enabled && el.field.field_pN > 0) {
       body.field = { field_pN: el.field.field_pN, dir: el.field.dir }
     }
@@ -2615,6 +2657,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (storageUnavailable(_selectedJob())) return
     if (!_selectedId || !oxdnaDisplay) return
     const full = scope === 'job'
+    const interval = Number(trajInterval?.value ?? 1)
+    if (full && (!Number.isSafeInteger(interval) || interval < 1 || interval > 100_000_000)) {
+      showToast('Frame interval must be a positive whole number.', 'warn')
+      return
+    }
     _trajBusy = true
     trajPlayer.pause()
     trajPlayer.setPreparing({ done: 0, total: 1 })
@@ -2642,7 +2689,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     trajPlayer.setLoading({ reset: true, phase: 'align', done: 0, total: 0,
                             label: phaseLabels.align })
-    _setTrajStatus(full ? 'Loading full trajectory… (no downsampling — this can take a while)'
+    _setTrajStatus(full ? 'Loading trajectory frames…'
                         : 'Loading trajectory…', _C.accent)
     // Poll the backend build for accurate frames-processed progress (the align pass
     // over a large structure runs for seconds) and render it into the status line.
@@ -2661,7 +2708,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     let r
     try {
       r = await oxdnaDisplay.loadTrajectory(
-        _selectedId, alignToggle ? alignToggle.checked : true, scope, undefined,
+        _selectedId, alignToggle ? alignToggle.checked : true, scope, full && interval > 1 ? interval : undefined,
         showProgress)
     } catch (error) {
       r = { ok: false, reason: error.message || 'Could not load trajectory' }
@@ -2679,7 +2726,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _applyTrajField(0)
       const nProd = (r.stages || []).filter(s => s.kind === 'production').length
       _setTrajStatus(full
-        ? `${r.n_frames} frames · this job only, every frame (no downsampling)`
+        ? `${r.n_frames} loaded frames · every ${interval} saved frame${interval === 1 ? '' : 's'} · this job only`
         : `${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`,
         _C.ok)
       if (!await trajPlayer.prepare()) _setTrajStatus('Playback preparation incomplete — retry Play', _C.warn)
@@ -2721,6 +2768,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
   trajToggle?.addEventListener('change', () => _onTrajToggle(trajToggle, 'lineage'))
   trajFullToggle?.addEventListener('change', () => _onTrajToggle(trajFullToggle, 'job'))
+  trajInterval?.addEventListener('change', () => {
+    if (trajFullToggle?.checked && !_lammpsMode) void _onTrajToggle(trajFullToggle, 'job')
+  })
 
   // ── Use as NAMD seed (Phase 2 — feed relaxed coords into a NAMD MD run) ─────
   function _setSeedStatus(text, color = _C.dim) {
@@ -2871,7 +2921,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     else if (flexToggle?.checked) await _refreshFlex()
     else if (autorefineDevToggle?.checked) await _refreshDeviation()
     else if (strainToggle?.checked) await _refreshStrain()
-    else if (trajToggle?.checked) await _refreshTraj()
+    else if (trajFullToggle?.checked) await _refreshTraj('job')
+    else if (trajToggle?.checked) await _refreshTraj('lineage')
   })
   function _setDisplayOff() {
     ++_displayRequest

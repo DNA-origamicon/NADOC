@@ -99,3 +99,24 @@ def test_forecast_recommends_archive_only_when_tight(tmp_path):
     assert s is None or (
         "path" in s and s["free_bytes"] >= huge + disk_guard.WARN_MIN_FREE_BYTES
     )
+
+
+def test_engine_defaults_are_independent(tmp_path, monkeypatch):
+    monkeypatch.setattr(rm, "_workspace", lambda: tmp_path)
+    assert rm.md_run_dir_status(engine="oxdna")["path"] == str(tmp_path / "oxdna_jobs")
+    assert rm.md_run_dir_status(engine="namd")["path"] == str(tmp_path / "md_jobs")
+
+
+def test_oxdna_run_dir_validates_and_preserves_default(tmp_path, monkeypatch):
+    from backend.api import routes_oxdna as routes
+    from backend.core.oxdna_job import new_oxdna_job
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    job = new_oxdna_job(design_name="test", stages=[])
+    with pytest.raises(HTTPException):
+        routes._apply_oxdna_run_dir(job, str(tmp_path / "missing"))
+    assert not (tmp_path / "missing").exists()
+    default = tmp_path / "oxdna_jobs"
+    default.mkdir()
+    routes._apply_oxdna_run_dir(job, str(default))
+    assert not job.archived
+    assert job.job_dir(tmp_path) == default / job.job_id

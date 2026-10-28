@@ -1,47 +1,11 @@
-/**
- * Run-location — one shared "📁 Directory" control (above the jobs list, universal for every
- * engine) that chooses where new runs write, and a low-disk recommendation to move to a
- * roomier drive and run there.
- *
- * A simulation run can write multi-GB trajectories; pointing it at a spacious volume (e.g. an
- * external drive) keeps them off a full system disk — simulations read/write there normally
- * fine (the GPU is the bottleneck, not the periodic flushes). The chosen folder is a SINGLE
- * preference in localStorage, so it applies to whichever engine you launch; every engine's
- * create reads `getRunDir()`. Backed by the existing server-side folder browser
- * (`pickSystemFolder` / routes_fs) and the backend disk forecast's `suggested_archive`.
- *
- * Standalone helpers (getRunDir/setRunDir/runDirLabel/archiveRecommendation/recommendArchive)
- * are the shared preference API; `mountDirectoryButton(container, { api })` renders the one
- * button and keeps its label in sync across the app via a change event.
- */
+/** Engine-specific run locations and directory picker. */
 import { pickSystemFolder } from './folder_picker.js'
 import { showChoice } from './primitives/choice.js'
 import { formatBytes } from './format_bytes.js'
 import { createButton } from './primitives/button.js'
 
-const _STORE_KEY = 'nadoc.runDir'          // engine-neutral: ONE run-location for all engines
-const _EVT = 'nadoc:run-dir-change'
-
-/** The current shared run directory (or null = default workspace). Read fresh each call so
- *  every engine + the button reflect the latest choice. */
-export function getRunDir() {
-  try {
-    return (typeof localStorage !== 'undefined' && localStorage.getItem(_STORE_KEY)) || null
-  } catch { return null }
-}
-
-/** Set the shared run directory (null clears it) and notify any mounted button. Returns it. */
-export function setRunDir(dir) {
-  const v = dir || null
-  try {
-    if (typeof localStorage !== 'undefined') {
-      if (v) localStorage.setItem(_STORE_KEY, v)
-      else localStorage.removeItem(_STORE_KEY)
-    }
-  } catch { /* private-mode / quota — ignore; nothing else to fall back to */ }
-  try { window.dispatchEvent(new CustomEvent(_EVT, { detail: v })) } catch { /* no window (tests) */ }
-  return v
-}
+import { getRunDir, setRunDir, RUN_DIR_EVENT as _EVT } from './run_location_preferences.js'
+export { getRunDir, setRunDir } from './run_location_preferences.js'
 
 /** Short display label for a run directory (its last path component). */
 export function runDirLabel(dir) {
@@ -59,14 +23,14 @@ export function archiveRecommendation(forecast) {
 }
 
 /** If the forecast recommends a roomier drive, offer to archive the run there. Resolves:
- *    { proceed:true,  runDir:<suggested> }  — run on the roomier drive (sets the shared dir),
+ *    { proceed:true,  runDir:<suggested> }  — run on the roomier drive (sets this engine’s dir),
  *    { proceed:true,  runDir:<current> }    — run on the current target anyway,
  *    { proceed:false }                      — cancel.
- *  No recommendation → { proceed:true, runDir:getRunDir() } without a dialog (the caller still
+ *  No recommendation → { proceed:true, runDir:getRunDir(engine) } without a dialog (the caller still
  *  runs its normal low-disk Continue/Cancel confirm). */
-export async function recommendArchive(forecast) {
+export async function recommendArchive(forecast, engine = 'namd') {
   const rec = archiveRecommendation(forecast)
-  if (!rec.show) return { proceed: true, runDir: getRunDir() }
+  if (!rec.show) return { proceed: true, runDir: getRunDir(engine) }
   const choice = await showChoice({
     title: 'Low disk space for this run',
     message: `This run may not fit on the target drive. ${rec.path} has `
@@ -78,33 +42,35 @@ export async function recommendArchive(forecast) {
     ],
     cancelLabel: 'Cancel',
   })
-  if (choice === 'archive') return { proceed: true, runDir: setRunDir(rec.path) }
-  if (choice === 'here') return { proceed: true, runDir: getRunDir() }
+  if (choice === 'archive') return { proceed: true, runDir: setRunDir(rec.path, engine) }
+  if (choice === 'here') return { proceed: true, runDir: getRunDir(engine) }
   return { proceed: false }
 }
 
-/** Mount the ONE shared "📁 Directory" button into `container` (place it above the jobs list).
+/** Mount the "📁 Directory" button into `container` (place it above the jobs list).
  *  Left-click opens the server-side folder browser; right-click resets to the default. The
- *  label stays in sync with the shared preference (across the app) via the change event. */
-export function mountDirectoryButton(container, { api } = {}) {
+ *  label stays in sync with this engine’s preference (across the app) via the change event. */
+export function mountDirectoryButton(container, { api, engine: initialEngine = 'namd' } = {}) {
   if (!container) return null
+  let engine = initialEngine
   let checkSeq = 0
   let status = null
   const btn = createButton({
-    label: `📁 ${runDirLabel(getRunDir())} · checking…`,
+    label: `📁 ${runDirLabel(getRunDir(engine))} · checking…`,
     variant: 'ghost',
-    title: 'Folder that new runs (any engine) write into — point large trajectories at a roomy '
+    title: 'Folder that new runs for this engine write into — point large trajectories at a roomy '
          + 'drive to keep them off a full system disk. Right-click to reset to the default.',
     onClick: async () => {
+      const pickedEngine = engine
       const picked = await pickSystemFolder({
-        api, title: 'Choose a folder for runs', initialPath: getRunDir() })
-      if (picked) setRunDir(picked)
+        api, title: `Choose a folder for ${pickedEngine} runs`, initialPath: getRunDir(pickedEngine) })
+      if (picked) setRunDir(picked, pickedEngine)
     },
   })
   btn.style.width = '100%'
-  btn.addEventListener('contextmenu', (e) => { e.preventDefault(); setRunDir(null) })
+  btn.addEventListener('contextmenu', (e) => { e.preventDefault(); setRunDir(null, engine) })
   const render = ({ checking = false } = {}) => {
-    const chosen = getRunDir()
+    const chosen = getRunDir(engine)
     const shownPath = chosen || status?.path || null
     const label = runDirLabel(shownPath)
     btn.textContent = `📁 ${label}${checking ? ' · checking…' : status?.ok === false ? ' ⚠' : ''}`
@@ -113,7 +79,7 @@ export function mountDirectoryButton(container, { api } = {}) {
     btn.style.color = status?.ok === false ? '#f85149' : ''
     btn.title = status?.ok === false
       ? `${status.detail || 'This folder is unavailable.'}\n${status.path || chosen || ''}`
-      : `Folder that new runs write into: ${shownPath || 'NADOC workspace default'}. `
+      : `Folder that new ${engine} runs write into: ${shownPath || 'NADOC workspace default'}. `
         + 'Right-click to reset to the default.'
   }
   const sync = async () => {
@@ -122,20 +88,25 @@ export function mountDirectoryButton(container, { api } = {}) {
     render({ checking: !!api?.getMdRunDirStatus })
     if (!api?.getMdRunDirStatus) { render(); return }
     try {
-      const next = await api.getMdRunDirStatus(getRunDir())
+      const next = await api.getMdRunDirStatus(getRunDir(engine), engine)
       if (seq !== checkSeq) return
       status = next || {
-        ok: false, path: getRunDir(), detail: 'Could not check this folder.' }
+        ok: false, path: getRunDir(engine), detail: 'Could not check this folder.' }
     } catch (err) {
       if (seq !== checkSeq) return
       status = {
-        ok: false, path: getRunDir(),
+        ok: false, path: getRunDir(engine),
         detail: `Could not check this folder: ${err?.message || err}`,
       }
     }
     render()
   }
   try { window.addEventListener(_EVT, sync) } catch { /* no window (tests) */ }
+  btn.setEngine = next => {
+    if (!next || next === engine) return
+    engine = next
+    void sync()
+  }
   container.appendChild(btn)
   let initiallyChecked = false
   const checkWhenVisible = () => {

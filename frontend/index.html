@@ -4993,10 +4993,16 @@
                          title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">
                     <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectories from job chain
                   </label>
-                  <!-- Full trajectory: THIS job only, every frame oxDNA wrote, no stride -->
+                  <!-- Trajectory: THIS job only, with optional saved-frame interval -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:not-allowed;opacity:0.5"
-                         title="Every frame this job's own run wrote — no downsampling, ancestors excluded. Frame count is set by the run's steps-per-frame; large runs take a while to build and use a lot of memory.">
-                    <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View full trajectory (this job)
+                         title="Load saved frames from this job only, excluding ancestors. The frame interval below controls how many frames are loaded.">
+                    <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View trajectory (this job)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:var(--text-xs)"
+                         title="Load every Nth saved frame from this job. 1 loads all saved frames; 10 loads frames 1, 11, 21, etc. Saved files are unchanged. The job-chain overview retains its automatic downsampling.">
+                    This job: frame interval
+                    <input id="oxdna-jobs-traj-interval" type="number" min="1" max="100000000" step="1" value="1"
+                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                   </label>
                   <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="oxdna-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>

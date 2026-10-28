@@ -532,6 +532,28 @@ describe('initOxdnaDisplay controller', () => {
     expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
   })
 
+  it('opens oxDNA with a bounded first page and fetches a distant seek on demand', async () => {
+    const renderer = { applyFemPositions: vi.fn() }
+    const api = {
+      getOxdnaTrajectoryMeta: vi.fn().mockResolvedValue({ n_frames: 100, stages: [], markers: [] }),
+      getOxdnaTrajectory: vi.fn(async (_id, opts) => ({
+        ready: true, keys: [['h0', 0, 'FORWARD']], frame_start: opts.frameStart,
+        frames: Array.from({ length: Math.min(99, opts.frameEnd) - opts.frameStart + 1 },
+          (_, i) => new Float32Array([opts.frameStart + i, 0, 0, 1, 0, 0])),
+      })),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer: renderer, api })
+    const result = await ctrl.loadTrajectory('large-job', false, 'job', 5)
+    expect(result.n_frames).toBe(100)
+    expect(api.getOxdnaTrajectoryMeta).toHaveBeenCalledWith('large-job', 'job', 5)
+    expect(api.getOxdnaTrajectory.mock.calls[0][1]).toMatchObject({ stride: 5 })
+    expect(api.getOxdnaTrajectory.mock.calls[0][1]).toMatchObject({ frameStart: 0, frameEnd: 7 })
+    await ctrl.ensureTrajectoryFrame(90)
+    expect(api.getOxdnaTrajectory).toHaveBeenCalledWith('large-job', expect.objectContaining({ frameStart: 88, frameEnd: 99 }))
+    expect(api.getOxdnaTrajectory.mock.calls.every(([, opts]) => opts.frameEnd - opts.frameStart < 16)).toBe(true)
+    ctrl.stopAndRestore()
+  })
+
   it('loadTrajectory caches frames and showFrame deforms to a given frame', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const traj = {
@@ -1964,4 +1986,64 @@ it('updates protein poses with each trajectory frame and interpolates rotation w
   expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,first))
   display.stopAndRestore()
   expect(proteinRenderer.clearOxdnaTransforms).toHaveBeenCalled()
+})
+
+it.each(['full', 'vdw'])('keeps a finite %s preview grid interactive without fetching and replaces it with the exact settled frame', async repr => {
+  const keys = [['h', 0, 'FORWARD']]
+  function bin(i, end, step = 1) {
+    const count = (end - i) / step + 1
+    const header = new TextEncoder().encode(JSON.stringify({ keys, frame_start: i, frame_step: step }))
+    const offset = (20 + header.length + 3) & ~3, buf = new ArrayBuffer(offset + 24 * count), dv = new DataView(buf)
+    ;[0x4e54524a, 1, count, 1, header.length].forEach((n, j) => dv.setUint32(j * 4, n, true))
+    new Uint8Array(buf, 20, header.length).set(header)
+    for (let j = 0; j < count; j++) new Float32Array(buf, offset + j * 24, 6).set([i + j * step,0,0,1,0,0])
+    return buf
+  }
+  const renderer = { applyFemPositions: vi.fn() }
+  const api = {
+    getOxdnaTrajectoryMeta: async () => ({ n_frames: 1000, markers: [{ frame: 500 }] }),
+    getOxdnaTrajectory: vi.fn(async (_, opts) => ({ ready: true, keys,
+      frames: Array.from({ length: opts.frameEnd - opts.frameStart + 1 }, (_, j) =>
+        new Float32Array([opts.frameStart + j, 0, 0, 1, 0, 0])) })),
+    getOxdnaTrajectoryBin: vi.fn(async (_, opts) => bin(opts.frameStart, opts.frameEnd, opts.frameStep)),
+  }
+  const atom = { getMode: () => repr, update: vi.fn(), applyPositionLerp: vi.fn() }
+  api.getOxdnaAtomisticModel = async () => ({ n_serials: 1, atoms: [{ serial: 0, element: 'P', x: 0, y: 0, z: 0 }], bonds: [] })
+  api.getOxdnaFramesAtomistic = vi.fn(async (_, ids) => Object.fromEntries(ids.map(i => [i, [i, 0, 0]])))
+  const d = initOxdnaDisplay({ designRenderer: renderer, api, getCurrentRepr: () => repr, getAtomisticRenderer: () => atom })
+  await d.loadTrajectory('job', false, 'job')
+  expect((await d.prepareInteractivePreview()).ok).toBe(true)
+  expect(api.getOxdnaTrajectoryBin.mock.calls.length).toBeLessThan(16)
+  const binCalls = api.getOxdnaTrajectoryBin.mock.calls.length
+  const calls = api.getOxdnaTrajectory.mock.calls.length
+  for (const i of [400.5, 700.5, 200.5, 499.5]) {
+    expect(d.showTrajectoryPreview(i)).toBe(true)
+    expect(renderer.applyFemPositions.mock.lastCall[0][0].backbone_position[0]).toBeCloseTo(i === 499.5 ? 499 : i)
+  }
+  expect(api.getOxdnaTrajectory).toHaveBeenCalledTimes(calls)
+  expect(api.getOxdnaTrajectoryBin).toHaveBeenCalledTimes(binCalls)
+  expect(await d.showExactTrajectoryFrame(799)).toBe(true)
+  expect(renderer.applyFemPositions.mock.lastCall[0][0].backbone_position[0]).toBe(799)
+  if (repr === 'vdw') expect(Array.from(atom.applyPositionLerp.mock.lastCall[0])).toEqual([799, 0, 0])
+  d.stopAndRestore()
+  expect(d.hasInteractivePreview()).toBe(false)
+})
+
+it('prepares a bounded saved-frame playback window across the loop boundary', async () => {
+  const keys = [['h', 0, 'FORWARD']], requested = []
+  const api = {
+    getOxdnaTrajectoryMeta: async () => ({ n_frames: 100, markers: [] }),
+    getOxdnaTrajectory: async (_, opts) => ({ ready: true, keys,
+      frames: Array.from({ length: Math.min(99, opts.frameEnd) - opts.frameStart + 1 },
+        (_, j) => new Float32Array([opts.frameStart + j,0,0,1,0,0])) }),
+    getOxdnaAtomisticModel: async () => ({ n_serials: 1, atoms: [{serial:0,element:'P',x:0,y:0,z:0}], bonds:[] }),
+    getOxdnaFramesAtomistic: async (_, ids) => { requested.push(...ids); return Object.fromEntries(ids.map(i => [i, [i,0,0]])) },
+  }
+  const d = initOxdnaDisplay({ api, designRenderer: {applyFemPositions:vi.fn()}, getCurrentRepr: () => 'vdw',
+    getAtomisticRenderer: () => ({ getMode: () => 'vdw', update: vi.fn(), applyPositionLerp: vi.fn() }) })
+  await d.loadTrajectory('job', false, 'job')
+  requested.length = 0
+  expect(await d.preparePlaybackFrames(98)).toBe(true)
+  expect(requested).toEqual([98,99,0,1])
+  d.stopAndRestore()
 })

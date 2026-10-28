@@ -2401,37 +2401,25 @@ def read_trajectory_frames_at(
             out[idx] = frame
     if not want:
         return out
-    header_idx = -1
-    cur_idx = -1
-    buf: Optional[list[str]] = None  # accumulating a wanted frame's lines, else None
-    with Path(traj_path).open("r", encoding="utf-8") as fh:
-        for line in fh:
-            if line.startswith("t "):
-                if buf is not None:
-                    m = _parse_trajectory_frame_lines(
-                        buf,
-                        order,
-                        copies=copies,
-                        n_trailing_extra=n_trailing_extra,
-                        trailing_extra_strand_length=trailing_extra_strand_length,
-                    )
-                    emit(cur_idx, m, buf)
-                    buf = None
-                header_idx += 1
-                if header_idx in want:
-                    buf, cur_idx = [], header_idx
+    from backend.core.oxdna_frame_index import trajectory_offsets
+    offsets = trajectory_offsets(traj_path)
+    with Path(traj_path).open("rb") as fh:
+        for idx in sorted(want):
+            if idx < 0 or idx >= len(offsets):
                 continue
-            if buf is not None and line.strip() and not line.startswith(("b ", "E ")):
-                buf.append(line)
-        if buf is not None:  # flush the final wanted frame (no trailing header)
+            fh.seek(offsets[idx])
+            fh.readline()  # t = ...
+            buf = []
+            while line := fh.readline():
+                if line.startswith(b"t "):
+                    break
+                if line.strip() and not line.startswith((b"b ", b"E ")):
+                    buf.append(line.decode("utf-8"))
             m = _parse_trajectory_frame_lines(
-                buf,
-                order,
-                copies=copies,
-                n_trailing_extra=n_trailing_extra,
+                buf, order, copies=copies, n_trailing_extra=n_trailing_extra,
                 trailing_extra_strand_length=trailing_extra_strand_length,
             )
-            emit(cur_idx, m, buf)
+            emit(idx, m, buf)
     return out
 
 

@@ -1648,7 +1648,7 @@ async function main() {
     // Field changed (gizmo drag / input edit): if a live session is running, update it —
     // re-aim the field live (magnitude/dir) or recompose the engine if the field was just
     // toggled on/off. The anchor halo no longer keys off the field, so it needs no refresh.
-    onChange: () => oxdnaLive?.onElementsChanged?.(),
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _saveOxdnaElements() },
     // Total base count → scales the arrow's force range so big origami get finer
     // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
     getBaseCount: () => store.getState().currentGeometry?.length || 0,

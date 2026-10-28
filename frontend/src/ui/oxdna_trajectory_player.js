@@ -75,6 +75,7 @@ export function initOxdnaTrajectoryPlayer({
   playBtn, slider, markersEl, label, onSeek, prevBtn = null, nextBtn = null,
   loadProgressEl = null, onBeforePlay = null, onBeforeSeek = null, onPlayStateChange = null, fps = 8,
   interpolationToggle = null, onInterpolate = null, onBeforeInterpolate = null,
+  previewReady = () => false, onPreview = null, onExactSeek = null,
   preparationKey = () => '',
 } = {}) {
   let _n = 0          // frame count
@@ -87,6 +88,7 @@ export function initOxdnaTrajectoryPlayer({
   let _seekToken = 0
   let _waitingForFrame = false
   const _loadPhases = new Map() // phase → latest progress; completed rows stay visible
+  let _previewShown = false, _settleTimer = null, _exactError = false
   let _smooth = false
   let _preparePromise = null, _readyKey = null
   const readyKey = () => `${preparationKey()}|${!!interpolationToggle?.checked}|${_i}`
@@ -162,7 +164,7 @@ export function initOxdnaTrajectoryPlayer({
   })
 
   function _setLabel() {
-    if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}${_waitingForFrame ? ' · buffering…' : ''}` : ''
+    if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}${_previewShown ? (_exactError ? ' · preview · exact frame unavailable' : _waitingForFrame ? ' · preview · loading exact frame…' : ' · preview') : _waitingForFrame ? ' · buffering…' : ''}` : ''
   }
 
   /**
@@ -227,18 +229,38 @@ export function initOxdnaTrajectoryPlayer({
     }
   }
 
-  function seek(i, fire = true) {
+  function seek(i, fire = true, { preview = false } = {}) {
     if (_n <= 0) return
     if (fire && _smooth) pause()
     const target = Math.max(0, Math.min(_n - 1, i | 0))
     const token = ++_seekToken
+    clearTimeout(_settleTimer)
     const apply = () => {
       if (token !== _seekToken) return false
       _i = target
+      _previewShown = false; _exactError = false
       if (slider) slider.value = String(_i)
       _setLabel()
       _steppers.refresh()
       if (fire) onSeek?.(_i)
+      return true
+    }
+    if (fire && preview && previewReady() && onPreview?.(target) !== false) {
+      _i = target
+      _previewShown = true; _exactError = false; _waitingForFrame = false
+      if (slider) slider.value = String(_i)
+      _setLabel(); _steppers.refresh()
+      // Dragging never queues every intermediate request. Resolve only the latest
+      // settled point, while retaining the immediate preview during a slow read.
+      if (!_timer && onExactSeek) _settleTimer = setTimeout(async () => {
+        if (token !== _seekToken) return
+        _waitingForFrame = true; _setLabel()
+        try {
+          const ok = await onExactSeek(target, () => token === _seekToken)
+          if (token === _seekToken) { _previewShown = ok === false; _exactError = ok === false }
+        } catch { if (token === _seekToken) _exactError = true }
+        finally { if (token === _seekToken) { _waitingForFrame = false; _setLabel() } }
+      }, 180)
       return true
     }
     const ready = fire ? onBeforeSeek?.(target) : true
@@ -298,6 +320,12 @@ export function initOxdnaTrajectoryPlayer({
     const needsPreparation = onBeforePlay || (interpolationToggle?.checked && onBeforeInterpolate)
     if (needsPreparation && _readyKey !== readyKey() && !await prepare()) return
     if (_timer) return
+    clearTimeout(_settleTimer); const playToken = ++_seekToken
+    // A scrub may still be showing an approximation at the starting index.
+    if (_previewShown) {
+      if (await onBeforeSeek?.(_i) === false || playToken !== _seekToken) return
+      seek(_i, false); onSeek?.(_i)
+    }
     setLoading(null)
     _smooth = !!interpolationToggle?.checked && !!onInterpolate
     _timer = _smooth ? -1 : setInterval(_tick, Math.max(1, Math.round(1000 / fps)))
@@ -308,6 +336,7 @@ export function initOxdnaTrajectoryPlayer({
   function pause() {
     const restore = interpolation.stop()
     _seekToken++
+    clearTimeout(_settleTimer)
     _waitingForFrame = false
     _setLabel()
     _prepToken++   // cancel any in-flight prepare so it won't start the loop on resolve
@@ -326,6 +355,9 @@ export function initOxdnaTrajectoryPlayer({
   /** Load a new trajectory: set frame count + markers, reset to frame 0, paused. */
   function setTrajectory(nFrames, markers) {
     pause()
+    clearTimeout(_settleTimer)
+    _seekToken++
+    _previewShown = false; _exactError = false
     _readyKey = null
     _n = Math.max(0, nFrames | 0)
     _markers = markers || []
@@ -339,6 +371,9 @@ export function initOxdnaTrajectoryPlayer({
   /** Clear everything (toggle off / job switch). */
   function stop() {
     pause()
+    clearTimeout(_settleTimer)
+    _seekToken++
+    _previewShown = false; _exactError = false
     _readyKey = null
     _n = 0; _i = 0; _markers = []
     // A job switch invalidates any prepare that was running for the OLD job; leaving the
@@ -360,7 +395,7 @@ export function initOxdnaTrajectoryPlayer({
     setLoading(null)
     if (resume && ready) void play()
   })
-  slider?.addEventListener('input', () => { pause(); seek(parseInt(slider.value, 10) || 0) })
+  slider?.addEventListener('input', () => { pause(); seek(parseInt(slider.value, 10) || 0, true, { preview: true }) })
 
   return {
     setTrajectory, play, pause, toggle, seek, stop, setPreparing, setLoading, prepare,

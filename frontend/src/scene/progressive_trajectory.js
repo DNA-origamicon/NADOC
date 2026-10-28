@@ -19,7 +19,9 @@ export async function loadProgressiveTrajectory({ jobId, spec, downloads, metada
   ])
   downloads.consumed(jobId, firstSpec)
   if (!first?.ready || !first.frames?.length || !meta?.n_frames) throw new Error('No trajectory frames')
+  if (!Number.isSafeInteger(meta.n_frames) || meta.n_frames > 1_000_000) throw new Error('Too many trajectory frames to index safely. Select a smaller range.')
   normalizeFrames(first)
+  if (first.frames.reduce((n, frame) => n + frame.byteLength, 0) > budgetBytes) throw new Error('Trajectory page exceeds the memory budget. Select a smaller range.')
   const frames = new Array(meta.n_frames)
   first.frames.forEach((frame, i) => { frames[i] = frame })
   const resp = { ...first, ...meta, frames, n_frames: meta.n_frames,
@@ -44,6 +46,8 @@ export async function loadProgressiveTrajectory({ jobId, spec, downloads, metada
         if (!ArrayBuffer.isView(frame)) throw new Error('Invalid trajectory frame')
         bytesPerFrame = Math.max(bytesPerFrame, frame.byteLength + (heavyBytes || 0))
       }
+      const pageBytes = result.frames.reduce((n, frame) => n + frame.byteLength + (heavyBytes || 0), 0)
+      if (pageBytes > budgetBytes) throw new Error('Trajectory page exceeds the memory budget. Select a smaller range.')
       return result
     },
     apply: async (page, start, end) => {

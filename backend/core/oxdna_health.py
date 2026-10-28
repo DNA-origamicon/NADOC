@@ -2793,7 +2793,7 @@ _ALIGNED_CACHE_MAX = 6
 # paths.  Bounded by cumulative nucleotide-frames (memory-proportional for big structures).
 _FRAME_CACHE = None  # lazily-created OrderedDict[frame_key -> aligned frame dict]
 _FRAME_CACHE_NT = 0  # running Σ len(frame) across the cache (for memory-bounded evict)
-_FRAME_CACHE_MAX_NT = 3_000_000  # ~a couple of large lineages' shared ancestors
+_FRAME_CACHE_MAX_NT = 150_000  # bounded dictionary working set (~five Voltron frames)
 
 # Per-frame DISPLAY OUTPUT cache: the finished atomistic flat-XYZ list / surface JSON
 # for one relaxed or trajectory frame.  The two caches above memoize the *aligned frame*
@@ -2877,7 +2877,9 @@ def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
             sig.append((str(path), st.st_size, st.st_mtime_ns))
         except OSError:
             sig.append((str(path), -1, -1))
-    return (tuple(sig), int(max_frames), bool(copies))
+    return (tuple(sig), int(max_frames), bool(copies),
+            tuple(len(item) < 6 or item[5] is not False for item in stages),
+            tuple(item[6] if len(item) > 6 else None for item in stages))
 
 
 def _traj_file_sig(path):
@@ -2927,7 +2929,7 @@ def _frame_cache_put(key, frame):
     if _FRAME_CACHE is None:
         _FRAME_CACHE = OrderedDict()
         _FRAME_CACHE_NT = 0
-    if key in _FRAME_CACHE:
+    if key in _FRAME_CACHE or len(frame) > _FRAME_CACHE_MAX_NT:
         return
     _FRAME_CACHE[key] = frame
     _FRAME_CACHE_NT += len(frame)
@@ -2956,6 +2958,7 @@ def _aligned_downsampled_frames(
     frame_end=None,
     frame_step=1,
     include_proteins=False,
+    frame_indices=None,
 ):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
@@ -2981,6 +2984,7 @@ def _aligned_downsampled_frames(
     cache_key = (
         _aligned_cache_key(stages, reference_conf_path, max_frames, copies),
         frame_start, frame_end, frame_step,
+        tuple(frame_indices) if frame_indices is not None else None,
         bool(align), bool(include_proteins),
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
@@ -3051,6 +3055,8 @@ def _aligned_downsampled_frames(
         key_list.extend(protein_keys)
         ref_display.update(protein_seed)
     _transform = (
+        (lambda fr: _flatten_cg_frame_ntrj_array(fr, key_list, dtype=np.float32))
+        if frame_transform == "ntrj" else
         (lambda fr: _flatten_cg_frame_array(fr, key_list))
         if frame_transform is not None
         else None
@@ -3059,9 +3065,14 @@ def _aligned_downsampled_frames(
     def _store(result):
         if frame_transform is not None:
             return result
+        # The per-frame LRU owns dictionary frames. Do not also retain entire
+        # composites, which defeated its memory limit.
+        if sum(len(fr) for fr in result[1]) > _FRAME_CACHE_MAX_NT:
+            return result
         _ALIGNED_CACHE[cache_key] = result
         try:
-            while len(_ALIGNED_CACHE) > _ALIGNED_CACHE_MAX:
+            while (len(_ALIGNED_CACHE) > _ALIGNED_CACHE_MAX or
+                   sum(sum(len(fr) for fr in item[1]) for item in _ALIGNED_CACHE.values()) > _FRAME_CACHE_MAX_NT):
                 _ALIGNED_CACHE.popitem(
                     last=False
                 )  # evict oldest (tolerate concurrent pop)
@@ -3078,8 +3089,8 @@ def _aligned_downsampled_frames(
             else [items[0]]
         )
 
-    # A stage tuple is ``(name, kind, path)``, ``(…, marker_label)`` or
-    # ``(…, marker_label, field)`` (field = the run's E-field descriptor or None).
+    # A stage tuple is ``(name, kind, path)``, optionally followed by marker_label,
+    # field (the run's E-field descriptor), and prepend_seed (False for job-only).
     #
     # DOWNSAMPLE FIRST.  The scrub player keeps ≤ ``max_frames`` (~200), so reading and
     # Kabsch-aligning EVERY frame of a multi-thousand-frame run only to discard 95 % of it
@@ -3097,8 +3108,10 @@ def _aligned_downsampled_frames(
     first_nonempty = next((i for i, c in enumerate(raw_counts) if c > 0), None)
     if first_nonempty is None:
         return key_list, [], [], []
-    # effective length includes the prepended seed on the first non-empty stage
-    eff_lens = [c + (1 if i == first_nonempty else 0) for i, c in enumerate(raw_counts)]
+    # The full-job view contains saved frames only. In particular a continuation
+    # must not begin at the original design pose and interpolate its history anew.
+    prepend_seed = len(stages[first_nonempty]) < 6 or stages[first_nonempty][5] is not False
+    eff_lens = [c + (1 if prepend_seed and i == first_nonempty else 0) for i, c in enumerate(raw_counts)]
     total = sum(eff_lens)
 
     # The unwrap traversal structure (bond graph → DFS order, parents, components)
@@ -3116,15 +3129,18 @@ def _aligned_downsampled_frames(
             _plan_cache[ks] = p
         return p
 
-    def _keep_for(e):
+    def _keep_for(e, i):
+        interval = stages[i][6] if len(stages[i]) > 6 else None
+        if interval is not None:
+            return len(range(0, e, interval))
         # max_frames <= 0 → UNLIMITED (the full-trajectory view): keep every written
         # frame, no stride.  Otherwise share the budget across stages as before.
         if max_frames <= 0 or total <= max_frames:
             return e
         return max(1, round(e * max_frames / total))
 
-    total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)  # progress denominator
-    if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
+    total_kept = sum(_keep_for(e, i) for i, e in enumerate(eff_lens) if e > 0)
+    if prepend_seed and n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
     total_kept = max(0, min(total_kept, frame_end + 1 if frame_end is not None else total_kept) - (frame_start or 0))
     total_kept = (total_kept + frame_step - 1) // frame_step
@@ -3143,16 +3159,21 @@ def _aligned_downsampled_frames(
         eff = eff_lens[i]
         if eff == 0:
             continue
-        keep = _keep_for(eff)
-        picked = _stride_pick(
-            list(range(eff)), keep
-        )  # positions into this stage's eff list
+        keep = _keep_for(eff, i)
+        interval = item[6] if len(item) > 6 else None
+        all_picked = range(0, eff, interval) if interval is not None else _stride_pick(range(eff), keep)
+        picked = all_picked
 
         sampled_count = len(picked)
         lo = max(0, (frame_start or 0) - composite_offset)
         lo += ((frame_start or 0) - composite_offset - lo) % frame_step
         hi = max(0, frame_end + 1 - composite_offset) if frame_end is not None else None
         picked = picked[lo:hi:frame_step]
+        if frame_indices is not None:
+            wanted_indices = set(frame_indices)
+            picked_set = set(picked)
+            picked = [p for offset, p in enumerate(all_picked)
+                      if p in picked_set and composite_offset + offset in wanted_indices]
         composite_offset += sampled_count
         if not picked:
             continue
@@ -3160,7 +3181,7 @@ def _aligned_downsampled_frames(
         # Map each kept eff-position to a raw trajectory-header index (position 0 of the
         # first non-empty stage is the prepended seed ref, which needs no parse), then parse
         # + align only those raw frames.
-        seed_here = i == first_nonempty
+        seed_here = prepend_seed and i == first_nonempty
         needed = sorted(
             {(p - 1 if seed_here else p) for p in picked if not (seed_here and p == 0)}
         )
@@ -3481,6 +3502,7 @@ def pack_composite_trajectory_bin(
         reference_conf_path,
         max_frames,
         include_proteins=True,
+        frame_transform="ntrj",
         copies=True, frame_start=frame_start, frame_end=frame_end, frame_step=frame_step,
         progress=_align_progress,
         align=align,
@@ -3497,7 +3519,7 @@ def pack_composite_trajectory_bin(
         progress("pack", 0, n_frames)
     frames = np.empty((n_frames, n_keys * 6), dtype=np.float32)
     for i, frame in enumerate(ordered):
-        frames[i] = _flatten_cg_frame_ntrj_array(frame, key_list, dtype=np.float32)
+        frames[i] = frame
         if progress:
             progress("pack", i + 1, n_frames)
 
@@ -3625,7 +3647,7 @@ def _count_dat_frames(path) -> int:
 def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
     """Lightweight metadata for the composite trajectory — ``{n_frames, markers,
     stages, n_nucleotides}`` — WITHOUT reading/aligning any coordinates. Replicates
-    composite_trajectory's seed-prepend + per-stage downsample using only frame
+    composite_trajectory's optional seed-prepend + per-stage downsample using only frame
     COUNTS, so n_frames + marker frame indices match the full composite exactly.
     Lets the trajectory-keyframe slider size itself in milliseconds instead of
     downloading the multi-MB trajectory."""
@@ -3643,6 +3665,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
                 "name": name,
                 "kind": kind,
                 "count": _count_dat_frames(path),
+                "prepend_seed": len(item) < 6 or item[5] is not False,
+                "interval": item[6] if len(item) > 6 else None,
                 "marker_label": marker_label,
                 "field": field,
             }
@@ -3650,7 +3674,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
     # Seed frame is prepended to the first non-empty stage (mirrors the composite).
     for s in per_stage:
         if s["count"] > 0:
-            s["count"] += 1
+            if s["prepend_seed"]:
+                s["count"] += 1
             break
 
     total = sum(s["count"] for s in per_stage)
@@ -3676,6 +3701,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
             if (max_frames <= 0 or total <= max_frames)
             else max(1, round(c * max_frames / total))
         )
+        if s["interval"] is not None:
+            keep = len(range(0, c, s["interval"]))
         if out_n:
             markers.append(
                 {
@@ -4395,7 +4422,7 @@ def iter_composite_trajectory_atomistic(
         stages,
         reference_conf_path,
         max_frames,
-        copies=True, frame_start=first, frame_end=wanted[-1],
+        copies=True, frame_indices=wanted,
         align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length,
@@ -4409,11 +4436,11 @@ def iter_composite_trajectory_atomistic(
     # Count against every requested index (not just the in-range ones) so a range that
     # overruns the trajectory still walks the bar to 100% instead of stopping short.
     for done, idx in enumerate(wanted, start=1):
-        if 0 <= idx - first < len(ordered):
+        if done - 1 < len(ordered):
             ck = ("cta", akey, idx)
             payload = _display_out_get(ck) if cache else None
             if payload is None:
-                payload = frame_atomistic_flat(design, ordered[idx - first])
+                payload = frame_atomistic_flat(design, ordered[done - 1])
                 if cache:
                     _display_out_put(ck, payload)
             yield idx, payload
@@ -4451,7 +4478,7 @@ def composite_trajectory_surface(
         stages,
         reference_conf_path,
         max_frames,
-        copies=True, frame_start=first, frame_end=wanted[-1],
+        copies=True, frame_indices=wanted,
         align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length,
@@ -4471,15 +4498,15 @@ def composite_trajectory_surface(
         detail,
     )
     out: dict[str, dict] = {}
-    for idx in wanted:
-        if idx < first or idx - first >= len(ordered):
+    for position, idx in enumerate(wanted):
+        if position >= len(ordered):
             continue
         ck = ("cts", akey, idx, sparams)
         payload = _display_out_get(ck)
         if payload is None:
             payload = frame_surface_json(
                 design,
-                ordered[idx - first],
+                ordered[position],
                 color_mode,
                 probe_radius,
                 grid_spacing,

@@ -1,0 +1,334 @@
+{
+  "job": "cb8b5c48b561",
+  "design": "voltroncorearmV2",
+  "nucleotides": 29671,
+  "frames": 501,
+  "history_findings": [
+    "18d287a7 (2026-09-28) introduced up-front preparation and smooth interpolation. Coarse cached playback predates recent oxDNA paging.",
+    "3bb41271 (2026-10-20) exact-frame cache changes primarily address native VR; not the principal desktop regression.",
+    "8cf55e02 (2026-10-27) added protein trajectory poses. Prior profiling attributed 19.4 of 25.9 profiled seconds to protein source setup; preceding performance work cached it.",
+    "Recent uncommitted progressive oxDNA loading uses exact page barriers and forces exact heavy reconstruction. This bypasses old coarse playback and adds latency at page boundaries."
+  ],
+  "changes": [
+    "Stage-aware grid of at most 16 preview samples; fewer atomic samples when needed to fit 64 MiB. Coordinates limited to 32 MiB. Heavy cache separately evicted against its existing budget.",
+    "Sparse sample runs fetched in batches (two coordinate requests for this job). Playback and active scrubbing draw cached interpolated previews without network waits.",
+    "180 ms scrub debounce, latest-request-only exact application, explicit preview/loading/failure labels; exact exports retain their existing path.",
+    "Avoid reconstructing all atomic frames in every coordinate page; reconstruct selected exact frames only. Reuse preview update records."
+  ],
+  "gpu_browser": {
+    "nucleotides": 29671,
+    "frames": 501,
+    "samples": 16,
+    "timings_ms": [
+      135.10000002384186,
+      64.40000009536743,
+      45.699999928474426,
+      48.10000002384186,
+      45.5,
+      42,
+      42.10000002384186,
+      43.89999997615814,
+      43.800000071525574,
+      41.299999952316284
+    ],
+    "playback_frame_times_ms": [
+      39.90000009536743,
+      45,
+      40.5,
+      39,
+      39.39999997615814,
+      41,
+      38.90000009536743,
+      41.09999990463257,
+      41,
+      41.200000047683716,
+      38.39999997615814,
+      41,
+      40.199999928474426,
+      44.10000002384186,
+      40,
+      42.39999997615814,
+      40,
+      40.5,
+      42,
+      44.199999928474426,
+      41.60000002384186,
+      45.699999928474426,
+      45.60000002384186,
+      44.60000002384186,
+      41.10000002384186,
+      42.799999952316284,
+      44.10000002384186,
+      41.5,
+      42.300000071525574,
+      42.60000002384186,
+      39.39999997615814,
+      42.10000002384186,
+      43.10000002384186,
+      42.699999928474426,
+      41.5,
+      44
+    ],
+    "playback_gaps_ms": [
+      40,
+      45.800000071525574,
+      40.799999952316284,
+      39.300000071525574,
+      39.39999997615814,
+      41.699999928474426,
+      39.40000009536743,
+      41.09999990463257,
+      41.60000002384186,
+      41.5,
+      38.5,
+      41.800000071525574,
+      40.59999990463257,
+      44.200000047683716,
+      40.700000047683716,
+      42.799999952316284,
+      40,
+      41.200000047683716,
+      42.39999997615814,
+      44.299999952316284,
+      42.300000071525574,
+      46.199999928474426,
+      45.60000002384186,
+      45.39999997615814,
+      41.10000002384186,
+      43.799999952316284,
+      44.60000002384186,
+      41.5,
+      43,
+      43,
+      39.39999997615814,
+      42.800000071525574,
+      43.60000002384186,
+      42.699999928474426,
+      42.5
+    ],
+    "playback_phases_ms": [
+      {
+        "update": 38.800000071525574,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 43.700000047683716,
+        "submit": 1.2999999523162842,
+        "gpu": 0
+      },
+      {
+        "update": 39.299999952316284,
+        "submit": 1.2000000476837158,
+        "gpu": 0
+      },
+      {
+        "update": 37.700000047683716,
+        "submit": 1.2999999523162842,
+        "gpu": 0
+      },
+      {
+        "update": 38.39999997615814,
+        "submit": 1,
+        "gpu": 0
+      },
+      {
+        "update": 39.89999997615814,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 37.800000071525574,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 39.89999997615814,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 39.700000047683716,
+        "submit": 1.2999999523162842,
+        "gpu": 0
+      },
+      {
+        "update": 40,
+        "submit": 1.2000000476837158,
+        "gpu": 0
+      },
+      {
+        "update": 37.200000047683716,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 39.800000071525574,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 39.09999990463257,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 42.700000047683716,
+        "submit": 1.399999976158142,
+        "gpu": 0
+      },
+      {
+        "update": 38.799999952316284,
+        "submit": 1.100000023841858,
+        "gpu": 0.10000002384185791
+      },
+      {
+        "update": 40.799999952316284,
+        "submit": 1.600000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 39,
+        "submit": 1,
+        "gpu": 0
+      },
+      {
+        "update": 39.10000002384186,
+        "submit": 1.2999999523162842,
+        "gpu": 0.10000002384185791
+      },
+      {
+        "update": 40.89999997615814,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 43.10000002384186,
+        "submit": 1.0999999046325684,
+        "gpu": 0
+      },
+      {
+        "update": 40.39999997615814,
+        "submit": 1.2000000476837158,
+        "gpu": 0
+      },
+      {
+        "update": 44.5,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 44,
+        "submit": 1.600000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 43.39999997615814,
+        "submit": 1.100000023841858,
+        "gpu": 0.10000002384185791
+      },
+      {
+        "update": 39.800000071525574,
+        "submit": 1.2999999523162842,
+        "gpu": 0
+      },
+      {
+        "update": 41.60000002384186,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 43.200000047683716,
+        "submit": 0.8999999761581421,
+        "gpu": 0
+      },
+      {
+        "update": 40.39999997615814,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 41.10000002384186,
+        "submit": 1.2000000476837158,
+        "gpu": 0
+      },
+      {
+        "update": 41.5,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 38.39999997615814,
+        "submit": 1,
+        "gpu": 0
+      },
+      {
+        "update": 40.90000009536743,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      },
+      {
+        "update": 42,
+        "submit": 1.100000023841858,
+        "gpu": 0
+      },
+      {
+        "update": 41.699999928474426,
+        "submit": 1,
+        "gpu": 0
+      },
+      {
+        "update": 40.10000002384186,
+        "submit": 1.399999976158142,
+        "gpu": 0
+      },
+      {
+        "update": 42.800000071525574,
+        "submit": 1.1999999284744263,
+        "gpu": 0
+      }
+    ],
+    "pixel_hashes": [
+      3576953303,
+      1345979292,
+      3799120291,
+      3824438891,
+      1087530270,
+      3609526103,
+      1362080735,
+      3492100223,
+      2168463389,
+      1075035602
+    ],
+    "label": "Frame 12 / 501 \u00b7 preview",
+    "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3080 Ti/PCIe/SSE2, OpenGL 4.5.0)",
+    "scope": "Real saved Voltron frames, actual design renderer and player in isolated browser harness. Exact page I/O mocked; preview coordinates are real. Renderer identified below."
+  },
+  "backend_preview_preparation": {
+    "batch_seconds": 19.23187064297963,
+    "peak_rss_mb": 371.67578125,
+    "runs": [
+      [
+        0,
+        476,
+        34
+      ],
+      [
+        500,
+        500,
+        1
+      ]
+    ]
+  },
+  "validation": {
+    "frontend_passed": 363,
+    "files": 9,
+    "test_logs": ".development-artifacts/oxdna-preview-20261027/preview-verified-tests.log",
+    "additional_smooth_test_log": ".development-artifacts/oxdna-preview-20261027/preview-smooth-test.log",
+    "initial_test_failure": "New API test stub lacked arrayBuffer; corrected stub. Earlier failure log retained.",
+    "software_renderer_failure": "SwiftShader exceeded the 500 ms target, with final profiled render submission of 2231.8 ms; scene update was 62.3 ms. Failed timing attempts retained.",
+    "limitations": "Hardware result is a short isolated browser measurement with actual design renderer/player and saved trajectory samples; exact page I/O mocked. Full application, flexible arcs, proteins as visible meshes, atomic and detailed-surface GPU render timings were not benchmarked. Initial preparation and exact settled frames can exceed 500 ms. Unit regressions cover atomistic preview/exact replacement and existing protein/export behavior."
+  },
+  "review_artifacts": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/oxdna-preview-20261027",
+  "simulation_data_changed": false
+}

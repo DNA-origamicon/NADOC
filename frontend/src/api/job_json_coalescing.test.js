@@ -7,7 +7,7 @@ vi.mock('../state/store.js', () => ({
 
 import {
   enginesStatus, getVRStatus, getMdJob, getMdTrajectory, getSystemResources,
-  launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs,
+  launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs, listSimJobSnapshot,
   refreshNativeVRJobs, refreshNativeVRVisualization, sendVRTrajectoryFeedback,
 } from './client.js'
 import { docKey } from '../shared/doc_id.js'
@@ -25,6 +25,18 @@ function deferredResponse(payload = { ok: true }) {
 }
 
 describe('job JSON GET coalescing', () => {
+  it('keeps fast snapshots independent of slow status requests', async () => {
+    const slow = deferredResponse([])
+    global.fetch = vi.fn(url => url.includes('snapshot=true')
+      ? Promise.resolve({ ok: true, status: 200, json: async () => [{ job_id: 'saved' }] })
+      : slow.wait)
+    const pending = listSimJobs('part.nadoc', false, { waitForIdle: false })
+    expect(await listSimJobSnapshot('part.nadoc')).toEqual([{ job_id: 'saved' }])
+    slow.release()
+    await pending
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
   beforeEach(() => {
     sessionStorage.clear()
     localStorage.clear()

@@ -1,3 +1,4 @@
+import { getRunDir } from '../ui/run_location_preferences.js'
 import { withCreatingJob } from './sim_job_creation.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
@@ -800,7 +801,7 @@ async function _applyDesignResponse(json, {
     // atomic setState so the renderer subscriber fires only once (one rebuild).
     const helixAxesMap = {}
     for (const ax of json.helix_axes ?? []) {
-      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, segments: ax.segments ?? null }
+      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null }
     }
     if (json.partial_geometry && json.changed_helix_ids?.length) {
       // ── Fix B merge path ──────────────────────────────────────────────────
@@ -848,7 +849,7 @@ async function _applyDesignResponse(json, {
           start: ax.start, end: ax.end,
           samples:  ax.samples  ?? null,
           ovhgAxes: ax.ovhg_axes ?? null,
-          segments: ax.segments ?? null,
+          residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
         }
       }
       updates.straightHelixAxes = Object.keys(straightAxesMap).length ? straightAxesMap : null
@@ -1341,13 +1342,14 @@ async function _syncPositionsOnlyDiff(json) {
         existing.samples  = ax.samples ?? existing.samples ?? null
         existing.ovhgAxes = ax.ovhg_axes ?? existing.ovhgAxes ?? null
         existing.segments = ax.segments ?? existing.segments ?? null
+        existing.residue_transformed = ax.residue_transformed === true
       } else {
         // New helix in axes (shouldn't happen if topology unchanged, but be safe).
         state.currentHelixAxes[ax.helix_id] = {
           start: ax.start, end: ax.end,
           samples:  ax.samples  ?? null,
           ovhgAxes: ax.ovhg_axes ?? null,
-          segments: ax.segments ?? null,
+          residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
         }
       }
     }
@@ -1973,7 +1975,7 @@ async function _applyGeometryResponse(json) {
       start: ax.start, end: ax.end,
       samples: ax.samples ?? null,
       ovhgAxes: ax.ovhg_axes ?? null,
-      segments: ax.segments ?? null,
+      residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
     }
   }
   // Materialise the embedded straight payload (if any) into the same flat
@@ -1988,7 +1990,7 @@ async function _applyGeometryResponse(json) {
         start: ax.start, end: ax.end,
         samples:  ax.samples  ?? null,
         ovhgAxes: ax.ovhg_axes ?? null,
-        segments: ax.segments ?? null,
+        residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
       }
     }
     if (Object.keys(straightAxes).length === 0) straightAxes = null
@@ -2048,7 +2050,7 @@ export async function getStraightGeometry() {
       start: ax.start, end: ax.end,
       samples: ax.samples ?? null,
       ovhgAxes: ax.ovhg_axes ?? null,
-      segments: ax.segments ?? null,
+      residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
     }
   }
   store.setState({
@@ -2881,6 +2883,10 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
     opts.body = JSON.stringify(body)
   }
   const r = await fetch(`${BASE}${path}`, opts).catch(() => null)
+  if (r && [413, 429].includes(r.status)) {
+    const error = await r.json().catch(() => ({}))
+    throw new Error(error.detail || 'Trajectory request exceeds the safe memory limit. Load fewer frames.')
+  }
   if (!r || !r.ok) return null
   if (!r.body?.getReader || (typeof onProgress !== 'function' && maxBytes === Infinity)) {
     const buffer = await r.arrayBuffer().catch(() => null)
@@ -2961,8 +2967,8 @@ export const browseFiles         = (path, kind)  => {
   const s = q.toString()
   return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
 }
-export const createOxdnaJob      = (body)        => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', '/oxdna/jobs', body))
-export const copyOxdnaJob        = (id)          => withCreatingJob('oxdna', { copy_source_id: id }, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`))
+export const createOxdnaJob      = (body)        => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', '/oxdna/jobs', { run_dir: getRunDir('oxdna'), ...body }))
+export const copyOxdnaJob        = (id)          => withCreatingJob('oxdna', { copy_source_id: id }, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`, { run_dir: getRunDir('oxdna') }))
 export const updateOxdnaJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/oxdna/jobs/${id}/settings`, body)
 
 // ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
@@ -3047,10 +3053,10 @@ export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
 export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/start`)
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
-export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, body)
-export const appendOxdnaRun      = (id, body)    => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, body))
+export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, { run_dir: getRunDir('oxdna'), ...body })
+export const appendOxdnaRun      = (id, body)    => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, { run_dir: getRunDir('oxdna'), ...body }))
 export const startOxdnaSurfaceDeposition = (id, body) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, body)
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, { run_dir: getRunDir('oxdna'), ...body })
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)
 export const stopOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/stop`)
 export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna/jobs/${id}`)
@@ -3148,32 +3154,18 @@ export const getOxdnaTrajectory = (id, opts) => {
   return _oxdnaTrajectoryBin(id, { ...opts, align, signal, scope })
 }
 
+const oxdnaStrideQuery = stride => Number.isInteger(stride) && stride > 0 ? `&stride=${stride}` : ''
+
 async function _oxdnaTrajectoryBin(id, { align, signal, scope, ...range }) {
-  const r = await fetch(`${BASE}/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin${_trajectoryRangeQuery(range)}`, {
-    headers: { ...docHeaders() }, signal,
-  }).catch(err => err?.name === 'AbortError' ? null : Promise.reject(err))
-  if (!r?.ok) return null
-  const expected = Number(r.headers?.get?.('X-NADOC-Uncompressed-Length'))
-  let buf
-  if (r.body && Number.isSafeInteger(expected) && expected > 0) {
-    const bytes = new Uint8Array(expected)
-    const reader = r.body.getReader()
-    let loaded = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (loaded + value.byteLength > bytes.byteLength) return null
-      bytes.set(value, loaded)
-      loaded += value.byteLength
-      window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
-        detail: { jobId: id, loaded, total: expected },
-      }))
-    }
-    if (loaded !== expected) return null
-    buf = bytes.buffer
-  } else {
-    buf = await r.arrayBuffer()
-  }
+  const buf = await _oxdnaBin('GET',
+    `/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin${_trajectoryRangeQuery(range)}${oxdnaStrideQuery(range.stride)}`,
+    undefined, {
+      signal, maxBytes: 128 * 1024 * 1024,
+      onProgress: p => window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
+        detail: { jobId: id, loaded: p.done, total: p.total },
+      })),
+    })
+  if (!buf) return null
   const { decodeOxdnaTrajectoryBin } = await import('../ui/oxdna_trajectory_bin.js')
   return decodeOxdnaTrajectoryBin(buf)
 }
@@ -3183,14 +3175,14 @@ async function _oxdnaTrajectoryBin(id, { align, signal, scope, ...range }) {
 export const getOxdnaTrajectoryBin = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectoryBin')
   return _oxdnaBin(
-    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}${_trajectoryRangeQuery(opts)}`,
-    undefined, { signal, onProgress: opts?.onProgress },
+    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}${oxdnaStrideQuery(opts?.stride)}${_trajectoryRangeQuery(opts)}${Number.isInteger(opts?.frameStep) && opts.frameStep > 1 ? `&frame_step=${opts.frameStep}` : ''}`,
+    undefined, { signal, onProgress: opts?.onProgress, maxBytes: 128 * 1024 * 1024 },
   )
 }
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast.
  *  Pass the SAME scope as getOxdnaTrajectory or the slider length won't match the payload. */
-export const getOxdnaTrajectoryMeta = (id, scope = 'lineage') =>
-  _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory-meta?scope=${scope}`)
+export const getOxdnaTrajectoryMeta = (id, scope = 'lineage', stride) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory-meta?scope=${scope}${oxdnaStrideQuery(stride)}`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
 export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
 /** Live progress for an in-flight trajectory-RANGE export ({active,done,total,phase}). */
@@ -3225,11 +3217,11 @@ export async function exportOxdnaTrajectory(jobId, { lo, hi, format = 'pdb' } = 
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
  *  format). Heavy — pass a downsampled index set. `scope` must match the scope the
  *  trajectory itself was loaded with, or the indices address different frames. */
-export const getOxdnaFramesAtomistic = (id, frameIndices, align=true, scope='lineage') =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}&scope=${scope}`, { frame_indices: frameIndices })
+export const getOxdnaFramesAtomistic = (id, frameIndices, align=true, scope='lineage', stride) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}&scope=${scope}${oxdnaStrideQuery(stride)}`, { frame_indices: frameIndices })
 /** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
 export const getOxdnaFramesSurface = (id, frameIndices, params = {}, align=true, scope='lineage') =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}&scope=${scope}`, { frame_indices: frameIndices, ...params })
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}&scope=${scope}${oxdnaStrideQuery(params.stride)}`, { frame_indices: frameIndices, ...params })
 /** All-atom flat-XYZ for the relaxed-display structure ({ready, atomistic:[x,y,z,…]}) —
  *  lets the OxDNA-display toggle drive the atomistic rep, not just CG beads. */
 export const getOxdnaDisplayAtomistic = (id, align = true) =>
@@ -3447,8 +3439,8 @@ export const fetchProtocolBoxPreview = (body) => _oxdnaJSON('POST', '/md/protoco
 export const createMdJob         = (body)        => withCreatingJob('namd', body, () => _oxdnaJSON('POST', '/md/jobs', body))
 /** Validate the selected NAMD run/download directory. With no path, the backend creates and
  * returns NADOC's portable <workspace>/md_jobs default. */
-export const getMdRunDirStatus   = (path = null) =>
-  _oxdnaJSON('GET', `/md/run-dir-status${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+export const getMdRunDirStatus   = (path = null, engine = 'namd') =>
+  _oxdnaJSON('GET', `/md/run-dir-status?engine=${encodeURIComponent(engine)}${path ? `&path=${encodeURIComponent(path)}` : ''}`)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA
  *  source; backs the "Relax from oxDNA" button. */
@@ -5214,9 +5206,14 @@ export async function simulateRecommendation(devices = '0') {
 /** The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
  *  normalized into one common node shape (engine/kind/status/parent_job_id/…) so the
  *  Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in one hierarchical list. */
+// Local saved metadata is independent of geometry and remote status reconciliation.
+export function listSimJobSnapshot(designSourcePath = null) {
+  return listSimJobs(designSourcePath, false, { waitForIdle: false, snapshot: true })
+}
 const _simJobsInflight = new Map()
-export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true } = {}) {
+export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true, snapshot = false } = {}) {
   const q = new URLSearchParams()
+  if (snapshot) q.set('snapshot', 'true')
   if (store.getState().assemblyActive) q.set('assembly', 'true')
   if (designSourcePath) q.set('design_source_path', designSourcePath)
   if (showAll) q.set('show_all', 'true')

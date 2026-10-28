@@ -372,9 +372,9 @@ export function initMdSubmitReview({
           const nErr = result.errors?.length ?? 0
           _notify(`Submitted ${nSub}/${nSub + nErr} replica${nSub === 1 ? '' : 's'} on Alpine${nErr ? ` (${nErr} failed)` : ''}`,
                   nErr ? 'warn' : 'ok')
+          await onSubmitted(parentId, result)
           _submitting = false
-          onSubmitEnd({ ok: true })
-          onSubmitted(parentId, result)
+          await onSubmitEnd({ ok: true })
           return
         }
         const result = resume
@@ -382,9 +382,9 @@ export function initMdSubmitReview({
           : await api.submitMdJobRemote(jobId, payload)
         if (!result) throw new Error(api.lastErrorMessage?.() ?? (resume ? 'Resume failed' : 'Submit failed'))
         _notify(`${resume ? 'Resumed' : 'Submitted'} on Alpine as SLURM ${result.slurm_job_id}`, 'ok')
+        await onSubmitted(jobId, result)
         _submitting = false
-        onSubmitEnd({ ok: true })
-        onSubmitted(jobId, result)
+        await onSubmitEnd({ ok: true })
       } catch (err) {
         // The card is already gone, so the failure has to reach the user through the
         // toast — silently dropping it would look like a submit that just never landed.

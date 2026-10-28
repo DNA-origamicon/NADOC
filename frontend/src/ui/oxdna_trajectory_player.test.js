@@ -451,3 +451,103 @@ it('reports buffering without advancing the scene and clears it after the exact 
   expect(onSeek).toHaveBeenCalledWith(249)
   p.stop()
 })
+
+// Scrubs preview immediately; playback waits for saved frames. Stale exact
+// completion must never replace a newer requested point.
+describe('interactive preview and exact settling', () => {
+  it('shows each scrub immediately, debounces exact reads, and labels failures honestly', async () => {
+    vi.useFakeTimers()
+    const slider = document.createElement('input'), label = document.createElement('div')
+    const preview = vi.fn(), exact = vi.fn()
+    let finish
+    exact.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const p = initOxdnaTrajectoryPlayer({ slider, label, previewReady: () => true,
+      onPreview: preview, onExactSeek: exact })
+    p.setTrajectory(100)
+    const scrub = i => { slider.value = String(i); slider.dispatchEvent(new Event('input')) }
+    scrub(12); scrub(57); scrub(90)
+    expect(preview.mock.calls.map(c => c[0])).toEqual([12, 57, 90])
+    expect(label.textContent).toContain('Frame 91 / 100 · preview')
+    expect(exact).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(180)
+    expect(exact).toHaveBeenCalledTimes(1)
+    expect(exact.mock.calls[0][0]).toBe(90)
+    expect(label.textContent).toContain('loading exact')
+    scrub(20)
+    expect(exact.mock.calls[0][1]()).toBe(false)
+    finish(true); await Promise.resolve()
+    expect(label.textContent).toContain('Frame 21 / 100 · preview')
+    await vi.advanceTimersByTimeAsync(180)
+    finish(false); await Promise.resolve(); await Promise.resolve()
+    expect(label.textContent).toContain('exact frame unavailable')
+    scrub(30); await vi.advanceTimersByTimeAsync(180)
+    finish(true); await Promise.resolve(); await Promise.resolve()
+    expect(label.textContent).toBe('Frame 31 / 100')
+    p.stop(); vi.useRealTimers()
+  })
+
+  it('plays every saved frame with smoothing off even when previews are available', async () => {
+    vi.useFakeTimers()
+    const preview = vi.fn(), exact = vi.fn(), before = vi.fn(async () => true), saved = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ previewReady: () => true,
+      onPreview: preview, onExactSeek: exact, onBeforeSeek: before, onSeek: saved, fps: 10 })
+    p.setTrajectory(100)
+    await p.play(); await vi.advanceTimersByTimeAsync(1000)
+    expect(saved.mock.calls.map(c => c[0])).toEqual([1,2,3,4,5,6,7,8,9,10])
+    expect(before).toHaveBeenCalledTimes(10)
+    expect(preview).not.toHaveBeenCalled(); expect(exact).not.toHaveBeenCalled()
+    p.pause(); p.stop(); vi.useRealTimers()
+  })
+})
+
+it('smooth playback waits for adjacent saved endpoints and never uses sparse previews', async () => {
+  vi.useFakeTimers()
+  let release
+  const onPreview = vi.fn(), onBeforeInterpolate = vi.fn(() => new Promise(resolve => { release = resolve }))
+  const onInterpolate = vi.fn()
+  const p = initOxdnaTrajectoryPlayer({ previewReady: () => true, onPreview,
+    onBeforeInterpolate, onInterpolate, interpolationToggle: { checked: true, addEventListener() {} } })
+  p.setTrajectory(100)
+  try {
+    const playing = p.play(); await vi.advanceTimersByTimeAsync(400)
+    expect(onPreview).not.toHaveBeenCalled(); expect(onInterpolate).not.toHaveBeenCalled()
+    onBeforeInterpolate.mockResolvedValue(true); release(true); await playing
+    await vi.advanceTimersByTimeAsync(400)
+    expect(p.current()).toBeGreaterThan(0)
+    expect(onPreview).not.toHaveBeenCalled()
+    expect(onInterpolate.mock.calls.length).toBeGreaterThan(0)
+    for (const [from,to] of onInterpolate.mock.calls) expect(to).toBe(from + 1)
+  } finally { p.stop(); vi.useRealTimers() }
+})
+
+it('holds the saved frame on a cache miss instead of substituting a sparse preview', async () => {
+  vi.useFakeTimers()
+  const onPreview = vi.fn(), onSeek = vi.fn()
+  let release
+  const p = initOxdnaTrajectoryPlayer({ previewReady: () => true, onPreview, onSeek,
+    onBeforeSeek: () => new Promise(resolve => { release = resolve }), fps: 10 })
+  p.setTrajectory(100)
+  try {
+    await p.play(); await vi.advanceTimersByTimeAsync(600)
+    expect(p.current()).toBe(0); expect(onSeek).not.toHaveBeenCalled(); expect(onPreview).not.toHaveBeenCalled()
+    release(true); await Promise.resolve(); await Promise.resolve()
+    expect(p.current()).toBe(1); expect(onSeek).toHaveBeenCalledWith(1)
+  } finally { p.stop(); vi.useRealTimers() }
+})
+
+it('loads the exact scrub position before playback and allows that load to be cancelled', async () => {
+  const slider = document.createElement('input'), onSeek = vi.fn(), onPreview = vi.fn()
+  let release
+  const p = initOxdnaTrajectoryPlayer({ slider, previewReady: () => true, onPreview, onSeek,
+    onBeforeSeek: () => new Promise(resolve => { release = resolve }) })
+  p.setTrajectory(100)
+  try {
+    slider.value = '55'; slider.dispatchEvent(new Event('input'))
+    const pending = p.play()
+    expect(p.isPlaying()).toBe(false); expect(onSeek).not.toHaveBeenCalled()
+    p.pause(); release(true); await pending
+    expect(p.isPlaying()).toBe(false); expect(onSeek).not.toHaveBeenCalled()
+    const resumed = p.play(); release(true); await resumed
+    expect(onSeek).toHaveBeenCalledWith(55); expect(p.isPlaying()).toBe(true)
+  } finally { p.stop() }
+})

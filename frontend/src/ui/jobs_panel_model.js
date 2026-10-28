@@ -59,20 +59,22 @@ const _DEFAULT_COLORS = { dim: '#8a8a8a', warn: '#e0a800' }
 function inputFreshnessMarker(job) {
   const evidence = job?.input_freshness
   if (!evidence || typeof evidence !== 'object') return null
+  if (evidence.status === 'stale' && evidence.reasons?.includes('preparation_options_changed')) return {
+    text: 'Preparation settings changed',
+    title: 'Job preparation settings differ from the recorded package settings. The saved result is retained.',
+  }
   if (evidence.status === 'stale') return {
     text: 'Inputs changed',
-    title: 'Recorded simulation inputs differ from the active design. The saved result is retained.',
+    title: evidence.package_match === false
+      ? 'Prepared package files changed or are unavailable. The saved result is retained.'
+      : 'The recorded design differs from the active design. The saved result is retained.',
   }
-  if (evidence.status === 'current' && evidence.coverage?.complete === true) return {
-    text: 'Inputs match',
-    title: 'The compared simulation inputs match. This does not assess the scientific quality of the result.',
+  if (evidence.reasons?.includes('saved_inputs_unavailable')) return {
+    text: 'Saved inputs unavailable',
+    title: 'Files recorded in the preparation receipt are missing or unreadable.',
   }
-  return {
-    text: 'Inputs unverified',
-    title: evidence.model_match === true
-      ? 'The recorded partial model matches, but complete simulation input provenance is unavailable.'
-      : 'Complete comparable simulation input evidence is unavailable for the active design.',
-  }
+  // Matching states and absence of historical evidence are not problems.
+  return null
 }
 
 /**

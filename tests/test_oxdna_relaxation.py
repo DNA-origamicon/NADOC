@@ -63,7 +63,8 @@ def test_stage_input_records_the_assigned_rng_seed():
 
 
 @pytest.mark.parametrize("packaged_sequence_parameters", [False, True])
-def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeypatch, packaged_sequence_parameters):
+@pytest.mark.parametrize("external_dir", [False, True])
+def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeypatch, packaged_sequence_parameters, external_dir):
     import backend.api.routes_oxdna as routes
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE
 
@@ -111,8 +112,12 @@ def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeyp
     if packaged_sequence_parameters:
         (source_dir / AVERAGE_SEQUENCE_FILE).write_bytes(parameters)
 
-    result = asyncio.run(routes.copy_oxdna_job(source.job_id))
+    destination = tmp_path / "external"
+    destination.mkdir()
+    location = routes.OxdnaRunLocation(run_dir=str(destination)) if external_dir else None
+    result = asyncio.run(routes.copy_oxdna_job(source.job_id, location))
     copied = OxdnaJob.load(result["job"]["job_id"], tmp_path)
+    assert copied.job_dir(tmp_path).parent == (destination if external_dir else tmp_path / "oxdna_jobs")
     copied_specs = routes.load_stage_specs(copied.job_dir(tmp_path))
 
     assert copied.status == OxdnaStatus.queued
@@ -4586,7 +4591,8 @@ def test_oxdna_create_rejects_deregistered_sequences(monkeypatch, tmp_path):
     assert "complementary" in detail and "assign sequences" in detail
 
 
-def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path, mock_oxdna):
+@pytest.mark.parametrize("external_dir", [False, True])
+def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path, mock_oxdna, external_dir):
     """n_nucleotides must be the simulated nucleotide count (strand order).  The geometry
     now emits ONLY real strand nucleotides: empty lattice slots no longer leak a ghost
     "_missing" base (ghost-suppression fix — ss-overhang regions render single-stranded),
@@ -4607,11 +4613,17 @@ def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_pat
     n_geom = len(_geometry_for_design(d))
     assert n_geom == n_strand  # empty slots no longer inflate — no ghost bases
 
+    destination = tmp_path / "external"
+    destination.mkdir()
     created = TestClient(app).post(
-        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False}
+        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False,
+                                "run_dir": str(destination) if external_dir else None}
     )
     assert created.status_code == 200, created.text
     assert created.json()["n_nucleotides"] == n_strand
+    loaded = OxdnaJob.load(created.json()["job_id"], tmp_path)
+    assert loaded.job_dir(tmp_path).parent == (destination if external_dir else tmp_path / "oxdna_jobs")
+    assert (loaded.job_dir(tmp_path) / "conf.dat").is_file()
 
 
 def _full_seq(strand, base="A"):
@@ -6423,7 +6435,7 @@ def test_oxdna_trajectory_binary_route_runs_the_full_builder(
     monkeypatch.setattr(
         routes,
         "_composite_inputs",
-        lambda _job, _scope: (design, [("relax", "mc", str(traj))], str(ref)),
+        lambda _job, _scope, stride=None: (design, [("relax", "mc", str(traj), None, None, True, stride)], str(ref)),
     )
     monkeypatch.setattr(routes, "_capture_bead_count", lambda _job: 0)
     monkeypatch.setattr(routes, "_capture_strand_length", lambda _job: 0)
@@ -6432,6 +6444,11 @@ def test_oxdna_trajectory_binary_route_runs_the_full_builder(
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/octet-stream"
     assert response.content[:4] == b"JRTN"  # little-endian bytes of the NTRJ magic
+    import struct
+    sampled = TestClient(app).get('/api/oxdna/jobs/J/trajectory-bin?stride=2')
+    metadata = TestClient(app).get('/api/oxdna/jobs/J/trajectory-meta?stride=2').json()
+    assert sampled.status_code == 200
+    assert struct.unpack_from('<5I', sampled.content)[2] == metadata['n_frames'] == 3
 
 
 def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):
@@ -6803,3 +6820,107 @@ def test_detached_worker_stop_from_fresh_process(design, geometry, tmp_path, moc
         assert not oxdna_runner._pid_is_oxdna(live.oxdna_pid)
     finally:
         oxdna_runner.stop_job(job.job_id, tmp_path)
+
+
+def test_sparse_heavy_frames_parse_only_requested_indices(tmp_path, design, geometry, monkeypatch):
+    import backend.core.oxdna_health as health
+    import backend.physics.oxdna_interface as interface
+    ref, traj = tmp_path / 'ref.dat', tmp_path / 'trajectory.dat'
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, n_frames=20)
+    health._ALIGNED_CACHE = None
+    health._FRAME_CACHE = None
+    health._FRAME_CACHE_NT = 0
+    calls = []
+    read = interface.read_trajectory_frames_at
+    def recorded(path, design, indices, **kw):
+        calls.extend(indices)
+        return read(path, design, indices, **kw)
+    monkeypatch.setattr(interface, 'read_trajectory_frames_at', recorded)
+    monkeypatch.setattr(health, 'frame_atomistic_flat', lambda design, frame: [len(frame)])
+    result = health.composite_trajectory_atomistic(design, [('run', 'production', str(traj))],
+                                                  str(ref), [2, 19], max_frames=0)
+    assert set(result) == {'2', '19'}
+    assert calls == [1, 18]  # seed is composite frame 0; intervening frames never parsed
+
+
+def test_ntrj_binary_does_not_retain_dictionary_frames(tmp_path, design, geometry):
+    import backend.core.oxdna_health as health
+    ref, traj = tmp_path / 'ref.dat', tmp_path / 'trajectory.dat'
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, n_frames=5)
+    health._ALIGNED_CACHE = None
+    health._FRAME_CACHE = None
+    health._FRAME_CACHE_NT = 0
+    health.pack_composite_trajectory_bin(design, [('run', 'production', str(traj))], str(ref))
+    assert not health._ALIGNED_CACHE
+    assert not health._FRAME_CACHE
+
+
+def test_job_only_frames_exclude_design_seed_in_metadata_binary_and_cached_reads(design, geometry, tmp_path, monkeypatch):
+    import json
+    import struct
+    import numpy as np
+    from backend.core import oxdna_health as health
+    ref, traj = tmp_path / 'ref.dat', tmp_path / 'trajectory.dat'
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, 4)
+    lineage = [('run', 'production', traj, None, None)]
+    job_only = [('run', 'production', traj, None, None, False)]
+    old = health.composite_trajectory(design, lineage, ref, max_frames=0, align=False)
+    new = health.composite_trajectory(design, job_only, ref, max_frames=0, align=False)
+    assert old['n_frames'] == 5
+    assert new['n_frames'] == 4
+    np.testing.assert_allclose(new['frames'], old['frames'][1:])
+    sampled_stages = [('run', 'production', traj, None, None, False, 2)]
+    sampled = health.composite_trajectory(design, sampled_stages, ref, max_frames=0, align=False)
+    assert sampled['n_frames'] == 2
+    np.testing.assert_allclose(sampled['frames'], new['frames'][::2])
+    assert health.composite_trajectory_meta(design, sampled_stages, max_frames=0)['n_frames'] == 2
+    assert health.composite_trajectory_meta(design, job_only, 0)['n_frames'] == 4
+    # Reverse-order repeats also catch collisions between seeded/unseeded caches.
+    again = health.composite_trajectory(design, lineage, ref, max_frames=0, align=False)
+    assert again['n_frames'] == 5
+    buf = health.pack_composite_trajectory_bin(design, job_only, ref, max_frames=0,
+        align=False, frame_start=0, frame_end=3, frame_step=3)
+    _, _, count, keys, header_len = struct.unpack_from('<IIIII', buf)
+    header = json.loads(buf[20:20 + header_len])
+    assert count == 2 and header['total_n_frames'] == 4
+    offset = (20 + header_len + 3) & ~3
+    frames = np.frombuffer(buf, dtype='<f4', offset=offset).reshape(count, keys, 6)
+    expected = np.asarray(new['frames']).reshape(4, keys, 9)[[0, 3], :, :6]
+    np.testing.assert_allclose(frames, expected, rtol=1e-6, atol=2e-5)
+    key = tuple(new['keys'][0])
+    monkeypatch.setattr(health, 'frame_atomistic_flat', lambda _, fr: health._flatten_cg_frame_array(fr, [key])[:3])
+    monkeypatch.setattr(health, 'frame_surface_json', lambda _, fr, *args, **kwargs: {'vertices': health._flatten_cg_frame_array(fr, [key])[:3]})
+    atoms = health.composite_trajectory_atomistic(design, job_only, ref, [0, 3], max_frames=0, align=False)
+    surfaces = health.composite_trajectory_surface(design, job_only, ref, [0, 3], max_frames=0, align=False)
+    for position, index in enumerate([0, 3]):
+        np.testing.assert_allclose(atoms[str(index)], expected[position, 0, :3], atol=2e-5)
+        np.testing.assert_allclose(surfaces[str(index)]['vertices'], expected[position, 0, :3], atol=2e-5)
+    sampled_atoms = health.composite_trajectory_atomistic(design, sampled_stages, ref, [1], max_frames=0, align=False)
+    sampled_surface = health.composite_trajectory_surface(design, sampled_stages, ref, [1], max_frames=0, align=False)
+    np.testing.assert_allclose(sampled_atoms['1'], new['frames'][2][:3], atol=2e-5)
+    np.testing.assert_allclose(sampled_surface['1']['vertices'], new['frames'][2][:3], atol=2e-5)
+
+
+def test_job_scope_selects_only_own_files_without_design_seed(design, geometry, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from backend.api import routes_oxdna as routes
+    folder = tmp_path / 'child'
+    stage_folder = folder / 'production'
+    stage_folder.mkdir(parents=True)
+    (folder / 'design.json').write_text(design.model_dump_json())
+    traj = stage_folder / 'trajectory.dat'
+    _write_traj(design, geometry, traj, 2)
+    ref = folder / 'design_ref.dat'
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    job = SimpleNamespace(parent_job_id='parent', run_config={}, efield=None,
+        job_dir=lambda _: folder, stage_dir=lambda _, name: folder / name,
+        stages=[SimpleNamespace(name='production', kind='production')])
+    monkeypatch.setattr(routes, '_workspace', lambda: tmp_path)
+    monkeypatch.setattr(routes, '_design_ref_conf', lambda *_: ref)
+    monkeypatch.setattr(routes, '_lineage_jobs', lambda _: (_ for _ in ()).throw(AssertionError('ancestor traversal')))
+    _, stages, alignment_ref = routes._composite_inputs(job, 'job')
+    assert len(stages) == 1 and stages[0][2] == traj and stages[0][5] is False
+    assert alignment_ref == ref  # Alignment origin remains unchanged.

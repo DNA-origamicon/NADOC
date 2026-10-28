@@ -1026,6 +1026,31 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   // Deselecting is NOT a job switch: whatever was loaded for that job (here a scrubbable
   // trajectory) has to stay on screen and in the controller, so re-selecting costs nothing.
   // Only picking a DIFFERENT job unloads it (with the "Unload trajectory?" confirm).
+  it.each(['Continue', 'Cancel'])('shares a pending trajectory-unload confirmation and honors %s once', async choice => {
+    api.listOxdnaJobs.mockResolvedValue(['j1', 'j2'].map((job_id, i) => ({
+      job_id, design_source_path: 'A.nadoc', status: 'completed', created_at: i + 1,
+      current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done' }),
+    })))
+    const disp = fakeDisplay()
+    disp.setPlaying = vi.fn()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await panel.refresh()
+    await panel.selectJob('j1')
+    $('oxdna-jobs-traj-toggle').checked = true
+    $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await flush()
+    const first = panel.selectJob('j2')
+    const duplicate = panel.selectJob('j2')
+    expect(document.querySelectorAll('.modal__overlay')).toHaveLength(1)
+    const button = [...document.querySelectorAll('.modal__actions button')].find(el => el.textContent === choice)
+    button.click()
+    await Promise.all([first, duplicate])
+    expect(document.querySelectorAll('.modal__overlay')).toHaveLength(0)
+    expect(panel.getSelectedJob()?.job_id).toBe(choice === 'Continue' ? 'j2' : 'j1')
+    expect(disp.stopAndRestore).toHaveBeenCalledTimes(choice === 'Continue' ? 1 : 0)
+    if (choice === 'Cancel') expect(disp.mode()).toBe('trajectory')
+  })
+
   it('clicking the selected row deselects it WITHOUT unloading the loaded trajectory', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done' }) }])
@@ -1170,6 +1195,10 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   })
 
   it('View FULL trajectory toggle loads this job only, unstrided', async () => {
+    const intervalInput = document.createElement('input')
+    intervalInput.id = 'oxdna-jobs-traj-interval'
+    intervalInput.value = '1'
+    document.body.append(intervalInput)
     const disp = fakeDisplay()
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jt', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
@@ -1184,6 +1213,15 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
       'jt', true, 'job', undefined, expect.any(Function),
     )
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
+    $('oxdna-jobs-align-toggle').checked = false
+    $('oxdna-jobs-align-toggle').dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(disp.loadTrajectory).toHaveBeenLastCalledWith(
+      'jt', false, 'job', undefined, expect.any(Function)))
+    intervalInput.value = '10'
+    disp.setPlaying = vi.fn()
+    intervalInput.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(disp.loadTrajectory).toHaveBeenLastCalledWith(
+      'jt', false, 'job', 10, expect.any(Function)))
   })
 
   it('shows byte-level transfer progress while a full trajectory downloads', async () => {
@@ -1347,6 +1385,40 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     api.startOxdnaJob.mockClear()
     $('oxdna-jobs-run-btn').click(); await flush(40)
     expect(api.startOxdnaJob).not.toHaveBeenCalled()
+  })
+
+  it('autosaves field edits on a queued run and restores them without Run', async () => {
+    const job = { job_id: 'field-edit', parent_job_id: 'parent', status: 'queued',
+      design_source_path: 'A.nadoc', backend: 'CPU', stages: [{ kind: 'production', status: 'pending' }],
+      run_config: { kind: 'run', field: null } }
+    api.listOxdnaJobs.mockImplementation(async () => [structuredClone(job)])
+    api.updateOxdnaJobSettings.mockImplementation(async (id, patch) => {
+      Object.assign(job.run_config, patch)
+      return structuredClone(job)
+    })
+    api.startOxdnaJob.mockClear()
+    let elements = {}
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', getRunElements: () => elements,
+      applyRunConfig: cfg => { elements = { field: cfg.field ? { ...cfg.field, enabled: true } : { enabled: false } } },
+    })
+    await panel.refresh(); await panel.selectJob(job.job_id)
+    for (const field of [{ enabled: true, field_pN: 2, dir: [0, 0, 1] },
+                         { enabled: true, field_pN: 3, dir: [0, -1, 0] }, { enabled: false }]) {
+      elements.field = field
+      panel.onRunElementsChanged()
+      await new Promise(resolve => setTimeout(resolve, 300))
+      const expected = field.enabled ? { field_pN: field.field_pN, dir: field.dir } : null
+      expect(api.updateOxdnaJobSettings).toHaveBeenLastCalledWith(job.job_id, expect.objectContaining({ field: expected }))
+      await panel.refresh(); await panel.selectJob(job.job_id)
+      expect(elements.field).toEqual(field)
+    }
+    expect(api.startOxdnaJob).not.toHaveBeenCalled()
+    elements.field = { enabled: true, field_pN: 4, dir: [1, 0, 0] }
+    panel.onRunElementsChanged()
+    $('oxdna-jobs-run-btn').click(); await flush(40)
+    expect(api.updateOxdnaJobSettings).toHaveBeenLastCalledWith(job.job_id,
+      expect.objectContaining({ field: { field_pN: 4, dir: [1, 0, 0] } }))
+    expect(api.startOxdnaJob).toHaveBeenCalledWith(job.job_id)
   })
 
   it.each(['relax', 'surface_deposition'])('deposition toggle saves a continuation from %s and Run waits for it', async (parentKind) => {

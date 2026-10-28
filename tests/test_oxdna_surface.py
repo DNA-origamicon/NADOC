@@ -434,6 +434,111 @@ def test_run_creates_child_queued_without_autostarting(design, monkeypatch, tmp_
     start_job_mock.assert_not_called()
 
 
+def test_new_run_stage_settings_persist_and_validate(design, monkeypatch, tmp_path):
+    client, routes = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    overrides = {"1_production": {
+        "thermostat": "langevin", "diff_coeff": 0.5, "dt": 0.001,
+        "refresh_vel": False, "temperature": "300K",
+    }}
+    response = client.post(f"/api/oxdna/jobs/{parent.job_id}/run", json={
+        "steps": 1000, "stage_overrides": overrides,
+    })
+    assert response.status_code == 200, response.text
+    job = response.json()
+    assert job["status"] == "queued"
+    assert job["run_config"]["stage_overrides"] == overrides
+    spec = routes.load_stage_specs(tmp_path / "oxdna_jobs" / job["job_id"])[0]
+    assert spec.thermostat == "langevin"
+    assert spec.diff_coeff == 0.5
+    assert spec.dt == 0.001
+    assert spec.refresh_vel is False
+    assert spec.temperature == "300K"
+    for invalid in ({"thermostat": "langevin"}, {"external_forces": False}, {"dt": -1}):
+        rejected = client.post(f"/api/oxdna/jobs/{parent.job_id}/run", json={
+            "steps": 1000, "stage_overrides": {"1_production": invalid},
+        })
+        assert rejected.status_code == 422, rejected.text
+
+
+def test_continuation_inherits_resolved_final_stage_and_allows_overrides(design, monkeypatch, tmp_path):
+    import json
+    from dataclasses import asdict
+    client, routes = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    specs = routes.load_stage_specs(parent.job_dir(tmp_path))
+    final = specs[-1]
+    final.thermostat, final.diff_coeff = 'langevin', 0.7
+    final.dt, final.temperature = 0.001, '310K'
+    final.refresh_vel, final.newtonian_steps = False, 71
+    (parent.job_dir(tmp_path) / 'stages_spec.json').write_text(json.dumps([asdict(s) for s in specs]))
+    inherited = client.get(f'/api/oxdna/jobs/{parent.job_id}').json()['continuation_parameters']
+    assert inherited['thermostat'] == 'langevin'
+    assert inherited['diff_coeff'] == 0.7
+    for overrides, expected in (({}, 0.7), ({'1_production': {'diff_coeff': 0.2}}, 0.2)):
+        response = client.post(f'/api/oxdna/jobs/{parent.job_id}/run', json={'steps': 1000, 'stage_overrides': overrides})
+        assert response.status_code == 200, response.text
+        spec = routes.load_stage_specs(tmp_path / 'oxdna_jobs' / response.json()['job_id'])[0]
+        assert spec.thermostat == 'langevin'
+        assert spec.diff_coeff == expected
+        assert spec.dt == 0.001
+        assert spec.temperature == '310K'
+        assert spec.refresh_vel is False
+        assert spec.newtonian_steps == 71
+        # Relaxation-only force caps are not carried into production sampling.
+        assert spec.max_backbone_force is None
+    # Continue again from the edited production child, not its relaxation ancestor.
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(response.json()['job_id'], tmp_path)
+    child.status = OxdnaStatus.completed
+    stage_dir = child.stage_dir(tmp_path, spec.name)
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    (stage_dir / 'last_conf.dat').write_bytes((child.job_dir(tmp_path) / 'conf.dat').read_bytes())
+    child.save(tmp_path)
+    chained = client.post(f'/api/oxdna/jobs/{child.job_id}/run', json={'steps': 1000})
+    assert chained.status_code == 200, chained.text
+    chained_spec = routes.load_stage_specs(tmp_path / 'oxdna_jobs' / chained.json()['job_id'])[0]
+    assert chained_spec.diff_coeff == 0.2
+    assert chained_spec.thermostat == 'langevin'
+    # Deposition keeps the thermostat and its own conservative timestep ceiling.
+    deposition = routes.build_surface_deposition_stages()
+    routes._inherit_continuation_parameters(deposition, child, tmp_path, deposition=True)
+    assert all(stage.thermostat == 'langevin' and stage.diff_coeff == 0.2 and stage.dt == 0.001 for stage in deposition)
+
+
+def test_queued_field_edits_persist_and_enable_engine_forces(design, monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    from backend.core.oxdna_job import OxdnaJob
+    client, routes = _run_client(monkeypatch, tmp_path)
+    start = Mock()
+    monkeypatch.setattr(routes, 'start_job', start)
+    parent = _completed_parent(tmp_path, design)
+    created = client.post(f'/api/oxdna/jobs/{parent.job_id}/run', json={'steps': 1234})
+    assert created.status_code == 200, created.text
+    jid = created.json()['job_id']
+    jd = tmp_path / 'oxdna_jobs' / jid
+    assert not routes.load_stage_specs(jd)[0].external_forces
+    for field in ({'field_pN': 2.0, 'dir': [0, 0, 1]},
+                  {'field_pN': 3.0, 'dir': [0, -1, 0]}, None):
+        saved = client.put(f'/api/oxdna/jobs/{jid}/settings', json={'field': field})
+        assert saved.status_code == 200, saved.text
+        job = OxdnaJob.load(jid, tmp_path)
+        assert job.status == OxdnaStatus.queued
+        assert job.run_config['field'] == field
+        spec = routes.load_stage_specs(jd)[0]
+        assert spec.steps == 1234
+        assert spec.external_forces == bool(field)
+        assert bool(spec.efield) == bool(field)
+        assert bool(job.efield) == bool(field)
+        if field:
+            forces = (jd / spec.forces_file).read_text()
+            assert 'type = string' in forces
+            assert 'dir = ' + ','.join(f'{v:g}' for v in field['dir']) in forces
+            assert spec.efield['force_pN'] == field['field_pN']
+            assert spec.efield['dir'] == field['dir']
+    start.assert_not_called()
+
+
 def test_run_field_without_anchor_allowed(design, monkeypatch, tmp_path):
     """A field with no anchor is no longer rejected — it branches a child job with a
     field-only forces file (the UI warns about the resulting COM drift)."""
@@ -504,16 +609,20 @@ def test_run_preserves_surface_anchor_provenance(design, monkeypatch, tmp_path):
     assert "visibility = 0,1,0" in forces
 
 
-def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
+@pytest.mark.parametrize("external_dir", [False, True])
+def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path, external_dir):
     from unittest.mock import Mock
     client, routes = _run_client(monkeypatch, tmp_path)
     start = Mock()
     monkeypatch.setattr(routes, 'start_job', start)
     parent = _completed_parent(tmp_path, design)
     anchor = {"kind": "domain", "strandId": design.strands[0].id, "domainIndex": 0}
+    destination = tmp_path / "external"
+    destination.mkdir()
     r = client.post(
         f"/api/oxdna/jobs/{parent.job_id}/surface-deposition",
         json={
+            "run_dir": str(destination) if external_dir else None,
             "surface": {"dir": [0, 1, 0], "position_nm": -10, "stiff": 5},
             "surface_anchors": [anchor],
         },
@@ -529,6 +638,7 @@ def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
         "deposition_gentle", "deposition_approach", "deposition_settle", "deposition_equil"
     ]
     jd = child.job_dir(tmp_path)
+    assert jd.parent == (destination if external_dir else tmp_path / "oxdna_jobs")
     approach = (jd / "deposition_approach_forces.txt").read_text()
     assert "type = attraction_plane" in approach and "type = trap" not in approach
     import json

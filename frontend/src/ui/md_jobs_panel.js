@@ -441,6 +441,16 @@ export function mdRunControl(selectedJob, {
       title: 'Select a run in the list, or create one with ＋ New job.',
     }
   }
+  // The persisted phase survives polling/reloads; the local guard covers the
+  // interval before the server publishes that phase and the final status refresh.
+  if (selectedJob.execution_target === 'alpine' &&
+      (submitting || selectedJob.remote_submit_progress || selectedJob.creating ||
+       selectedJob.status === 'preparing')) {
+    return {
+      action: RUN_ACTION.SUBMIT, label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      title: 'Preparing and uploading the package to Alpine. Submission is in progress.',
+    }
+  }
   if (selectedJob.creating || selectedJob.status === 'preparing') return {
     action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
   }
@@ -475,21 +485,6 @@ export function mdRunControl(selectedJob, {
   // primary control tracks that: it spins while the package builds, then becomes the
   // submit. (Only Alpine — a RunPod job's rental flow is still its own thing.)
   if (selectedJob.execution_target === 'alpine') {
-    if (selectedJob.status === 'preparing') {
-      return {
-        action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
-        title: 'Solvating and building the package on this computer. Submit unlocks when '
-             + 'it is done — attach anchors or an electric field meanwhile.',
-      }
-    }
-    // The upload itself is minutes of SFTP for an 800 MB package, and a second click on
-    // an enabled-looking button during it is exactly how a job gets submitted twice.
-    if (submitting) {
-      return {
-        action: RUN_ACTION.PREPARING, label: 'Submitting…', disabled: true, spinner: true,
-        title: 'Uploading the package to Alpine, then sbatch.',
-      }
-    }
     // The cluster side is already terminal while NADOC pulls and indexes the result
     // tree — true whether it got there by finishing, by a walltime TIMEOUT, or by a
     // manual Terminate-and-download (which scancels BEFORE it ever sets this state;
@@ -1903,6 +1898,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _selectBestJob()
       const selected = _jobs.find(j => j.job_id === _selectedId)
       _updateVizToggles(selected)
+      // Submission phases can change without a selection change or queue refresh.
+      _paintRunControl()
       if (selected) surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
@@ -2066,6 +2063,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
+    boxSolvent?.clearJob()
     _grapheneSelectionId = null
     // Empty job-list refreshes must not clear the setup the user is editing.
     if (_selectedId) {
@@ -3744,6 +3742,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Creating a job has begun but the backend has not returned its id yet, so there is
     // no selected record from which mdRunControl can derive this transient state.
     if (_launching) {
+      if (_selectedJob()?.execution_target === 'alpine') return {
+        action: RUN_ACTION.SUBMIT, label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      }
       return { action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true }
     }
     const sel = _selectedJob()
@@ -3800,7 +3801,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const starting = rc.action === RUN_ACTION.RUN || rc.action === RUN_ACTION.SUBMIT
       || rc.action === RUN_ACTION.PREPARING
     const stopping = !queueing && !starting
-    runBtn.style.background = runBtn.disabled ? '#122117'
+    runBtn.style.background = runBtn.disabled ? '#21262d'
       : queueing ? '#1c2333' : (stopping ? '#2d2119' : '#1a4a1a')
     runBtn.style.borderColor = runBtn.disabled ? _C.border
       : queueing ? '#30456d' : (stopping ? '#d29922' : _C.ok)
@@ -3993,6 +3994,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // into a single button — they used to be a fresh-Relax button, a contextual Stop/Resume
   // button and a Production button, each aware of a different subset of job states.
   runBtn?.addEventListener('click', () => {
+    if (runBtn.disabled || _runControl().disabled) return
     const sel = _selectedJob()
     if (!sel) return
     if (sel.status === 'failed' && sel.failure_kind === 'electrode_equilibration') return _openVramFix(sel.job_id)
@@ -4307,7 +4309,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
       ...physicalPayload,
-      run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
+      run_dir:        getRunDir('namd'),   // shared run-location: write this run into the chosen folder
     }
 
     // Creating is deliberately cheap: record every choice as a draft and leave topology,
@@ -4348,7 +4350,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       try {
         const fc = await estimateMdDisk(payload)
         // If the run won't fit, offer to archive it to a roomier drive and run THERE.
-        const rec = await recommendArchive(fc)
+        const rec = await recommendArchive(fc, 'namd')
         if (!rec.proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
         payload.run_dir = rec.runDir || null   // suggested archive OR the user's chosen dir
         // No archive suggestion but still tight → the plain low-disk Continue/Cancel warning.

@@ -296,6 +296,10 @@ def _straight_helix_axes(design: Design) -> list[dict]:
     _normalize_helix_for_grid, because that would ignore re-centering applied
     at import time (e.g. _recenter_design for scadnano/cadnano designs).
     """
+    if design.nucleotide_transforms:
+        return deformed_helix_axes(design.model_copy(update={
+            "deformations": [], "cluster_transforms": [],
+        }))
     result = []
     for h in design.helices:
         result.append(

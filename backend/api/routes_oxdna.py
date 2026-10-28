@@ -215,7 +215,34 @@ def _seed_geometry(design) -> list[dict]:
 # ── Request models ────────────────────────────────────────────────────────────
 
 
+class OxdnaRunLocation(BaseModel):
+    run_dir: Optional[str] = None
+
+
+def _apply_oxdna_run_dir(job, run_dir: Optional[str]) -> None:
+    """Place a fresh job on its selected drive before writing simulation inputs."""
+    if not run_dir:
+        return
+    import os
+    from backend.core import job_archive
+
+    base = Path(run_dir).expanduser()
+    if not base.is_dir() or not os.access(base, os.W_OK):
+        raise HTTPException(400, f"Run directory is unavailable or not writable: {run_dir}")
+    ws = _workspace()
+    if base.resolve() == (ws / "oxdna_jobs").resolve():
+        return
+    dest = base.resolve() / job.job_id
+    dest.mkdir(exist_ok=False)
+    job.archived = True
+    job.archive_path = str(dest)
+    index = job_archive.read_index(ws, "oxdna_jobs")
+    index[job.job_id] = str(dest)
+    job_archive._write_index(ws, "oxdna_jobs", index)
+
+
 class CreateOxdnaJobRequest(BaseModel):
+    run_dir: Optional[str] = None
     execution_target: str = Field("local", pattern="^(local|alpine|runpod)$")
     cluster_name: Optional[str] = None
     partition: Optional[str] = None
@@ -352,6 +379,7 @@ class FieldElement(BaseModel):
 
 
 class FieldRequest(FieldElement):
+    run_dir: Optional[str] = None
     anchors: list[AnchorRef] = Field(default_factory=list)
     steps: int = Field(2_000_000, ge=1000, le=200_000_000, description="Field MD steps")
     anchor_stiff: float = Field(
@@ -387,11 +415,13 @@ class SurfaceElement(SurfaceGeometry):
 
 
 class RunRequest(BaseModel):
+    run_dir: Optional[str] = None
     """A consolidated production run: unbiased MD plus any combination of an electric
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
     child job seeded from the relaxed parent so runs can be fanned out + compared."""
 
     steps: int = Field(2_000_000, ge=1000, le=200_000_000)
+    stage_overrides: dict[str, dict] = Field(default_factory=dict)
     # Steps between trajectory frames (oxDNA's print_conf_interval).  Absolute, not a
     # fraction of `steps`, so a longer run gives a LONGER trajectory rather than a
     # coarser one.  The submit card shows the resulting frame count + disk before launch.
@@ -456,6 +486,7 @@ def resolve_oxdna_field_api(field: FieldElement) -> dict:
 
 
 class SurfaceDepositionRequest(BaseModel):
+    run_dir: Optional[str] = None
     surface: SurfaceElement
     surface_anchors: list[AnchorRef] = Field(min_length=1)
     # Calibrated on surface_test: 2.5 pN remained 2.49 nm off-plane after 100k
@@ -723,7 +754,7 @@ def _job_field(job: OxdnaJob) -> dict | None:
     return None
 
 
-def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
+def _composite_inputs(job: OxdnaJob, scope: str = "lineage", stride: int | None = None):
     """Assemble (design, stages, ref) for a job's WHOLE-LINEAGE composite trajectory
     (root → … → selected, every stage in time order, numbered boundary labels).
 
@@ -733,7 +764,7 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
     Shared by the trajectory + per-frame atomistic/surface routes. Returns
     (design, [], None) when no stage has written a trajectory yet.
 
-    Each stage tuple is ``(label, kind, traj_path, marker_label, field)`` where
+    Each stage tuple is ``(label, kind, traj_path, marker_label, field, prepend_seed)`` where
     ``field`` is the owning job's E-field descriptor (or None) — the trajectory
     player uses it to point the field arrow at whatever run in the chain is on screen.
 
@@ -742,6 +773,8 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
     conf.dat is the parent's drifted relaxed structure, off-origin)."""
     from backend.core.models import Design
 
+    if stride is not None and not 1 <= stride <= 100_000_000:
+        raise HTTPException(422, "Frame interval must be a positive integer.")
     jd = job.job_dir(_workspace())
     ws = _workspace()
     chain = [job] if scope == "job" else _lineage_jobs(job)
@@ -761,7 +794,7 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
                 if first_of_job and not is_root:
                     marker = f"→ {st.kind} {run_no}"
                     first_of_job = False
-                stages.append((label, st.kind, traj, marker, field))
+                stages.append((label, st.kind, traj, marker, field, scope != "job", stride))
     if not stages:
         return None, [], None
     snap = jd / "design.json"
@@ -1089,6 +1122,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         "runpod_estimated_cost_usd": body.runpod_estimated_cost_usd,
         "runpod_quoted_rate_usd_per_hour": job.runpod_quoted_rate_usd_per_hour,
     })
+    _apply_oxdna_run_dir(job, body.run_dir)
     job.status = OxdnaStatus.preparing
     job.save(_workspace())
     logger.info(
@@ -1205,6 +1239,35 @@ async def list_oxdna_jobs() -> list[dict]:
     return out
 
 
+_CONTINUATION_PARAMETERS = (
+    "temperature", "dt", "thermostat", "diff_coeff", "gamma_trans",
+    "refresh_vel", "bussi_tau", "newtonian_steps",
+)
+
+
+def _continuation_parameters(job, workspace, stage_name=None):
+    """Use the resolved MD stage that supplied the continuation coordinates."""
+    if stage_name is None:
+        _, stage_name = _latest_relaxed_conf(job, workspace)
+    specs = load_stage_specs(job.job_dir(workspace))
+    source = next((spec for spec in specs if spec.name == stage_name and spec.sim_type == "MD"), None)
+    if source is None:
+        return {}
+    return {key: getattr(source, key) for key in _CONTINUATION_PARAMETERS}
+
+
+def _inherit_continuation_parameters(stages, job, workspace, stage_name=None, *, deposition=False):
+    parameters = _continuation_parameters(job, workspace, stage_name)
+    for stage in stages:
+        for key, value in parameters.items():
+            # Deposition's approach/settling stages retain their conservative
+            # integration ceiling, while accepting a smaller parent timestep.
+            if deposition and key == "dt":
+                value = min(value, stage.dt)
+            setattr(stage, key, value)
+    return stages
+
+
 def _list_oxdna_jobs() -> tuple[list[dict], list]:
     from backend.core.design_disk_usage import dir_size_bytes_cached_only
     from backend.core.physical_input_freshness import legacy_job_status
@@ -1216,6 +1279,8 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     to_warm: list = []
     for j in jobs:
         d = j.to_dict()
+        if j.status == OxdnaStatus.completed:
+            d["continuation_parameters"] = _continuation_parameters(j, ws)
         d.update(legacy_job_status(_job_fingerprint(j), current_fp, engine="oxdna"))
         if d.get("status") == "running":
             from backend.core.oxdna_runner import job_overall_fraction, load_stage_specs
@@ -1242,12 +1307,14 @@ async def get_oxdna_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
+    if job.status == OxdnaStatus.completed:
+        d["continuation_parameters"] = _continuation_parameters(job, _workspace())
     d.update(legacy_job_status(_job_fingerprint(job), _current_design_fingerprint(), engine="oxdna"))
     return d
 
 
 @router.post("/oxdna/jobs/{job_id}/copy")
-async def copy_oxdna_job(job_id: str) -> dict:
+async def copy_oxdna_job(job_id: str, body: Optional[OxdnaRunLocation] = None) -> dict:
     """Create a clean, queued copy with identical inputs and a fresh RNG seed."""
     from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE
 
@@ -1294,8 +1361,9 @@ async def copy_oxdna_job(job_id: str) -> dict:
     copied.runpod_volume_id = source.runpod_volume_id
     copied.runpod_quoted_rate_usd_per_hour = source.runpod_quoted_rate_usd_per_hour
 
+    _apply_oxdna_run_dir(copied, body.run_dir if body else None)
     copied_dir = copied.job_dir(ws)
-    copied_dir.mkdir(parents=True, exist_ok=False)
+    copied_dir.mkdir(parents=True, exist_ok=copied.archived)
     files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", "attachment_forces.txt", AVERAGE_SEQUENCE_FILE}
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
@@ -1391,6 +1459,10 @@ def _rebuild_continuation_settings(job, updates):
             prepare = _prepare_surface_deposition_job
         else:
             settings = {key: value for key, value in merged.items() if key in RunRequest.model_fields}
+            # Existing stage settings are restored from stages_spec below when
+            # the protocol is unchanged. Deposition stage names cannot be applied
+            # to the new single-stage production protocol when toggling it off.
+            settings.pop("stage_overrides", None)
             settings["anchor_stiff"] = merged.get("production_anchor_stiff", DEFAULT_ANCHOR_STIFF)
             settings["seed"] = seed
             request = RunRequest.model_validate(settings)
@@ -1412,6 +1484,9 @@ def _rebuild_continuation_settings(job, updates):
                 if previous:
                     previous.forces_file = spec.forces_file
                     previous.forces_meta = spec.forces_meta
+                    previous.external_forces = spec.external_forces
+                    previous.absolute_forces = spec.absolute_forces
+                    previous.efield = spec.efield
                     specs[index] = previous
         # Preserve the selected job's execution settings, not the parent's.
         for spec in specs:
@@ -1899,6 +1974,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
         salt_concentration=job.salt_concentration,
     )
     prod = assign_stage_seeds([prod], stage_seed)[0]
+    _inherit_continuation_parameters([prod], job, _workspace())
     prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
     from backend.physics.oxdna_peg import configure_peg_stages, is_peg
     peg_spec = (job.run_config or {}).get("surface_strands")
@@ -2011,6 +2087,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         device=parent.device,
         salt_concentration=parent.salt_concentration,
     )
+    _inherit_continuation_parameters([stage], parent, ws, _stage)
     stage = assign_stage_seeds([stage], job_seed)[0]
     from backend.physics.oxdna_protein import has_proteins
 
@@ -2044,6 +2121,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
 
     from dataclasses import asdict
 
+    _apply_oxdna_run_dir(child, body.run_dir)
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
@@ -2183,6 +2261,22 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         salt_concentration=parent.salt_concentration,
         steps_per_frame=body.steps_per_frame,
     )
+    allowed = {
+        "temperature", "dt", "thermostat", "diff_coeff", "refresh_vel",
+        "bussi_tau", "newtonian_steps", "max_backbone_force",
+        "max_backbone_force_far", "min_bp_retained", "print_energy_every",
+    }
+    _inherit_continuation_parameters([stage], parent, ws, _stage)
+    overrides = body.stage_overrides.get(stage.name, {})
+    if "diff_coeff" in overrides or ("thermostat" in overrides and overrides["thermostat"] != "langevin"):
+        stage.gamma_trans = None
+    if any(name != stage.name or set(overrides) - allowed
+           for name, overrides in body.stage_overrides.items()):
+        raise HTTPException(422, "Unsupported production stage override.")
+    try:
+        stage = apply_stage_overrides([stage], body.stage_overrides)[0]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"Invalid production stage override: {exc}") from exc
     stage = assign_stage_seeds([stage], job_seed)[0]
     from backend.physics.oxdna_protein import has_proteins
 
@@ -2220,6 +2314,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
         run_config={
             "kind": "run",
             "seed": job_seed,
+            "stage_overrides": body.stage_overrides,
+            "inherited_parameters": _continuation_parameters(parent, ws, _stage),
             "steps": body.steps,
             "steps_per_frame": body.steps_per_frame,
             "anchor_stiff": body.anchor_stiff,
@@ -2243,6 +2339,8 @@ def _prepare_run_job(job_id: str, body: RunRequest, *, target=None):
     from dataclasses import asdict
 
     child = _prepared_child_target(child, target)
+    if target is None:
+        _apply_oxdna_run_dir(child, body.run_dir)
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     if mobile_gold:
@@ -2366,6 +2464,7 @@ def _prepare_surface_deposition_job(job_id: str, body: SurfaceDepositionRequest,
         equil_steps=body.equil_steps,
         steps_per_frame=body.steps_per_frame,
     )
+    _inherit_continuation_parameters(stages, parent, ws, _stage, deposition=True)
     stages = assign_stage_seeds(stages, job_seed)
     from backend.physics.oxdna_protein import has_proteins
 
@@ -2419,6 +2518,8 @@ def _prepare_surface_deposition_job(job_id: str, body: SurfaceDepositionRequest,
         max_relax_retries=0,
     )
     child = _prepared_child_target(child, target)
+    if target is None:
+        _apply_oxdna_run_dir(child, body.run_dir)
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
@@ -3092,6 +3193,49 @@ def _export_stem(job, design) -> str:
 _SPARSE_FRAME_CAP = 200
 
 
+# Bound concurrent coordinate reconstruction across jobs and clients. Estimates
+# include parsing/alignment scratch and response copies, not just wire bytes.
+_TRAJECTORY_MEMORY_LOCK = threading.Lock()
+_TRAJECTORY_RESERVED_BYTES = 0
+
+
+def _trajectory_work(fn, *args, **kwargs):
+    import inspect
+    import psutil
+    from backend.core.oxdna_health import composite_trajectory_meta
+    global _TRAJECTORY_RESERVED_BYTES
+    call = inspect.signature(fn).bind(*args, **kwargs)
+    call.apply_defaults()
+    options = call.arguments
+    meta = composite_trajectory_meta(options['design'], options['stages'], options.get('max_frames', 200))
+    total = meta['n_frames']
+    if 'frame_indices' in options:
+        count = len({int(i) for i in options['frame_indices'] if 0 <= int(i) < total})
+        per_particle_frame = 3000  # dictionaries plus atomistic/mesh output
+    else:
+        lo = max(0, options.get('frame_start') or 0)
+        hi = min(total, (options['frame_end'] + 1) if options.get('frame_end') is not None else total)
+        step = max(1, options.get('frame_step', 1))
+        count = max(0, (hi - lo + step - 1) // step)
+        packed = fn.__name__ == 'pack_composite_trajectory_bin' or options.get('packed')
+        per_particle_frame = 144 if packed else 3000
+    particles = meta['n_nucleotides'] + options.get('n_trailing_extra', 0)
+    if per_particle_frame == 144 and particles * count * 36 > 128 * 1024**2:
+        raise HTTPException(413, 'Trajectory download exceeds the safe size limit. Request a smaller frame range.')
+    required = particles * (4000 + count * per_particle_frame)
+    with _TRAJECTORY_MEMORY_LOCK:
+        budget = min(1024 ** 3, int(psutil.virtual_memory().available * 0.25))
+        if required + _TRAJECTORY_RESERVED_BYTES > budget:
+            raise HTTPException(413, 'Not enough safe memory to load this trajectory request. '
+                                'Use a smaller frame range or fewer frames, close other trajectory views, and retry.')
+        _TRAJECTORY_RESERVED_BYTES += required
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        with _TRAJECTORY_MEMORY_LOCK:
+            _TRAJECTORY_RESERVED_BYTES -= required
+
+
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(
     job_id: str,
@@ -3101,6 +3245,7 @@ async def get_oxdna_trajectory(
     transport: str = "json",
     frame_start: int | None = None,
     frame_end: int | None = None,
+    stride: int | None = None,
 ):
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
@@ -3118,7 +3263,7 @@ async def get_oxdna_trajectory(
     from backend.core.oxdna_health import composite_trajectory
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job, scope)
+    design, stages, ref = _composite_inputs(job, scope, stride)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
     # <= 0 disables the stride entirely — see _aligned_downsampled_frames._keep_for.
@@ -3143,6 +3288,7 @@ async def get_oxdna_trajectory(
     try:
         task = asyncio.create_task(
             run_in_threadpool(
+                _trajectory_work,
                 composite_trajectory,
                 design,
                 stages,
@@ -3203,7 +3349,8 @@ async def get_oxdna_trajectory(
 @router.get("/oxdna/jobs/{job_id}/trajectory-bin")
 async def get_oxdna_trajectory_bin(
     job_id: str, request: Request, align: bool = True, scope: str = "lineage",
-    frame_start: int | None = None, frame_end: int | None = None, frame_step: int = 1
+    frame_start: int | None = None, frame_end: int | None = None, frame_step: int = 1,
+    stride: int | None = None
 ) -> Response:
     """Compact binary sibling of ``/trajectory`` for the interactive scrubber.
 
@@ -3217,7 +3364,7 @@ async def get_oxdna_trajectory_bin(
     if not 1 <= frame_step <= 100_000_000:
         raise HTTPException(422, "Invalid frame interval")
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job, scope)
+    design, stages, ref = _composite_inputs(job, scope, stride)
     if not stages:
         return Response(status_code=204)
     budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
@@ -3243,6 +3390,7 @@ async def get_oxdna_trajectory_bin(
     try:
         task = asyncio.create_task(
             run_in_threadpool(
+                _trajectory_work,
                 pack_composite_trajectory_bin,
                 design,
                 stages,
@@ -3512,7 +3660,7 @@ async def get_oxdna_occupancy_progress(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-meta")
-async def get_oxdna_trajectory_meta(job_id: str, scope: str = "lineage") -> dict:
+async def get_oxdna_trajectory_meta(job_id: str, scope: str = "lineage", stride: int | None = None) -> dict:
     """Frame count + stage markers for the composite trajectory WITHOUT downloading
     coordinates — lets the trajectory-keyframe slider size itself instantly. Indices
     match GET /oxdna/jobs/{id}/trajectory exactly, ``scope`` included — pass the SAME
@@ -3521,7 +3669,7 @@ async def get_oxdna_trajectory_meta(job_id: str, scope: str = "lineage") -> dict
     from backend.core.oxdna_health import composite_trajectory_meta
 
     job = _load_job(job_id)
-    design, stages, _ = _composite_inputs(job, scope)
+    design, stages, _ = _composite_inputs(job, scope, stride)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
     budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
@@ -3549,6 +3697,7 @@ async def oxdna_frames_atomistic(
     body: OxdnaFramesAtomisticBody,
     align: bool = True,
     scope: str = "lineage",
+    stride: int | None = None,
 ) -> dict:
     """Per-frame ATOMISTIC coordinates for the given composite-trajectory frame
     indices (same wire format as /design/features/atomistic-batch). Used by the
@@ -3559,10 +3708,11 @@ async def oxdna_frames_atomistic(
     from backend.core.oxdna_health import composite_trajectory_atomistic
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job, scope)
+    design, stages, ref = _composite_inputs(job, scope, stride)
     if not stages:
         return {}
     return await run_in_threadpool(
+                _trajectory_work,
         composite_trajectory_atomistic,
         design,
         stages,
@@ -3581,6 +3731,7 @@ async def oxdna_frames_surface(
     body: OxdnaFramesSurfaceBody,
     align: bool = True,
     scope: str = "lineage",
+    stride: int | None = None,
 ) -> dict:
     """Per-frame molecular SURFACE meshes for the given composite-trajectory frame
     indices (same wire format as /design/features/surface-batch). Heaviest path
@@ -3589,10 +3740,11 @@ async def oxdna_frames_surface(
     from backend.core.oxdna_health import composite_trajectory_surface
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job, scope)
+    design, stages, ref = _composite_inputs(job, scope, stride)
     if not stages:
         return {}
     return await run_in_threadpool(
+                _trajectory_work,
         composite_trajectory_surface,
         design,
         stages,

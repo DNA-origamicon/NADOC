@@ -747,7 +747,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     // a line straight through the gap. For these helices we build the same
     // per-segment cylinder array used by non-curved helices below and skip
     // the single shaft entirely.
-    const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
+    const useSegments = Boolean(axDef?.residue_transformed) || !isCurved || (axDef?.segments?.length ?? 0) > 1
     // Native oligos have a backbone, not a duplex axis. Full uses the same
     // strand-colored direction cones as every ordinary strand. Keep the
     // axis metadata for cylinder LOD, but never overlay an axis tube.
@@ -896,6 +896,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       bp_hi:   helix.bp_start + helix.length_bp - 1,
       isCurved,
       isNative: isNativeFold,
+      residueTransformed: Boolean(axDef?.residue_transformed),
       // True when this helix renders its axis via per-segment cylinders
       // rather than a single shaft. Set for every non-curved helix and for
       // curved helices with bp-range gaps between segments (so the gap
@@ -958,7 +959,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _segDir = new THREE.Vector3()
   const _segQ   = new THREE.Quaternion()
   function _layStraightSegments(arrow, baseStart, baseEnd) {
-    if (arrow.isCurved || !arrow.segments?.length) return
+    if (arrow.residueTransformed || arrow.isCurved || !arrow.segments?.length) return
     _segDir.set(baseEnd.x - baseStart.x, baseEnd.y - baseStart.y, baseEnd.z - baseStart.z)
     const dlen = _segDir.length()
     if (dlen < 0.001) return
@@ -2428,7 +2429,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart = sa ? sa.start : arrow.aStart
       const baseEnd   = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.useSegments && arrow.isCurved) {
+      if (arrow.useSegments && (arrow.isCurved || arrow.residueTransformed)) {
         // Multi-segment curved helix: per-segment positioning. Pass t=0
         // when reverting to straight (sa.segments are the destination), t=1
         // when reverting to deformed (stored wsStart/wsEnd are deformed).
@@ -2650,7 +2651,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const baseStart  = sa ? sa.start : arrow.aStart
       const baseEnd    = sa ? sa.end   : arrow.aEnd
 
-      if (arrow.useSegments && arrow.isCurved) {
+      if (arrow.useSegments && (arrow.isCurved || arrow.residueTransformed)) {
         // Multi-segment curved helix: position each segment at its per-segment
         // straight endpoint + the unfold offset. Same rule as _lerpPerSegment
         // but with a uniform per-helix offset instead of an interpolation.
@@ -4510,7 +4511,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // domain stays at its own position and the bp gaps stay empty.
         // Non-curved helices use the legacy single-line _layStraightSegments
         // (correct because the entire helix is rigid).
-        if (arrow.useSegments && arrow.isCurved) {
+        if (arrow.useSegments && (arrow.isCurved || arrow.residueTransformed)) {
           _lerpPerSegment(arrow, sa?.segments, t)
           continue
         }

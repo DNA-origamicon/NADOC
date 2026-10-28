@@ -55,6 +55,15 @@ export function relaxationElementsSettings(elements = {}) {
   }
 }
 
+/** Continuations can apply a field; relaxation deliberately remains field-free. */
+export function continuationElementsSettings(elements = {}) {
+  return {
+    ...relaxationElementsSettings(elements),
+    field: elements.field?.enabled && elements.field.field_pN > 0
+      ? { field_pN: elements.field.field_pN, dir: elements.field.dir } : null,
+  }
+}
+
 export function relaxationElementsSignature(settings = {}) {
   const surface = settings.surface
   const strands = settings.surface_strands ? { ...settings.surface_strands } : null
@@ -64,5 +73,6 @@ export function relaxationElementsSignature(settings = {}) {
       ...(surface.position_nm != null ? { position_nm: surface.position_nm } : { offset_nm: surface.offset_nm }) } : null,
     anchors: settings.anchors || [], surface_anchors: settings.surface_anchors || [],
     surface_strands: strands,
+    field: settings.field || null,
   })
 }

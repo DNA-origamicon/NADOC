@@ -10,6 +10,16 @@ const DEFAULTS = Object.freeze({
 
 export const OXDNA_ENGINE_VARIANTS = Object.freeze(['auto', 'adaptive-memory', 'dnanm', 'upstream'])
 
+// Conventional standalone oxDNA monomer diffusion in reduced units, not the
+// LAMMPS Langevin "damp" timescale: Sengar et al. (2021), supplement section 2.
+// https://oliverhenrich.com/wp-content/uploads/2021/06/fmolb-08-693710_supplementarymaterial.pdf
+export const OXDNA_DEFAULT_DIFFUSION = 2.5
+export function oxdnaThermostatDefaults(thermostat, diffusion) {
+  return ['langevin', 'brownian', 'john'].includes(thermostat)
+    && (diffusion == null || diffusion === '')
+    ? { diff_coeff: OXDNA_DEFAULT_DIFFUSION } : {}
+}
+
 export function validateOxdnaWizard(values = {}) {
   const v = oxdnaWizardDefaults(values)
   const errors = {}
@@ -139,19 +149,38 @@ export function validateOxdnaProductionWizard(values = {}) {
   // Bounds match RunRequest (backend/api/routes_oxdna.py): steps 1e3-2e8, steps_per_frame 1-2e8.
   range('steps', 1000, 200_000_000, 'Production steps must be between 1,000 and 200,000,000.')
   range('steps_per_frame', 1, 200_000_000, 'Steps/frame must be between 1 and 200,000,000.')
+  const [stage] = oxdnaProductionStagePlan(v)
+  if (!['bussi', 'john', 'brownian', 'langevin', 'no'].includes(stage.thermostat))
+    errors.thermostat = 'Choose a supported thermostat.'
+  if (['john', 'brownian', 'langevin'].includes(stage.thermostat)
+      && !(stage.thermostat === 'langevin' && Number(stage.gamma_trans) > 0)
+      && !(Number.isFinite(Number(stage.diff_coeff)) && Number(stage.diff_coeff) > 0))
+    errors.diff_coeff = 'Enter a positive diffusion coefficient for the selected thermostat.'
+  for (const key of ['dt', 'bussi_tau', 'newtonian_steps', 'print_energy_every']) {
+    if (!(Number.isFinite(Number(stage[key])) && Number(stage[key]) > 0)) errors[key] = `${key} must be positive.`
+  }
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
-/** Single-stage plan mirroring oxdnaStagePlan's shape, for the wizard's read-only summary.
- *  backend/device/salt are always inherited from the parent — RunRequest has no override field. */
+/** Mirrors build_run_stage defaults. Execution hardware and salt are inherited. */
 export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
   const v = oxdnaProductionDefaults(values)
-  return [{
+  const stage = {
     name: '1_production', purpose: 'Sample from the relaxed structure', sim_type: 'MD',
     backend: parentJob?.backend ?? null, device: parentJob?.device ?? null,
     salt_concentration: parentJob?.salt_concentration ?? null,
+    temperature: '296K', dt: 0.005, thermostat: 'bussi', diff_coeff: null,
+    refresh_vel: true, bussi_tau: 1000, newtonian_steps: 53,
+    max_backbone_force: null, max_backbone_force_far: null, min_bp_retained: 0,
+    print_energy_every: Math.max(1, Math.floor(Number(v.steps) / 100)),
+    ...(v.inherited_parameters || {}),
+    ...(parentJob.continuation_parameters || {}),
+    ...(v.stage_overrides?.['1_production'] || {}),
     steps: Number(v.steps), print_conf_interval: Number(v.steps_per_frame),
-  }]
+  }
+  const overrides = v.stage_overrides?.['1_production'] || {}
+  if ('diff_coeff' in overrides || stage.thermostat !== 'langevin') delete stage.gamma_trans
+  return [stage]
 }
 
 /** Payload sent to POST /oxdna/jobs/{parentId}/run. Deliberately excludes field/surface/anchors —
@@ -159,7 +188,9 @@ export function oxdnaProductionStagePlan(values = {}, parentJob = {}) {
  *  time in oxdna_jobs_panel.js, exactly as the (removed) Full Sim button already did. */
 export function oxdnaProductionPayload(values) {
   const v = oxdnaProductionDefaults(values)
-  return { steps: Number(v.steps), steps_per_frame: Number(v.steps_per_frame) }
+  return { steps: Number(v.steps), steps_per_frame: Number(v.steps_per_frame),
+    ...(Object.keys(v.stage_overrides || {}).length ? { stage_overrides: structuredClone(v.stage_overrides) } : {}),
+  }
 }
 
 /** Jobs eligible as a production "Continue from" parent: completed, and belonging to the current

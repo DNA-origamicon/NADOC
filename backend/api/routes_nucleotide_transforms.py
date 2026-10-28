@@ -166,7 +166,7 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
         # _geometry_for_helices' output (design_geometry.py) — the one real
         # helix genuinely needs its geometry re-shipped.
         return _design_response_with_geometry(
-            updated, report, changed_helix_ids=[transform.helix_id],
+            updated, report, changed_helix_ids=[transform.helix_id], partial_axes=True,
         )
     # "extra_base" transforms are explicitly excluded from that bake-in
     # (design_geometry.py filters to kind == "base" only) — the pose is
@@ -218,7 +218,7 @@ def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
     )
     if changed_helix_ids:
         payload = _design_response_with_geometry(
-            updated, report, changed_helix_ids=changed_helix_ids
+            updated, report, changed_helix_ids=changed_helix_ids, partial_axes=True,
         )
     else:
         payload = _design_response(updated, report)
@@ -255,7 +255,7 @@ def delete_nucleotide_transform(transform_id: str) -> dict:
     # helix geometry.
     if existing.kind == "base":
         return _design_response_with_geometry(
-            updated, report, changed_helix_ids=[existing.helix_id],
+            updated, report, changed_helix_ids=[existing.helix_id], partial_axes=True,
         )
     payload = _design_response(updated, report)
     payload["geometry_unchanged"] = True

@@ -21,6 +21,7 @@ _LOCK = threading.Lock()
 _PENDING = set()
 _RECENT = {}
 _THREAD = None
+_MEMORY_LIMITED = 76
 
 # Previous manifests covered sampled MD analyses only. Keep existing artifacts,
 # but backfill full-frame results before considering a job prepared.
@@ -71,6 +72,7 @@ def _drain():
     while True:
         key = _QUEUE.get()
         interrupted = False
+        memory_limited = False
         try:
             from backend.core.trajectory_priority import PREEMPTED, foreground_active
 
@@ -84,6 +86,7 @@ def _drain():
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=7200,
             )
             interrupted = completed.returncode == PREEMPTED
+            memory_limited = completed.returncode == _MEMORY_LIMITED
             if completed.returncode and not interrupted:
                 _LOG.warning("Trajectory precompute failed for %s: %s", key,
                              completed.stderr.decode(errors="replace")[-2000:])
@@ -97,7 +100,7 @@ def _drain():
                     _QUEUE.put(key)
                 else:
                     _PENDING.discard(key)
-                    _RECENT[key] = time.monotonic()
+                    _RECENT[key] = time.monotonic() + (3540 if memory_limited else 0)
             _QUEUE.task_done()
 
 
@@ -167,11 +170,26 @@ def prepare(workspace, engine, job_id):
             temp.replace(marker)
 
 
+def _limit_worker_memory():
+    """Disposable analysis must never compete for all host RAM or swap."""
+    import resource
+    import psutil
+    ceiling = min(2 * 1024**3, int(psutil.virtual_memory().available * 0.25))
+    current = psutil.Process().memory_info().vms
+    if ceiling < current + 128 * 1024**2:
+        raise MemoryError('Insufficient memory for background trajectory analysis')
+    _, hard = resource.getrlimit(resource.RLIMIT_AS)
+    if hard != resource.RLIM_INFINITY:
+        ceiling = min(ceiling, hard)
+    resource.setrlimit(resource.RLIMIT_AS, (ceiling, hard))
+
+
 def main():
     import fcntl
     import tempfile
 
     os.environ["NADOC_PRECOMPUTE_WORKER"] = "1"
+    _limit_worker_memory()
     os.nice(19)
     if hasattr(os, "sched_getaffinity"):
         os.sched_setaffinity(0, {max(os.sched_getaffinity(0))})
@@ -192,4 +210,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except MemoryError:
+        print("Background trajectory analysis stopped at its memory limit; simulation data is unchanged.", file=sys.stderr)
+        sys.exit(_MEMORY_LIMITED)

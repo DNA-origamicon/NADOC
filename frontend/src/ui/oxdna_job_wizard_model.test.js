@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload, validateOxdnaWizard,
   oxdnaProductionDefaults, oxdnaProductionPayload, oxdnaProductionParents, oxdnaProductionStagePlan, validateOxdnaProductionWizard,
+  oxdnaThermostatDefaults,
 } from './oxdna_job_wizard_model.js'
 import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
 
@@ -102,6 +103,33 @@ describe('oxDNA copied-job seed display', () => {
     expect(text).not.toContain('"seed": 135791357')
     wizard.close()
   })
+
+  it('writes continuation thermostat controls into the saved configuration without losing other settings', () => {
+    const wizard = makeWizard()
+    wizard.openEditable(copiedJob({
+      parent_job_id: 'parent',
+      run_config: { kind: 'run', stage_overrides: { '1_production': { dt: 0.001 } } },
+      stages: [{ name: '1_production', kind: 'md', steps: 10000 }],
+    }))
+    const select = document.querySelector('[aria-label="Thermostat on 1_production"]')
+    expect([...select.options].filter(option => option.value).every(option => option.title.length > 20)).toBe(true)
+    expect(select.title).toContain('Langevin:')
+    select.value = 'langevin'
+    select.dispatchEvent(new Event('change'))
+    const diffusion = document.querySelector('[aria-label="Diffusion coefficient on 1_production"]')
+    expect(diffusion.value).toBe('2.5')
+    diffusion.value = '0.5'
+    diffusion.dispatchEvent(new Event('change'))
+    select.value = 'brownian'
+    select.dispatchEvent(new Event('change'))
+    expect(diffusion.value).toBe('0.5')
+    select.value = 'langevin'
+    select.dispatchEvent(new Event('change'))
+    const config = JSON.parse(document.querySelector('[aria-label="Editable oxDNA job configuration"]').value)
+    expect(config.stages[0]).toMatchObject({ thermostat: 'langevin', diff_coeff: 0.5, steps: 10000 })
+    expect(config.stage_overrides['1_production'].dt).toBe(0.001)
+    wizard.close()
+  })
 })
 
 it('requires explicit diffusion when changing a stage to a local bath', () => {
@@ -121,6 +149,83 @@ it('previews the fixed-gold hybrid with GPU MD and persistent model forces', () 
 })
 
 describe('oxDNA production wizard model', () => {
+  it('previews the selected parent parameters and preserves explicit wizard edits', () => {
+    const first = { job_id: 'first', status: 'completed', created_at: 2,
+      continuation_parameters: { thermostat: 'langevin', diff_coeff: 0.7, dt: 0.001, temperature: '310K', refresh_vel: false } }
+    const second = { job_id: 'second', status: 'completed', created_at: 1,
+      continuation_parameters: { thermostat: 'brownian', diff_coeff: 1.2, dt: 0.002, temperature: '300K', refresh_vel: true } }
+    const wizard = initOxdnaJobWizard({ getJobs: () => [first, second] })
+    wizard.open('production')
+    expect(oxdnaProductionStagePlan(wizard.currentValues())[0]).toMatchObject(first.continuation_parameters)
+    const picker = document.querySelector('[aria-label="Continue from"]')
+    picker.value = 'second'
+    picker.dispatchEvent(new Event('change'))
+    expect(oxdnaProductionStagePlan(wizard.currentValues())[0]).toMatchObject(second.continuation_parameters)
+    expect(validateOxdnaProductionWizard(wizard.currentValues()).valid).toBe(true)
+    expect(oxdnaProductionStagePlan({ ...wizard.currentValues(), stage_overrides: {
+      '1_production': { diff_coeff: 0.1, dt: 0.0005 },
+    } })[0]).toMatchObject({ thermostat: 'brownian', diff_coeff: 0.1, dt: 0.0005 })
+    // Inheritance is resolved by the backend, not copied back as explicit edits.
+    expect(oxdnaProductionPayload(wizard.currentValues())).not.toHaveProperty('stage_overrides')
+    wizard.close()
+  })
+
+  it('defaults blank local-bath diffusion without overwriting explicit choices', () => {
+    for (const thermostat of ['langevin', 'brownian', 'john']) {
+      expect(oxdnaThermostatDefaults(thermostat, null)).toEqual({ diff_coeff: 2.5 })
+      expect(oxdnaThermostatDefaults(thermostat, '')).toEqual({ diff_coeff: 2.5 })
+      expect(oxdnaThermostatDefaults(thermostat, 0.1)).toEqual({})
+      expect(oxdnaThermostatDefaults(thermostat, 0)).toEqual({})
+    }
+    expect(oxdnaThermostatDefaults('bussi', null)).toEqual({})
+    expect(oxdnaThermostatDefaults('no', null)).toEqual({})
+  })
+  it('creates a new continuation with thermostat settings and a matching summary', async () => {
+    let submitted
+    const wizard = initOxdnaJobWizard({
+      estimateRunSize: (steps, interval) => ({ frames: Math.floor(steps / interval), bytes: Math.floor(steps / interval) * 130080 }),
+      getJobs: () => [{ job_id: 'parent', status: 'completed', backend: 'CUDA', device: '0', salt_concentration: 0.5 }],
+      spawnProduction: async (id, payload) => { submitted = { id, payload }; return { job_id: 'created' } },
+    })
+    wizard.open('production')
+    const modal = document.querySelector('.modal--oxdna-wizard')
+    const settings = [...modal.querySelectorAll('.wizard-tabpanel')].find(panel => !panel.hidden)
+    const estimate = settings.querySelector('[data-oxdna-output-estimate]')
+    expect(estimate.textContent).toContain('500 saved frames')
+    expect(estimate.textContent).not.toContain('size unknown')
+    const cadence = settings.querySelector('[data-oxdna-field="steps_per_frame"]')
+    cadence.value = '20000'
+    cadence.dispatchEvent(new Event('input'))
+    expect(estimate.textContent).toContain('250 saved frames')
+    const thermostat = settings.querySelector('[aria-label="Thermostat on 1_production"]')
+    expect(thermostat).not.toBeNull()
+    thermostat.value = 'langevin'
+    thermostat.dispatchEvent(new Event('change'))
+    expect(validateOxdnaProductionWizard(wizard.currentValues()).valid).toBe(true)
+    expect(wizard.currentValues().stage_overrides['1_production'].diff_coeff).toBe(2.5)
+    const row = [...settings.querySelectorAll('tr')].find(row => row.textContent.includes('Diffusion coefficient'))
+    row.querySelector('td').click()
+    const input = row.querySelector('input')
+    input.value = '0.5'
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    const changedThermostat = settings.querySelector('[aria-label="Thermostat on 1_production"]')
+    changedThermostat.value = 'brownian'
+    changedThermostat.dispatchEvent(new Event('change'))
+    expect(wizard.currentValues().stage_overrides['1_production'].diff_coeff).toBe(0.5)
+    const finalThermostat = settings.querySelector('[aria-label="Thermostat on 1_production"]')
+    finalThermostat.value = 'langevin'
+    finalThermostat.dispatchEvent(new Event('change'))
+    ;[...modal.querySelectorAll('.wizard-tab')].find(tab => tab.textContent === 'Summary').click()
+    expect(modal.querySelector('.oxdna-wizard-config').textContent).toContain('thermostat = langevin')
+    expect(modal.querySelector('.oxdna-wizard-config').textContent).toContain('diff_coeff = 0.5')
+    const create = [...modal.querySelectorAll('button')].find(button => button.textContent === 'Create job')
+    expect(create.disabled).toBe(false)
+    create.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(submitted).toMatchObject({ id: 'parent', payload: { stage_overrides: { '1_production': { thermostat: 'langevin', diff_coeff: 0.5 } } } })
+    wizard.close()
+  })
+
   it('defaults match the prior Full Sim UI (5,000,000 steps / 10,000 per frame)', () => {
     expect(oxdnaProductionDefaults()).toEqual({ steps: 5_000_000, steps_per_frame: 10_000 })
     expect(oxdnaProductionDefaults({ steps: 1_000_000 })).toMatchObject({ steps: 1_000_000, steps_per_frame: 10_000 })

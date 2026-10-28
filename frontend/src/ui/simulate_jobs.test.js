@@ -474,6 +474,54 @@ describe('unified list + master card', () => {
     expect(mdPanel.deselectJob).toHaveBeenCalled()
   })
 
+  it('clears immediately on close and ignores the outstanding status response', async () => {
+    mount()
+    let resolveStatus
+    const { sim } = make([], {
+      listSimJobSnapshot: vi.fn().mockResolvedValue([oxNode()]),
+      listSimJobs: vi.fn(() => new Promise(resolve => { resolveStatus = resolve })),
+    })
+    const pending = sim.refresh()
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(document.querySelector('[data-job-id="ox1"]')).not.toBeNull()
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+    expect(sim.getSelected().id).toBeNull()
+    resolveStatus([oxNode()])
+    await pending
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+  })
+
+  it('renders the new full snapshot under 100ms without waiting for old status checks', async () => {
+    mount()
+    let path = '/w/old.nadoc'
+    let resolveOld
+    const { sim, oxdnaPanel } = make([], {
+      listSimJobSnapshot: vi.fn(p => Promise.resolve([
+        oxNode({ job_id: p.includes('old') ? 'old' : 'new' }),
+        oxNode({ job_id: p.includes('old') ? 'old-child' : 'new-child',
+          parent_job_id: p.includes('old') ? 'old' : 'new' }),
+      ])),
+      listSimJobs: vi.fn().mockImplementationOnce(() => new Promise(r => { resolveOld = r }))
+        .mockResolvedValue([oxNode({ job_id: 'new' }), oxNode({ job_id: 'new-child', parent_job_id: 'new' })]),
+    }, { getWorkspacePath: () => path })
+    const old = sim.refresh()
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    const start = performance.now()
+    path = '/w/new.nadoc'
+    window.dispatchEvent(new Event('nadoc:workspace-path-change'))
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(document.querySelector('[data-job-id="new-child"]')).not.toBeNull()
+    expect(document.querySelector('[data-job-id="old"]')).toBeNull()
+    expect(performance.now() - start).toBeLessThan(100)
+    sim.selectJob('old')
+    expect(oxdnaPanel.selectJob).not.toHaveBeenCalled()
+    resolveOld([oxNode({ job_id: 'old' })])
+    await old
+    expect(document.querySelector('[data-job-id="old"]')).toBeNull()
+  })
+
   it('offers Thin job with an explanatory tooltip for completed NAMD jobs', async () => {
     mount()
     const { sim } = make([mdNode()])
@@ -1178,4 +1226,19 @@ it('shows last synced on a resumed Alpine progress readout', () => {
   expect(text).toContain('synced')
   expect(text).toContain('Last synced')
   expect(text).toContain('34')
+})
+
+it('shows each engine’s remembered directory when switching simulation tabs', () => {
+  mount()
+  localStorage.setItem('nadoc.runDir.oxdna', '/disk/dna-runs')
+  localStorage.setItem('nadoc.runDir.namd', '/disk/atom-runs')
+  const { sim } = make([])
+  const button = document.querySelector('#simulate-run-dir button')
+  expect(button.textContent).toContain('dna-runs')
+  sim.setActiveEngine('namd')
+  expect(button.textContent).toContain('atom-runs')
+  sim.setActiveEngine('oxdna')
+  expect(button.textContent).toContain('dna-runs')
+  localStorage.removeItem('nadoc.runDir.oxdna')
+  localStorage.removeItem('nadoc.runDir.namd')
 })

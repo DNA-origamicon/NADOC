@@ -550,9 +550,10 @@ export function initSimulateJobs({
   const deleteActionBtn = $('simulate-jobs-delete-btn')
   const archiveProgress = $('simulate-jobs-archive-progress')
 
-  // The ONE shared "📁 Directory" button, above the jobs list — sets where new runs (any
-  // engine) write their large trajectories. Each engine's create reads getRunDir().
-  mountDirectoryButton($('simulate-run-dir'), { api })
+  // The directory control follows the selected engine and remembers its own folder.
+  const directoryButton = mountDirectoryButton($('simulate-run-dir'), {
+    api, engine: engineSelector?.getSelected?.() || 'oxdna',
+  })
 
   let _nodes = []
   let _sel = { engine: null, id: null }
@@ -1138,7 +1139,7 @@ export function initSimulateJobs({
     try {
       // null means the server's default folder, which the Directory button already
       // displays. Resolve that same folder instead of treating null as no choice.
-      let destRoot = getRunDir()
+      let destRoot = getRunDir('namd')
       if (!destRoot) {
         const directory = await api.getMdRunDirStatus(null)
         if (!directory?.ok || !directory.path) {
@@ -1209,6 +1210,8 @@ export function initSimulateJobs({
   let _fetchEpoch = 0
   let _loadedPath = undefined
   let _listReady = false
+  let _documentGeneration = 0
+  let _endDocumentLoading = null
   const loadStatus = document.createElement('div')
   loadStatus.setAttribute('role', 'status')
   loadStatus.dataset.jobsLoadStatus = 'true'
@@ -1216,11 +1219,41 @@ export function initSimulateJobs({
   listEl.before(loadStatus)
   function _fetch() {
     if (_fetchPending) return _fetchPending
+    if (_loadedPath !== _currentPath()) {
+      _listReady = false
+      listEl.inert = true
+      _nodes = []
+      _sel = { engine: null, id: null }
+      _listSig = null
+      listEl.replaceChildren()
+      _renderMaster()
+    }
     const endLoading = beginPanelLoading(_loadedPath !== _currentPath() ? [
       cardHeader, document.querySelector('.left-tab-btn[data-tab="dynamics"]'),
     ] : [], 'Loading simulation jobs…')
-    _fetchPending = (async () => {
+    _endDocumentLoading = endLoading
+    const generation = _documentGeneration
+    const pending = (async () => {
+      // Membership first: this request never waits for geometry, remote services,
+      // artifact verification, or an old document's outstanding refresh.
+      if (_loadedPath !== _currentPath() && api.listSimJobSnapshot) {
+        const path = _currentPath()
+        const nodes = await api.listSimJobSnapshot(path).catch(() => null)
+        if (generation !== _documentGeneration) return
+        if (path === _currentPath() && Array.isArray(nodes)) {
+          _nodes = mergeCreatedNodes(nodes)
+          _loadedPath = path
+          _listReady = true
+          listEl.inert = false
+          listEl.removeAttribute('aria-busy')
+          loadStatus.hidden = true
+          _renderList()
+          _renderMaster()
+          endLoading()
+        }
+      }
       while (true) {
+        if (generation !== _documentGeneration) return
         if (_loadedPath !== _currentPath()) {
           _listReady = false
           listEl.inert = true
@@ -1231,13 +1264,15 @@ export function initSimulateJobs({
         // Resolve the path AFTER geometry/operation deferral, not at the initial
         // tab event when the file being opened may not yet have its workspace path.
         await whenOperationIdle()
+        if (generation !== _documentGeneration) return
         const path = _currentPath()
         const epoch = _fetchEpoch
         const nodes = await api.listSimJobs(path, false, { waitForIdle: false }).catch(() => null)
+        if (generation !== _documentGeneration) return
         if (path !== _currentPath() || epoch !== _fetchEpoch) continue
         if (!Array.isArray(nodes)) {
           loadStatus.hidden = false
-          loadStatus.textContent = 'Could not load jobs. '
+          loadStatus.textContent = _listReady ? 'Showing saved jobs; status refresh failed. ' : 'Could not load jobs. '
           const retry = document.createElement('button')
           retry.type = 'button'; retry.textContent = 'Retry'
           retry.onclick = () => { void _fetch() }
@@ -1262,8 +1297,12 @@ export function initSimulateJobs({
         _schedulePoll()
         return
       }
-    })().finally(() => { _fetchPending = null; endLoading() })
-    return _fetchPending
+    })().finally(() => {
+      if (_fetchPending === pending) _fetchPending = null
+      endLoading()
+    })
+    _fetchPending = pending
+    return pending
   }
   function _schedulePoll({ retryFailedFetch = false } = {}) {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
@@ -1306,15 +1345,30 @@ export function initSimulateJobs({
     }
   })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
-  window.addEventListener('nadoc:document-reset', () => creatingNodes.clear())
-  window.addEventListener('nadoc:workspace-path-change', () => {
+  function _clearDocumentJobs() {
     creatingNodes.clear()
+    _documentGeneration++
+    _endDocumentLoading?.()
+    _endDocumentLoading = null
     _fetchEpoch++
+    _fetchPending = null
+    if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
+    _loadedPath = undefined
     _listReady = false
     listEl.inert = true
+    listEl.removeAttribute('aria-busy')
+    loadStatus.hidden = true
     _sel = { engine: null, id: null }
+    _nodes = []
+    _listSig = null
+    listEl.replaceChildren()
     _renderMaster()
-    if (_dynamicsActive) _fetch()
+  }
+  window.addEventListener('nadoc:document-reset', _clearDocumentJobs)
+  window.addEventListener('nadoc:workspace-path-change', () => {
+    _clearDocumentJobs()
+    // Closing is synchronous; never query the old backend document with a null path.
+    if (_currentPath()) void _fetch()
   })
   // A job launched / stopped / resumed from an engine panel (each polls its OWN hidden
   // list) must WAKE the master: its poll re-arms only while it already has an active
@@ -1365,6 +1419,7 @@ export function initSimulateJobs({
   function setActiveEngine(engine) {
     if (!engine || engine === _activeEngine) return
     _activeEngine = engine
+    directoryButton?.setEngine?.(engine)
     _updateEngineLabel()
     if (_sel.id && !_visibleNodes().some((n) => n.engine === _sel.engine && n.job_id === _sel.id)) {
       if (_sel.engine === 'namd') mdPanel?.deselectJob?.()

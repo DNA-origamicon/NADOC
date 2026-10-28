@@ -3340,7 +3340,7 @@ def _default_namd_run_dir() -> Path:
 
 
 @router.get("/md/run-dir-status")
-def md_run_dir_status(path: Optional[str] = None) -> dict:
+def md_run_dir_status(path: Optional[str] = None, engine: str = "namd") -> dict:
     """Validate the run directory shown by the wizard.
 
     The default is created by NADOC. An explicit browser preference is never created here:
@@ -3348,7 +3348,11 @@ def md_run_dir_status(path: Optional[str] = None) -> dict:
     would hide the error the user needs to see.
     """
     is_default = not bool(path)
-    target = _default_namd_run_dir() if is_default else Path(path).expanduser()
+    folders = {"namd": "md_jobs", "oxdna": "oxdna_jobs", "lammps": "lammps_jobs",
+               "mrdna": "mrdna_jobs", "cando": "cando_jobs", "snupi": "snupi_jobs", "blade": "blade_jobs"}
+    if engine not in folders:
+        raise HTTPException(400, f"Unknown simulation engine: {engine}")
+    target = (_workspace() / folders[engine]) if is_default else Path(path).expanduser()
     if is_default:
         try:
             target.mkdir(parents=True, exist_ok=True)
@@ -3357,7 +3361,7 @@ def md_run_dir_status(path: Optional[str] = None) -> dict:
                 "ok": False,
                 "path": str(target),
                 "default": True,
-                "detail": f"Could not create NADOC's NAMD jobs folder: {exc}",
+                "detail": f"Could not create NADOC's {engine} jobs folder: {exc}",
             }
     exists = target.exists()
     is_dir = target.is_dir() if exists else False

@@ -660,11 +660,11 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
   const prepping = { job_id: 'j1', status: 'preparing', execution_target: 'alpine' }
   const ready = { job_id: 'j1', status: 'queued', execution_target: 'alpine' }
 
-  it('while the package is being built → a disabled, spinning Preparing…', () => {
+  it('while the Alpine package is built, keeps Submit disabled', () => {
     // NOT "■ Stop Run" (what the generic isActive branch gave it): the local phase of an
     // Alpine job exists only to produce a package, and its outcome is a submit.
     const rc = mdRunControl(prepping, connected)
-    expect(rc).toMatchObject({ action: 'preparing', label: 'Preparing…', disabled: true, spinner: true })
+    expect(rc).toMatchObject({ action: 'submit', label: '☁ Submit to Alpine', disabled: true, spinner: true })
   })
 
   it('once prepared → ☁ Submit to Alpine', () => {
@@ -694,9 +694,9 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     expect(rc.title).toMatch(/cluster/i)
   })
 
-  it('while the package uploads → Submitting…, disabled, so it cannot be sent twice', () => {
+  it('while the package uploads, keeps Submit disabled so it cannot be sent twice', () => {
     const rc = mdRunControl(ready, { ...connected, submitting: true })
-    expect(rc).toMatchObject({ label: 'Submitting…', disabled: true, spinner: true })
+    expect(rc).toMatchObject({ label: '☁ Submit to Alpine', disabled: true, spinner: true })
   })
 
   it('a SUBMITTED cluster job still stops (scancel), it does not offer submit again', () => {
@@ -1559,6 +1559,35 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect($('md-jobs-adv-toggle')).toBeNull()
     expect($('md-jobs-adv-body')).toBeNull()
     expect($('md-jobs-new-btn')).not.toBeNull()
+  })
+
+  it('keeps the real Alpine button gray and disabled across preparation/upload polling', async () => {
+    clearDom()
+    mountIds({ 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div', 'md-jobs-run-btn': 'button' })
+    let job = { job_id: 'A', execution_target: 'alpine', status: 'preparing', created_at: 1, design_source_path: '/w/alpine.nadoc' }
+    mdApi.listMdJobs.mockImplementation(async () => [{ ...job }])
+    mdApi.getMdJob.mockImplementation(async () => ({ ...job }))
+    const panel = initMdJobsPanel({ getClusterState: () => 'connected', getWorkspacePath: () => '/w/alpine.nadoc' })
+    await flushMicro()
+    await panel.selectJob('A')
+    const button = $('md-jobs-run-btn')
+    for (const phase of ['preparing', 'preflight', 'upload', 'sbatch']) {
+      job = { ...job, status: phase === 'preparing' ? 'preparing' : 'queued',
+        remote_submit_progress: phase === 'preparing' ? null : { phase, fraction: .5 } }
+      await panel.refresh()
+      await flushMicro()
+      expect(button.textContent).toBe('☁ Submit to Alpine')
+      expect(button.disabled).toBe(true)
+      expect(button.style.background).toBe('rgb(33, 38, 45)')
+      expect(button.style.cursor).toBe('not-allowed')
+      button.click()
+      expect(mdApi.startMdJob).not.toHaveBeenCalled()
+    }
+    job = { ...job, status: 'running', slurm_job_id: '42', remote_submit_progress: null }
+    await panel.refresh()
+    await flushMicro()
+    expect(button.dataset.runAction).toBe('stop')
   })
 
   it('selecting a job selects its Local, Alpine, or RunPod cluster-card pane', async () => {
@@ -2867,5 +2896,19 @@ describe('MD starting structure selection', () => {
     finishSeed({ ok: true, n: 10 }); await flush()
     expect(document.getElementById('md-jobs-display-status').textContent).not.toContain('Inherited oxDNA-seed')
     toggle.checked = false; toggle.dispatchEvent(new Event('change'))
+  })
+})
+
+describe('Alpine persisted submission phases', () => {
+  it.each(['preparing', 'queued', 'running'])(
+    'keeps Submit disabled for %s upload records without a browser request flag', status => {
+      const job = { status, execution_target: 'alpine', remote_submit_progress: { phase: 'upload', fraction: .4 } }
+      expect(mdRunControl(job, { clusterState: 'connected' })).toMatchObject({
+        action: 'submit', label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      })
+    })
+  it('keeps the submission guard ahead of draft and sequence gates', () => {
+    expect(mdRunControl({ status: 'draft', execution_target: 'alpine', awaiting_sequence: true },
+      { submitting: true })).toMatchObject({ action: 'submit', disabled: true, label: '☁ Submit to Alpine' })
   })
 })

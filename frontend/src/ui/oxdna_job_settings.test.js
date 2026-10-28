@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { createOxdnaJobSettings, relaxationElementsSettings } from './oxdna_job_settings.js'
+import { createOxdnaJobSettings, continuationElementsSettings, relaxationElementsSettings, relaxationElementsSignature } from './oxdna_job_settings.js'
 afterEach(() => vi.useRealTimers())
 
 it('autosaves anchors without Run or an explicit flush', async () => {
@@ -55,4 +55,17 @@ it('retains a failed edit and makes a run flush fail until saving succeeds', asy
 it('explicitly clears disabled surface forces and removed anchors', () => {
   expect(relaxationElementsSettings({ surface: { enabled: false }, anchors: [], surfaceAnchors: [{}] }))
     .toEqual({ surface: null, anchors: [], surface_anchors: [], surface_strands: null })
+})
+
+
+it('saves continuation field changes and explicit removal, while relaxation remains field-free', () => {
+  const field = { enabled: true, field_pN: 2, dir: [0, 0, 1] }
+  const first = continuationElementsSettings({ field })
+  expect(first.field).toEqual({ field_pN: 2, dir: [0, 0, 1] })
+  for (const change of [{ ...field, field_pN: 3 }, { ...field, dir: [0, -1, 0] }, { ...field, enabled: false }]) {
+    expect(relaxationElementsSignature(continuationElementsSettings({ field: change })))
+      .not.toBe(relaxationElementsSignature(first))
+  }
+  expect(continuationElementsSettings({ field: { ...field, enabled: false } }).field).toBeNull()
+  expect(relaxationElementsSettings({ field })).not.toHaveProperty('field')
 })
