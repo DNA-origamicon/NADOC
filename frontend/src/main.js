@@ -257,6 +257,7 @@ import { initMenuFlyouts } from './ui/menu_flyouts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
+import { initCircleGraph } from './ui/circle_graph.js'
 import { initViewMenuPills } from './ui/view_menu_pills.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -3933,6 +3934,7 @@ async function main() {
   // ui/view_menu_pills.js. `_setMenuToggle` (43-use shared util) stays here and is
   // injected. The factory registers its store subscriber + runs the initial
   // import-visibility sync at this exact point → subscription order preserved.
+  initCircleGraph({ store })
   initViewMenuPills({ store, setMenuToggle: _setMenuToggle })
 
   // ── Browser tab title ────────────────────────────────────────────────────────
