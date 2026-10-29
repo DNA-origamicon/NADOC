@@ -109,6 +109,64 @@ def test_generated_compiler_rejects_planned_output_substitution():
     assert history.design == state.get_or_404()
 
 
+def nick_plan():
+    from backend.api.two_np_build import _handles
+    from tests.test_joined_branches import _source
+
+    source = _source(True)  # Four particles with their existing native handles.
+    original = source.model_dump_json()
+    settings = GeneratorSettings(connections_per_particle=1)
+    history = GeneratedHistory(source, settings)
+    raw = Design(lattice_type=source.lattice_type)
+    params = dict(cells=[[0, 0]], length_bp=32, history_seed=str(uuid4()), _proof_version=1)
+    before = execute("extrude-segment", raw, params)
+    history.record(raw, before, "extrude-segment", "Extrude", params, "extrude")
+    dom = before.strands[0].domains[0]
+    before, handles = _handles(source, before, source.nanoparticles, settings, history)
+    assert all(reused for _, _, _, reused in handles)
+    assert source.model_dump_json() == original
+    params = dict(helix_id=dom.helix_id, bp_index=15, direction=dom.direction.value,
+                  _proof_version=1)
+    return source, history, before, execute("nick", before, params), params
+
+
+def test_generated_reused_handles_preserve_native_order_through_nick_and_edit():
+    from backend.core.part_history_proof import AUTHORING_FIELDS
+
+    source, history, before, after, params = nick_plan()
+    history.record(before, after, "nick", "Nick", params, "nick")
+    target = after.strands[-1]
+    params = dict(strand_id=target.id, name="Edited strand", _proof_version=1)
+    edited = execute("strand-patch", after, params)
+    history.record(after, edited, "strand-patch", "Name strand", params, "name")
+    # Independently replay inputs, without consuming any stored result snapshots.
+    replayed = source
+    for entry in history.design.feature_log[len(source.feature_log):]:
+        if getattr(entry, "children", None):
+            for child in entry.children:
+                replayed = execute(child.op_subtype, replayed, child.params)
+        else:
+            replayed = execute(entry.op_kind, replayed, entry.params)
+    assert history.design.model_dump(include=AUTHORING_FIELDS) == replayed.model_dump(
+        include=AUTHORING_FIELDS
+    )
+    assert [s for s in history.design.strands if s.id in {s.id for s in source.strands}] == source.strands
+
+
+@pytest.mark.parametrize("defect", ["content", "missing"])
+def test_generated_nick_rejects_planned_strand_changes_atomically(defect):
+    source, history, before, after, params = nick_plan()
+    target = next(s for s in after.strands if s.id not in {s.id for s in source.strands})
+    if defect == "content":
+        target.name = "Substituted planned strand"
+    else:
+        after = after.copy_with(strands=[s for s in after.strands if s.id != target.id])
+    original = history.design.model_dump_json()
+    with pytest.raises(ValueError, match="differs from native execution"):
+        history.record(before, after, "nick", "Nick", params, "nick")
+    assert history.design.model_dump_json() == original
+
+
 def test_legacy_compound_output_is_explicitly_unverified():
     from backend.api.generated_commands import certify_entries
     from backend.core.models import SnapshotLogEntry

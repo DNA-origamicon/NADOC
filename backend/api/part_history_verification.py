@@ -7,7 +7,6 @@ from backend.api import state
 from backend.api.part_work_admission import WorkAdmission
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_verification_capture import CaptureLimit
-from backend.api.part_proof_commands import execute, dependencies
 
 
 # One owner for full-document work. Ordinary consumers still fail immediately;
@@ -19,6 +18,9 @@ def verify_current_part():
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history check is already running; retry later.")
     try:
+        # Other worker hosts share admission without executing native commands.
+        from backend.api.part_proof_commands import execute, dependencies
+
         source, isolated, revision = state.capture_design_for_verification()
         deadline = monotonic() + 0.5
         def checkpoint():

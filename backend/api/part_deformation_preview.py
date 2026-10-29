@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from math import ceil, dist, isfinite
 from time import monotonic
 
-from backend.api.part_proof_commands import dependencies, execute
 from backend.core.models import BendParams, DeformationLogEntry, DeformationOp, Design, TwistParams
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_history_contract import FIELD_ROLES
@@ -74,6 +73,17 @@ ORDINARY_UNESTIMATED = frozenset({
     "strand-delete-batch", "strand-patch", "strand-update", "strands-color-bulk", "strands-reference",
 })
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
+
+
+def dependencies(kind, params):
+    # Display-only admission reuses this module without executing a recipe.
+    from backend.api.part_proof_commands import dependencies as native_dependencies
+    return native_dependencies(kind, params)
+
+
+def execute(kind, design, params):
+    from backend.api.part_proof_commands import execute as native_execute
+    return native_execute(kind, design, params)
 
 
 def _reject(detail, code="unsupported_preview_scope"):

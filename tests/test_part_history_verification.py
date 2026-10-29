@@ -6,6 +6,18 @@ from backend.core.models import Design, RoutingClusterLogEntry, SnapshotLogEntry
 from backend.core.part_history_contract import FIELD_ROLES, PartRecipeRoot, assess_part_history
 
 
+@pytest.mark.parametrize('module', ['part_history_verification', 'part_deformation_preview_dto'])
+def test_work_admission_and_display_imports_do_not_load_native_proof_commands(module):
+    import subprocess
+    import sys
+
+    result = subprocess.run([sys.executable, '-c',
+        f'import backend.api.{module}; import sys; '
+        'assert "backend.api.part_proof_commands" not in sys.modules'],
+        capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+
+
 def test_every_design_field_has_an_explicit_proof_role():
     assert FIELD_ROLES.keys() == Design.model_fields.keys()
 

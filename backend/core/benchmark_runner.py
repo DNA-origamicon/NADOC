@@ -282,7 +282,19 @@ async def _run_namd_bench(
         try:
             return await proc.wait()
         except asyncio.CancelledError:
-            _kill_process_group(proc.pid)
+            async def reap():
+                # The child watcher needs this loop to process exit notifications.
+                await asyncio.to_thread(_kill_process_group, proc.pid)
+                await proc.wait()
+
+            cleanup = asyncio.create_task(reap())
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    # Repeated Cancel must not release the workdir before reaping.
+                    continue
+            cleanup.result()
             raise
 
 

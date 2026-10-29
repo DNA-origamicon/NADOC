@@ -534,6 +534,52 @@ def test_eta_none_before_first_trial_and_when_done():
 # ── Cancellation ──────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+def test_namd_cancel_keeps_loop_responsive_and_reaps_before_return(tmp_path, monkeypatch, repeat_cancel):
+    from threading import Event
+    from backend.core import namd_runner
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        started, reaped = asyncio.Event(), Event()
+        waited_after_cancel = []
+
+        class Process:
+            pid = 123
+
+            async def wait(self):
+                if not started.is_set():
+                    started.set()
+                    await asyncio.Event().wait()
+                assert reaped.is_set()
+                waited_after_cancel.append(True)
+                return -15
+
+        async def spawn(*args, **kwargs):
+            return Process()
+
+        def kill(pid):
+            assert pid == 123
+            # Process-exit notification needs the same loop being cancelled.
+            if repeat_cancel:
+                loop.call_soon_threadsafe(task.cancel)
+            loop.call_soon_threadsafe(reaped.set)
+            assert reaped.wait(1), "Cancellation cleanup blocked process-exit notification"
+
+        monkeypatch.setattr(br.asyncio, "create_subprocess_exec", spawn)
+        monkeypatch.setattr(namd_runner, "_core_binding_prefix", lambda threads: [])
+        monkeypatch.setattr(namd_runner, "_kill_process_group", kill)
+        task = asyncio.create_task(br._run_namd_bench(
+            "/unused/namd", "bench", tmp_path, tmp_path / "bench.log", 2, ""))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert waited_after_cancel == [True]
+
+    asyncio.run(scenario())
+
+
 def test_cancel_running_benchmark_kills_and_keeps_state(tmp_path, monkeypatch):
     monkeypatch.setenv("OXDNA_BIN", "/usr/bin/true")
 

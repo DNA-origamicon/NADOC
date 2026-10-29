@@ -71,17 +71,18 @@ def _handles(source, rod, particles, settings, history=None):
     strand_ids = {r.strand_id for c in conjugations for r in c.surface_strands}
     helix_ids = {r.helix_id for c in conjugations for r in c.surface_strands}
     before = rod
+    # These handles already precede newly generated DNA in the destination.
+    # Keep that same local order so subsequent native commands compose exactly.
     rod = rod.copy_with(
         nanoparticles=particles,
         nanoparticle_conjugations=conjugations,
-        strands=[*rod.strands, *(s for s in detached.strands if s.id in strand_ids)],
-        helices=[*rod.helices, *(h for h in detached.helices if h.id in helix_ids)],
+        strands=[*(s for s in detached.strands if s.id in strand_ids), *rod.strands],
+        helices=[*(h for h in detached.helices if h.id in helix_ids), *rod.helices],
         overhangs=[
-            *rod.overhangs,
             *(o for o in detached.overhangs if o.strand_id in strand_ids),
+            *rod.overhangs,
         ],
         staple_groups=[
-            *rod.staple_groups,
             *(
                 g.model_copy(
                     update={
@@ -91,6 +92,7 @@ def _handles(source, rod, particles, settings, history=None):
                 for g in detached.staple_groups
                 if strand_ids.intersection(g.strand_ids)
             ),
+            *rod.staple_groups,
         ],
     )
     # An applied handle's saved unbound helix can predate a particle move.

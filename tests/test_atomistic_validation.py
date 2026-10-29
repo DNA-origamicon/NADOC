@@ -509,13 +509,16 @@ def test_audit_trajectory_frames_catches_bad_frame(design, tmp_path):
     carry it inherently; only true soundness breaks fail a frame.)"""
     import copy
     from backend.core.atomistic_validation import audit_trajectory_frames
+    from backend.physics.native_oxdna import native_full_to_oxdna_geometry
     from backend.physics.oxdna_interface import write_configuration
 
     geo = _geometry_for_design(design)
     ref = tmp_path / "ref.dat"
     write_configuration(design, geo, ref, box_nm=200.0)
 
-    bad = copy.deepcopy(geo)
+    # Corrupt a physical frame, after converting its native O5' landmarks to
+    # oxDNA centres. Moving native sites without their frames must still refuse.
+    bad = copy.deepcopy(native_full_to_oxdna_geometry(design, geo))
     fwd = {
         (n["helix_id"], n["bp_index"]): n["backbone_position"]
         for n in bad

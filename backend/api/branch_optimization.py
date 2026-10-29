@@ -55,10 +55,12 @@ def _screen(lattice_value, serialized_summary):
                     "Stapled curvature cannot fit this scaffold with a safe end adjustment."
                 )
             continue
+        # Curvature may change insertion/deletion counts after autostapling.
+        # Match Generate's resequencing before validating either branch family.
+        with scratch_session(lattice):
+            state.set_design(stapled)
+            stapled = full_sequence(summary["scaffold_name"]).model_copy(deep=True)
         if joined:
-            with scratch_session(lattice):
-                state.set_design(stapled)
-                stapled = full_sequence(summary["scaffold_name"]).model_copy(deep=True)
             if physical_scaffold_nt(stapled) != budget:
                 raise ValueError(
                     "The joined core must use the entire selected scaffold."
