@@ -2337,7 +2337,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     running) finds the orphan via /proc (self-verifying) or the persisted ``oxdna_pid``,
     kills it, and marks the job stopped so it stays controllable."""
     local = _RUNNING.get(job_id)
-    requested = runtime.request_stop(Path(workspace_dir) / "oxdna_jobs" / job_id)
+    requested = runtime.request_stop(runtime.job_path("oxdna_jobs", job_id, workspace_dir))
     if not (local and local.thread.is_alive()) and requested:
         return True
 

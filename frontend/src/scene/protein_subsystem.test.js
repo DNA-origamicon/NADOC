@@ -149,6 +149,35 @@ describe('initProteinSubsystem', () => {
     sub.dispose()
   })
 
+  it('preserves a paused trajectory pose across representation changes and atom refreshes', async () => {
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }) })
+    const sub = initProteinSubsystem(makeDeps())
+    await sub.refresh()
+    const pose = { p1: [1,0,0,10, 0,1,0,20, 0,0,1,30, 0,0,0,1] }
+    sub.renderer.applyOxdnaTransforms(pose)
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'ballstick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(pose)
+    _lastRenderer.applyOxdnaTransforms.mockClear()
+    await sub.refresh()
+    expect(_lastRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(pose)
+    sub.renderer.clearOxdnaTransforms()
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'stick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).not.toHaveBeenCalled()
+    sub.dispose()
+  })
+
+  it('does not carry a protein pose into another document', async () => {
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }) })
+    const deps = makeDeps({ currentDesign: { id: 'first' } })
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+    sub.renderer.applyOxdnaTransforms({ p1: [1,0,0,10, 0,1,0,0, 0,0,1,0, 0,0,0,1] })
+    deps.store.setState({ currentDesign: { id: 'second' } })
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'ballstick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).not.toHaveBeenCalled()
+    sub.dispose()
+  })
+
   it('uses the protein ovoid renderer for cylinders', async () => {
     global.fetch.mockResolvedValue({
       ok: true,

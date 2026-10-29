@@ -43,6 +43,11 @@ const lmNode = (o = {}) => ({ engine: 'lammps', job_id: 'lm1', parent_job_id: nu
   current_step: 1000, ...o })
 
 describe('pure helpers', () => {
+  it.each(['queued', 'stopped', 'paused', 'failed'])('job lifecycle %s overrides a leftover running production stage', status => {
+    const text = masterStatusText(oxNode({ status, production_state: 'running' }))
+    expect(text).toContain(status)
+    expect(text).not.toContain('production running')
+  })
   it('nodeNeedsPolling excludes a job that was created but never started', () => {
     // `＋ New job → Create job` leaves a solvated package at `queued` waiting for the
     // user. It is "active" for spinner purposes but its state cannot change on its own,
@@ -439,6 +444,26 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it.each([false, true])('commits selection only when the trajectory dialog accepts it (%s)', async accepted => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode(), oxNode({ job_id: 'next', status: 'queued' })])
+    await sim.refresh()
+    sim.selectJob('ox1')
+    let resolve
+    oxdnaPanel.selectJob.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = sim.selectJob('next')
+    expect(sim.getSelected().id).toBe('ox1')
+    expect(document.querySelector('[data-job-id="next"] [data-selection-pending]')).not.toBeNull()
+    resolve(accepted)
+    await pending
+    expect(document.querySelector('[data-selection-pending]')).toBeNull()
+    expect(sim.getSelected().id).toBe(accepted ? 'next' : 'ox1')
+    if (!accepted) {
+      await sim.selectJob('next')
+      expect(sim.getSelected().id).toBe('next')
+    }
+  })
+
   it('selects pending creation immediately and replaces it without waiting for list refresh', async () => {
     mount()
     const { sim, mdPanel } = make([mdNode()])

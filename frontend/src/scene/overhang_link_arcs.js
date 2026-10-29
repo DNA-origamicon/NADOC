@@ -76,6 +76,9 @@ export function initOverhangLinkArcs(scene) {
   // the random-walk shape).
   let _lastDesign = null
   let _lastGeometry = null
+  let _simulationPositions = null
+  let _simulationAmp = 1
+  const keyOf = n => `${n.helix_id}:${n.bp_index}:${n.direction}:${n.copy ?? 0}`
   ensureFjcLookup().catch(() => {})
   onFjcLookupLoaded(() => {
     if (_lastDesign && _lastGeometry) rebuild(_lastDesign, _lastGeometry)
@@ -86,6 +89,7 @@ export function initOverhangLinkArcs(scene) {
     _lastGeometry = geometry
     _clear()
     if (!design || !geometry) {
+      _simulationPositions = null
       if (DEBUG) console.debug('[overhangLinkArcs] skip rebuild — design=%o geometry=%o', !!design, !!geometry)
       return
     }
@@ -93,7 +97,7 @@ export function initOverhangLinkArcs(scene) {
     const nucs = Array.isArray(geometry) ? geometry : (geometry.nucleotides ?? [])
     const conns = design.overhang_connections ?? []
     if (DEBUG) console.debug('[overhangLinkArcs] rebuild: %d connection(s), %d nucs in geometry', conns.length, nucs.length)
-    if (conns.length === 0) return
+    if (conns.length === 0) { _simulationPositions = null; return }
     const nucsByOvhg   = _indexNucsByOverhang(nucs)
     const nucsByStrand = _indexNucsByStrand(nucs)
     const strandById   = new Map((design.strands ?? []).map(s => [s.id, s]))
@@ -129,6 +133,7 @@ export function initOverhangLinkArcs(scene) {
         group.add(ssGroup)
         const entry = {
           connId: conn.id,
+          conn, anchorA: a, anchorB: b, nucsByStrand,
           strandIds,
           group: ssGroup,
           kind: 'ss',
@@ -154,6 +159,7 @@ export function initOverhangLinkArcs(scene) {
         group.add(dsGroup)
         _ssEntries.push({
           connId: conn.id,
+          conn, anchorA: a, anchorB: b, nucsByStrand,
           strandIds,
           group: dsGroup,
           kind: 'ds',
@@ -182,6 +188,46 @@ export function initOverhangLinkArcs(scene) {
     _applyHighlight()          // paints cluster colour when in cluster mode
     _applyClusterAlpha()
     _applyDetailVisibility()
+    if (_simulationPositions) _applySimulation()
+  }
+
+  // Only retain coordinates belonging to these linkers, not the full trajectory.
+  function applyFemPositions(updates, amp = 1) {
+    if (!_ssEntries.length) { _simulationPositions = null; return }
+    _simulationAmp = amp
+    if (updates) {
+      const wanted = new Set()
+      for (const e of _ssEntries) {
+        wanted.add(keyOf(e.nucA)); wanted.add(keyOf(e.nucB))
+        for (const sid of e.strandIds) {
+          for (const n of e.nucsByStrand.get(sid) ?? []) wanted.add(keyOf(n))
+        }
+      }
+      _simulationPositions = new Map(updates.filter(n => wanted.has(keyOf(n))).map(n => [keyOf(n), n]))
+    } else _simulationPositions = null
+    _applySimulation()
+  }
+
+  function _applySimulation() {
+    const project = n => {
+      const u = _simulationPositions?.get(keyOf(n))
+      if (!u) return n
+      const native = n.backbone_position ?? n.base_position
+      return { ...n, backbone_position: native.map((v, i) => v + _simulationAmp * (u.backbone_position[i] - v)),
+        base_normal: Number.isFinite(u.nx) ? [u.nx, u.ny, u.nz] : n.base_normal,
+        axis_tangent: Number.isFinite(u.tx) ? [u.tx, u.ty, u.tz] : n.axis_tangent }
+    }
+    for (const e of _ssEntries) {
+      const anchor = a => { const nuc = project(a.nuc); return { ...a, nuc, pos: _vec3(nuc.backbone_position ?? nuc.base_position) } }
+      const a = anchor(e.anchorA), b = anchor(e.anchorB)
+      if (e.kind === 'ss') {
+        _makeSsLinkerMeshes(e.conn, a, b, e.defaultColor, !!e.conn.bridge_relaxed,
+          e.conn.bridge_relaxed ? (e.conn.bridge_bin_index ?? 0) : null, e.group)
+      } else {
+        const strands = new Map(e.strandIds.map(sid => [sid, (e.nucsByStrand.get(sid) ?? []).map(project)]))
+        _makeDsLinkerMeshes(e.conn, a, b, strands, e.defaultColor, e.defaultColor, e.strandIds, e.group)
+      }
+    }
   }
 
   /** Re-read the cluster colour/alpha lookups off a design. */
@@ -246,6 +292,8 @@ export function initOverhangLinkArcs(scene) {
   }
 
   function dispose() {
+    _simulationPositions = null
+    _lastDesign = _lastGeometry = null
     _clear()
     if (group.parent) group.parent.remove(group)
   }
@@ -431,7 +479,7 @@ export function initOverhangLinkArcs(scene) {
     refreshClusterDisplay(newState.currentDesign)
   })
 
-  return { rebuild, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales, refreshClusterDisplay }
+  return { rebuild, applyFemPositions, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales, refreshClusterDisplay }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -649,21 +697,19 @@ function _hasArcFrame(nuc) {
   return Array.isArray(nuc?.axis_tangent) && Array.isArray(nuc?.base_normal)
 }
 
-function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcShape = false, binIndex = null) {
+function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcShape = false, binIndex = null, existing = null) {
   const baseCount = linkerLengthToBases(conn)
-  const group = new THREE.Group()
+  const group = existing ?? new THREE.Group()
   group.name = 'overhangSsLinkerBases'
-  group.userData = {
+  if (!existing) group.userData = {
     debugType: 'overhangSsLinkerBases',
     baseCount,
     connId: conn.id,
     defaultColor: color,
   }
 
-  const beadMat = new THREE.MeshPhongMaterial({ color })
-  const slabMat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.90 })
-  const beads = new THREE.InstancedMesh(GEO_SS_BEAD, beadMat, baseCount)
-  const slabs = new THREE.InstancedMesh(GEO_SS_SLAB, slabMat, baseCount)
+  const beads = existing?.getObjectByName('overhangSsLinkerBeads') ?? new THREE.InstancedMesh(GEO_SS_BEAD, new THREE.MeshPhongMaterial({ color }), baseCount)
+  const slabs = existing?.getObjectByName('overhangSsLinkerSlabs') ?? new THREE.InstancedMesh(GEO_SS_SLAB, new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.90 }), baseCount)
   beads.frustumCulled = false
   slabs.frustumCulled = false
   beads.name = 'overhangSsLinkerBeads'
@@ -756,8 +802,10 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcSh
     }
   }
 
-  let backbone = null
-  if (backboneCurve) {
+  let backbone = existing?.getObjectByName('overhangSsLinkerBackboneArc') ?? null
+  if (backboneCurve && backbone) {
+    _updateTube(backbone, backboneCurve, SS_ARC_RADIUS)
+  } else if (backboneCurve) {
     backbone = new THREE.Mesh(
       new THREE.TubeGeometry(backboneCurve, ARC_TUBE_SEGS, SS_ARC_RADIUS, 8, false),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }),
@@ -767,8 +815,10 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcSh
 
   beads.instanceMatrix.needsUpdate = true
   slabs.instanceMatrix.needsUpdate = true
-  if (backbone) group.add(backbone, beads, slabs)
-  else          group.add(beads, slabs)
+  if (!existing) {
+    if (backbone) group.add(backbone, beads, slabs)
+    else group.add(beads, slabs)
+  }
   return group
 }
 
@@ -786,11 +836,11 @@ function _bridgeBoundaryPos(nucsByStrand, connId, side, bpIndex) {
   return _vec3(requireNativeBackbonePosition(nuc))
 }
 
-function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR, strandIds = null) {
+function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_COLOR, colorB = ARC_COLOR, strandIds = null, existing = null) {
   const baseCount = linkerLengthToBases(conn)
-  const group = new THREE.Group()
+  const group = existing ?? new THREE.Group()
   group.name = 'overhangDsLinkerSegment'
-  group.userData = {
+  if (!existing) group.userData = {
     debugType: 'overhangDsLinkerSegment',
     baseCount,
     connId: conn.id,
@@ -821,16 +871,31 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_
   // highlight just the clicked half of the duplex.
   const sidA = strandIds?.[0] ?? `__lnk__${conn.id}__a`
   const sidB = strandIds?.[1] ?? `__lnk__${conn.id}__b`
-  const ARC_EPSILON = 1e-3
-  if (posA.distanceTo(bridgeA) > ARC_EPSILON) {
-    const arcA = _makeTubeMesh([posA, _quadraticCtrlBetween(posA, bridgeA, frame.z), bridgeA], DS_ARC_RADIUS, colorA, 'overhangDsConnectorArcA')
-    arcA.userData.strandId = sidA
-    group.add(arcA)
-  }
-  if (posB.distanceTo(bridgeB) > ARC_EPSILON) {
-    const arcB = _makeTubeMesh([posB, _quadraticCtrlBetween(posB, bridgeB, frame.z), bridgeB], DS_ARC_RADIUS, colorB, 'overhangDsConnectorArcB')
-    arcB.userData.strandId = sidB
-    group.add(arcB)
+  for (const [name, pos, bridge, color, sid] of [
+    ['overhangDsConnectorArcA', posA, bridgeA, colorA, sidA],
+    ['overhangDsConnectorArcB', posB, bridgeB, colorB, sidB],
+  ]) {
+    const points = [pos, _quadraticCtrlBetween(pos, bridge, frame.z), bridge]
+    let arc = group.getObjectByName(name)
+    if (arc) _updateTube(arc, new THREE.QuadraticBezierCurve3(...points), DS_ARC_RADIUS)
+    else {
+      arc = _makeTubeMesh(points, DS_ARC_RADIUS, color, name)
+      arc.userData.strandId = sid
+      group.add(arc)
+    }
+    arc.scale.setScalar(pos.distanceTo(bridge) > 1e-3 ? 1 : 0)
   }
   return group
+}
+
+function _updateTube(mesh, curve, radius) {
+  const next = new THREE.TubeGeometry(curve, ARC_TUBE_SEGS, radius, 8, false)
+  for (const name of ['position', 'normal']) {
+    mesh.geometry.attributes[name].array.set(next.attributes[name].array)
+    mesh.geometry.attributes[name].needsUpdate = true
+  }
+  mesh.geometry.parameters = next.parameters
+  mesh.geometry.computeBoundingSphere()
+  mesh.geometry.computeBoundingBox()
+  next.dispose()
 }

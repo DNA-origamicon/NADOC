@@ -944,25 +944,19 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         const arr = transforms[id]
         if (Array.isArray(arr) && arr.length === 16) mats[id] = new THREE.Matrix4().set(...arr)
       }
-      const v = new THREE.Vector3()
-      const touched = new Set()
       const table = _state.atoms
-      for (const [el, group] of Object.entries(_state.elementAtoms)) {
-        const mesh = _state.elementMeshes[el]
-        if (!mesh) continue
-        for (let i = 0; i < group.length; i++) {
-          const r = group[i]
-          const hid = table.helixId(r)
-          const sid = (typeof hid === 'string' && hid.startsWith(PFX))
-            ? hid.slice(PFX.length) : null
-          const m = sid ? mats[sid] : null
-          v.set(table.x(r), table.y(r), table.z(r))
-          if (m) v.applyMatrix4(m)
-          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementScale[el]))
-          touched.add(mesh)
-        }
+      const positions = new Float64Array(table.count * 3)
+      const v = new THREE.Vector3()
+      for (let row = 0; row < table.count; row++) {
+        const hid = table.helixId(row)
+        const id = typeof hid === 'string' && hid.startsWith(PFX) ? hid.slice(PFX.length) : null
+        v.set(table.x(row), table.y(row), table.z(row))
+        if (id && mats[id]) v.applyMatrix4(mats[id])
+        v.toArray(positions, row * 3)
       }
-      for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
+      // Atoms and bond cylinders must consume the same transformed coordinates.
+      // Row offsets also support sparse/non-contiguous source atom serials.
+      _applySnapshot(positions, _snapshotOffsets(row => row * 3))
     },
 
     /** Restore every protein to its design pose (clear OxDNA-display transforms). */

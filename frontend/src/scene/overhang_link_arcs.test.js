@@ -231,3 +231,64 @@ describe('overhang link arcs — per-cluster display', () => {
     expect(mats(arcs)[0].opacity).toBeCloseTo(base, 5)
   })
 })
+
+describe('linker arcs during simulation playback', () => {
+  const n = (helix, bp, strand, pos, extra = {}) => ({ helix_id: helix, bp_index: bp,
+    direction: 'FORWARD', strand_id: strand, backbone_position: pos, ...extra })
+  const geometry = [
+    n('a', 0, 'ohA', [0, 0, 0], { overhang_id: 'oa', is_five_prime: true }),
+    n('b', 0, 'ohB', [4, 0, 0], { overhang_id: 'ob', is_five_prime: true }),
+    n('a', 0, '__lnk__c__s', [0, 1, 0], { direction: 'REVERSE' }),
+    n('b', 0, '__lnk__c__s', [4, 1, 0], { direction: 'REVERSE' }),
+  ]
+  const design = { strands: [], overhang_connections: [{ id: 'c', linker_type: 'ss',
+    overhang_a_id: 'oa', overhang_a_attach: 'free_end',
+    overhang_b_id: 'ob', overhang_b_attach: 'free_end', length_value: 0, length_unit: 'bp' }] }
+  const endpoint = (mesh, t) => mesh.geometry.parameters.path.getPoint(t).toArray()
+
+  it('moves both ends with the simulated complement, reuses buffers, and restores native coordinates', () => {
+    const arcs = initOverhangLinkArcs(new THREE.Scene())
+    arcs.rebuild(design, geometry)
+    const mesh = arcs.group.getObjectByName('overhangSsLinkerBackboneArc')
+    const buffer = mesh.geometry.attributes.position
+    const native = Array.from(buffer.array)
+    const updates = geometry.map(n => ({ ...n, backbone_position: n.backbone_position.map(v => v + 10) }))
+    // A loop copy must not replace the actual endpoint's coordinates.
+    updates.push({ ...updates[2], copy: 1, backbone_position: [99, 99, 99] })
+    arcs.applyFemPositions(updates)
+    expect(endpoint(mesh, 0)).toEqual([10, 11, 10])
+    expect(endpoint(mesh, 1)).toEqual([14, 11, 10])
+    expect(mesh.geometry.attributes.position).toBe(buffer)
+    expect(Array.from(buffer.array)).not.toEqual(native)
+    expect(geometry[2].backbone_position).toEqual([0, 1, 0])
+    arcs.applyFemPositions(updates, 0.5)
+    expect(endpoint(mesh, 0)).toEqual([5, 6, 5])
+    // A metadata refresh cannot put the arc back in its native position.
+    arcs.rebuild({ ...design }, geometry)
+    expect(endpoint(arcs.group.getObjectByName(mesh.name), 0)).toEqual([5, 6, 5])
+    arcs.applyFemPositions(null)
+    expect(Array.from(arcs.group.getObjectByName(mesh.name).geometry.attributes.position.array)).toEqual(native)
+    arcs.rebuild(null, null)
+    arcs.rebuild(design, geometry)
+    expect(endpoint(arcs.group.getObjectByName(mesh.name), 0)).toEqual([0, 1, 0])
+    arcs.dispose()
+  })
+
+  it('updates ds connector anchors and bridge ends, including initially collapsed connectors', () => {
+    const dsDesign = { ...design, overhang_connections: [{ ...design.overhang_connections[0], linker_type: 'ds', length_value: 2 }] }
+    const nucs = [geometry[0], geometry[1],
+      n('__lnk__c', 0, '__lnk__c__a', [0, 0, 0]),
+      n('__lnk__c', 1, '__lnk__c__b', [4, 0, 0])]
+    const arcs = initOverhangLinkArcs(new THREE.Scene())
+    arcs.rebuild(dsDesign, nucs)
+    const a = arcs.group.getObjectByName('overhangDsConnectorArcA')
+    expect(a.scale.x).toBe(0)
+    arcs.applyFemPositions(nucs.map((n, i) => ({ ...n, backbone_position: [i, i + 10, 2] })))
+    expect(endpoint(a, 0)).toEqual([0, 10, 2])
+    expect(endpoint(a, 1)).toEqual([2, 12, 2])
+    expect(a.scale.x).toBe(1)
+    arcs.applyFemPositions(null)
+    expect(a.scale.x).toBe(0)
+    arcs.dispose()
+  })
+})

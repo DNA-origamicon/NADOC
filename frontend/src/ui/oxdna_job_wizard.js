@@ -90,6 +90,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
   onParentChange = () => {} } = {}) {
   let modal, targetStep, currentTab = 'target', values = oxdnaWizardDefaults(), busy = false
   let editJob = null, derivedEditor = null, derivedError = null
+  let readOnly = false
   let settingsStageTable = null
   let settingsEstimate = null
   let mode = 'relax', parentJobId = null
@@ -428,6 +429,12 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
   }
 
   function paint() {
+    if (readOnly) {
+      previousBtn.style.display = 'none'
+      nextBtn.style.display = 'none'
+      createBtn.style.display = 'none'
+      return
+    }
     renderSource()
     const activeTabs = tabsForMode()
     for (const [id] of ALL_TABS) {
@@ -473,7 +480,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
     selectTab(activeTabs[Math.max(0, Math.min(activeTabs.length - 1, i + delta))][0])
   }
   async function submit() {
-    if (busy || (!derivedEditor && mode !== 'production' && !targetStep.isReady())) return
+    if (readOnly || busy || (!derivedEditor && mode !== 'production' && !targetStep.isReady())) return
     busy = true; paint()
     try {
       let payload
@@ -535,6 +542,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
 
   function open(initialMode = 'relax', { parentJobId: seedParentId = null } = {}) {
     if (!modal) build()
+    readOnly = false
     editJob = null
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'New oxDNA job'
@@ -560,6 +568,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
 
   function openEditable(job = {}) {
     if (!modal) build()
+    readOnly = false
     editJob = job
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'Edit oxDNA job'
@@ -668,6 +677,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
 
   function openReadOnly(job = {}) {
     if (!modal) build()
+    readOnly = true
     editJob = null
     derivedEditor = null
     modal.header.querySelector('.modal__title').textContent = 'oxDNA job settings'
@@ -684,21 +694,73 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, spawnP
       config.surface_strands = { ...config.surface_strands }
       delete config.surface_strands.built
     }
+    const snapshot = {
+      ...config,
+      job_id: job.job_id,
+      kind: config.kind || (job.parent_job_id ? 'run' : 'relax'),
+      execution_target: job.execution_target || config.execution_target || 'local',
+      backend: job.backend ?? config.backend,
+      device: job.device ?? config.device,
+      salt_concentration: job.salt_concentration ?? config.salt_concentration,
+      seed: job.random_seed ?? config.seed ?? 'not recorded',
+      stages: (job.stages || []).map(stage => ({
+        name: stage.name, kind: stage.kind, steps: stage.steps,
+      })),
+    }
+    const recordedFields = entries => el('dl', {
+      className: 'oxdna-recorded-fields',
+      children: entries.map(([label, value]) => el('div', { children: [
+        el('dt', { text: label }),
+        el('dd', { text: value == null ? 'Not recorded'
+          : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }),
+      ] })),
+    })
+    const target = snapshot.execution_target
+    const recordedPanels = {
+      target: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
+        el('h3', { text: 'Recorded execution target' }),
+        recordedFields([
+          ['Run on', { local: 'Local', alpine: 'Alpine', runpod: 'RunPod' }[target] || target],
+          ['Backend', snapshot.backend], ['Device', snapshot.device],
+          ['Job status', job.status],
+          ...(target === 'local' ? [] : [
+            ['Cluster', job.cluster_name ?? config.cluster_name],
+            ['Partition', job.partition ?? config.partition],
+            ['Resources', job.requested_resources ?? config.slurm_resources],
+            ['GPU', job.runpod_gpu_key ?? config.runpod_gpu_key],
+          ]),
+        ]),
+      ] }),
+      settings: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
+        el('h3', { text: 'Recorded parameters' }),
+        recordedFields(Object.entries(snapshot).filter(([key]) => !['job_id', 'execution_target', 'backend', 'device'].includes(key))
+          .map(([key, value]) => [ROW_LABELS[key] || key.replaceAll('_', ' '), value])),
+      ] }),
+      config: el('section', { className: 'wizard-pane wizard-tabpanel', children: [
+        el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify(snapshot, null, 2) }),
+      ] }),
+    }
+    const recordedTabs = {}
+    const selectRecordedTab = selected => {
+      for (const [id] of ALL_TABS) {
+        recordedPanels[id].hidden = id !== selected
+        recordedTabs[id].classList.toggle('is-selected', id === selected)
+        recordedTabs[id].setAttribute('aria-selected', String(id === selected))
+      }
+    }
+    for (const [id, label] of ALL_TABS) {
+      recordedPanels[id].setAttribute('role', 'tabpanel')
+      recordedPanels[id].setAttribute('aria-label', label)
+      recordedTabs[id] = el('button', { className: 'wizard-tab', text: label,
+        attrs: { type: 'button', role: 'tab' }, on: { click: () => selectRecordedTab(id) } })
+    }
+    selectRecordedTab('target')
     readOnlyPanel.replaceChildren(
-      el('div', { className: 'wizard-note', text: 'Read-only snapshot of the settings recorded when this job was created.' }),
-      el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify({
-        job_id: job.job_id,
-        kind: config.kind || (job.parent_job_id ? 'run' : 'relax'),
-        execution_target: job.execution_target || config.execution_target || 'local',
-        backend: job.backend,
-        device: job.device,
-        salt_concentration: job.salt_concentration,
-        ...config,
-        seed: job.random_seed ?? config.seed ?? 'not recorded',
-        stages: (job.stages || []).map(stage => ({
-          name: stage.name, kind: stage.kind, steps: stage.steps,
-        })),
-      }, null, 2) }),
+      el('div', { className: 'wizard-note', text: 'Read-only settings recorded for this job.' }),
+      el('div', { className: 'wizard-tabbar', children: [
+        el('div', { className: 'wizard-tabs', attrs: { role: 'tablist' }, children: Object.values(recordedTabs) }),
+      ] }),
+      ...Object.values(recordedPanels),
     )
     modal.open()
   }

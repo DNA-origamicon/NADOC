@@ -69,3 +69,24 @@ it('saves continuation field changes and explicit removal, while relaxation rema
   expect(continuationElementsSettings({ field: { ...field, enabled: false } }).field).toBeNull()
   expect(relaxationElementsSettings({ field })).not.toHaveProperty('field')
 })
+
+it('recovers the latest direction after reload before the debounce or request finishes', async () => {
+  vi.useFakeTimers()
+  const values = new Map()
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }
+  const save = vi.fn().mockImplementation(async (job_id, patch) => ({ job_id, run_config: patch }))
+  const options = { storage, storageKey: 'test-drafts', save }
+  const first = createOxdnaJobSettings(options)
+  const job = { job_id: 'a', run_config: {} }
+  first.change(job, { field: { field_pN: 2, dir: [1, 0, 0] } })
+  const final = { field: { field_pN: 2, dir: [0, 0, -1] } }
+  first.change(job, final)
+  expect(save).not.toHaveBeenCalled()
+  vi.clearAllTimers() // the old page is gone before its debounce fires
+  const reloaded = createOxdnaJobSettings(options)
+  expect(reloaded.overlay(job).run_config).toEqual(final)
+  reloaded.restore([job])
+  await reloaded.flush(job.job_id)
+  expect(save).toHaveBeenCalledExactlyOnceWith('a', final)
+  expect(values.size).toBe(0)
+})

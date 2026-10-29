@@ -46,7 +46,7 @@ async def execute(job, workspace, lease):
 
 def main(workspace_dir, job_id):
     workspace = Path(workspace_dir).resolve()
-    with runtime.use_workspace(workspace), runtime.worker_lease(workspace / "oxdna_jobs" / job_id) as lease:
+    with runtime.use_workspace(workspace), runtime.worker_lease(runtime.job_path("oxdna_jobs", job_id, workspace)) as lease:
         if lease is None:
             return 0
         job = OxdnaJob.load(job_id, workspace)

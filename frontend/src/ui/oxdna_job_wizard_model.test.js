@@ -104,6 +104,45 @@ describe('oxDNA copied-job seed display', () => {
     wizard.close()
   })
 
+  it('keeps navigation hidden after asynchronous target refreshes in the read-only view', async () => {
+    const wizard = makeWizard()
+    wizard.openReadOnly(copiedJob({ status: 'completed' }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const modal = document.querySelector('.modal--oxdna-wizard')
+    expect(modal.querySelector('.wizard').hidden).toBe(true)
+    expect(modal.querySelector('.oxdna-job-settings-view').hidden).toBe(false)
+    const actions = [...modal.querySelectorAll('.modal__actions button')]
+    expect(actions.filter(button => button.style.display !== 'none').map(button => button.textContent)).toEqual(['Close'])
+    wizard.close()
+    wizard.open()
+    expect(modal.querySelector('.wizard').hidden).toBe(false)
+    expect(modal.querySelector('.wizard-tab.is-selected').textContent).toBe('Where it runs')
+    wizard.close()
+  })
+
+  it('opens completed continuation settings on the recorded target and allows inspecting every tab', async () => {
+    const wizard = makeWizard()
+    wizard.openReadOnly(copiedJob({ status: 'completed', parent_job_id: 'parent', execution_target: 'alpine',
+      cluster_name: 'saved-cluster', partition: 'saved-partition',
+      run_config: { kind: 'run', field: { field_pN: 2, dir: [0, 0, -1] }, steps: 1234 },
+    }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const view = document.querySelector('.oxdna-job-settings-view')
+    const tabs = [...view.querySelectorAll('[role="tab"]')]
+    const visiblePanel = () => view.querySelector('[role="tabpanel"]:not([hidden])')
+    expect(tabs.map(tab => tab.textContent)).toEqual(['Where it runs', 'Parameters & options', 'Full configuration'])
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true')
+    expect(visiblePanel().textContent).toContain('Alpine')
+    expect(visiblePanel().textContent).toContain('saved-partition')
+    tabs[1].click()
+    expect(visiblePanel().textContent).toContain('1234')
+    expect(visiblePanel().textContent).toContain('"field_pN": 2')
+    tabs[2].click()
+    expect(JSON.parse(visiblePanel().querySelector('pre').textContent).field.dir).toEqual([0, 0, -1])
+    expect(view.querySelector('input, select, textarea')).toBeNull()
+    wizard.close()
+  })
+
   it('writes continuation thermostat controls into the saved configuration without losing other settings', () => {
     const wizard = makeWizard()
     wizard.openEditable(copiedJob({

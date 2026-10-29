@@ -903,8 +903,26 @@ def library_delete(path: str, delete_jobs: bool = False) -> dict:
 @router.post("/design/save-workspace", status_code=200)
 def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     """Write the active in-memory design to a workspace file."""
-    design, save_revision, known_heads = design_state.copy_for_workspace_save()
     dest = _safe_workspace_path(body.path)
+    def file_stamp():
+        stat = dest.stat()
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    if body.overwrite and dest.is_file():
+        stamp = file_stamp()
+        cached = design_state.workspace_save_checkpoint(str(dest.resolve()), stamp)
+        if cached:
+            from backend.core.project_revisions import ProjectRevisionStore
+            revisions = ProjectRevisionStore(_asm._WORKSPACE_DIR)
+            # An external writer can advance a branch without touching this file.
+            # Preserve the normal conflict check in that case.
+            if (all(revisions.branch_head(cached["design_id"], key) == head
+                    for key, head in cached["heads"].items())
+                    and design_state.workspace_save_checkpoint(str(dest.resolve()), file_stamp()) == cached):
+                return {"path": body.path, "identity_disposition": "confirmed",
+                        "design_id": cached["design_id"], "revision": cached["revision"],
+                        "previous_revision": cached["revision"]}
+    design, save_revision, known_heads = design_state.copy_for_workspace_save()
     if not body.overwrite and dest.exists():
         raise HTTPException(409, detail=f"File already exists: {body.path!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -972,7 +990,8 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
         ) from exc
     dest.write_text(saved.to_json(), encoding="utf-8")
     acknowledged = design_state.acknowledge_workspace_save(
-        design, saved, save_revision, include_snapshot=disposition != "confirmed"
+        design, saved, save_revision, include_snapshot=disposition != "confirmed",
+        checkpoint={"path": str(dest.resolve()), "file_stamp": file_stamp()},
     )
     # Same-path autosave is an acknowledgement, not a state sync: the frontend
     # deliberately keeps its current Design object to avoid an autosave loop.

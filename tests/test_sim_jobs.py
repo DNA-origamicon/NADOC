@@ -97,6 +97,15 @@ def test_normalize_oxdna_production_state_reflects_latest_production():
     )
 
 
+def test_queued_production_is_pending_not_running():
+    node = sim_jobs.normalize_oxdna_job(_ox(status="queued", stages=[
+        {"kind": "production", "status": "pending"},
+    ]))
+    assert node["production_state"] == "pending"
+    assert node["status"] == "queued"
+    assert not node["viewable"]
+
+
 def test_normalize_oxdna_viewable_once_a_stage_started():
     assert (
         sim_jobs.normalize_oxdna_job(_ox(stages=[{"kind": "mc", "status": "done"}]))[

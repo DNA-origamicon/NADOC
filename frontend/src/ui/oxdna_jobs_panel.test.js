@@ -506,6 +506,12 @@ describe('flexConfidenceText', () => {
 })
 
 describe('productionState / jobListStatus', () => {
+  it('pending and interrupted production never imply a running job', () => {
+    const stages = [{ kind: 'production', status: 'pending' }]
+    expect(productionState({ status: 'queued', stages })).toBe('pending')
+    expect(jobListStatus({ status: 'queued', stages }).label).toBe('queued')
+    expect(jobListStatus({ status: 'stopped', stages: [{ kind: 'production', status: 'running' }] }).label).toBe('stopped')
+  })
   it('productionState reflects the production stage', () => {
     expect(productionState({ stages: [{ kind: 'mc' }, { kind: 'equil' }] })).toBe('none')
     expect(productionState({ stages: [{ kind: 'production', status: 'running' }] })).toBe('running')
@@ -842,6 +848,28 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
   }
 
+  it('accepts selection before progress loads and ignores late details from the previous job', async () => {
+    api.listOxdnaJobs.mockResolvedValue([
+      { job_id: 'slow', status: 'running', design_source_path: 'A.nadoc', stages: relaxStages() },
+      { job_id: 'next', status: 'queued', design_source_path: 'A.nadoc', stages: [{ kind: 'production', status: 'pending' }] },
+    ])
+    let finishProgress
+    api.getOxdnaProgress.mockImplementation(id => id === 'slow'
+      ? new Promise(resolve => { finishProgress = resolve }) : Promise.resolve(null))
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    expect(await panel.selectJob('slow')).toBe(true)
+    expect(panel.getSelectedJob().job_id).toBe('slow')
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Stop')
+    expect(await panel.selectJob('next')).toBe(true)
+    const detail = $('oxdna-jobs-detail').textContent
+    finishProgress({ overall: 0.9, current_stage: 'old stage' })
+    await flush()
+    expect(panel.getSelectedJob().job_id).toBe('next')
+    expect($('oxdna-jobs-detail').textContent).toBe(detail)
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Run')
+  })
+
   it('keeps the spinner on the current frame request and ignores superseded completions', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
@@ -1044,7 +1072,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(document.querySelectorAll('.modal__overlay')).toHaveLength(1)
     const button = [...document.querySelectorAll('.modal__actions button')].find(el => el.textContent === choice)
     button.click()
-    await Promise.all([first, duplicate])
+    expect(await Promise.all([first, duplicate])).toEqual([choice === 'Continue', choice === 'Continue'])
     expect(document.querySelectorAll('.modal__overlay')).toHaveLength(0)
     expect(panel.getSelectedJob()?.job_id).toBe(choice === 'Continue' ? 'j2' : 'j1')
     expect(disp.stopAndRestore).toHaveBeenCalledTimes(choice === 'Continue' ? 1 : 0)
@@ -1387,6 +1415,37 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(api.startOxdnaJob).not.toHaveBeenCalled()
   })
 
+  it('saves a rapid direction edit before switching jobs, without applying it to the next job', async () => {
+    const jobs = ['a', 'b'].map(job_id => ({ job_id, parent_job_id: 'parent', status: 'queued',
+      design_source_path: 'A.nadoc', stages: [{ kind: 'production', status: 'pending' }],
+      run_config: { kind: 'run', field: { field_pN: 2, dir: [1, 0, 0] } } }))
+    api.listOxdnaJobs.mockImplementation(async () => structuredClone(jobs))
+    let finishSave, elements = {}
+    api.updateOxdnaJobSettings.mockImplementation((id, patch) => new Promise(resolve => {
+      finishSave = () => {
+        const job = jobs.find(j => j.job_id === id)
+        Object.assign(job.run_config, patch)
+        resolve(structuredClone(job))
+      }
+    }))
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', getRunElements: () => elements,
+      applyRunConfig: cfg => { elements = { field: { ...cfg.field, enabled: true } } },
+    })
+    await panel.refresh(); await panel.selectJob('a')
+    elements.field.dir = [0, 0, -1]
+    panel.onRunElementsChanged()
+    const switching = panel.selectJob('b')
+    expect(panel.getSelectedJob().job_id).toBe('a')
+    expect(api.updateOxdnaJobSettings).toHaveBeenLastCalledWith('a', expect.objectContaining({
+      field: { field_pN: 2, dir: [0, 0, -1] },
+    }))
+    finishSave(); await switching
+    expect(panel.getSelectedJob().job_id).toBe('b')
+    expect(elements.field.dir).toEqual([1, 0, 0])
+    await panel.selectJob('a')
+    expect(elements.field.dir).toEqual([0, 0, -1])
+  })
+
   it('autosaves field edits on a queued run and restores them without Run', async () => {
     const job = { job_id: 'field-edit', parent_job_id: 'parent', status: 'queued',
       design_source_path: 'A.nadoc', backend: 'CPU', stages: [{ kind: 'production', status: 'pending' }],
@@ -1496,6 +1555,31 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     run.click()
     await flush()
     expect(api.startOxdnaJob).toHaveBeenCalledWith('jReady')
+  })
+
+  it('polling cannot erase an in-flight start or restore the old Run control after success', async () => {
+    const job = { job_id: 'slow-start', design_source_path: 'A.nadoc', status: 'queued',
+      created_at: 1, current_stage_idx: 0, backend: 'CPU', parent_job_id: 'parent',
+      stages: [{ kind: 'production', status: 'pending' }] }
+    api.listOxdnaJobs.mockImplementation(async () => [structuredClone(job)])
+    let finishStart
+    api.startOxdnaJob.mockImplementationOnce(() => new Promise(resolve => {
+      finishStart = () => { job.status = 'running'; job.stages[0].status = 'running'; resolve({ ok: true }) }
+    }))
+    api.startOxdnaJob.mockClear()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    const run = $('oxdna-jobs-run-btn')
+    run.click(); await flush()
+    await panel.refresh()
+    expect(run.disabled).toBe(true)
+    expect(run.textContent).toContain('Starting')
+    run.click()
+    expect(api.startOxdnaJob).toHaveBeenCalledTimes(1)
+    finishStart(); await flush(40)
+    expect(run.disabled).toBe(false)
+    expect(run.textContent).toBe('■ Stop Run')
+    expect(run.dataset.runAction).toBe('stop')
   })
 
   it('an interrupted production run is resumed from the single Run control, not a separate Full Sim button', async () => {

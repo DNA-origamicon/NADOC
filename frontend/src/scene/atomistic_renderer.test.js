@@ -1029,3 +1029,41 @@ it('hides unrevealed sweep atoms and their bonds without moving the atoms', () =
   expect(bondCylinderScaleY(scene)).toBeCloseTo(.15)
   ar.dispose()
 })
+
+it.each(['ballstick', 'stick', 'vdw'])('moves protein atoms and bonds together in %s and restores their native pose', mode => {
+  const scene = new THREE.Scene(), ar = initAtomisticRenderer(scene)
+  ar.setMode(mode)
+  ar.update({ atoms: [
+    { serial: 7, element: 'C', helix_id: '__protein__p', x: 0, y: 0, z: 0 },
+    { serial: 19, element: 'C', helix_id: '__protein__p', x: .15, y: 0, z: 0 },
+    { serial: 25, element: 'C', helix_id: '__protein__other', x: 2, y: 0, z: 0 },
+  ], bonds: [[7, 19]] })
+  const meshes = scene.children.filter(m => m.isInstancedMesh)
+  const original = meshes.map(m => Array.from(m.instanceMatrix.array))
+  // Row-major rotation by 90 degrees plus translation, as emitted by oxDNA.
+  const pose = [0,-1,0,10, 1,0,0,20, 0,0,1,30, 0,0,0,1]
+  ar.applyOxdnaTransforms({ p: pose })
+  const sphere = meshes.find(m => m.name === 'atomSpheres')
+  const matrix = new THREE.Matrix4(), p = new THREE.Vector3()
+  if (mode !== 'stick') {
+    sphere.getMatrixAt(0, matrix)
+    expect(p.setFromMatrixPosition(matrix).toArray()).toEqual([10,20,30])
+    sphere.getMatrixAt(2, matrix)
+    expect(p.setFromMatrixPosition(matrix).toArray()).toEqual([2,0,0])
+  }
+  const bond = meshes.find(m => m.name === 'atomBonds')
+  if (mode !== 'vdw') {
+    expect(bond).toBeTruthy()
+    bond.getMatrixAt(0, matrix)
+    const ends = [-.5,.5].map(y => new THREE.Vector3(0,y,0).applyMatrix4(matrix))
+    expect(ends[0].distanceTo(new THREE.Vector3(10,20,30))).toBeLessThan(1e-5)
+    expect(ends[1].distanceTo(new THREE.Vector3(10,20.15,30))).toBeLessThan(1e-5)
+  }
+  // Reapplying a frame is absolute, not a cumulative transform.
+  const moved = meshes.map(m => Array.from(m.instanceMatrix.array))
+  ar.applyOxdnaTransforms({ p: pose })
+  meshes.forEach((m,i) => expect(Array.from(m.instanceMatrix.array)).toEqual(moved[i]))
+  ar.clearOxdnaTransforms()
+  meshes.forEach((m,i) => Array.from(m.instanceMatrix.array).forEach((v,j) => expect(v).toBeCloseTo(original[i][j], 6)))
+  ar.dispose()
+})

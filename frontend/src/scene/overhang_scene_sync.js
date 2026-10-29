@@ -18,6 +18,10 @@ export function initOverhangSceneSync({ scene, store, designRenderer, assemblyRe
   )
   const unligatedMarkers = initUnligatedCrossoverMarkers(scene)
   let rootMap = new Map()
+  // Playback mutates scene positions without changing the design store.
+  designRenderer.subscribeSimulation?.((updates, amp) => {
+    if (updates !== undefined) linkArcs.applyFemPositions(updates, amp)
+  })
 
   function rebuildLocations() {
     if (!locations.isVisible()) return

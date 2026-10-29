@@ -1,3 +1,4 @@
+import { docKey } from '../shared/doc_id.js'
 import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { store } from '../state/store.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
@@ -265,7 +266,7 @@ export function stageChips(job) {
   }))
 }
 
-/** Pure: production-stage state — 'none' | 'running' | 'done' | 'failed'.
+/** Pure: production-stage state — 'none' | 'pending' | 'running' | 'done' | 'failed'.
  *  Reflects the LATEST production run (jobs can have several). */
 export function productionState(job) {
   const prods = (job?.stages || []).filter(s => s.kind === 'production')
@@ -273,7 +274,7 @@ export function productionState(job) {
   if (!prod) return 'none'
   if (prod.status === 'done')   return 'done'
   if (prod.status === 'failed') return 'failed'
-  if (prod.status === 'running' || prod.status === 'pending') return 'running'
+  if (prod.status === 'running' || prod.status === 'pending') return prod.status
   return 'none'
 }
 
@@ -393,9 +394,9 @@ export function startButtonLabel(job) {
 export function jobListStatus(job) {
   const ps = productionState(job)
   if (job?.status === 'completed' && ps === 'none') return { label: 'production ready', color: _C.accent }
-  if (ps === 'running') return { label: 'production', color: _C.warn }
-  if (ps === 'done')    return { label: 'production done', color: _C.ok }
-  if (ps === 'failed')  return { label: 'production failed', color: _C.err }
+  if (job?.status === 'running' && ps === 'running') return { label: 'production', color: _C.warn }
+  if (job?.status === 'completed' && ps === 'done') return { label: 'production done', color: _C.ok }
+  if (job?.status === 'failed' && ps === 'failed') return { label: 'production failed', color: _C.err }
   return { label: job?.status ?? 'unknown', color: _STATUS_COLOR[job?.status] || _C.dim }
 }
 
@@ -1437,6 +1438,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   let _settingsEpoch = 0
   const _settingsSignature = job => JSON.stringify(job?.run_config || {})
   const _jobSettings = createOxdnaJobSettings({
+    storage: window.localStorage,
+    storageKey: docKey('nadoc:oxdna-pending-settings'),
     save: (id, patch) => api.updateOxdnaJobSettings(id, patch),
     onSaved: (saved, latest) => {
       _settingsEpoch++
@@ -1474,6 +1477,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (settingsEpoch !== _settingsEpoch) { _base.schedulePoll(); return }
     if (Array.isArray(jobs)) {
       _jobs = mergeCreatingJobs(jobs, 'oxdna')
+      _jobSettings.restore(_jobs)
       _renderList()
       // Refresh the launch-button spinners from live job state even when nothing
       // is selected (e.g. after a page reload while a job is still running).
@@ -1549,27 +1553,51 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       busy: _launching,
     })
   }
+  let _runActionLabel = null
+  function _setRunActionLabel(label) {
+    _runActionLabel = label
+    _updateButtons(_selectedJob())
+  }
+  async function _withRunAction(label, action) {
+    if (_runActionLabel) return
+    _runActionLabel = label
+    try {
+      return await runExclusive(runBtn, action, { label })
+    } catch (error) {
+      showToast(api.lastErrorMessage?.() || error.message || 'Could not update the oxDNA run.', 'error')
+    } finally {
+      // runExclusive restores the pre-click DOM. Repaint AFTER that restoration
+      // so Stop/Resume reflect the response rather than the old queued state.
+      _runActionLabel = null
+      _updateButtons(_selectedJob())
+    }
+  }
   function _stopSelected() {
-    return runExclusive(runBtn, async () => {
-      if (!_selectedId) return
-      await api.stopOxdnaJob(_selectedId)
+    const jobId = _selectedId
+    return _withRunAction('Stopping…', async () => {
+      if (!jobId) return
+      await api.stopOxdnaJob(jobId)
       await _fetchJobs()
-    }, { label: 'Stopping…' })
+    })
   }
   function _resumeSelected() {
-    return runExclusive(runBtn, async () => {
-      if (!_selectedId) return
+    const jobId = _selectedId
+    return _withRunAction('Checking running jobs…', async () => {
+      if (!jobId) return
       if (!(await confirmNoConcurrentJob({
-        excludeJobId: _selectedId,
+        excludeJobId: jobId,
         usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
       }))) return
+      if (_selectedId !== jobId) return
       oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
-      await api.startOxdnaJob(_selectedId)
+      _setRunActionLabel('Resuming…')
+      const started = await api.startOxdnaJob(jobId)
+      if (!started) throw new Error('Could not resume the oxDNA job.')
       await _fetchJobs()
-    }, { label: 'Resuming…' })
+    })
   }
   function _startSelected() {
-    return runExclusive(runBtn, async () => {
+    return _withRunAction('Checking running jobs…', async () => {
       const job = _selectedJob()
       if (!canStartJob(job)) return
       const jobId = job.job_id
@@ -1580,6 +1608,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (_selectedId !== jobId) return
       // Capture even a typed edit whose card debounce has not fired yet.
       _runElementsChanged()
+      _setRunActionLabel('Saving settings…')
       try { await _jobSettings.flush(jobId) } catch {
         showToast(api.lastErrorMessage?.() || 'Could not save surface/anchor settings; the job was not started.', 'error')
         return
@@ -1587,6 +1616,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (_selectedId !== jobId) return
       oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
       if (_selectedId !== jobId) return
+      _setRunActionLabel('Starting…')
       const started = await api.startOxdnaJob(jobId)
       if (!started) {
         showToast(api.lastErrorMessage?.() || 'Could not start oxDNA job', 'error')
@@ -1594,7 +1624,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
       showToast('oxDNA run started', 'ok')
       await _fetchJobs()
-    }, { label: 'Starting…' })
+    })
   }
   runBtn?.addEventListener('click', () => {
     const action = _runControl().action
@@ -1873,6 +1903,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // update the visualization controls or follow the live display; historical rows
   // are observational and leave the existing visualization state intact.
   const pendingSelections = new Map()
+  let selectionEpoch = 0
   function _selectJob(jobId, options = {}) {
     // A second selection dispatch can arrive while the first is awaiting the
     // unload dialog. Share the whole operation, including cancellation, so one
@@ -1885,7 +1916,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   async function _performSelectJob(jobId, { confirmTrajUnload = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
-    if (!job) return
+    if (!job) return false
+    if (_selectedId && _selectedId !== jobId) {
+      _runElementsChanged()
+      try { if (_jobSettings.hasPending(_selectedId)) await _jobSettings.flush(_selectedId) } catch {
+        showToast('Could not save field/surface/anchor settings. Retry before switching jobs.', 'error')
+        return false
+      }
+    }
     if (_lammpsMode) {   // leaving LAMMPS-viz mode → tear down its overlay, re-enable oxDNA gating
       lammpsDisplay?.stopAndRestore()
       _lammpsMode = false; _lammpsNode = null
@@ -1908,15 +1946,31 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
           confirmLabel: 'Continue',
           cancelLabel: 'Cancel',
         })
-        if (!ok) return   // keep the current selection + its trajectory
+        if (!ok) return false   // keep the current selection + its trajectory
       }
       _setTrajOff()
     }
     const controlsChanged = _controlsJobId !== jobId || _controlsSignature !== _settingsSignature(_jobSettings.overlay(job))
     _selectedId = jobId
+    const epoch = ++selectionEpoch
     if (controlsChanged && selectionUpdatesVisualization(job)) _applyRunControls(_jobSettings.overlay(job))
+    // Accept the selection using the job already in the list. Disk-backed progress
+    // and visualization reads must not delay highlighting or the Run controls.
+    _progress = null
+    _renderList()
+    _renderDetail(job)
+    void _loadSelectionDetail(job, epoch).catch(() => {
+      if (_selectedId === jobId && selectionEpoch === epoch) {
+        showToast('Could not refresh job details. Select the job again to retry.', 'error')
+      }
+    })
+    return true
+  }
+
+  async function _loadSelectionDetail(job, epoch) {
+    const jobId = job.job_id
     const progress = job.creating ? null : await api.getOxdnaProgress(jobId).catch(() => null)
-    if (_selectedId !== jobId) return
+    if (_selectedId !== jobId || selectionEpoch !== epoch) return
     _progress = progress
     _renderList()
     _renderDetail(job)
@@ -1928,6 +1982,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       await _refreshDisplay()
     }
     _base.schedulePoll()
+    return true
   }
 
   // Clicking the ALREADY-selected row deselects it.  Deliberately NON-destructive: no
@@ -1940,6 +1995,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // deselecting is not a job switch.  The viz radios lock (no job → no per-job action) but
   // "Off" never disables, so any lingering overlay can still be taken down.
   function _deselectJob() {
+    selectionEpoch++
     _selectedId = null
     _progress = null
     _hideDetail()
@@ -2168,7 +2224,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // every poll (rebuild only on a state change, tracked via dataset.spinning).
   function _setBtnSpinner(btn, active, idleLabel, busyLabel = idleLabel) {
     if (active) {
-      if (btn.dataset.spinning !== '1') {
+      if (btn.dataset.spinning !== '1' || btn.textContent.trim() !== busyLabel) {
         btn.textContent = ''
         btn.append(makeSpinner(_C.warn, 10), document.createTextNode(' ' + busyLabel))
         btn.dataset.spinning = '1'
@@ -2201,14 +2257,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // kind (Full Sim's own button is gone; production is created via the wizard).
     if (runBtn) {
       const rc = _runControl()
-      if (_launching || rc.spinner) {
+      if (_runActionLabel) {
+        _setBtnSpinner(runBtn, true, _runActionLabel, _runActionLabel)
+      } else if (_launching || rc.spinner) {
         _setBtnSpinner(runBtn, true, rc.label, rc.spinner ? rc.label : 'Starting…')
       } else {
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
       const canStart = canStartJob(job)
-      runBtn.disabled = rc.disabled || !_available || _launching ||
+      runBtn.disabled = !!_runActionLabel || rc.disabled || !_available || _launching ||
         (rc.action === RUN_ACTION.RUN && (!canStart || prodRunning))
       runBtn.dataset.runAction = rc.action
     }
@@ -2233,7 +2291,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
     if (prodRunning) _setProdStatus('Production running…', _C.warn)
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
-    else if (prodReady && hasRun)
+    else if (prodResume) _setProdStatus(`Production ${job.status} — press Resume Run to continue.`, _C.dim)
+    else if (job?.status === 'queued') _setProdStatus('Prepared — press Run to start.', _C.dim)
+    else if (job?.status === 'completed' && hasRun)
       _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). "+ New job" to continue from the last frame.`, _C.ok)
     else _setProdStatus(prodReady ? 'Job complete — "+ New job" to continue from its final frame.' : '', _C.dim)
 
@@ -2947,7 +3007,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // first so Off invalidates that in-flight transaction as well as an already-drawn one.
     if (_occupancy?.isActive()) _setOccupancyOff()
     else if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
-    else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff({ keepCache })
+    else if (oxdnaDisplay?.mode() === 'trajectory' || _trajJobId || _trajBusy) _setTrajOff({ keepCache })
     else if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     else if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     else _setDisplayOff()
@@ -3159,7 +3219,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // Without this the list keeps showing the previous design's jobs (and the
   // selection/display belong to the old design).  Mirrors md_jobs_panel.
   window.addEventListener('nadoc:workspace-path-change', () => {
-    if (oxdnaDisplay?.isActive()) _allDisplaysOff()
+    // Document reset may already have discarded the renderer's trajectory.
+    // Still reset the player and checked controls belonging to that document.
+    _allDisplaysOff()
     _selectedId = null
     _hideDetail()
     _resetControlsToDefaults()   // drop the previous design's relaxation/run settings

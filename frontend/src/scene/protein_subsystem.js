@@ -35,6 +35,7 @@ export function initProteinSubsystem({
   }
   const allRenderers = () => [...new Set(rendererPool.values())]
   let _representation = 'full'
+  let _oxdnaTransforms = null
   let _latestData = { atoms: [] }
   const displayMode = (rep, independent = false) => rep === 'full' || rep === 'beads' ? 'trace'
     : rep === 'cylinders' ? 'ovoid'
@@ -73,6 +74,9 @@ export function initProteinSubsystem({
       const renderer = rendererForMode(mode)
       renderer.setMode(mode)
       renderer.update(subsetData(_latestData, ids))
+      // A newly selected representation or refreshed topology starts at the
+      // native pose; retain the current simulation pose even while paused.
+      if (_oxdnaTransforms) renderer.applyOxdnaTransforms(_oxdnaTransforms)
     }
     for (const [mode, renderer] of rendererPool) {
       if (idsByMode.has(mode)) continue
@@ -108,10 +112,12 @@ export function initProteinSubsystem({
     applyLiveTransform: (...args) => allRenderers().forEach(r => r.applyLiveTransform(...args)),
     endLiveTransform: (...args) => allRenderers().forEach(r => r.endLiveTransform(...args)),
     applyOxdnaTransforms(transforms) {
+      _oxdnaTransforms = transforms
       window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: transforms }))
       allRenderers().forEach(r => r.applyOxdnaTransforms(transforms))
     },
     clearOxdnaTransforms() {
+      _oxdnaTransforms = null
       window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: null }))
       allRenderers().forEach(r => r.clearOxdnaTransforms())
     },
@@ -302,6 +308,7 @@ export function initProteinSubsystem({
   // undo, redo, attach/detach) re-renders proteins from its attachments.
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign) return
+    if (newState.currentDesign?.id !== prevState.currentDesign?.id) _oxdnaTransforms = null
     const hasProteins = (newState.currentDesign?.protein_attachments?.length ?? 0) > 0
     // Refresh when proteins exist now, or when the renderer is showing some
     // (so a removal — undo/delete — clears them).

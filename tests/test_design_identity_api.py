@@ -141,6 +141,20 @@ def test_autosave_does_not_adopt_another_documents_revision(monkeypatch, tmp_pat
     assert Design.from_json((tmp_path / 'conflict.nadoc').read_text()).metadata.description == ''
 
 
+def test_unchanged_save_still_detects_external_branch_change(monkeypatch, tmp_path):
+    from backend.core.project_revisions import refresh_active_revision
+    client = _client_at(monkeypatch, tmp_path)
+    design_state.set_design_branch(Design(id="checkpoint-conflict"))
+    body = {"path": "checkpoint-conflict.nadoc", "overwrite": True}
+    assert client.post('/api/design/save-workspace', json=body).status_code == 200
+    other = design_state.get_or_404().model_copy(deep=True)
+    other.metadata.description = 'External edit'
+    refresh_active_revision(tmp_path, other)
+    response = client.post('/api/design/save-workspace', json=body)
+    assert response.status_code == 409
+    assert response.json()['detail']['kind'] == 'branch_diverged'
+
+
 def test_save_acknowledgement_preserves_edit_made_during_save(monkeypatch, tmp_path):
     from backend.core import project_revisions
     client = _client_at(monkeypatch, tmp_path)
@@ -307,3 +321,26 @@ def test_open_part_rejects_missing_file_and_traversal(monkeypatch, tmp_path):
     client = _client_at(monkeypatch, tmp_path)
     assert client.post("/api/library/open-part", json={"path": "nope.nadoc"}).status_code == 404
     assert client.post("/api/library/open-part", json={"path": "../outside.nadoc"}).status_code == 400
+
+
+def test_unchanged_save_skips_serialization_but_edits_and_disk_changes_do_not(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    client = _client_at(monkeypatch, tmp_path)
+    design_state.load_design(Design(id='close-save'))
+    save = lambda: client.post('/api/design/save-workspace', json={'path': 'close.nadoc', 'overwrite': True})
+    assert save().status_code == 200
+    copy = Mock(wraps=design_state.copy_for_workspace_save)
+    monkeypatch.setattr(design_state, 'copy_for_workspace_save', copy)
+    revision = design_state.revision()
+    assert save().status_code == 200
+    copy.assert_not_called()
+    assert design_state.revision() == revision
+    design_state.set_design(design_state.get_or_404().model_copy(update={
+        'metadata': design_state.get_or_404().metadata.model_copy(update={'description': 'new edit'}),
+    }))
+    assert save().status_code == 200
+    assert copy.call_count == 1
+    assert Design.from_json((tmp_path / 'close.nadoc').read_text()).metadata.description == 'new edit'
+    (tmp_path / 'close.nadoc').touch()
+    assert save().status_code == 200
+    assert copy.call_count == 2

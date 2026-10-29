@@ -255,11 +255,13 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
 
   // Render loop — setAnimationLoop works in both normal and WebXR modes.
   // _viewerFrame is a global frame counter used by diagnostics and render tests.
+  let renderingPaused = false
+  function setRenderingPaused(paused) { renderingPaused = Boolean(paused) }
   let _viewerFrame = 0
   const trajectoryClock = attachTrajectoryRenderClock()
   window._viewerFrame = 0
   renderer.setAnimationLoop(() => {
-    if (placementGuard.blocked()) return
+    if (renderingPaused || placementGuard.blocked()) return
     if (pauseWhenHidden && canvas.ownerDocument.hidden && !renderer.xr.isPresenting) return
     trajectoryClock.tick()
     _viewerFrame++
@@ -323,6 +325,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     setResizeCallback, clearResizeCallback,
     addFrameCallback, removeFrameCallback,
     setNativeVRActive, setNativeVRDesktopEnabled,
+    setRenderingPaused,
     setRenderFn, resetRenderFn, renderNow: () => { assertPlacementExportSafe(scene); return _renderFn() },
     isStandardRender: () => _renderFn === _defaultRenderFn && _renderCamera === camera,
   }

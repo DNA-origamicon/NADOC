@@ -1182,6 +1182,41 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(seen.mode).toBe(null)
   })
 
+  it('document reset releases trajectory state without rebuilding the outgoing model', async () => {
+    const { ctrl, designRenderer, onRestoreDesignHeavy } = makeHeavyDeps('full')
+    await ctrl.loadTrajectory('job1')
+    designRenderer.applyFemPositions.mockClear()
+    onRestoreDesignHeavy.mockClear()
+    ctrl.discardForDocumentReset()
+    expect(ctrl.isActive()).toBe(false)
+    expect(ctrl.mode()).toBe(null)
+    expect(ctrl.trajectoryPreparationState().atom).toBe(null)
+    expect(ctrl.trajectoryPreparationState().surface).toBe(null)
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    expect(onRestoreDesignHeavy).not.toHaveBeenCalled()
+    ctrl.showFrame(0)
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+  })
+
+  it('document reset rejects a late reconstruction without restoring the old model', async () => {
+    const { ctrl, api, atom, onRestoreDesignHeavy } = makeHeavyDeps('ballstick')
+    await ctrl.displayJob('job1')
+    await tick()
+    let release
+    api.getOxdnaDisplayAtomistic = vi.fn().mockReturnValue(new Promise(resolve => {
+      release = () => resolve({ ready: true, atomistic: [9, 9, 9] })
+    }))
+    ctrl.reapplyForRepr()
+    atom.applyPositionLerp.mockClear()
+    onRestoreDesignHeavy.mockClear()
+    ctrl.discardForDocumentReset()
+    release()
+    await tick()
+    expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+    expect(onRestoreDesignHeavy).not.toHaveBeenCalled()
+    expect(ctrl.isActive()).toBe(false)
+  })
+
   it('flex map is cached across toggle-off → re-toggle is instant (no re-fetch)', async () => {
     const { ctrl, api } = makeHeavyDeps('full')   // CG so no heavy rebuild noise
     await ctrl.displayRmsf('jobF', { awaitHeavy: true })

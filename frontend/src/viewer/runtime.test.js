@@ -104,3 +104,22 @@ it('can suppress focused desktop drawing without stopping transactions or trajec
   frame(); expect(draw).toHaveBeenCalledTimes(4)
   runtime.dispose(); focused.mockRestore()
 })
+
+it('pauses frames during session teardown and resumes the existing render override', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  document.body.innerHTML = '<div><canvas></canvas></div>'
+  const runtime = initScene(document.querySelector('canvas'))
+  const frame = runtime.renderer.setAnimationLoop.mock.calls[0][0]
+  const draw = vi.fn(), update = vi.fn()
+  runtime.setRenderFn(draw)
+  runtime.addFrameCallback(update)
+  runtime.setRenderingPaused(true)
+  frame()
+  expect(draw).not.toHaveBeenCalled()
+  expect(update).not.toHaveBeenCalled()
+  runtime.setRenderingPaused(false)
+  frame()
+  expect(draw).toHaveBeenCalledOnce()
+  expect(update).toHaveBeenCalledOnce()
+  runtime.dispose()
+})

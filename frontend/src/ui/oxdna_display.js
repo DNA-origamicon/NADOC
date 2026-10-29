@@ -1506,17 +1506,17 @@ export function initOxdnaDisplay({
     return true
   }
 
-  function _restoreHeavy() {
+  function _restoreHeavy({ restoreDesign = true } = {}) {
     // Drop the flex-map overlay BEFORE the design rebuild — otherwise the scalar
     // colours (keyed by helix:bp:dir, which the design's own atoms also match)
     // would repaint the restored design atoms by stale RMSF.
-    getAtomisticRenderer?.()?.clearScalarColors?.()
+    if (restoreDesign) getAtomisticRenderer?.()?.clearScalarColors?.()
     // Rebuild the design heavy rep unconditionally (self-gates in _restoreDesignHeavy:
     // no-op unless an atomistic/surface mode is on).  NOT gated on _heavyActive — during
     // the deferred-build window the overlay hasn't pushed atoms yet (_heavyActive false)
     // but the heavy rep IS active with the CG showing, so turning off must still restore
     // the DESIGN surface/atoms rather than leave the CG up (rep appearing to revert).
-    onRestoreDesignHeavy?.()
+    if (restoreDesign) onRestoreDesignHeavy?.()
     _heavyActive = false
     _bakedAtom = null
     _bakedSurf = null
@@ -2427,7 +2427,7 @@ export function initOxdnaDisplay({
   }
 
   /** Clear the overlay (positions + colours) and restore the design. */
-  function stopAndRestore() {
+  function stopAndRestore({ restoreDesign = true } = {}) {
     _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     trajectoryDownloads.clear()
     _preview = null
@@ -2443,7 +2443,7 @@ export function initOxdnaDisplay({
     _prebuildToken++   // and any in-flight playback prebuild
     _playing = false
     _setHeavyBusy(false, null)   // clear any "building…" spinner the cancelled fetch left up
-    if (!_active) return
+    if (!_active && restoreDesign) return
     // Clear the active/mode state BEFORE restoring the heavy rep.  _restoreHeavy →
     // onRestoreDesignHeavy re-applies the current atomistic/surface mode, and that path
     // checks drivesHeavy() to decide whether to DEFER to this overlay (keep the CG up) —
@@ -2453,8 +2453,16 @@ export function initOxdnaDisplay({
     _active = false
     _mode = null
     _jobId = null
-    designRenderer?.clearScalarColors?.()
     onOccupancyClear?.()   // drop any superposed configuration ghosts with the model
+    if (!restoreDesign) {
+      _lastCgUpdates = null
+      _rmsfResp = _devResp = _strainResp = _photoproductResp = _rmsfCache = null
+      _displayCompanionByJob.clear()
+      preparationCache?.retain([])
+      _restoreHeavy({ restoreDesign: false })
+      return
+    }
+    designRenderer?.clearScalarColors?.()
     _applyFem(null)
     onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
     nanoparticleRenderer?.clearOxdnaPoses?.()
@@ -2512,6 +2520,9 @@ export function initOxdnaDisplay({
     },
     refresh,
     stopAndRestore,
+    // The owner clears the design store/scene immediately afterwards. Do not
+    // rebuild native positions or heavy representations just to dispose them.
+    discardForDocumentReset: () => stopAndRestore({ restoreDesign: false }),
     setGranularity,
     setPlaying,
     prebuildHeavy,

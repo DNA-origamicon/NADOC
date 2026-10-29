@@ -37,7 +37,7 @@ import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopolo
 export function initDesignRenderer(scene, storeRef) {
   const simulationListeners = new Set()
   let simulationGeometry = null, simulationDesign = null
-  const notifySimulation = () => { for (const fn of simulationListeners) fn() }
+  const notifySimulation = (...args) => { for (const fn of simulationListeners) fn(...args) }
   let _helixCtrl        = null
   let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
@@ -607,6 +607,8 @@ export function initDesignRenderer(scene, storeRef) {
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
+      _activeFemUpdates = null
+      _activeFemAmp = 1
       return
     }
 
@@ -1518,7 +1520,7 @@ export function initDesignRenderer(scene, storeRef) {
       // replacing currentGeometry. Refresh position-backed overlays on every frame;
       // the store subscriber cannot observe these playback/scrub mutations.
       this.refreshAllGlow()
-      notifySimulation()
+      notifySimulation(updates, amp)
     },
 
     subscribeSimulation(fn) { simulationListeners.add(fn); return () => simulationListeners.delete(fn) },

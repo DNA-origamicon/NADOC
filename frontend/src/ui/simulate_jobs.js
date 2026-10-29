@@ -376,9 +376,9 @@ export function masterStatusText(node) {
   if (node.engine === 'lammps') {
     return `${eng} · ${node.status} · ${masterStepText(node)}`
   }
-  if (node.production_state === 'running') return `${eng} · production running · ${masterStepText(node)}`
-  if (node.production_state === 'done') return `${eng} · production done · ${masterStepText(node)}`
-  if (node.production_state === 'failed') return `${eng} · production failed · ${masterStepText(node)}`
+  if (node.status === 'running' && node.production_state === 'running') return `${eng} · production running · ${masterStepText(node)}`
+  if (node.status === 'completed' && node.production_state === 'done') return `${eng} · production done · ${masterStepText(node)}`
+  if (node.status === 'failed' && node.production_state === 'failed') return `${eng} · production failed · ${masterStepText(node)}`
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
   if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterStepText(node)}`
@@ -556,6 +556,7 @@ export function initSimulateJobs({
   })
 
   let _nodes = []
+  let _pendingSelectionId = null
   let _sel = { engine: null, id: null }
   let _listSig = null
   let _busy = false
@@ -671,10 +672,11 @@ export function initSimulateJobs({
     const nodes = _visibleNodes()
     const ctx = _rowCtx(nodes)
     const sig = `${_activeEngine}:${_showAllTypes ? 1 : 0}|` + jobListSignature(nodes, ctx)
-    if (sig === _listSig && listEl.childElementCount > 0) return
+    if (sig === _listSig && listEl.childElementCount > 0) { _paintPendingSelection(); return }
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => {
+        if (selectionPending) return
         if (jobId !== _sel.id) { _select(jobId, true); return }
         const node = _selectedNode()
         if (node?.engine === 'namd' && !selectionExplicit) { selectionExplicit = true; _dispatchDetail(node, true); return }
@@ -702,6 +704,25 @@ export function initSimulateJobs({
       dimColor: _C.dim,
       legendState: _legend,
     })
+    _paintPendingSelection()
+  }
+
+  function _paintPendingSelection() {
+    for (const row of listEl.querySelectorAll('[data-job-id]')) {
+      const pending = row.dataset.jobId === _pendingSelectionId
+      if (pending) row.setAttribute('aria-busy', 'true')
+      else row.removeAttribute('aria-busy')
+      const marker = row.querySelector('[data-selection-pending]')
+      if (!pending) { marker?.remove(); continue }
+      if (!marker) {
+        const spinner = document.createElement('span')
+        spinner.className = 'nadoc-spinner'
+        spinner.dataset.selectionPending = ''
+        spinner.setAttribute('aria-label', 'Selecting job')
+        spinner.title = 'Selecting job…'
+        row.append(spinner)
+      }
+    }
   }
 
   /**
@@ -1003,16 +1024,38 @@ export function initSimulateJobs({
 
   // ── selection ────────────────────────────────────────────────────────────
   let selectionExplicit = false
+  let selectionPending = false
   function _select(jobId, explicit = false) {
     if (!_listReady) return
     const node = _nodes.find((n) => n.job_id === jobId)
     if (!node) return
     if (_sel.engine === node.engine && _sel.id === jobId) return
-    selectionExplicit = explicit
-    _sel = { engine: node.engine, id: jobId }
-    _renderList()
-    _renderMaster()
-    _dispatchDetail(node, explicit)
+    if (selectionPending) return
+    const previous = _sel
+    const path = _currentPath()
+    const commit = accepted => {
+      // An engine may reject selection when the user keeps a loaded trajectory.
+      // Do not highlight a job whose controls still belong to the previous job.
+      if (accepted === false || _sel !== previous || _currentPath() !== path) return false
+      selectionExplicit = explicit
+      _sel = { engine: node.engine, id: jobId }
+      _renderList()
+      _renderMaster()
+      return true
+    }
+    selectionPending = true
+    _pendingSelectionId = jobId
+    _paintPendingSelection()
+    const finish = () => {
+      selectionPending = false
+      _pendingSelectionId = null
+      _paintPendingSelection()
+    }
+    try {
+      const result = _dispatchDetail(node, explicit)
+      if (!result?.then) { const accepted = commit(result); finish(); return accepted }
+      return result.then(commit).finally(finish)
+    } catch (error) { finish(); throw error }
   }
 
   // Clicking the ALREADY-selected row deselects it: the highlight, master card and job
@@ -1041,15 +1084,14 @@ export function initSimulateJobs({
     if (node.engine !== 'namd') mdPanel?.deselectJob?.()
     if (node.engine === 'lammps') {
       engineSelector?.select?.('oxdna')
-      oxdnaPanel?.selectLammpsJob?.(node)
-      return
+      return oxdnaPanel?.selectLammpsJob?.(node)
     }
     const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel,
                     blade: bladePanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
-    if (node.engine === 'namd') panel?.selectJob?.(node.job_id, { explicit })
-    else panel?.selectJob?.(node.job_id)
+    if (node.engine === 'namd') return panel?.selectJob?.(node.job_id, { explicit })
+    return panel?.selectJob?.(node.job_id)
   }
 
   // ── run / stop / resume (dispatch by node engine) ──────────────────────────

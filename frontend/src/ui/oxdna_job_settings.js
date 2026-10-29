@@ -1,6 +1,24 @@
 /** Serialize saves per job so a late response cannot overwrite a newer edit. */
-export function createOxdnaJobSettings({ save, onSaved, onError, delayMs = 250 }) {
+export function createOxdnaJobSettings({ save, onSaved, onError, delayMs = 250, storage = null, storageKey = null }) {
   const entries = new Map()
+  // Journal edits before the debounce/request so reloads cannot discard them.
+  const recovered = new Set()
+  try {
+    const drafts = JSON.parse(storage?.getItem(storageKey) || '{}')
+    for (const [id, patch] of Object.entries(drafts)) {
+      entries.set(id, { pending: patch, latest: patch, timer: null, active: null })
+      recovered.add(id)
+    }
+  } catch { /* A damaged recovery cache must not prevent opening the panel. */ }
+  function persist() {
+    if (!storage || !storageKey) return
+    const drafts = Object.fromEntries([...entries].filter(([, state]) => state.latest)
+      .map(([id, state]) => [id, state.latest]))
+    try {
+      if (Object.keys(drafts).length) storage.setItem(storageKey, JSON.stringify(drafts))
+      else storage.removeItem(storageKey)
+    } catch (error) { onError?.(error) }
+  }
   function entry(id) {
     if (!entries.has(id)) entries.set(id, { pending: null, latest: null, timer: null, active: null })
     return entries.get(id)
@@ -15,8 +33,9 @@ export function createOxdnaJobSettings({ save, onSaved, onError, delayMs = 250 }
         state.pending = null
         try {
           const saved = await save(id, patch)
-          if (!saved?.job_id) throw new Error('Could not save oxDNA surface and anchor settings.')
+          if (!saved?.job_id) throw new Error('Could not save oxDNA field, surface and anchor settings.')
           if (!state.pending) state.latest = null
+          persist()
           onSaved?.(saved, !state.pending)
         } catch (error) {
           state.pending ||= patch
@@ -30,8 +49,15 @@ export function createOxdnaJobSettings({ save, onSaved, onError, delayMs = 250 }
     change(job, patch) {
       const state = entry(job.job_id)
       state.pending = state.latest = structuredClone(patch)
+      persist()
       clearTimeout(state.timer)
       state.timer = setTimeout(() => { void flush(job.job_id).catch(error => onError?.(error, job.job_id)) }, delayMs)
+    },
+    restore(jobs) {
+      for (const job of jobs) {
+        if (!recovered.delete(job.job_id)) continue
+        void flush(job.job_id).catch(error => onError?.(error, job.job_id))
+      }
     },
     overlay(job) {
       const patch = entries.get(job?.job_id)?.latest

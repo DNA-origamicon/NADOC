@@ -113,6 +113,7 @@ class _DesignSession:
     # Monotonic counter bumped on every reassignment of this doc's design. The
     # session-cache flush thread reads it to skip serializing unchanged docs.
     revision: int = 0
+    workspace_save_checkpoint: dict | None = None
     # Persistence cursors belong to the document session, not undoable content.
     workspace_heads: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     # Host lifetime only: never persisted on Design, restored from a file or
@@ -469,7 +470,20 @@ def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
         return design, s.revision, known
 
 
-def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True) -> Design | dict | None:
+def workspace_save_checkpoint(path: str, file_stamp: tuple) -> dict | None:
+    """An exact, already-persisted session revision; never a substitute for dirty saves."""
+    with _lock:
+        _require_compatibility_write("workspace_save_checkpoint")
+        s = _session()
+        cached = s.workspace_save_checkpoint
+        if (not cached or s.design is None or cached["revision"] != s.revision
+                or cached["design_id"] != s.design.id or cached["path"] != path
+                or cached["file_stamp"] != file_stamp):
+            return None
+        return dict(cached)
+
+
+def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True, checkpoint: dict | None = None) -> Design | dict | None:
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
         _require_compatibility_write("acknowledge_workspace_save")
@@ -484,7 +498,8 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
             # with the source file's identity and workspace path.
             s.history.clear()
             s.redo.clear()
-        if s.revision == revision:
+        saved_current_revision = s.revision == revision
+        if saved_current_revision:
             s.design = saved
         else:
             heads = {item.id: item.head_revision_id for item in saved.loadouts}
@@ -502,6 +517,11 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
             s.design = s.design.model_copy(update=updates)
         previous_revision = s.revision
         _bump_revision(s)
+        if saved_current_revision and checkpoint is not None:
+            s.workspace_save_checkpoint = {
+                **checkpoint, "revision": s.revision, "design_id": saved.id,
+                "heads": {item.id: item.head_revision_id for item in saved.loadouts},
+            }
         # Pair the acknowledgement revision with the merged current content,
         # never the pre-I/O snapshot when a concurrent edit was preserved.
         return _snapshot_copy(s.design) if include_snapshot else {

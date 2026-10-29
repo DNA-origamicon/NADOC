@@ -361,7 +361,7 @@ async function main() {
     getActiveControls,
     setResizeCallback, clearResizeCallback,
     addFrameCallback, removeFrameCallback,
-    setRenderFn, resetRenderFn, isStandardRender,
+    setRenderFn, resetRenderFn, isStandardRender, setRenderingPaused,
     setNativeVRActive, setNativeVRDesktopEnabled,
   } = initScene(canvas, { placementStore: store })
   const referenceModels = initReferenceModels({ scene, camera, canvas, controls, onImported: () => _hideWelcome(), onSelected: () => selectionManager?.clearSelection() })
@@ -2778,7 +2778,25 @@ async function main() {
   _renderRecentMenu()
 
   // ── Close Session ─────────────────────────────────────────────────────────────
+  let _sessionClosing = false
   async function _closeSession() {
+    if (_sessionClosing) return
+    _sessionClosing = true
+    // Large designs can spend hundreds of milliseconds drawing each frame.
+    // Preserve the last frame while saving, so rendering cannot starve the
+    // save response or teardown. Resume even if saving/closing fails.
+    setRenderingPaused(true)
+    const progress = showOpProgress('Closing session', 'Saving changes and releasing the model…', { indeterminate: true })
+    try {
+      await _saveAndCloseSession()
+    } finally {
+      hideOpProgress(progress)
+      setRenderingPaused(false)
+      _sessionClosing = false
+    }
+  }
+
+  async function _saveAndCloseSession() {
     // Tell every other NADOC tab (cadnano editors AND any other 3D windows)
     // to self-close. window.close() succeeds for tabs that were opened via
     // window.open() — tabs the user opened by typing a URL or duplicating
@@ -3127,15 +3145,9 @@ async function main() {
     // simulation result can be rebound to the next design's geometry.
     oxdnaSurfaceStrandsSetup?.applyConfig?.(null)
     surfaceStrandsOverlay?.clear?.()
-    // Reset representation to Full — deactivates atomistic/surface renderers,
-    // resets the representation radio, and hides mode-specific option rows.
-    _setRepresentation('full')
-    // Reset camera to the same position as initial page load
-    camera.position.set(6, 3, 18)
-    controls.target.set(6, 3, 0)
-    camera.up.set(0, 1, 0)
-    controls.enabled = true
-    controls.update()
+    // Release simulation caches and clear the model before representation reset;
+    // otherwise Full rebuilds the outgoing trajectory/model only to discard it.
+    oxdnaDisplay.discardForDocumentReset()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
@@ -3150,6 +3162,15 @@ async function main() {
       activeClusterId: null,
       translateRotateActive: false,
     })
+    // Reset representation to Full — deactivates atomistic/surface renderers,
+    // resets the representation radio, and hides mode-specific option rows.
+    _setRepresentation('full')
+    // Reset camera to the same position as initial page load
+    camera.position.set(6, 3, 18)
+    controls.target.set(6, 3, 0)
+    camera.up.set(0, 1, 0)
+    controls.enabled = true
+    controls.update()
     _setWorkspacePath(null)
   }
 
