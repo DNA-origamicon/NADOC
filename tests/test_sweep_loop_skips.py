@@ -146,7 +146,9 @@ def test_tool_api_recomputes_atomically_and_supports_history(lattice):
 def test_tool_rejects_unrealizable_sweep_atomically(monkeypatch):
     import backend.core.sweep_loop_skips as module
     with hb.scratch_session():
-        routed_sweep()
+        # The solver is forced to refuse below. Keep real Sweep/history state
+        # without running unrelated scaffold, crossover and break optimizers.
+        hb.sweep(CELLS, arc_points(), ligate_adjacent=False)
         before = state.get_or_404().model_dump_json()
         depth = state.undo_depth()
         def fail(*args, **kwargs):

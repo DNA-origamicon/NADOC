@@ -572,6 +572,15 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # October 28 FULL: real native packing/upgrade and multiple independent
+    # worker replays (26.76s/6.09s/5.59s); lightweight refusal tests stay fast.
+    "test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
+    "test_public_coating_submission_uses_real_worker_then_one_commit_and_cold_replay",
+    "test_spawned_mixed_batch_then_independent_cold_replay_survive_json_and_poisoned_recovery",
+    # Existing native preview workers and real lease/commit cancellation paths
+    # exceeded 5s in FULL. Classification retains all focused and FULL coverage.
+    "test_feedback_only_evaluation_keeps_prefix_identity_and_no_geometry",
+    "test_expiry_during_commit_cannot_outlive_lease_permit",
     "test_real_worker_sweep_creation_and_upstream_extrusion_edit",  # spawned native workers, 5.09 s
     "test_real_file_recover_edit_append_undo_redo_and_reload",  # four native workers + file cycle (5–6 s)
     "test_real_sealed_refresh_sequence",  # four real native workers + HTTP receipt/read sequence (5.14 s)
@@ -580,9 +589,9 @@ _SLOW_TESTS = {
     "test_real_worker_bend_and_upstream_edit",  # 5.57 s
     "test_real_recover_edit_persist_close_recover_cycle",  # 5.11 s
     "test_real_worker_placement_and_upstream_edit",  # 5.06 s
-    # Four spawned native numerical workers per family; deliberate recipe
-    # compatibility integration, not a fast manifest/schema unit test.
-    "test_spawned_numerical_schema_transition_preserves_exact_authored_outputs",
+    # Multiple spawned native numerical workers per family; deliberate current
+    # and retired source-pin integration, not a fast manifest/schema unit test.
+    "test_spawned_current_pins_reproduce_and_retired_schema_pins_refuse",
     # October 15: durable creation/flush/restart/edit plus four real spawned
     # batch/recovery/proof workers (5.56 s). Keep sibling storage/fault tests fast.
     "test_real_durable_create_batch_flush_restart_restore_and_edit",
@@ -992,6 +1001,22 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    # Default atomistic linker minimization on the smallest existing two-helix
+    # fixture (49.30s/10.75s). Keep every display variant in the fast suite.
+    "test_crossover_endpoint_pose_preserves_every_unselected_atom[default-build-half_b-TT]",
+    "test_crossover_endpoint_pose_preserves_every_unselected_atom[default-build-half_b-T]",
+    # October 28 FULL: real prefix/geometry workers and background-drain
+    # publication (5.03–6.03s); the untouched cheap parameters remain fast.
+    "test_apply_waits_for_background_and_publishes_once[view-volumes-bend]",
+    "test_apply_waits_for_background_and_publishes_once[activity-bend]",
+    "test_apply_waits_for_background_and_publishes_once[activity-twist]",
+    "test_apply_waits_for_background_and_publishes_once[dimensions-twist]",
+    "test_real_apply_receipt_undo_redo_full_suffix_and_cleanup[twist]",
+    "test_real_sealed_prepare_evaluate_cancel_matches_prefix_with_suffix[bend]",
+    "test_inflight_work_cannot_return_late_packet[evaluate-revision]",
+    "test_inflight_work_cannot_return_late_packet[evaluate-source]",
+    "test_inflight_work_cannot_return_late_packet[evaluate-session]",
+    "test_inflight_work_cannot_return_late_packet[evaluate-policy]",
     # Real native display worker: repeated broad-run 5.42s/5.17s; retain focused coverage.
     "test_combined_native_display_parity_and_one_worker[twist]",
     "test_combined_native_display_parity_and_one_worker[bend]",
@@ -1057,6 +1082,7 @@ def _slow_area_for(module: str) -> str:
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
     if (
         "atomistic" in module
+        or module == "test_nucleotide_selection_locality"
         or module == "test_native_placement_review_gate"
         or module == "test_cpd_design"
         or module == "test_native_cpd_proof"

@@ -224,7 +224,9 @@ def test_marker_presence_never_falls_through_to_source_free_gold(sources, marker
               "diameter_nm": 22.0, "coating_version": marker}
     assert not dependencies("nanoparticle-patch", params).known
     with pytest.raises(NotImplementedError):
-        execute_long("nanoparticle-patch", recipe(sources), params)
+        # A valid uncoated target would accept the forbidden source-free
+        # fallback. Invalid-marker admission needs no real protein packing.
+        execute_long("nanoparticle-patch", gold_recipe(sources), params)
 
 
 def test_both_sources_are_owned_dependencies_and_survive_portable_save_after_removal(sources, tmp_path):

@@ -4,6 +4,7 @@ from copy import deepcopy
 import base64
 import gzip
 from hashlib import sha256
+from itertools import count
 import json
 import multiprocessing
 from multiprocessing.shared_memory import SharedMemory
@@ -54,7 +55,15 @@ def recovery_contents(value):
 
 
 @pytest.mark.parametrize("kind", ["verify", "batch"])
-def test_byte_evaluation_matches_ordinary_native_capture_exactly(kind):
+def test_byte_evaluation_matches_ordinary_native_capture_exactly(kind, monkeypatch):
+    # Independent evaluations may cross a wall-clock second. Force distinct
+    # gzip timestamps while retaining exact comparison of every archive byte
+    # after decompression, every authored field and the transport binding.
+    compress = gzip.compress
+    timestamps = count(1_700_000_000)
+    def stamp(data, compresslevel=9, *, mtime=None):
+        return compress(data, compresslevel=compresslevel, mtime=next(timestamps))
+    monkeypatch.setattr(gzip, "compress", stamp)
     transport, handle, parts, binding = packed(kind=kind)
     design = revisions.materialize_revision(handle)
     captured, op, actual_binding = transport.decode_input(b"".join(parts))
@@ -63,7 +72,8 @@ def test_byte_evaluation_matches_ordinary_native_capture_exactly(kind):
     assert "poisoned recovery" not in captured.model_dump_json()
     actual = transport.evaluate_payload(b"".join(parts))
     assert actual["binding"] == binding
-    assert actual["result"] == evaluate(capture(design, preserve_entry_types=True), operation(design, kind))
+    expected = evaluate(capture(design, preserve_entry_types=True), operation(design, kind))
+    assert recovery_contents(actual["result"]) == recovery_contents(expected)
     assert actual["result"]["status"] == ("verified" if kind == "verify" else "ready")
     assert op == operation(design, kind)
 

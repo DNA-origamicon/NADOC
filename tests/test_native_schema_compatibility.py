@@ -1,9 +1,9 @@
-"""Spawned non-numerical transition admissibility with unchanged calculations.
+"""Spawned current-source parity and exact rejection of retired schema pins.
 
-These are same-installed-kernel parity checks, not historical binary or runtime
-oracles. The first worker authors real outputs and runtime/template pins. Only
-the implementation hash is then substituted with its captured historical value;
-independent workers must reproduce the exact same complete authoring state.
+The first worker authors real outputs and runtime/template pins. Independent
+workers reproduce current inputs and refuse captured historical source pins.
+No historical equivalence authorizes an unreviewed transition to today's source;
+all refusal checks preserve the complete authored state and original runtime pin.
 """
 
 from copy import deepcopy
@@ -91,7 +91,7 @@ def _cold(source, request, *, family):
 
 
 @pytest.mark.parametrize("family", ["duplex", "coating", "cpd"])
-def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(family, monkeypatch):
+def test_spawned_current_pins_reproduce_and_retired_schema_pins_refuse(family, monkeypatch):
     from backend.core.part_group_model import GroupOrganization, PartGroup
 
     source, request, contract_name = _fixture(family)
@@ -137,6 +137,7 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
 
     current = _cold(candidate, {"operation": "verify"}, family=family)
     assert current["status"] == "reproduced_import", current
+    assert current["checked_commands"] == len(candidate.feature_log)
     assert not current.get("numerical_compatibility", {}).get("transitions")
 
     generations = [("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE),
@@ -149,7 +150,6 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     generations.append(("native-domain-lineage-v1", VISIBILITY_BEFORE))
     generations.append(("group-visibility-v1", POSES_BEFORE))
     generations.append(("placement-poses-v1", EXTENSIONS_BEFORE))
-    event = "terminal-extensions-v1"
     historical_pins = [json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
                        for _, path in generations]
     assert len(set(historical_pins)) == len(generations) == (7 if family == "coating" else 8)
@@ -158,14 +158,12 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
         assert current_pin != historical
         entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": historical}}
         before_old = candidate.model_dump_json()
-        approved = _cold(candidate, {"operation": "verify"}, family=family)
-        assert approved["status"] == current["status"], (generation, approved)
-        assert approved["checked_commands"] == current["checked_commands"] == len(candidate.feature_log)
-        assert approved["authoring_fingerprint"] == current["authoring_fingerprint"]
-        assert approved["numerical_compatibility"] == {"transitions": [{
-            "transition_id": f"{event}.from-{generation}.{contract.ENGINE_ID}",
-            "engine_id": contract.ENGINE_ID, "from_sha256": historical, "to_sha256": current_pin,
-        }], "truncated": False}
+        refused = _cold(candidate, {"operation": "verify"}, family=family)
+        assert refused["status"] == "unverified", (generation, refused)
+        assert refused["checked_commands"] == 0
+        assert any(issue["code"] == "engine_mismatch" for issue in refused["issues"])
+        assert refused["authoring_fingerprint"] == current["authoring_fingerprint"]
+        assert not refused.get("numerical_compatibility", {}).get("transitions")
         assert candidate.model_dump_json() == before_old
         assert candidate.model_dump(mode="json", include=AUTHORING_FIELDS) == authored
         assert entry.params["engine"]["runtime_sha256"] == params["engine"]["runtime_sha256"]

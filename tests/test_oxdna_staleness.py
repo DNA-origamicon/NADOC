@@ -234,7 +234,9 @@ def test_roll_design_restores_snapshot_and_clears_out_of_date(monkeypatch, tmp_p
     for s in edited.strands:
         s.sequence = ""
     design_state.set_design(edited)
-    c = TestClient(app)
+    # This checks exact saved inputs and job fingerprints, not returned display
+    # geometry. Use the existing metadata response path for loadout selection.
+    c = TestClient(app, headers={"X-NADOC-Skip-Geometry": "1"})
     assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is True
 
     # Roll to the job's state → restores the sequenced snapshot, clears the flag.
