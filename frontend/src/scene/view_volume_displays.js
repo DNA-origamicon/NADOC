@@ -1,6 +1,6 @@
 import { buildVolumeExtras, paintVolumeExtras } from './view_volume_extras.js'
 import { coarseVolumePicker } from './volume_render_adapter.js'
-import { baseKey } from './base_ref.js'
+import { baseKey, atomBaseKey } from './base_ref.js'
 import { clusterAlphaKeys } from './cluster_entries.js'
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap, buildNucLetterMap } from './helix_renderer.js'
@@ -46,6 +46,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
       entry.cg.applyColoring(mode, design, Object.fromEntries(strands), state.loopStrandIds)
       entry.cg.setClusterAlphas(clusterAlphaKeys(design))
       entry.cg.applyRepOverrides(entry.columns)
+      if (layer.baseKeys) entry.cg.setAxisArrowsVisible(false)
       paintVolumeExtras(entry.extras, { columns: entry.columns, design, mode, strands, nucAlphas })
       entry.root.traverse(o => {
         for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
@@ -74,7 +75,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
     const pending = { atom: [], surface: [] }
     for (const layer of layers) {
       const kind = layer.representation === 'surface' ? 'surface' : ['vdw', 'ballstick', 'stick'].includes(layer.representation) ? 'atom' : 'cg'
-      const signature = JSON.stringify([layer.representation, layer.keys])
+      const signature = JSON.stringify([layer.representation, layer.keys, layer.baseKeys])
       let entry = entries.get(layer.id)
       if (entry && (entry.signature !== signature || entry.geometry !== state.currentGeometry || entry.axes !== state.currentHelixAxes)) {
         remove(entry); entries.delete(layer.id); entry = null
@@ -88,13 +89,18 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
       const keys = new Set(layer.keys)
       const current = () => !entry.abort.signal.aborted && entries.get(layer.id) === entry
       if (kind === 'cg') {
-        const geometry = state.currentGeometry ?? []
-        entry.cg = buildHelixObjects(geometry, design, root, {}, state.loopStrandIds, state.currentHelixAxes, layer.representation)
+        const exact = layer.baseKeys ? new Set(layer.baseKeys) : null
+        const geometry = (state.currentGeometry ?? []).filter(n => !exact || exact.has(baseKey(n, n.copy_k ?? 0)))
+        // Scaffold cylinders normally borrow the paired staple's display. An isolated
+        // scaffold must own a cylinder when its complementary strand is absent.
+        const buildDesign = exact && layer.representation === 'cylinders'
+          ? { ...design, strands: design.strands.map(s => ({ ...s, strand_type: s.strand_type === 'scaffold' ? 'staple' : s.strand_type })) } : design
+        entry.cg = buildHelixObjects(geometry, buildDesign, root, {}, state.loopStrandIds, state.currentHelixAxes, layer.representation)
         const columns = new Map((layer.allColumnKeys ?? geometry.map(n => `${n.helix_id}:${n.bp_index}`)).map(key => [key, 'surface']))
         for (const key of keys) columns.set(key, layer.representation === 'cylinders' ? 'cylinders' : 'full')
         entry.cg.setReferenceStrands(new Set((design.strands ?? []).filter(s => s.is_reference).map(s => s.id)))
         entry.cg.setDetailLevel(layer.representation === 'cylinders' ? 2 : layer.representation === 'beads' ? 1 : 0)
-        entry.extras = buildVolumeExtras(design, geometry, root, layer.representation)
+        entry.extras = layer.baseKeys ? null : buildVolumeExtras(design, geometry, root, layer.representation)
         entry.columns = columns
         entry.cg.applyRepOverrides(columns)
         entry.ready = true; paint(entry, layer)
@@ -105,10 +111,13 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
             const data = await ensureAtoms()
             if (!data || !current()) return
             entry.renderer = initAtomisticRenderer(root, { independentColors: true })
-            entry.renderer.update(filterAtomData(data, keys, layer.representation !== 'vdw'))
+            const exact = layer.baseKeys ? new Set(layer.baseKeys) : null
+            const selected = exact ? { ...data, atoms: data.atoms.filter(a => exact.has(atomBaseKey(a))) } : data
+            const live = new Set(selected.atoms.map(a => a.serial))
+            entry.renderer.update(exact ? { ...selected, bonds: (selected.bonds ?? []).filter(([a, b]) => live.has(a) && live.has(b)) } : filterAtomData(selected, keys, layer.representation !== 'vdw'))
             entry.renderer.setMode(layer.representation)
           } else {
-            const mesh = await api.getRegionSurface(layer.segments, { colorMode: 'strand', signal: entry.abort.signal, suppressBusy: true })
+            const mesh = await api.getRegionSurface(layer.segments, { nucleotideKeys: layer.baseKeys, colorMode: 'strand', signal: entry.abort.signal, suppressBusy: true })
             if (!current()) return
             entry.renderer = initSurfaceRenderer(root)
             entry.renderer.update(mesh, 'strand', `volume-surface-${layer.id}`)

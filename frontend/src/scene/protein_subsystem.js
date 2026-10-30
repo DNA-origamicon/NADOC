@@ -339,6 +339,7 @@ export function initProteinSubsystem({
 
   return {
     renderer: proteinRenderer,
+    getGeometry: () => _latestData,
     gizmo: proteinGizmo,
     refresh: _refreshProteins,
     syncSelectionVisual: _syncProteinSelectionVisual,

@@ -336,6 +336,7 @@ import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
 import { initDesignReadinessHost } from './ui/design_readiness_host.js'
+import { initZoomVolume } from './scene/zoom_volume.js'
 import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
@@ -2065,6 +2066,9 @@ async function main() {
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
+  const zoomVolume = initZoomVolume({ document, scene, canvas, store, api, designRenderer, assemblyRenderer,
+    ensureAtoms: () => _atomSurface.ensureAtoms(), getProteinGeometry: () => proteinSubsystem.getGeometry(), getAssemblyCluster: () => _selectedAssemblyCluster, getRenderCamera, addFrameCallback, removeFrameCallback })
+  if (DEBUG) window.__NADOC_ZOOM_VOLUME__ = zoomVolume
   // Opt-in field diagnostic for the intermittent atomistic reload loop.
   // It prints one paste-ready JSON line five seconds after the first loading
   // request, with direct caller stacks plus live renderer/design state. Keep it

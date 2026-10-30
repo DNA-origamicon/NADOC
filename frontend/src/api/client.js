@@ -4269,9 +4269,10 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
  * ({vertices, faces, vertex_strand_index*, stats}); NOT a design response.
  */
 export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06, detail = 'coarse',
-                                                   signal, suppressBusy = false } = {}) {
+                                                   signal, suppressBusy = false, nucleotideKeys } = {}) {
   return _oxdnaJSON('POST', '/design/surface/region', {
     segments,
+    nucleotide_keys: nucleotideKeys,
     detail,
     color_mode:   colorMode,
     probe_radius: probeRadius,
@@ -5612,9 +5613,9 @@ export const sendVRJoinFeedback = body => _request('POST', '/vr/join-feedback', 
 export async function saveAssemblyViewVolumes(volumes) {
   return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })
 }
-export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal } = {}) {
+export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal, nucleotideKeys } = {}) {
   return _oxdnaJSON('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
-    { segments, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
+    { segments, nucleotide_keys: nucleotideKeys, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
 }
 
 export async function saveAssemblyAnnotations({ annotations, enabled }) {

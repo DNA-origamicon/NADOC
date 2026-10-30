@@ -48,6 +48,7 @@ class SurfaceRegionRequest(BaseModel):
     (the surface-rep regions). Stateless; same knobs as GET /design/surface."""
 
     segments: List[RepresentationSegment]
+    nucleotide_keys: list[str] | None = None
     detail: str = "coarse"
     color_mode: str = "strand"
     grid_spacing: float = 0.20
@@ -543,7 +544,7 @@ def build_region_surface(design, body: SurfaceRegionRequest) -> dict:
         for bp in range(lo, hi + 1):
             colset.add((seg.helix_id, bp))
 
-    if not colset:
+    if not colset and not body.nucleotide_keys:
         return {
             "vertices": [],
             "faces": [],
@@ -554,8 +555,23 @@ def build_region_surface(design, body: SurfaceRegionRequest) -> dict:
     model = build_atomistic_model(
         design,
         nuc_frame_override=_flexible_display_override(design),
+        include_proteins=any(key.startswith("__protein__") for key in (body.nucleotide_keys or [])),
     )
-    atoms = [a for a in model.atoms if (a.helix_id, a.bp_index) in colset]
+    atoms = model.atoms if body.nucleotide_keys is not None else [a for a in model.atoms if (a.helix_id, a.bp_index) in colset]
+
+    if body.nucleotide_keys is not None:
+        keys = set(body.nucleotide_keys)
+        def atom_key(atom):
+            if getattr(atom, "crossover_id", None) is not None and getattr(atom, "extra_base_k", None) is not None:
+                return f"__xb__:{atom.crossover_id}:{atom.extra_base_k}"
+            helix = atom.helix_id
+            bp = atom.bp_index
+            if getattr(atom, "extension_id", None) is not None and getattr(atom, "ext_k", None) is not None:
+                helix, bp = f"__ext_{atom.extension_id}", atom.ext_k
+            key = f"{helix}:{bp}:{atom.direction}"
+            copy = getattr(atom, "copy_k", None) or 0
+            return f"{key}:{copy}" if copy else key
+        atoms = [atom for atom in atoms if atom_key(atom) in keys]
 
     t0 = time.perf_counter()
     if body.detail == "chimerax":

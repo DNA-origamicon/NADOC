@@ -851,6 +851,7 @@ export function initAtomSurfaceDisplay({
   })
 
   return {
+    ensureAtoms: _ensureAtomData,
     applySurfaceMode: _applySurfaceMode,
     selectSurfaceDetail: _selectSurfaceDetail,
     refreshSurfaceRegions: () => _applyRegionSurfaceOverlay(store.getState().currentDesign, true),
