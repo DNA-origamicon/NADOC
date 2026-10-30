@@ -31,7 +31,9 @@ const _geo   = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
 
 // Shared grayscale radial-gradient texture (white centre → transparent edge).
 // Created once and reused by all SpriteMaterials.
-const _GLOW_TEX = (() => {
+let _glowTexture = null
+function getGlowTexture() {
+  if (_glowTexture) return _glowTexture
   const SIZE = 128
   const canvas = document.createElement('canvas')
   canvas.width = SIZE; canvas.height = SIZE
@@ -47,14 +49,14 @@ const _GLOW_TEX = (() => {
   ctx.fillRect(0, 0, SIZE, SIZE)
   const tex = new THREE.CanvasTexture(canvas)
   tex.needsUpdate = true
-  return tex
-})()
+  return (_glowTexture = tex)
+}
 
 // Each sprite owns its material: donors of the same color may have different
 // quenching. Reuse it across frames and dispose it when the sprite is removed.
 function _getSpriteMat(hexColor) {
   return new THREE.SpriteMaterial({
-    map:        _GLOW_TEX,
+    map:        getGlowTexture(),
     color:      hexColor,
     blending:   THREE.AdditiveBlending,
     depthWrite: false,
@@ -166,6 +168,13 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
   }
 
   return {
+    getMesh: () => mesh,
+
+    setStyle(color, intensity = 1) {
+      mat.color.set(color)
+      mat.opacity = Math.min(1, Math.max(0, GLOW_OPACITY * intensity))
+    },
+
     /** Position glow spheres over the given backbone entries. */
     setEntries(entries) {
       _entries = entries

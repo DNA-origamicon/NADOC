@@ -245,6 +245,14 @@ export function initProteinTraceRenderer(scene) {
       }
       return { ...c, radius: Math.sqrt(r2) }
     },
+    silhouetteEntries(predicate) {
+      const out = []
+      for (const group of attachmentGroups.values()) {
+        if (!group.userData.atoms.some(predicate)) continue
+        group.traverse(obj => { if (obj.isMesh) out.push({ mesh: obj }) })
+      }
+      return out
+    },
     raycastPick(raycaster) {
       const meshes = []
       root.traverse(obj => { if (obj.isMesh) meshes.push(obj) })

@@ -14,12 +14,15 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import * as THREE from 'three'
+import { registerSilhouetteHighlights } from './silhouette_highlight.js'
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 // Only WebGLRenderer is replaced; everything else in three stays real, because
 // the mode leans on Vector3/Quaternion/Box3/Scene maths throughout.
 
 const rendererCtor = vi.fn()
+const { drawAnnotations, syncAnnotations } = vi.hoisted(() => ({ drawAnnotations: vi.fn(), syncAnnotations: vi.fn() }))
+vi.mock('./annotation_overlay.js', () => ({ drawSceneAnnotations: drawAnnotations, syncSceneAnnotations: syncAnnotations }))
 
 vi.mock('three', async (importOriginal) => {
   const actual = await importOriginal()
@@ -183,6 +186,45 @@ describe('beginFrameSession', () => {
     expect(ctx.camera.aspect).toBe(aspect)               // restored in the finally
     expect(ctx.camera.view?.enabled).toBeFalsy()          // clearViewOffset()
     session.dispose()
+  })
+
+  it('scales highlight width using the full export and live drawing buffer, including tiled high-DPI exports', () => {
+    ctx.renderer.getDrawingBufferSize = t => t.set(1600, 1200)
+    ctx.renderer.getPixelRatio = () => 2
+    mode.activate()
+    const renderHighlight = vi.fn()
+    const unregister = registerSilhouetteHighlights(ctx.scene, renderHighlight)
+    const session = mode.beginFrameSession(6000, 4800)
+    try {
+      session.renderFrameToCanvas()
+      expect(renderHighlight).toHaveBeenCalledTimes(4)
+      for (const [, camera, scale] of renderHighlight.mock.calls) {
+        expect(camera).toBe(ctx.camera)
+        expect(scale).toBe(4)
+      }
+    } finally { session.dispose(); unregister() }
+  })
+
+  it('composites annotations once per complete frame with the export projection, then restores the preview', () => {
+    mode.activate()
+    const savedAspect = ctx.camera.aspect
+    drawAnnotations.mockClear()
+    syncAnnotations.mockClear()
+    drawAnnotations.mockImplementation((scene, context, width, height, camera) => {
+      expect(scene).toBe(ctx.scene)
+      expect(width).toBe(4200)
+      expect(height).toBe(2970)
+      expect(camera.aspect).toBeCloseTo(width / height)
+      expect(camera.view?.enabled).toBe(false)
+      expect(context.drawImage).toHaveBeenCalledTimes(2)
+    })
+    const session = mode.beginFrameSession(4200, 2970)
+    session.renderFrameToCanvas()
+    expect(drawAnnotations).toHaveBeenCalledOnce()
+    expect(syncAnnotations).toHaveBeenCalledTimes(2)
+    expect(ctx.camera.aspect).toBe(savedAspect)
+    session.dispose()
+    drawAnnotations.mockReset()
   })
 
   it('tiles anything above the GPU max texture size', () => {

@@ -36,3 +36,19 @@ export async function applyComparisonRepresentation(representation, {
   }
   return true
 }
+
+/** Only inputs consumed by the oxDNA frame builder, reference filter and palette.
+ * Autosave acknowledgements can replace the entire Design with equal geometry
+ * plus new loadout/history metadata; those must not restart a paused display.
+ */
+export function oxdnaPreviewInputsChanged(next, previous) {
+  const changed = (a, b) => a !== b && JSON.stringify(a) !== JSON.stringify(b)
+  if (next.currentGeometry !== previous.currentGeometry) return true
+  for (const key of ['simulationTabActive', 'showReferenceGeometry', 'strandColors', 'strandGroups', 'loopStrandIds']) {
+    if (changed(next[key], previous[key])) return true
+  }
+  for (const key of ['id', 'strands', 'crossovers', 'overhangs', 'extensions', 'cluster_transforms']) {
+    if (changed(next.currentDesign?.[key], previous.currentDesign?.[key])) return true
+  }
+  return false
+}

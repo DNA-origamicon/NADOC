@@ -21,6 +21,10 @@ def _note(**over):
         "icon": "warning",
         "callout_type": "rounded",
         "color": "#ff4d4d",
+        "highlight": True,
+        "highlight_type": "silhouette",
+        "glow_color": "#58a6ff",
+        "glow_intensity": 1.5,
         "transparency": 0.25,
         "size": 1.5,
         "manual": True,
@@ -76,6 +80,9 @@ def test_put_annotations_validates():
     )
     assert put() == 200
     assert put(color="red") == 422
+    assert put(glow_color="red") == 422
+    assert put(glow_intensity=-1) == 422
+    assert put(glow_intensity=3) == 422
     assert put(callout_type="wavy") == 422
     assert put(transparency=1.5) == 422
     assert put(size=0) == 422

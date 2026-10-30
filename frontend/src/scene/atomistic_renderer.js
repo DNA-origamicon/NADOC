@@ -728,6 +728,25 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       return offset === positions.length ? positions : positions.slice(0, offset)
     },
 
+    /** Exact rendered instances, including bonds; preserve the native impostor shader. */
+    silhouetteEntries(predicate) {
+      if (_state.mode === 'off') return []
+      const out = [], rows = new Set()
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          if (!predicate(_state.atoms.get(group[i]))) continue
+          rows.add(group[i])
+          out.push({ instMesh: _state.elementMeshes[el], id: i })
+        }
+      }
+      const indices = _state.bondAtomIdx
+      if (_state.bondMesh) for (let i = 0; i < (indices?.length ?? 0) / 2; i++) {
+        if (rows.has(indices[i * 2]) && rows.has(indices[i * 2 + 1]))
+          out.push({ instMesh: _state.bondMesh, id: i })
+      }
+      return out
+    },
+
     /** Build live glow entries for all atoms belonging to the supplied nucleotides. */
     selectionAtomEntries(nucs, { scale = 1.35, includeBonds = false } = {}) {
       if (_state.mode === 'off' || !nucs?.length) return []

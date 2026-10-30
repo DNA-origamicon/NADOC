@@ -291,7 +291,7 @@ describe('initAutosaveSync', () => {
     store._emitSlice('design', { currentDesign: { id: 'd1' } })
     expect(deps.syncBadge.setSyncStatus).toHaveBeenCalledWith('yellow', 'saving…')
     await vi.advanceTimersByTimeAsync(1500)
-    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledWith('/ws/d.nadoc')
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledWith('/ws/d.nadoc', { suppressBusy: true })
     expect(nadocBroadcast.emit).toHaveBeenCalledWith('file-saved', { path: '/ws/d.nadoc' })
     expect(sync.selfSavedPaths.has('/ws/d.nadoc')).toBe(true)
     // self-save marker clears after 5s
@@ -313,6 +313,76 @@ describe('initAutosaveSync', () => {
     expect(deps.api.saveDesignToWorkspace).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledOnce()
+  })
+
+  it('coalesces annotation edits during the metadata idle window without dropping topology edits', async () => {
+    const original = { id: 'd1', helices: [], annotations: [], annotations_enabled: true }
+    const { store, deps } = makeAutosaveDeps({ state: { currentDesign: original },
+      deps: { getWorkspacePath: () => '/ws/large.nadoc' } })
+    initAutosaveSync(deps)
+    store._emitSlice('design', { currentDesign: { ...original, annotations: [{ id: 'a', text: 'note' }] } })
+    await vi.advanceTimersByTimeAsync(9000)
+    store._emitSlice('design', { currentDesign: { ...store.getState().currentDesign, annotations_enabled: false } })
+    await vi.advanceTimersByTimeAsync(9999)
+    expect(deps.api.saveDesignToWorkspace).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledExactlyOnceWith('/ws/large.nadoc', { suppressBusy: true })
+    store._emitSlice('design', { currentDesign: { ...store.getState().currentDesign, helices: [{ id: 'h1' }] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledTimes(2)
+  })
+
+  it('serializes slow saves and coalesces waiting edits without acknowledging them early', async () => {
+    const { store, deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/d.nadoc' } })
+    let finish
+    deps.api.saveDesignToWorkspace.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    initAutosaveSync(deps)
+    store._emitSlice('design', { currentDesign: { id: 'd1', helices: [] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    for (let i = 0; i < 3; i++) {
+      store._emitSlice('design', { currentDesign: { id: 'd1', helices: [{ id: `h${i}` }] } })
+      await vi.advanceTimersByTimeAsync(1500)
+    }
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledTimes(1)
+    expect(deps.syncBadge.setSyncStatus).not.toHaveBeenCalledWith('green', 'saved')
+    finish({})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledTimes(2)
+    expect(deps.syncBadge.setSyncStatus).toHaveBeenLastCalledWith('green', 'saved')
+  })
+
+  it('keeps the library echo suppressed throughout a subsequent slow save', async () => {
+    const { store, deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/d.nadoc' } })
+    const releases = []
+    deps.api.saveDesignToWorkspace.mockImplementation(() => new Promise(resolve => releases.push(resolve)))
+    const sync = initAutosaveSync(deps)
+    store._emitSlice('design', { currentDesign: { id: 'd1', helices: [] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    store._emitSlice('design', { currentDesign: { id: 'd1', helices: [{ id: 'h' }] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    releases[0]({})
+    await vi.advanceTimersByTimeAsync(5001)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledTimes(2)
+    expect(sync.selfSavedPaths.has('/ws/d.nadoc')).toBe(true)
+    releases[1]({})
+    await vi.advanceTimersByTimeAsync(5001)
+    expect(sync.selfSavedPaths.has('/ws/d.nadoc')).toBe(false)
+  })
+
+  it('does not send a queued save into a different document', async () => {
+    let path = '/ws/d.nadoc', finish
+    const { store, deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => path } })
+    deps.api.saveDesignToWorkspace.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    initAutosaveSync(deps)
+    store._emitSlice('design', { currentDesign: { id: 'd1', helices: [] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    store._emitSlice('design', { currentDesign: { id: 'd1', helices: [{ id: 'h' }] } })
+    await vi.advanceTimersByTimeAsync(1500)
+    path = null
+    store._emitSlice('design', { currentDesign: { id: 'other' } })
+    finish({})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledTimes(1)
   })
 
   it.each(['rejection', 'empty response'])('shows save error, never saved, after %s', async (failure) => {

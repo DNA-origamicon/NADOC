@@ -7,7 +7,7 @@
 import './annotation_panel.css'
 import { ANNOTATION_ICONS, annotationIconMarkup } from '../scene/annotation_icons.js'
 import {
-  CALLOUT_TYPES, SIZE_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
+  CALLOUT_TYPES, GLOW_INTENSITY_RANGE, SIZE_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
 } from '../scene/annotation_model.js'
 import { assemblyAnnotationSelection } from '../scene/assembly_annotation_refs.js'
 import { describeTarget } from '../scene/annotation_targets.js'
@@ -195,6 +195,34 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     const colorRow = h(document, 'div', 'anno-row')
     colorRow.append(h(document, 'label', '', { text: 'Color' }), color)
 
+    const highlight = h(document, 'input', '', { type: 'checkbox', checked: entry.highlight })
+    highlight.dataset.field = 'highlight'
+    const highlightRow = h(document, 'label', 'anno-row', { text: 'Highlight target' })
+    highlightRow.prepend(highlight)
+    const highlightType = h(document, 'select', '', { 'aria-label': 'Highlight type' })
+    highlightType.dataset.field = 'highlightType'
+    for (const [value, label] of [['glow', 'Glow highlight'], ['silhouette', 'Silhouette highlight']]) {
+      highlightType.append(h(document, 'option', '', { value, text: label }))
+    }
+    highlightType.value = entry.highlightType
+    highlightType.addEventListener('change', () => controller.update(id, { highlightType: highlightType.value }))
+    const highlightTypeRow = h(document, 'div', 'anno-row')
+    highlightTypeRow.append(h(document, 'label', '', { text: 'Highlight type' }), highlightType)
+    const glowColor = h(document, 'input', '', { type: 'color', value: entry.glowColor, 'aria-label': 'Highlight color' })
+    glowColor.dataset.field = 'glowColor'
+    glowColor.addEventListener('input', () => controller.update(id, { glowColor: glowColor.value }))
+    const glowColorRow = h(document, 'div', 'anno-row')
+    glowColorRow.append(h(document, 'label', '', { text: 'Highlight color' }), glowColor)
+    const glowIntensity = rangeRow('Highlight intensity', GLOW_INTENSITY_RANGE, entry.glowIntensity,
+      v => `${Math.round(v * 100)}%`, v => controller.update(id, { glowIntensity: v }), 'glowIntensity')
+    const syncGlow = () => {
+      highlightType.disabled = !highlight.checked
+      glowColor.disabled = !highlight.checked
+      glowIntensity.querySelector('input').disabled = !highlight.checked
+    }
+    highlight.addEventListener('change', () => { controller.update(id, { highlight: highlight.checked }); syncGlow() })
+    syncGlow()
+
     const transparency = rangeRow('Transparency', TRANSPARENCY_RANGE, entry.transparency,
       v => `${Math.round(v * 100)}%`, v => controller.update(id, { transparency: v }), 'transparency')
     const size = rangeRow('Size', SIZE_RANGE, entry.size, v => `${v.toFixed(2)}×`, v => controller.update(id, { size: v }), 'size')
@@ -229,7 +257,7 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
 
     const warn = h(document, 'p', 'anno-warn', { text: 'Add text or pick an icon — the callout won’t appear until you do.' })
 
-    card.append(topRow, text, iconRow, typeRow, colorRow, transparency, size, manualRow, manualHint, targetRow, target, warn)
+    card.append(topRow, text, iconRow, typeRow, colorRow, highlightRow, highlightTypeRow, glowColorRow, glowIntensity, transparency, size, manualRow, manualHint, targetRow, target, warn)
     cards.set(id, { card, iconBtn, warn, target, clear, use, text })
     refreshIconButton(id)
     refreshTarget(id)

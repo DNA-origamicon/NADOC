@@ -11,7 +11,7 @@ import { initAnnotationPanel } from '../ui/annotation_panel.js'
 export function initAnnotations({
   document = globalThis.document, store, api, scene, getCamera, addFrameCallback, removeFrameCallback,
   getEntries = () => [], resolveBasePosition, getProteinRenderer = () => null, getNanoparticleSubsystem = () => null,
-  getAssemblyRenderer = () => null,
+  getAssemblyRenderer = () => null, getDnaSilhouetteEntries = () => [],
   container = document.getElementById('canvas-area'),
   pane = document.getElementById('right-tab-content-annotations'), legacyStorage,
 }) {
@@ -62,6 +62,15 @@ export function initAnnotations({
     getEntries: () => host().assembly ? [] : getEntries(),
     resolveTargetEntries: refs => host().assembly ? assemblyTargets.resolve(refs) : null,
     getDesign: () => host().doc, resolveBasePosition,
+    resolveSilhouette: (refs, matched) => matched.concat(
+      host().assembly ? [] : getDnaSilhouetteEntries(refs, matched), refs.flatMap(ref => {
+        if (ref.kind === 'protein') return getProteinRenderer()?.silhouetteEntries?.(a => a.helix_id === `__protein__${ref.id}`) ?? []
+        if (ref.kind === 'nanoparticle') {
+          const mesh = getNanoparticleSubsystem()?.meshes?.get(ref.id)
+          return mesh ? [{ mesh }] : []
+        }
+        return []
+      })),
     resolveExternal: external.resolve, getOccluders: () => host().assembly ? assemblyTargets.occluders() : external.listAll(),
     addFrameCallback, removeFrameCallback,
   })

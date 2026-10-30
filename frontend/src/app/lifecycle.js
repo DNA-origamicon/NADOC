@@ -158,16 +158,19 @@ export function initAutosaveSync({
   let _savingAssembly   = false
   let _reloadingFromSSE = false
   const _selfSavedPaths = new Set()
+  const _designSaveMarkers = new Map()
   let _lastSameDocActivityMs = 0
   let _designSaveTimer  = null
+  let _designSaveInFlight = null
+  let _designSaveGeneration = 0
   let _assemblySaveTimer = null
   let _partSaveTimer = null
   let _libRefreshTimer = null
 
-  const _viewVolumeOnly = (next, previous) => {
-    if (!next || !previous || next === previous || next.view_volumes === previous.view_volumes) return false
+  const _displayMetadataOnly = (next, previous) => {
+    if (!next || !previous || next === previous) return false
     const keys = new Set([...Object.keys(next), ...Object.keys(previous)])
-    keys.delete('view_volumes')
+    for (const key of ['view_volumes', 'annotations', 'annotations_enabled']) keys.delete(key)
     for (const key of keys) if (next[key] !== previous[key]) return false
     return true
   }
@@ -178,40 +181,63 @@ export function initAutosaveSync({
     // autosave a protected branch invokes the 409 recovery path, which activates the
     // editable branch and silently undoes the warning-icon rollback.
     if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
-    const viewVolumeOnly = _viewVolumeOnly(newState.currentDesign, prevState.currentDesign)
+    const displayMetadataOnly = _displayMetadataOnly(newState.currentDesign, prevState.currentDesign)
     // The dedicated PUT has already persisted this metadata in server state.
-    // Delay the large portable-file flush until a representation/opacity gesture
-    // has been idle, otherwise Voltron serializes ~82 MB between consecutive card
-    // changes and blocks their tiny PUTs behind CPU/lock contention.
-    const saveDelay = viewVolumeOnly ? 10_000 : 1_500
+    // Coalesce annotation, glow and view-volume gestures before flushing the
+    // large portable file. Their small metadata PUTs still reach server state
+    // immediately; full Voltron snapshots should not run between card edits.
+    const saveDelay = displayMetadataOnly ? 10_000 : 1_500
     if (getPartEditContext()) {
       if (newState.currentDesign === prevState.currentDesign) return
       syncBadge.setSyncStatus('yellow', 'auto-saving…')
       clearTimeout(_partSaveTimer)
       _partSaveTimer = setTimeout(() => {
         fileIo.savePartToAssembly({ silent: true })
-      }, viewVolumeOnly ? 10_000 : 900)
+      }, displayMetadataOnly ? 10_000 : 900)
       return
     }
     if (!getWorkspacePath() || _reloadingFromSSE) return
     if (newState.currentDesign === prevState.currentDesign) return
     syncBadge.setSyncStatus('yellow', 'saving…')
     clearTimeout(_designSaveTimer)
+    const generation = ++_designSaveGeneration
+    const designId = newState.currentDesign?.id
+    const path = getWorkspacePath()
     _designSaveTimer = setTimeout(async () => {
-      const path = getWorkspacePath()
-      if (!path) return
-      syncBadge.syncLog('info', 'SAVE', `design → ${path}`)
-      _selfSavedPaths.add(path)
-      nadocBroadcast.emit('file-saved', { path })   // tell sibling tabs to skip the SSE reload echo
-      try {
-        const saved = await api.saveDesignToWorkspace(path)
-        if (!saved) throw new Error('The part file could not be saved.')
-        syncBadge.setSyncStatus('green', 'saved')
-        setTimeout(() => _selfSavedPaths.delete(path), 5000)
-      } catch (err) {
-        syncBadge.setSyncStatus('red', 'save error')
-        syncBadge.syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
-        setTimeout(() => _selfSavedPaths.delete(path), 5000)
+      const previousSave = _designSaveInFlight
+      const pending = (async () => {
+        // A large file may take longer to save than the debounce interval.
+        // Serialize writes and coalesce edits waiting behind that write.
+        if (previousSave) await previousSave
+        if (generation !== _designSaveGeneration || path !== getWorkspacePath()
+            || designId !== store.getState().currentDesign?.id) return
+        syncBadge.syncLog('info', 'SAVE', `design → ${path}`)
+        _selfSavedPaths.add(path)
+        _designSaveMarkers.set(path, generation)
+        nadocBroadcast.emit('file-saved', { path })
+        try {
+          const saved = await api.saveDesignToWorkspace(path, { suppressBusy: true })
+          if (!saved) throw new Error('The part file could not be saved.')
+          // An older write must not claim that newer, still-pending edits are saved.
+          if (generation === _designSaveGeneration && path === getWorkspacePath()
+              && designId === store.getState().currentDesign?.id)
+            syncBadge.setSyncStatus('green', 'saved')
+        } catch (err) {
+          syncBadge.setSyncStatus('red', 'save error')
+          syncBadge.syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
+        } finally {
+          setTimeout(() => {
+            // A prior save's grace period must not expose a newer slow write
+            // to its own library-change echo (which would reload stale state).
+            if (_designSaveMarkers.get(path) !== generation) return
+            _designSaveMarkers.delete(path)
+            _selfSavedPaths.delete(path)
+          }, 5000)
+        }
+      })()
+      _designSaveInFlight = pending
+      try { await pending } finally {
+        if (_designSaveInFlight === pending) _designSaveInFlight = null
       }
     }, saveDelay)
   })

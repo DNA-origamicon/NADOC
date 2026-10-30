@@ -171,6 +171,36 @@ describe('FigureShader ChimeraX depth-outline', () => {
 })
 
 describe('FigurePass pre-pass exclusions', () => {
+  it('excludes invisible picking disks and editor overlays without hiding DNA', () => {
+    const scene = new THREE.Scene()
+    const pass = new FigurePass(scene, new THREE.PerspectiveCamera())
+    const mesh = (params = {}) => new THREE.Mesh(
+      new THREE.CircleGeometry(), new THREE.MeshBasicMaterial(params),
+    )
+    const hitDisk = mesh({ transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+    const hoverRing = mesh({ transparent: true, opacity: 0.8, depthWrite: false })
+    const hiddenMaterial = mesh({ visible: false })
+    const transparentHit = mesh({ transparent: true, opacity: 0 })
+    const overlay = mesh()
+    overlay.userData.noAO = true
+    const dragPlane = mesh()
+    dragPlane.isTransformControlsPlane = true
+    const alreadyHidden = mesh()
+    alreadyHidden.visible = false
+    // Partly transparent molecular surfaces still contribute depth.
+    const dna = mesh({ transparent: true, opacity: 0.5 })
+    const excluded = [hitDisk, hoverRing, hiddenMaterial, transparentHit, overlay, dragPlane]
+    scene.add(...excluded, alreadyHidden, dna)
+
+    pass._hideNonSurfaces()
+    for (const obj of excluded) expect(obj.visible).toBe(false)
+    expect(dna.visible).toBe(true)
+    pass._restoreHidden()
+    for (const obj of excluded) expect(obj.visible).toBe(true)
+    expect(alreadyHidden.visible).toBe(false)
+    expect(hitDisk.material.opacity).toBe(0)
+  })
+
   it('hides only the meshes MeshNormalMaterial cannot reproduce, and restores them', () => {
     const scene  = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera()

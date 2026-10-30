@@ -1319,6 +1319,10 @@ class Annotation(BaseModel):
     icon: Optional[str] = Field(None, max_length=32)
     callout_type: Literal["elbow", "line", "rounded", "shelf"] = "elbow"
     color: str = Field("#f0883e", pattern=r"^#[0-9a-fA-F]{6}$")
+    highlight: bool = False
+    glow_color: str = Field("#f0883e", pattern=r"^#[0-9a-fA-F]{6}$")
+    glow_intensity: float = Field(1.0, ge=0.0, le=2.0)
+    highlight_type: Literal["glow", "silhouette"] = "glow"
     transparency: float = Field(0.0, ge=0.0, le=1.0)
     size: float = Field(1.0, ge=0.25, le=4.0)
     manual: bool = False

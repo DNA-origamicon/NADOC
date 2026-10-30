@@ -85,6 +85,20 @@ describe('workspace save response synchronization', () => {
     expect(currentRevisionWatermark()).toBeNull()
   })
 
+  it.each([saveDesignToWorkspace, saveDesignAs])('keeps simulations active on an initial same-identity path claim (%s)', async save => {
+    const current = { id: 'same-id', strands: [], helices: [], metadata: {} }
+    const claimed = { ...current, metadata: { identity_last_known_path: 'part.nadoc' } }
+    store.setState({ currentDesign: current })
+    fetch.mockResolvedValueOnce(response({ disposition: 'claimed', design: claimed }))
+    const invalidate = vi.fn()
+    window.addEventListener('nadoc:design-changed', invalidate)
+    try {
+      await save('part.nadoc')
+      expect(store.getState().currentDesign).toEqual(claimed)
+      expect(invalidate).not.toHaveBeenCalled()
+    } finally { window.removeEventListener('nadoc:design-changed', invalidate) }
+  })
+
   it('still synchronizes an initial path claim or Save As identity change', async () => {
     const current = { id: 'old-id', strands: [], helices: [], metadata: {} }
     const claimed = {

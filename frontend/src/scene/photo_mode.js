@@ -1,3 +1,5 @@
+import { prepareExportGrids } from './photo_renderer/export_grid.js'
+import { renderSilhouetteHighlights } from './silhouette_highlight.js'
 /**
  * Photo mode — figure-quality rendering of the design on screen.
  *
@@ -40,6 +42,7 @@
  * deactivate, the same save/restore contract photo mode v1 honoured.
  */
 
+import { drawSceneAnnotations, syncSceneAnnotations } from './annotation_overlay.js'
 import * as THREE from 'three'
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -838,6 +841,7 @@ export function createPhotoMode(sceneCtx) {
     setRenderFn(() => {
       _perFrameSync()
       _composer?.render()
+      renderSilhouetteHighlights(renderer, scene, camera)
     })
   }
 
@@ -1109,6 +1113,10 @@ export function createPhotoMode(sceneCtx) {
     const maxTex = probeR.capabilities.maxTextureSize
     probeR.dispose()
 
+    // Match live screen-space line widths at the same displayed size.
+    // Use the full export height, not a tile's height, and account for the
+    // live drawing buffer's device pixel ratio. Opacity stays unchanged.
+    const exportPixelScale = height / Math.max(1, renderer.getDrawingBufferSize(new THREE.Vector2()).y)
     const tileMax = Math.min(maxTex, 4096)
     const tilesX  = Math.max(1, Math.ceil(width  / tileMax))
     const tilesY  = Math.max(1, Math.ceil(height / tileMax))
@@ -1172,9 +1180,11 @@ export function createPhotoMode(sceneCtx) {
     function renderFrameToCanvas() {
       assertPlacementExportSafe(scene)
       if (_disposed) throw new Error('photo: renderFrame() called after dispose()')
+      syncSceneAnnotations(scene)
       _syncForOfflineFrame(followMotion)
 
       const savedAspect = camera.aspect
+      const restoreGrids = prepareExportGrids(scene, exportPixelScale)
       try {
         camera.aspect = width / height
         // The tiles are drawn with drawImage, which COMPOSITES. On a transparent
@@ -1196,16 +1206,22 @@ export function createPhotoMode(sceneCtx) {
             scene.environment = _settings.studioEnvironment ? exportEnvTexture : null
             try {
               composer.render()
+              renderSilhouetteHighlights(offRenderer, scene, camera, exportPixelScale)
             } finally {
               scene.environment = liveEnv
             }
             finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
           }
         }
+        camera.clearViewOffset()
+        camera.updateProjectionMatrix()
+        drawSceneAnnotations(scene, finalCtx, width, height, camera)
       } finally {
+        restoreGrids()
         camera.clearViewOffset()
         camera.aspect = savedAspect
         camera.updateProjectionMatrix()
+        syncSceneAnnotations(scene)
       }
       return finalCanvas
     }

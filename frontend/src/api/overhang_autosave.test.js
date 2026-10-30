@@ -66,7 +66,7 @@ describe.each(['workspace', 'assembly part'])('overhang Gen autosave: %s', (dest
       expect(savePart).toHaveBeenCalledExactlyOnceWith({ silent: true })
       expect(saveWorkspace).not.toHaveBeenCalled()
     } else {
-      expect(saveWorkspace).toHaveBeenCalledExactlyOnceWith('parts/test.nadoc')
+      expect(saveWorkspace).toHaveBeenCalledExactlyOnceWith('parts/test.nadoc', { suppressBusy: true })
       expect(savePart).not.toHaveBeenCalled()
     }
   })

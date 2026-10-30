@@ -171,3 +171,20 @@ export function describeTarget(refs, design) {
   const parts = [...counts].map(([kind, n]) => `${n} ${(KIND_LABELS[kind] ?? kind).toLowerCase()}${n > 1 ? 's' : ''}`)
   return `${refs.length} items · ${parts.join(', ')}`
 }
+
+/** Resolve the displayed DNA components without substituting bounding shapes. */
+export function dnaSilhouetteEntries(refs, design, renderer, atomRenderers = []) {
+  const beads = matchTargetEntries(refs, design, renderer.getBackboneEntries?.() ?? [])
+  const slabs = matchTargetEntries(refs, design, (renderer.getSlabEntries?.() ?? []).map(e => ({ ...e, pos: e.bbPos })))
+  const cones = matchTargetEntries(refs, design, (renderer.getConeEntries?.() ?? []).flatMap(e =>
+    [e.fromNuc, e.toNuc].filter(Boolean).map(nuc => ({ ...e, nuc, pos: e.midPos }))))
+  const domains = matchTargetEntries(refs, design, (renderer.getCylinderDomainData?.() ?? []).map(d => ({
+    nuc: { helix_id: d.helixId, strand_id: d.strandId, domain_index: d.domainIndex }, pos: {}, domain: d,
+  }))).map(e => ({ strandId: e.domain.strandId, domainIndex: e.domain.domainIndex }))
+  return [...beads, ...slabs, ...cones,
+    ...slabs.filter(e => e.connectorMesh).map(e => ({ instMesh: e.connectorMesh, id: e.connectorId })),
+    ...(renderer.selectionCylinderEntries?.(domains) ?? []),
+    ...atomRenderers.filter(Boolean).flatMap(r => r.selectionAtomEntries?.(
+      beads.map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })), { includeBonds: true }) ?? []),
+  ]
+}

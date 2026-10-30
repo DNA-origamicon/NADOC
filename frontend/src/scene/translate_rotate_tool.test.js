@@ -113,6 +113,20 @@ beforeEach(() => {
 })
 
 describe('initTranslateRotateTool — API + init side effects', () => {
+  it('keeps the explicitly activated attachment controller and commits before deactivation', async () => {
+    let attached = false
+    const proteinGizmo = { isAttached: () => attached, commit: vi.fn(async () => {}), detach: vi.fn(() => { attached = false }) }
+    const { deps, store } = makeDeps({ proteinGizmo })
+    store.subscribe(state => { if (state.translateRotateActive) attached = true })
+    const tool = initTranslateRotateTool(deps)
+    await tool.activate()
+    expect(deps.moveRotatePanel.setSessionMode).toHaveBeenLastCalledWith('protein')
+    await tool.confirm()
+    expect(proteinGizmo.commit).toHaveBeenCalledOnce()
+    expect(proteinGizmo.detach).toHaveBeenCalledOnce()
+    expect(store.getState().translateRotateActive).toBe(false)
+  })
+
   it('routes Apply, Cancel, and Reset to an attached protein session', () => {
     const proteinGizmo = {
       isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),

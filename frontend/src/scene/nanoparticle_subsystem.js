@@ -265,7 +265,8 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     highlighted = id
     const particles = store.getState().currentDesign?.nanoparticles ?? []
     refreshAppearance()
-    if (id && meshes.has(id)) {
+    const moveActive = !!store.getState().translateRotateActive
+    if (id && meshes.has(id) && moveActive) {
       if (reanchor || gizmo.getAttachmentId() !== id) gizmo.attach(
         id, scene, camera, canvas, centroid(id), movementConstraints.get(id) ?? null,
       )
@@ -284,7 +285,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         ? 'Drag the nanoparticle joint. The handle duplex swings rigidly between two ball joints.'
         : 'Drag the nanoparticle gizmo. Press T or R to change mode.'
     } else if (gizmo.isAttached()) gizmo.cancel()
-    if (!id) {
+    if (!id || !meshes.has(id) || !moveActive) {
       if (moveRotatePanel?.getProteinController?.() === gizmo) {
         moveRotatePanel.setProteinController(null)
       }
@@ -366,7 +367,8 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     // Persisted metadata and identical geometry responses must retain the PDB
     // prototype and compiled materials. Actual placement/topology edits rebuild.
     if (nanoparticleRenderInputsChanged(next, prev)) rebuild()
-    else if (next.selection !== prev.selection) syncSelection()
+    else if (next.selection !== prev.selection
+        || next.translateRotateActive !== prev.translateRotateActive) syncSelection()
   })
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && primaryRefOfKind(store.getState(), 'nanoparticle')) {

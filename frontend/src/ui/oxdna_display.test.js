@@ -448,6 +448,23 @@ describe('initOxdnaDisplay controller', () => {
     expect(applyOxdnaFrame).toHaveBeenLastCalledWith(null)
   })
 
+  it.each(['oxdna', 'mrdna-coarse', 'mrdna-fine'])('reapplying %s frames never re-enables native crossover arcs', async repr => {
+    const resp = { ready: true, positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
+      backbone_position: [8, 0, 0], nx: 1, ny: 0, nz: 0 }] }
+    const deps = makeDeps(resp), setDesignVisible = vi.fn()
+    let currentRepr = repr
+    const ctrl = initOxdnaDisplay({ ...deps, setDesignVisible, getCurrentRepr: () => currentRepr })
+    await ctrl.displayJob('job')
+    setDesignVisible.mockClear()
+    ctrl.reapplyForRepr()
+    expect(setDesignVisible).toHaveBeenCalledWith(false)
+    expect(setDesignVisible).not.toHaveBeenCalledWith(true)
+    // Native Full still needs its crossover lines when explicitly restored.
+    currentRepr = 'full'
+    ctrl.reapplyForRepr()
+    expect(setDesignVisible).toHaveBeenLastCalledWith(true)
+  })
+
   it('does not activate when there is no relaxed frame', async () => {
     const deps = makeDeps({ ready: false, positions: [] })
     const ctrl = initOxdnaDisplay(deps)

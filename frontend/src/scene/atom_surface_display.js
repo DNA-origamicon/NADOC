@@ -66,7 +66,7 @@ export function isViewVolumeOnlyDesignChange(next, previous) {
 export function atomisticDesignInputsChanged(next, previous) {
   if (next === previous) return false
   if (!next || !previous) return true
-  const ignored = new Set(['metadata', 'id', 'view_volumes', 'camera_poses', 'animations'])
+  const ignored = new Set(['metadata', 'id', 'view_volumes', 'camera_poses', 'animations', 'annotations', 'annotations_enabled'])
   return [...new Set([...Object.keys(next), ...Object.keys(previous)])].some(key =>
     !ignored.has(key) && next[key] !== previous[key] && JSON.stringify(next[key]) !== JSON.stringify(previous[key]))
 }

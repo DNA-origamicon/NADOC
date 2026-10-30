@@ -51,7 +51,9 @@ function _signalDesignChanged({
     changed_helix_ids: changedHelixIds,
     metadata_only: metadataOnly,
   })
-  if (typeof window !== 'undefined') {
+  // Display metadata still syncs across tabs, but does not invalidate simulation
+  // results or restart a renderer owned by a loaded trajectory.
+  if (!metadataOnly && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nadoc:design-changed', {
       detail: { geometry_unchanged: geometryUnchanged },
     }))
@@ -4911,8 +4913,8 @@ export async function saveAssemblyToWorkspace(filename) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function saveDesignToWorkspace(path) {
-  const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
+export async function saveDesignToWorkspace(path, { suppressBusy = false } = {}) {
+  const json = await _request('POST', '/design/save-workspace', { path, overwrite: true }, { suppressBusy })
   if (!json) throw new Error(store.getState().lastError?.message ?? 'The part file could not be saved.')
   // A same-path save refreshes only the backend's identity_confirmed_at stamp.
   // Feeding that response back through currentDesign creates an autosave loop:
@@ -4926,7 +4928,12 @@ export async function saveDesignToWorkspace(path) {
   }
   // Initial path claims and Save As can change identity/path metadata (and Save
   // As can mint a new UUID), so those responses still must enter the store.
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  // Claiming a path does not alter the model or invalidate its active simulation.
+  // A Save As identity change still needs the normal document-change signal.
+  return _syncFromDesignResponse(json, {
+    skipGeometry: true,
+    crossTabMetadataOnly: json.design?.id === store.getState().currentDesign?.id,
+  })
 }
 
 /** Save current in-memory design to an explicit workspace path.
@@ -4939,7 +4946,12 @@ export async function saveDesignAs(path, overwrite = true) {
         json.previous_revision === currentRevisionWatermark()) _designRevisions.acceptMetadata(json, [], json.design_id)
     return json
   }
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  // Claiming a path does not alter the model or invalidate its active simulation.
+  // A Save As identity change still needs the normal document-change signal.
+  return _syncFromDesignResponse(json, {
+    skipGeometry: true,
+    crossTabMetadataOnly: json.design?.id === store.getState().currentDesign?.id,
+  })
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */

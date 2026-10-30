@@ -1,3 +1,4 @@
+import { dnaSilhouetteEntries } from './scene/annotation_targets.js'
 import { openVRSweepEdit } from './scene/vr_sweep_edit.js'
 import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
@@ -284,7 +285,7 @@ import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMultiView, multiViewDesignCentroid } from './ui/multi_view.js'
 import { initMultiOverlay } from './ui/multi_overlay.js'
-import { applyComparisonRepresentation } from './ui/comparison_representations.js'
+import { applyComparisonRepresentation, oxdnaPreviewInputsChanged } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { standardizeSimulationCardOrder } from './ui/simulation_card_order.js'
@@ -4294,6 +4295,8 @@ async function main() {
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
   initAnnotations({
+    getDnaSilhouetteEntries: refs => dnaSilhouetteEntries(refs, store.getState().currentDesign, designRenderer,
+      [atomisticRenderer, _atomSurface.getRegionVdwRenderer?.(), _atomSurface.getRegionBallstickRenderer?.(), _atomSurface.getRegionStickRenderer?.()]),
     getAssemblyRenderer: () => assemblyRenderer,
     store, api, scene, getCamera: getRenderCamera, addFrameCallback, removeFrameCallback,
     getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
@@ -6088,12 +6091,7 @@ async function main() {
   // particles appear/disappear without requiring the user to re-pick oxDNA.
   store.subscribe((newState, prevState) => {
     if (_currentRepr !== 'oxdna') return
-    if (newState.simulationTabActive === prevState.simulationTabActive &&
-        newState.showReferenceGeometry === prevState.showReferenceGeometry &&
-        newState.currentDesign === prevState.currentDesign &&
-        newState.strandColors === prevState.strandColors &&
-        newState.strandGroups === prevState.strandGroups &&
-        newState.loopStrandIds === prevState.loopStrandIds) return
+    if (!oxdnaPreviewInputsChanged(newState, prevState)) return
     void _setRepresentation('oxdna')
   })
 

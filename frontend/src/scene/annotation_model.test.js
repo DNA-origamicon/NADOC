@@ -7,6 +7,10 @@ import {
 describe('normalizeAnnotation', () => {
   it('fills defaults and clamps out-of-range values', () => {
     const a = normalizeAnnotation({ size: 99, transparency: 5, color: 'nope', calloutType: 'bogus', icon: 'bogus' }, { index: 1 })
+    expect(a.highlight).toBe(false)
+    expect(a.highlightType).toBe('glow')
+    expect(normalizeAnnotation({ highlightType: 'unknown' }).highlightType).toBe('glow')
+    expect(normalizeAnnotation({ glowIntensity: 99, glowColor: 'invalid', color: '#123456' })).toMatchObject({ glowIntensity: 2, glowColor: '#123456' })
     expect(a.size).toBe(2.5)
     expect(a.transparency).toBe(0.8)
     expect(a.color).toBe(ANNOTATION_COLORS[1])
@@ -42,7 +46,7 @@ describe('renderability', () => {
 describe('file wire format', () => {
   it('maps to the snake_case .nadoc shape and back without loss', () => {
     const entry = normalizeAnnotation({
-      id: 'a', text: 't', icon: 'check', calloutType: 'rounded', color: '#123456', transparency: 0.3, size: 1.4,
+      highlight: true, highlightType: 'silhouette', glowColor: '#00ff00', glowIntensity: 1.5, id: 'a', text: 't', icon: 'check', calloutType: 'rounded', color: '#123456', transparency: 0.3, size: 1.4,
       manual: true, screenPos: { x: 0.2, y: 0.7 }, visible: false, refs: [{ kind: 'domain', strandId: 's', domainIndex: 1 }],
     })
     const wire = annotationToWire(entry)

@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three'
+import { renderSilhouetteHighlights } from '../scene/silhouette_highlight.js'
 import { configureMouseBindings, attachMouseBindings } from './mouse_bindings.js'
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
@@ -227,7 +228,10 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
 
   // Photo-mode render override — replaces renderer.render() in the animation loop.
   // The default fn is restored by resetRenderFn().
-  let _defaultRenderFn = () => renderer.render(scene, _renderCamera)
+  let _defaultRenderFn = () => {
+    renderer.render(scene, _renderCamera)
+    renderSilhouetteHighlights(renderer, scene, _renderCamera)
+  }
   let _renderFn = _defaultRenderFn
 
   function setRenderFn(fn) { _renderFn = fn }

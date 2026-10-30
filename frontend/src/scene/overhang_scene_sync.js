@@ -1,3 +1,4 @@
+import { isAnnotationOnlyDesignChange } from './annotation_model.js'
 import { initOverhangLocations } from './overhang_locations.js'
 import { initOverhangLinkArcs } from './overhang_link_arcs.js'
 import { initFlexibleArcs } from './flexible_arcs.js'
@@ -53,7 +54,8 @@ export function initOverhangSceneSync({ scene, store, designRenderer, assemblyRe
   }
 
   store.subscribe((next, previous) => {
-    const designChanged = next.currentDesign !== previous.currentDesign
+    const designChanged = next.currentDesign !== previous.currentDesign &&
+      !isAnnotationOnlyDesignChange(next.currentDesign, previous.currentDesign)
     const geometryChanged = next.currentGeometry !== previous.currentGeometry
     const straightChanged = next.straightGeometry !== previous.straightGeometry
     if (designChanged || geometryChanged) {

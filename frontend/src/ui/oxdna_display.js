@@ -525,7 +525,11 @@ export function initOxdnaDisplay({
   // arc-layout pass can't leave extra-base / extension beads stranded at native positions.
   let _lastCgUpdates = null
   const _applyFem = (updates) => {
-    if (updates) setDesignVisible?.(true)
+    // Standalone oxDNA/mrDNA geometry owns the visible connections. Reapplying
+    // an identical frame may not notify simulation subscribers again, so never
+    // expose native crossover arcs and rely on a later redraw to hide them.
+    const repr = getCurrentRepr?.()
+    if (updates) setDesignVisible?.(!['oxdna', 'mrdna-coarse', 'mrdna-fine'].includes(repr))
     _lastCgUpdates = updates
     const handledByOxdna = getCurrentRepr?.() === 'oxdna' && applyOxdnaFrame?.(updates) === true
     if (!handledByOxdna) designRenderer?.applyFemPositions(updates)

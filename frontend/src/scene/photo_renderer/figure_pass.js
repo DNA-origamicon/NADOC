@@ -347,6 +347,14 @@ export class FigurePass extends Pass {
         // would stamp a huge depth step and draw a contour along the horizon
         // and around every silhouette where the design meets the plane.
         || obj.userData?.photoFloor
+        || obj.userData?.noAO
+        || obj.isTransformControlsPlane
+        // The override discards the source material's visibility/depth flags.
+        // In particular, blunt-end rings and picking disks are visible objects
+        // with zero-opacity, depthWrite:false materials, not DNA surfaces.
+        || m?.visible === false
+        || m?.depthWrite === false
+        || (m?.transparent && m.opacity === 0)
         || m?.isLineBasicMaterial
         || m?.isLineDashedMaterial
         || m?.blending === THREE.AdditiveBlending

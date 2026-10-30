@@ -365,6 +365,18 @@ export function initTranslateRotateTool(deps) {
     setActive(true)
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
 
+    // Explicit activation lets attachment subscribers attach the selected
+    // protein/nanoparticle. Keep their controller and panel instead of replacing
+    // them with the cluster-selection waiting state.
+    if (!targetClusterId && proteinGizmo?.isAttached()) {
+      finishClusterPick?.()
+      _moveRotatePanel.setAssemblyCtx(null)
+      _moveRotatePanel.setSessionMode?.('protein')
+      if (_mrPanel) _mrPanel.style.display = ''
+      _confirmBtn.style.display = 'flex'
+      return
+    }
+
     // ── Multi-selected clusters → drive them all as one rigid body ──────────────
     // Only when the caller did NOT pre-target a specific cluster (Rotate button,
     // joint rotate, strand-click retarget all pass one). Keep only canonical ids
@@ -466,6 +478,12 @@ export function initTranslateRotateTool(deps) {
     if (_vrPreview) {
       showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
       return
+    }
+    // Finish the attachment preview before disabling the tool: its subscribers
+    // cancel uncommitted previews on deactivation.
+    if (proteinGizmo?.isAttached()) {
+      await proteinGizmo.commit()
+      proteinGizmo.detach()
     }
     setActive(false)
     _confirmBtn.style.display = 'none'
