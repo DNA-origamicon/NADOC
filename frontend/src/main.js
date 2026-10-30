@@ -1255,7 +1255,9 @@ async function main() {
   // post-boot, so the lazy reference is resolved by then.)
   const _restoreDesignHeavy = () => {
     if (atomisticRenderer.getMode?.() !== 'off') {
-      _atomSurface.invalidateAtomCache()
+      // The native cache follows design edits, not simulation poses. Reuse it
+      // so Off restores positions immediately instead of leaving the last MD
+      // pose visible while an unnecessary atomistic rebuild is in flight.
       return _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
     }
     if (_atomSurface.getSurfaceMode?.() !== 'off') {
@@ -6414,7 +6416,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active) },
+    onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active); if(active)void vrViewTools.prepare().catch(()=>{}) },
     onNativePoll: () => { void vrJoin.publish(); void vrPrompts.publish(); void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
     renderer,
     scene,
@@ -6788,6 +6790,16 @@ async function main() {
   document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
     const { showAboutFileModal } = await import('./ui/about_file_modal.js')
     showAboutFileModal({ api, path: _workspacePath })
+  })
+
+  document.getElementById('menu-help-nanobase-inventory')?.addEventListener('click', async () => {
+    const { showNanobaseInventory } = await import('./ui/nanobase_inventory.js')
+    showNanobaseInventory()
+  })
+
+  document.getElementById('menu-help-image-evaluation')?.addEventListener('click', async () => {
+    const { showImageEvaluation } = await import('./ui/image_evaluation.js')
+    showImageEvaluation()
   })
 
   document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {

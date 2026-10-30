@@ -409,3 +409,7 @@ experiments/exp60_extra_vs_native_photoproducts/results/jobs/*/summary.json
 /analysis/gerling2018_unsolved_schematic_20261027/*
 !/analysis/gerling2018_unsolved_schematic_20261027/*.py
 !/analysis/gerling2018_unsolved_schematic_20261027/*.md
+
+# Raw desktop benchmark logs and capture retained on Archive.
+/docs/benchmarks/desktop/*.txt
+/docs/benchmarks/desktop/*.png

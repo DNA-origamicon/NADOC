@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createVRViewTools, captureVRView, VR_VIEW_KEYS } from './vr_view_tools.js'
+import { createVRViewTools, captureVRView, prepareVRViewPanel, VR_VIEW_KEYS } from './vr_view_tools.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 
 vi.mock('../viewer/broadcast_fingerprint.js', () => ({ broadcastFingerprint: vi.fn(() => 'same-scene') }))
 let state, controller
+const controllers=[]
+function makeController(options){const value=createVRViewTools(options);controllers.push(value);return value}
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
   vi.stubGlobal('requestAnimationFrame', callback => setTimeout(callback, 0))
@@ -16,9 +18,9 @@ beforeEach(() => {
     getImageData: (_x,_y,w,h) => ({ data: new Uint8ClampedArray(w*h*4) }) }
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context)
   state = { currentGeometry: [], currentDesign: { deformations: [{}] } }
-  controller = createVRViewTools({ scene: new THREE.Scene(), getState: () => state })
+  controller = makeController({ scene: new THREE.Scene(), getState: () => state })
 })
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
+afterEach(() => { for(const c of controllers.splice(0))c.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 async function publishSettled() {
   // First poll discovers a changed input; second runs after the normal debounce.
   const first = controller.publish()
@@ -93,7 +95,7 @@ it('negotiates transform updates, and resets to full snapshots for new viewers o
   const buffer=await body.arrayBuffer();headers.push([...new Uint32Array(buffer,8,10)])
   return {ok:true,json:async()=>({transform_updates:true})}
  })
- controller=createVRViewTools({scene,getState:()=>state})
+ controller=makeController({scene,getState:()=>state})
  try{
   await publishSettled()
   mesh.setMatrixAt(0,new THREE.Matrix4().makeTranslation(1,2,3));controller.refresh();await vi.runAllTimersAsync()
@@ -130,7 +132,7 @@ it('publishes a simple click without the debounce or browser animation frames',a
 it('waits for actual deform readiness and then publishes without a fixed delay',async()=>{
   let ready
   const activateDeform=vi.fn(()=>new Promise(resolve=>{ready=resolve}))
-  controller=createVRViewTools({scene:new THREE.Scene(),getState:()=>state,activateDeform})
+  controller=makeController({scene:new THREE.Scene(),getState:()=>state,activateDeform})
   await publishSettled()
   const pending=controller.activate(7,13)
   await vi.advanceTimersByTimeAsync(2000);await controller.publish()
@@ -166,7 +168,7 @@ it('batches real loop/skip annotations without losing posed positions or visibil
 it('does not acknowledge an asynchronous overlay until its report is applied',async()=>{
  let ready
  const waitForTool=vi.fn(()=>new Promise(resolve=>{ready=resolve}))
- controller=createVRViewTools({scene:new THREE.Scene(),getState:()=>state,waitForTool})
+ controller=makeController({scene:new THREE.Scene(),getState:()=>state,waitForTool})
  await publishSettled()
  const pending=controller.activate(6,14)
  await vi.advanceTimersByTimeAsync(2000);await controller.publish()
@@ -178,7 +180,7 @@ it('does not acknowledge an asynchronous overlay until its report is applied',as
 
 it('publishes cold state and subscribed geometry edits immediately',async()=>{
  let changed
- controller=createVRViewTools({scene:new THREE.Scene(),getState:()=>state,subscribe:fn=>{changed=fn}})
+ controller=makeController({scene:new THREE.Scene(),getState:()=>state,subscribe:fn=>{changed=fn}})
  document.querySelector('[data-vt="loopSkips"]').classList.add('active')
  const initial=controller.publish();await vi.advanceTimersByTimeAsync(10);await initial
  expect(fetch).toHaveBeenCalledTimes(1)
@@ -216,6 +218,32 @@ it('refreshes changed texture contents and reclaims an atlas when texture dimens
  canvas.width=32
  const resized=await captureVRView(scene,document,'',false,first.atlasState)
  expect(resized.schema).toBe(5);expect(resized.atlasState).not.toBe(first.atlasState)
+})
+
+
+it('publishes a display-only refresh without waiting for the fingerprint fallback',async()=>{
+ document.querySelector('[data-vt="clashes"]').classList.add('active')
+ const first=controller.publish();await vi.advanceTimersByTimeAsync(10);await first
+ expect(fetch).toHaveBeenCalledTimes(1)
+ window.dispatchEvent(new Event('nadoc:view-scene-changed'))
+ await vi.advanceTimersByTimeAsync(10)
+ expect(fetch).toHaveBeenCalledTimes(2)
+ expect(performance.now()).toBeLessThan(50)
+})
+
+
+it('prepares independent icons concurrently without changing desktop toggle state',async()=>{
+ const doc=document.implementation.createHTMLDocument('prewarm')
+ doc.body.innerHTML=VR_VIEW_KEYS.map((key,i)=>`<button data-vt="${key}"><svg><path d="M${i} 0"/></svg></button>`).join('')
+ const releases=[]
+ vi.stubGlobal('Image',class {decode(){return new Promise(resolve=>releases.push(resolve))}})
+ const before=doc.body.innerHTML,pending=prepareVRViewPanel(doc)
+ expect(releases).toHaveLength(8)
+ for(const resolve of releases)resolve()
+ await pending
+ expect(doc.body.innerHTML).toBe(before)
+ await prepareVRViewPanel(doc)
+ expect(releases).toHaveLength(8)
 })
 
 it('keeps a static cached flex map resident without rescanning it on VR heartbeats', async () => {

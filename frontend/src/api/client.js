@@ -709,6 +709,7 @@ async function _applyDesignResponse(json, {
   transient = false,
   crossTabMetadataOnly = false,
   simulationProjection = false,
+  deferGeometry = false,
 } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
@@ -859,18 +860,27 @@ async function _applyDesignResponse(json, {
     _setTimedState(updates, json)
     markOperationTiming('store-applied', undefined, _responseTimings.get(json) ?? null)
   } else {
-    _setTimedState(updates, json)
-    markOperationTiming('design-applied', undefined, _responseTimings.get(json) ?? null)
+    // Deferred VR commits already started canonical export. Keep the desktop
+    // on its coherent old scene until the matching geometry arrives, avoiding
+    // a rebuild of the new topology against the old nucleotide records.
+    if (!deferGeometry || !json.design) _setTimedState(updates, json)
+    markOperationTiming(deferGeometry ? 'design-awaiting-geometry' : 'design-applied', undefined, _responseTimings.get(json) ?? null)
     if (json.design) {
       const h0 = json.design.helices?.[0]
       console.debug('[NADOC import] design set: first helix axis_start =',
         h0 ? `(${h0.axis_start?.x?.toFixed(3)}, ${h0.axis_start?.y?.toFixed(3)})` : 'none',
         '| debug =', json.debug ?? 'none')
     }
-    // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
+    // Fetch the response's retained partial scope, or full geometry (getGeometry stores it).
     if (json.design) {
       markOperationTiming('geometry-fetch-start', undefined, _responseTimings.get(json) ?? null)
-      const geometry = await getGeometry()
+      const scope = _documentRequests.capture()
+      const geometry = await getGeometry(json.deferred_geometry_helix_ids,
+        deferGeometry ? { designResponse: json, designUpdates: updates } : {})
+      if (!_documentRequests.isCurrent(scope) || _isStaleDesignResponse(json)) return json
+      // A committed mutation still needs its feature/Undo identity if the
+      // geometry fetch fails. Keep the existing failure behavior in that case.
+      if (!geometry && deferGeometry) _setTimedState(updates, json)
       if (!geometry) finishOperationTiming(_responseTimings.get(json), { status: 'Failed', phase: 'geometry-fetch-failed' })
       markOperationTiming('geometry-fetched', undefined, _responseTimings.get(json) ?? null)
       const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
@@ -1122,7 +1132,7 @@ export async function undo({ onCommitted, deferGeometry = false } = {}) {
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -1134,7 +1144,7 @@ export async function redo({ onCommitted, deferGeometry = false } = {}) {
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -1574,7 +1584,7 @@ export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPe
     is_periodic_seam:      isPeriodicSeam,
   }, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 // Join owns a guarded preview session. Return raw responses so its controller
@@ -1888,11 +1898,11 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
     cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
     preview,
   }
-  const json = await _request('POST', '/design/deformation', body)
+  const json = await _request('POST', '/design/deformation', body, { deferGeometry: !preview && guard.deferGeometry === true })
   if (!preview && json?.design && Number.isSafeInteger(json.revision)) guard.onCommitted?.(json)
   // A preview op is transient (no undo, no commit) → must not auto-save/propagate
   // to the assembly. The non-preview add IS the commit → save normally.
-  const synced = _syncFromDesignResponse(json, { transient: preview })
+  const synced = _syncFromDesignResponse(json, { transient: preview, deferGeometry: !preview && guard.deferGeometry === true })
   // On commit (not preview), surface any feasibility warning the backend attached.
   if (!preview && json?.deformation_warning) _toastDeformationWarning(json.deformation_warning)
   return synced
@@ -1950,8 +1960,8 @@ export async function updateMetadata(fields, { skipGeometry = false } = {}) {
  *   merge the result into the existing currentGeometry (Fix B partial path).
  *   Pass null (default) for a full fetch that replaces the whole geometry.
  */
-export async function getGeometry(helixIds = null) {
-  if (welcomeVisible() && !store.getState().currentDesign) return null
+export async function getGeometry(helixIds = null, { designResponse = null, designUpdates = null } = {}) {
+  if (!designResponse && welcomeVisible() && !store.getState().currentDesign) return null
   const base = helixIds?.length
     ? `/design/geometry?helix_ids=${helixIds.join(',')}`
     : '/design/geometry'
@@ -1959,11 +1969,13 @@ export async function getGeometry(helixIds = null) {
   // toggle costs one refetch and the legacy request stays byte-identical when off.
   const url  = base
   const json = await _request('GET', url)
-  return _applyTimedResponse(json, () => _applyGeometryResponse(json))
+  return _applyTimedResponse(json, () => _applyGeometryResponse(json, designResponse, designUpdates))
 }
 
-async function _applyGeometryResponse(json) {
+async function _applyGeometryResponse(json, designResponse = null, designUpdates = null) {
   if (!json) return null
+  if (designResponse && _isStaleDesignResponse(designResponse)) return json
+  if (designUpdates && designResponse) designUpdates.currentDesign = designResponse.design
   // Response format: { nucleotides: [...], helix_axes: [...] }
   // When the design has deformations or cluster_transforms, the backend
   // also auto-embeds straight_positions_by_helix + straight_helix_axes so
@@ -2004,11 +2016,13 @@ async function _applyGeometryResponse(json) {
     const retainedAxes = { ...(store.getState().currentHelixAxes ?? {}) }
     for (const id of changedSet) delete retainedAxes[id]
     const updates = {
+      ...designUpdates,
       currentGeometry: [
         ...existing.filter(n => !changedSet.has(n.helix_id)),
         ...nucleotides,
       ],
       currentHelixAxes: { ...retainedAxes, ...helixAxesMap },
+      lastPartialChangedHelixIds: json.changed_helix_ids,
     }
     // Partial responses do not embed straight (axes unchanged on partial
     // mutations), so straightGeo/straightAxes are null here in practice —
@@ -2018,8 +2032,10 @@ async function _applyGeometryResponse(json) {
     _setTimedState(updates, json)
   } else {
     const updates = {
+      ...designUpdates,
       currentGeometry:  nucleotides,
       currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
+      lastPartialChangedHelixIds: null,
     }
     if (straightGeo !== null)  updates.straightGeometry  = straightGeo
     if (straightAxes !== null) updates.straightHelixAxes = straightAxes
@@ -2429,7 +2445,7 @@ export async function addNick({ helixId, bpIndex, direction }, { onCommitted, de
     direction,
   }, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 export async function addNickBatch(nicks) {
@@ -4154,14 +4170,15 @@ function _clearStaleSelections() {
  * @param {object} params new request body, in the format originally sent to
  *                        the extrude endpoint
  */
-export async function editFeature(index, params) {
-  const json = await _request('POST', `/design/features/${index}/edit`, { params })
+export async function editFeature(index, params, { onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', `/design/features/${index}/edit`, { params }, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   // Edit responses now go through _design_replace_response on the backend so
   // they may take the lean fast paths when the diff is small (deformation
   // edits often hit positions_only since topology is unchanged).
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -5623,10 +5640,10 @@ export const previewSweep = (body, index = null, { includeGeometry = true } = {}
   if (!includeGeometry) query.set('include_geometry', 'false')
   return _request('POST', `/design/sweep/preview${query.size ? `?${query}` : ''}`, body, { suppressBusy: true })
 }
-export async function createSweep(body, { onCommitted } = {}) {
-  const json = await _request('POST', '/design/sweep', body)
+export async function createSweep(body, { onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', '/design/sweep', body, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 export const validateVRClipboard = body => _request('POST', '/vr/clipboard/validate', body, { suppressBusy: true })

@@ -465,11 +465,17 @@ def _design_response_with_geometry(
     editor a multi-MB JSON.parse of a payload it would discard.
     """
     if should_skip_geometry():
-        return _design_response(
+        response = _design_response(
             design, report,
             preserve_feature_log_id=preserve_feature_log_id,
             full_feature_log=full_feature_log,
         )
+        if changed_helix_ids is not None:
+            # Preserve the existing partial-update scope across deferred VR
+            # synchronization; the follow-up GET must not expand a Nick/Ligate
+            # edit into a full-design geometry transfer.
+            response["deferred_geometry_helix_ids"] = list(changed_helix_ids)
+        return response
     # Mutation and GET feeds resolve the same baseline/candidate display policy.
     measured_positioning = measured_display_placement(requested_measured_positioning())
     if changed_helix_ids is not None:

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
+import * as THREE from 'three'
 
 // The 3 region-overlay renderers are constructed INSIDE the factory via these
 // imports — mock them so no real THREE scene is needed.
@@ -197,6 +198,54 @@ describe('isViewVolumeOnlyDesignChange', () => {
 })
 
 describe('initAtomSurfaceDisplay', () => {
+  for (const mode of ['stick', 'ballstick', 'vdw']) {
+    it(`restores native atom and bond positions after trajectory then Flex in ${mode}`, async () => {
+      mountIds(DOM)
+      const { initAtomisticRenderer } = await vi.importActual('./atomistic_renderer.js')
+      const scene = new THREE.Scene(), renderer = initAtomisticRenderer(scene)
+      const model = { atoms: [
+        { serial: 0, element: 'C', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'O', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: .15, y: 0, z: 0 },
+      ], bonds: [[0, 1]] }
+      global.fetch = vi.fn(async () => ({ ok: true, json: async () => model }))
+      const display = initAtomSurfaceDisplay(makeDeps({ atomisticRenderer: renderer }))
+      await display.applyAtomisticMode(mode)
+      const native = Array.from(renderer.packedAtomPositions())
+      const nativeBond = scene.children.find(m => m.name === 'atomBonds')?.instanceMatrix.array.slice()
+      const trajectory = new Float32Array([4, 0, 0, 4.15, 0, 0])
+      renderer.applyPositionLerp(trajectory, trajectory, 0, null, [], null)
+      expect(Array.from(renderer.packedAtomPositions())).not.toEqual(native)
+      const mean = new Float32Array([2, 1, 0, 2.15, 1, 0])
+      renderer.applyPositionLerp(mean, mean, 0, null, [], null)
+      renderer.applyScalarColors(new Map([['h0:0:FORWARD:0', 0xff0000]]))
+      renderer.clearScalarColors()
+      await display.applyAtomisticMode(mode)
+      expect(Array.from(renderer.packedAtomPositions())).toEqual(native)
+      if (nativeBond) expect(scene.children.find(m => m.name === 'atomBonds').instanceMatrix.array).toEqual(nativeBond)
+      expect(renderer.getMode()).toBe(mode)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+      renderer.dispose()
+    })
+  }
+
+  it('does not let a pending native restore overwrite a newly active simulation', async () => {
+    mountIds(DOM)
+    let release, overlay = false
+    global.fetch = vi.fn(() => new Promise(resolve => { release = resolve }))
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => overlay })
+    const display = initAtomSurfaceDisplay(deps)
+    const restoring = display.applyAtomisticMode('stick')
+    overlay = true
+    deps.atomisticRenderer.update.mockClear()
+    release({ ok: true, json: async () => ({ atoms: [], bonds: [] }) })
+    await restoring
+    expect(deps.atomisticRenderer.update).not.toHaveBeenCalled()
+    overlay = false
+    await display.applyAtomisticMode('stick')
+    expect(deps.atomisticRenderer.update).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('returns the public API and builds 2 region atom + 1 region surface renderer', () => {
     mountIds(DOM)
     const api = initAtomSurfaceDisplay(makeDeps())

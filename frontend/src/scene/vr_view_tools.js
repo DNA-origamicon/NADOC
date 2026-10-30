@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { docHeaders } from '../shared/doc_id.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 import { preparedImpostorSpec } from './impostor_material.js'
+import { compressVRPanel } from './vr_view_panel_compression.js'
 import { drawViewToolMessage } from './vr_view_tools_panel.js'
 
 export const VR_VIEW_KEYS = ['lengthHeatmap','sequences','undefinedBases','loopSkips','grid','overhangNames','clashes','deform']
@@ -27,7 +28,35 @@ function panelFingerprint(doc,message) {
     return [b?.querySelector('svg')?.outerHTML,style?.color,style?.backgroundColor,style?.borderColor]
   })])
 }
+const documentIcons = new WeakMap()
+function iconCache(doc) {
+  let icons=documentIcons.get(doc)
+  if(!icons){icons=new Map();documentIcons.set(doc,icons)}
+  return icons
+}
+async function panelIcons(doc,icons) {
+  return Promise.all(VR_VIEW_KEYS.map(async key=>{
+    const button=doc.querySelector(`[data-vt="${key}"]`),svg=button?.querySelector('svg')
+    if(!svg)return null
+    const style=(doc.defaultView??document.defaultView).getComputedStyle(button)
+    const icon=svg.cloneNode(true);icon.setAttribute('xmlns','http://www.w3.org/2000/svg');icon.style.color=style.color||'#e6edf3'
+    const source=new XMLSerializer().serializeToString(icon)
+    let pending=icons.get(source)
+    if(!pending){
+      const im=new Image();im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(source)
+      pending=im.decode().then(()=>im)
+      if(icons.size>=32)icons.clear()
+      icons.set(source,pending)
+      pending.catch(()=>{if(icons.get(source)===pending)icons.delete(source)})
+    }
+    return pending
+  }))
+}
+export async function prepareVRViewPanel(doc=document) {
+  await panelIcons(doc,iconCache(doc))
+}
 async function capturePanel(doc,message,icons) {
+  const images=await panelIcons(doc,icons)
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
@@ -42,14 +71,7 @@ async function capturePanel(doc,message,icons) {
     c.fillStyle='#131313';c.fillRect(px,py,360,100)
     c.globalAlpha=.35;c.fillStyle=desktopStyle?.backgroundColor||'transparent';c.fillRect(px,py,360,100);c.globalAlpha=1
     c.strokeStyle=desktopStyle?.borderColor||'#6e7681';c.lineWidth=1;c.strokeRect(px+.5,py+.5,359,99)
-    const svg=b?.querySelector('svg')?.outerHTML
-    if(svg) {
-      const icon=b.querySelector('svg').cloneNode(true);icon.setAttribute('xmlns','http://www.w3.org/2000/svg');icon.style.color=desktopStyle?.color||'#e6edf3'
-      const source=new XMLSerializer().serializeToString(icon)
-      let im=icons.get(source)
-      if(!im){im=new Image();im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(source);await im.decode();if(icons.size>=32)icons.clear();icons.set(source,im)}
-      c.drawImage(im,px+18,py+16,64,40)
-    }
+    if(images[i])c.drawImage(images[i],px+18,py+16,64,40)
     c.fillStyle='#e0eaff';c.font='21px sans-serif';c.fillText(VR_VIEW_LABELS[i],px+18,py+82)
     c.fillStyle=flags&viewBit(i)?'#e0eaff':'#8592a5';c.font='bold 17px sans-serif';c.fillText(flags&viewBit(i)?'ON':'OFF',px+304,py+35)
   }
@@ -79,7 +101,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     }
   }
   const atlas=doc.createElement('canvas');atlas.width=2048;atlas.height=2048
-  const ctx=atlas.getContext('2d'),textures=new Map(),icons=reuseAtlas?.icons??new Map()
+  const ctx=atlas.getContext('2d'),textures=new Map(),icons=reuseAtlas?.icons??iconCache(doc)
   let x=0,y=0,row=0
   const allocate=(image)=>{
     const w=image.width,h=image.height
@@ -206,14 +228,16 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   const refresh = () => { dirty=true; settle=0;if(started)queueMicrotask(()=>void publish()) }
-  subscribe?.((next,previous)=>{
-    if(displayFlags(doc)!==256 && (next.currentGeometry!==previous.currentGeometry || next.currentDesign!==previous.currentDesign || next.currentHelixAxes!==previous.currentHelixAxes))refresh()
+  const unsubscribe=subscribe?.((next,previous)=>{
+    if(['showSequences','showOverhangNames','showLoopSkips','unfoldActive','deformVisuActive'].some(key=>next[key]!==previous[key]) || (displayFlags(doc)!==256 && ['currentGeometry','currentDesign','currentHelixAxes','currentAssembly'].some(key=>next[key]!==previous[key])))refresh()
   })
-  for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
-  let deliveryMilliseconds=0,controlPending=false,activating=false,started=false,atlasPatches=false,atlasInvalid=false
+  const refreshEvents=["nadoc:view-scene-changed", "nadoc:display-rebuilt", "nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]
+  for(const event of refreshEvents)doc.defaultView?.addEventListener(event,refresh)
+  let deliveryMilliseconds=0,controlPending=false,activating=false,started=false,atlasPatches=false,compressedPanels=false,atlasInvalid=false
   let geometry,design,transformBase=null,transformBaseVersion=0,transformUpdates=false
   async function publish() {
     started=true
+    if(busy || activating)return
     const s=getState(),now=performance.now()
     // The canonical scene already handles edits in normal Deform mode. Its
     // view-tools stream contains only an unchanged tablet atlas (16 MiB), so
@@ -248,7 +272,8 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       stamp('encode_start')
       ++version
       const update=transformUpdates ? encodeTransformUpdate(view,transformBase,transformBaseVersion,version,requestSequence,reason=>stamp('transform_fallback',{reason,version})) : null
-      const body=update ?? encodeVRView(view,version,requestSequence)
+      const wireView=!update && compressedPanels ? await compressVRPanel(view) : view
+      const body=update ?? encodeVRView(wireView,version,requestSequence)
       stamp('encode_end',{version})
       stamp('upload_start',{version,bytes:body.size,transforms:!!update})
       const response=await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body})
@@ -257,7 +282,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       const receipt=await response.json?.()
       if(generation!==epoch)return
       transformUpdates=receipt?.transform_updates===true
-      atlasPatches=receipt?.atlas_patches===true;atlasInvalid=false
+      atlasPatches=receipt?.atlas_patches===true;compressedPanels=receipt?.compressed_panels===true;atlasInvalid=false
       if(!update && view.schema!==9){transformBase=view;transformBaseVersion=version}
       deliveryMilliseconds=performance.now()-publicationStart
       lastGood=view.schema===9?{...lastGood,atlasState:view.atlasState}:view;lastError='';if(requestSequence===appliedSequence)controlPending=false
@@ -279,9 +304,9 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
         }
         if(generation===epoch)await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(fallback,++version,requestSequence)})
       }catch{/* Retry after reconnect; the quiver can still stow the panel. */}
-    }finally{busy=false;if(generation===epoch && dirty && performance.now()>=settle && (controlPending || doc.documentElement?.dataset.vrSimulationTrajectory==='true'))void publish()}
+    }finally{busy=false;if(generation===epoch && dirty && performance.now()>=settle)void publish()}
   }
-  return {publish,refresh,async activate(index,sequence=0){
+  return {publish,refresh,dispose(){this.reset();unsubscribe?.();for(const event of refreshEvents)doc.defaultView?.removeEventListener(event,refresh)},prepare:()=>prepareVRViewPanel(doc),async activate(index,sequence=0){
     const key=VR_VIEW_KEYS[index];if(!key)return
     appliedSequence=sequence;controlPending=true;activating=true
     const generation=epoch
@@ -299,7 +324,7 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
       activating=false
       if(generation===epoch){dirty=true;settle=0;void publish()}
     }
-  },reset(){epoch++;started=false;atlasPatches=false;atlasInvalid=false;controlPending=false;activating=false;deliveryMilliseconds=0;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy},get delivery(){return {busy,milliseconds:deliveryMilliseconds}}}
+  },reset(){epoch++;started=false;atlasPatches=false;compressedPanels=false;atlasInvalid=false;controlPending=false;activating=false;deliveryMilliseconds=0;dirty=true;last='';message='';appliedSequence=0;lastGood=null;lastError='';transformBase=null;transformUpdates=false},get busy(){return busy},get delivery(){return {busy,milliseconds:deliveryMilliseconds}}}
 }
 
 export function viewToolUnavailable(key,state) {

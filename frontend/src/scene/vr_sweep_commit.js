@@ -27,11 +27,11 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
           if (edited.design !== getState()?.currentDesign || edited.revision !== api.currentRevisionWatermark()) {
             outcome = { accepted: false, reason: 'undo_stale_desktop_changed' }; edited = null
           } else {
-            const result = await api.undo({ onCommitted: sceneRefresh.onCommitted })
+            const result = await api.undo({ onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
             outcome = { accepted: !!result, reason: result ? 'undone' : 'undo_failed', transaction: edited.transaction }
             if (result) edited = null
           }
-        } else outcome = await transaction.undo({ tool: 'sweep', onCommitted: sceneRefresh.onCommitted })
+        } else outcome = await transaction.undo({ tool: 'sweep', onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       } else {
         const plan = preflight.takeValidatedPlan(event.configSequence)
         const args = plan?.commit?.arguments
@@ -47,7 +47,7 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
             outcome = { accepted: false, reason: 'sweep_edit_stale' }
           } else {
             await acknowledge(event, 'pending', 'committing')
-            const result = await api.editFeature(reference.index, args)
+            const result = await api.editFeature(reference.index, args, { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
             const token = { targetIdentity: null, targetKind: 'none', featureLogEntryId: entry.id }
             outcome = { accepted: !!result, reason: result ? 'committed' : 'commit_failed', transaction: token }
             if (result) { transaction.clear(); edited = { design: getState().currentDesign, revision: api.currentRevisionWatermark(), transaction: token } }
@@ -57,7 +57,7 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
           await acknowledge(event, 'pending', 'committing')
           outcome = await transaction.commit({ tool: 'sweep', targetKey: plan.targetIdentity,
             targetIdentity: null, targetKind: 'none', execute: async () => {
-              const result = await api.createSweep(args, { onCommitted: sceneRefresh.onCommitted })
+              const result = await api.createSweep(args, { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
               return { accepted: !!result, reason: result ? 'committed' : 'commit_failed', result }
             } })
         }

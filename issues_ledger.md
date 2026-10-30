@@ -2238,3 +2238,51 @@ docs/audits/vr_gpu_20261021.json. Main.js task LOC delta: 0.
   substantial GPU workload; this does not claim perfectly seamless rendering.
 
 Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta: 0.
+
+
+## ISSUE-105 — Close Session smoke leaves operation-progress overlay visible (2026-10-27)
+
+- Status: open; observed during Nanobase inventory validation outside the feature workflow.
+- Repro: `just smoke`, `frontend/e2e/smoke.spec.js` test “Close Session from a loaded
+  design tears down cleanly”. At line 357, `#op-progress` retains class `visible`.
+- Result: 22 other smoke tests passed; inventory and Image evaluation browser exercises passed.
+- Evidence: Archive `runtime/development-artifacts/nanobase-inventory/smoke.log`.
+- Root cause uninvestigated; no claim that the menu change caused it. Preserve the existing
+  regression test and investigate cancellation/progress cleanup separately.
+
+## ISSUE-106 — Figure detector misses verified diagrams and can identify grids as routing (2026-10-27)
+
+- Open. All 21 verified Nanobase figure records evaluated: only 3 yield candidates.
+  Fourteen records have raster routing, which the current vector-only detector cannot trace.
+- Rotation/4× normalization of List ring/dumbbell figures produces tens of thousands of
+  apparent crossovers from grids. These experimental hypotheses are rejected, not promoted.
+- Evidence: Archive `runtime/development-artifacts/nanobase-reconstruction-20261027/`
+  `evaluation/summary.json` and `normalization-summary.json`. Application detector unchanged.
+- Stage-two prototype preserves primitive evidence and requires explicit registration,
+  reviewed direction/nicks/indels; no claim of automatic reconstruction accuracy.
+
+## ISSUE-107 — NADOC caDNAno-to-oxDNA geometry differs from converter-matched deposited starts (2026-10-27)
+
+- Open investigation; no production geometry modification authorized or made.
+- Ten native-file trials: equal particle counts/strand-length multisets and zero mismatches
+  on tested single-copy address-mapped directed neighbors. Loop-copy alignment excluded.
+- Proper rigid alignment to tacoxDNA b8a1706d yields position RMSD 0.66–16.20 nm;
+  nine trials have median a3 deviations about 175–180 degrees, one about 18 degrees.
+- Nine deposited starts (eight records) reproduce fresh tacoxDNA positions/orientations to
+  numerical precision; the tenth (record35) has nonzero simulation time despite its label.
+- Evidence: Archive `nanobase-reconstruction-20261027/export-comparison.json`, exported
+  configurations, source hashes/manifests, converter logs. These comparisons do not prove
+  a root cause or simulation failure. Preserve direction/placement authorization gates.
+
+## ISSUE-108 — oxDNA nucleotide walk omitted forced-ligation inserts (2026-10-28)
+
+- [x] Fixed. Gerling Fig.S1's saved design contains forced ligations carrying TT;
+  the canonical exporter emitted only inserts belonging to crossover records,
+  shortening published staples despite the insert sequence remaining in the file.
+- Match each forced ligation to its full directed consecutive-domain endpoints;
+  emit its bases through the existing insertion walk. Covers same-helix and
+  unequal-BP joins and preserves crossover ownership/unique particle keys.
+- Six focused regression cases pass; three reproduced missing bases before the
+  fix. Existing crossover/terminal-insert checks:48 passed,6 skipped. Both corrected
+  Gerling variants pass full native sequence and reciprocal-backbone verification.
+- No atom-placement formula, molecular phase constant, or simulation was changed.

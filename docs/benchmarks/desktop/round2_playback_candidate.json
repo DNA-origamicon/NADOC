@@ -1,0 +1,86 @@
+{"atoms":30000,"bonds":29700,"operation":"exact_snapshot","beforeMs":0.8835349999999949,"afterMs":0.9893130000000099,"speedup":0.8930793388947542,"exactBuffers":true}
+{"atoms":30000,"bonds":29700,"operation":"interpolation","beforeMs":1.735791000000006,"afterMs":1.5537289999999757,"speedup":1.1171774485769612,"exactBuffers":true}
+{"atoms":30000,"bonds":29700,"operation":"cluster_interpolation","beforeMs":0.6076080000000275,"afterMs":0.6118460000000141,"speedup":0.9930734204358833,"exactBuffers":true}
+{"atoms":30000,"bonds":29700,"operation":"live_md","beforeMs":1.739657999999963,"afterMs":1.547788999999966,"speedup":1.123963279232506,"exactBuffers":true}
+{"atoms":150000,"bonds":148500,"operation":"exact_snapshot","beforeMs":4.6551690000001145,"afterMs":4.607929999999897,"speedup":1.0102516748301773,"exactBuffers":true}
+{"atoms":150000,"bonds":148500,"operation":"interpolation","beforeMs":8.47183700000005,"afterMs":7.584735000000137,"speedup":1.1169588654053038,"exactBuffers":true}
+{"atoms":150000,"bonds":148500,"operation":"cluster_interpolation","beforeMs":3.3718850000000202,"afterMs":3.3370600000002923,"speedup":1.0104358327389154,"exactBuffers":true}
+{"atoms":150000,"bonds":148500,"operation":"live_md","beforeMs":9.799643999999716,"afterMs":9.062732999999753,"speedup":1.081312226675991,"exactBuffers":true}
+{
+  "baseline": "2f3b962966b4917d9f626e486d56680306600363",
+  "baselineHelper": "frontend/src/scene/atomistic_renderer/geometry_builder.js",
+  "results": [
+    {
+      "atoms": 30000,
+      "bonds": 29700,
+      "operation": "exact_snapshot",
+      "beforeMs": 0.8835349999999949,
+      "afterMs": 0.9893130000000099,
+      "speedup": 0.8930793388947542,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 30000,
+      "bonds": 29700,
+      "operation": "interpolation",
+      "beforeMs": 1.735791000000006,
+      "afterMs": 1.5537289999999757,
+      "speedup": 1.1171774485769612,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 30000,
+      "bonds": 29700,
+      "operation": "cluster_interpolation",
+      "beforeMs": 0.6076080000000275,
+      "afterMs": 0.6118460000000141,
+      "speedup": 0.9930734204358833,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 30000,
+      "bonds": 29700,
+      "operation": "live_md",
+      "beforeMs": 1.739657999999963,
+      "afterMs": 1.547788999999966,
+      "speedup": 1.123963279232506,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 150000,
+      "bonds": 148500,
+      "operation": "exact_snapshot",
+      "beforeMs": 4.6551690000001145,
+      "afterMs": 4.607929999999897,
+      "speedup": 1.0102516748301773,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 150000,
+      "bonds": 148500,
+      "operation": "interpolation",
+      "beforeMs": 8.47183700000005,
+      "afterMs": 7.584735000000137,
+      "speedup": 1.1169588654053038,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 150000,
+      "bonds": 148500,
+      "operation": "cluster_interpolation",
+      "beforeMs": 3.3718850000000202,
+      "afterMs": 3.3370600000002923,
+      "speedup": 1.0104358327389154,
+      "exactBuffers": true
+    },
+    {
+      "atoms": 150000,
+      "bonds": 148500,
+      "operation": "live_md",
+      "beforeMs": 9.799643999999716,
+      "afterMs": 9.062732999999753,
+      "speedup": 1.081312226675991,
+      "exactBuffers": true
+    }
+  ]
+}

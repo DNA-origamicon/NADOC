@@ -1,0 +1,137 @@
+{
+  "scope": "Sampled Node CPU profile, current renderer initialization + disposal; 15 x 150k columnar atoms, no GPU",
+  "top_self": [
+    {
+      "function": "_rebuild",
+      "source": "frontend/src/scene/atomistic_renderer.js",
+      "line": 276,
+      "self_ms": 268.135
+    },
+    {
+      "function": "_applyColors",
+      "source": "frontend/src/scene/atomistic_renderer.js",
+      "line": 461,
+      "self_ms": 43.511
+    },
+    {
+      "function": "writeBondMatrix",
+      "source": "frontend/src/scene/atomistic_renderer/geometry_builder.js",
+      "line": 157,
+      "self_ms": 43.114
+    },
+    {
+      "function": "post",
+      "source": "node:inspector",
+      "line": 118,
+      "self_ms": 28.77
+    },
+    {
+      "function": "(garbage collector)",
+      "source": "",
+      "line": 0,
+      "self_ms": 27.859
+    },
+    {
+      "function": "update",
+      "source": "frontend/src/scene/atomistic_renderer.js",
+      "line": 609,
+      "self_ms": 24.769
+    },
+    {
+      "function": "normalize",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 3777,
+      "self_ms": 22.15
+    },
+    {
+      "function": "InstancedMesh",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 14934,
+      "self_ms": 18.44
+    },
+    {
+      "function": "colorAt",
+      "source": "frontend/src/scene/atomistic_renderer.js",
+      "line": 474,
+      "self_ms": 12.283
+    },
+    {
+      "function": "compose",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 6678,
+      "self_ms": 5.21
+    },
+    {
+      "function": "resolveAtomColor",
+      "source": "frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "line": 123,
+      "self_ms": 3.168
+    },
+    {
+      "function": "Object3D",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 7288,
+      "self_ms": 2.106
+    },
+    {
+      "function": "serial",
+      "source": "frontend/src/scene/atom_table.js",
+      "line": 83,
+      "self_ms": 2.105
+    },
+    {
+      "function": "writeSphereMatrix",
+      "source": "frontend/src/scene/atomistic_renderer/geometry_builder.js",
+      "line": 147,
+      "self_ms": 1.054
+    },
+    {
+      "function": "normalize",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 4443,
+      "self_ms": 1.054
+    },
+    {
+      "function": "z",
+      "source": "frontend/src/scene/atom_table.js",
+      "line": 82,
+      "self_ms": 1.054
+    },
+    {
+      "function": "setFromUnitVectors",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 3670,
+      "self_ms": 1.054
+    },
+    {
+      "function": "_bondEnds",
+      "source": "frontend/src/scene/atomistic_renderer.js",
+      "line": 222,
+      "self_ms": 1.054
+    },
+    {
+      "function": "resolveAtomColor",
+      "source": "frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "line": 123,
+      "self_ms": 1.054
+    },
+    {
+      "function": "setup",
+      "source": "frontend/scripts/benchmark-desktop-render-init.mjs",
+      "line": 29,
+      "self_ms": 1.053
+    },
+    {
+      "function": "add",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 7568,
+      "self_ms": 1.009
+    },
+    {
+      "function": "MeshStandardMaterial",
+      "source": "frontend/node_modules/three/build/three.core.js",
+      "line": 23827,
+      "self_ms": 0.072
+    }
+  ]
+}

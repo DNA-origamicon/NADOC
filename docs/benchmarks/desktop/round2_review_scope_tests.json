@@ -1,0 +1,27 @@
+[
+  {
+    "file": "native_full_placement",
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_scope_native_full_placement.txt"
+  },
+  {
+    "file": "native_compact_geometry",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_scope_native_compact_geometry.txt"
+  },
+  {
+    "file": "native_slab_placement",
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_scope_native_slab_placement.txt"
+  },
+  {
+    "file": "native_placement_history",
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_scope_native_placement_history.txt"
+  },
+  {
+    "file": "native_placement_vr",
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_scope_native_placement_vr.txt"
+  }
+]

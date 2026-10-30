@@ -31,7 +31,7 @@ test('gold creation popup updates optical references and creates the entered siz
   await page.click('#gold-create')
   await expect(dialog).toHaveCount(0, { timeout: 60_000 })
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered()[0]?.diameterNm)).toBe(23.5)
-  await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(true)
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
   await page.evaluate(() => document.getElementById('menu-edit-undo').click())
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().length)).toBe(0)
   await page.evaluate(() => document.getElementById('menu-edit-redo').click())

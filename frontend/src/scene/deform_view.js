@@ -161,6 +161,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getOverhangLocations?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
     getJointRenderer?.()?.applyDeformLerp(t)
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   // ── Animation ───────────────────────────────────────────────────────────────

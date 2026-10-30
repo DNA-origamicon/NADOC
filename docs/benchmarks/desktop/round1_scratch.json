@@ -1,0 +1,20 @@
+{
+  "alias": "/media/jojo/Archive/nr1-c01fbd82",
+  "target": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round1/tmp",
+  "reason": "AF_UNIX socket limit; pytest resolves symlinks, so use a physically short Archive path",
+  "cleanup": "complete",
+  "physical_short_tmp": "/media/jojo/Archive/nr1-h15b0t0j",
+  "removed": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round1",
+      "files": 44,
+      "bytes": 40367838
+    },
+    {
+      "path": "/media/jojo/Archive/nr1-h15b0t0j",
+      "files": 13367,
+      "bytes": 2439408141
+    }
+  ],
+  "active_references_before_removal": []
+}

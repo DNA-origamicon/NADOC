@@ -39,6 +39,11 @@ static std::string panelPacket(uint32_t version,uint32_t base,bool only){
  if(only)data.append((char*)h,sizeof(h));else std::memcpy(data.data()+8,h,sizeof(h));
  data.insert(48,(char*)&base,4);data.append(768*768*4,char(127));return data;
 }
+static std::string compressedPanelPacket(uint32_t version,uint32_t base,bool only){
+ auto data=panelPacket(version,base,only);const size_t bytes=768*768*4,offset=data.size()-bytes;
+ data.resize(offset);uint32_t run[2]={768*768,0x7f7f7f7f};data.append((char*)run,sizeof(run));
+ uint32_t schema=only?11:10;std::memcpy(data.data()+8,&schema,4);return data;
+}
 static std::string glyphPacket(uint32_t version,float kind){
  std::ostringstream out;out.write("NADOCVT1",8);uint32_t h[10]={6,version,264,0,0,0,0,0,1,0};out.write((char*)h,sizeof(h));
  uint32_t counts[2]={6,1};out.write((char*)counts,sizeof(counts));
@@ -91,6 +96,16 @@ int main(int argc,char** argv){
   assert(std::all_of(panel.begin(),panel.end(),[](auto c){return c==127;}));
   apply(v,panelPacket(8,6,false),path);assert(v.transformBase->version==8 && pixels(v)==sceneBeforePanel);
   assert(!VRViewTools::readView("",v.version,{},1,{},true,false,{},false,false,panelPacket(9,6,true),v.transformBase));
+  for(bool only:{true,false}){
+   const auto compressed=compressedPanelPacket(only?10:11,8,only);
+   const auto parsed=VRViewTools::readView("",v.version,{},1,{},true,false,{},false,false,compressed,v.transformBase);
+   assert(parsed && parsed->pixels==panel && parsed->panelOnly==only);
+   for(const auto& bad:{compressed.substr(0,compressed.size()-1),compressed+"trailing"})
+    assert(!VRViewTools::readView("",v.version,{},1,{},true,false,{},false,false,bad,v.transformBase));
+  }
+  apply(v,compressedPanelPacket(12,8,true),path);
+  glBindTexture(GL_TEXTURE_2D,v.panelTexture);std::vector<unsigned char> decompressed(panel.size());glGetTexImage(GL_TEXTURE_2D,0,GL_RGBA,GL_UNSIGNED_BYTE,decompressed.data());
+  assert(decompressed==panel && v.batches[0].vertexBuffer && pixels(v)==sceneBeforePanel);
   apply(v,annotationPacket(18,false),path);const auto occluded=pixels(v);
   apply(v,annotationPacket(19,true),path);const auto annotated=pixels(v);
   assert(v.batches[0].annotation && v.opaqueActive());

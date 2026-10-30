@@ -14,6 +14,11 @@ process.once('exit', () => {
 })
 
 export default class ArtifactCleanupReporter {
+  onBegin(config) {
+    for (const project of config.projects) {
+      if (project.outputDir && !OUTPUTS.includes(project.outputDir)) OUTPUTS.push(project.outputDir)
+    }
+  }
   async onEnd() {
     await Promise.all(OUTPUTS.map(output => rm(output, { recursive: true, force: true })))
   }

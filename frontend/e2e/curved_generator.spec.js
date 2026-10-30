@@ -48,7 +48,7 @@ test('four fixed, uneven-height particles on a square-lattice curved rod', async
   await refresh()
   await page.waitForTimeout(500)
   await page.locator('#menu-bar > .menu-item').filter({ has: page.getByRole('button', { name: 'Help', exact: true }) }).hover()
-  await page.locator('#menu-help-generate-design').click()
+  await page.locator('#menu-help-experimental').hover(); await page.locator('#menu-help-generate-design').click()
   await expect(page.getByLabel('Design shape')).toBeEnabled({ timeout: 120_000 })
   await page.getByLabel('Design shape').selectOption('curved-rod')
   await expect(page.getByLabel('Pathing')).toHaveClass('select')
@@ -156,7 +156,7 @@ test('review equatorial pathing and compact generator controls', async ({ page }
   }
   await page.evaluate(() => window.__nadocTest.pauseViewerRenderingForTest())
   await page.locator('#menu-bar > .menu-item').filter({ has: page.getByRole('button', { name: 'Help', exact: true }) }).hover()
-  await page.locator('#menu-help-generate-design').click()
+  await page.locator('#menu-help-experimental').hover(); await page.locator('#menu-help-generate-design').click()
   await page.screenshot({ path: path.join(evidence, 'generator-dialog-loading.png') })
   await expect(page.getByLabel('Design shape')).toBeEnabled({ timeout: 90_000 })
   await expect(page.getByRole('status').filter({ hasText: 'Neither 7249 nor 8064' })).toBeVisible()

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "part_evaluation_comparison",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_review_part_evaluation_comparison.txt"
+  },
+  {
+    "file": "part_comparison_routes",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_review_part_comparison_routes.txt"
+  },
+  {
+    "file": "native_placement_endpoints",
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_review_native_placement_endpoints.txt"
+  }
+]

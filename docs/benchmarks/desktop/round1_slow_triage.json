@@ -1,0 +1,507 @@
+{
+  "original_report": {
+    "per_test_budget_sec": 5.0,
+    "total_test_seconds": 588.8,
+    "n_tests": 14808,
+    "sim_running": false,
+    "sim_reason": "",
+    "slowest_files_15": [
+      {
+        "file": "tests/test_project_revisions.py",
+        "seconds": 37.1,
+        "n_tests": 23,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_headless_oxdna_build.py",
+        "seconds": 27.3,
+        "n_tests": 45,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_oxdna_relaxation.py",
+        "seconds": 22.0,
+        "n_tests": 248,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_api.py",
+        "seconds": 21.6,
+        "n_tests": 17,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_creation.py",
+        "seconds": 20.2,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_native_placement_review_gate.py",
+        "seconds": 13.9,
+        "n_tests": 22,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_alpine_restart.py",
+        "seconds": 13.7,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_project_collaboration.py",
+        "seconds": 13.6,
+        "n_tests": 4,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_trajectory_thinning.py",
+        "seconds": 13.0,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_biotin_cache.py",
+        "seconds": 12.9,
+        "n_tests": 3,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_recovery.py",
+        "seconds": 9.7,
+        "n_tests": 36,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_vr_representation_loading.py",
+        "seconds": 9.4,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_alpine_worker.py",
+        "seconds": 8.1,
+        "n_tests": 12,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_job_archive.py",
+        "seconds": 7.8,
+        "n_tests": 22,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_coating_evaluation.py",
+        "seconds": 7.7,
+        "n_tests": 27,
+        "n_slow_marked": 0
+      }
+    ],
+    "violators": [
+      {
+        "nodeid": "tests/test_native_placement_review_gate.py::test_collection_error_reports_source_markers_without_broadening_execution_scope[syntax]",
+        "seconds": 10.2
+      },
+      {
+        "nodeid": "tests/test_biotin_cache.py::test_survives_restart_but_endpoint_or_solver_version_changes_invalidate",
+        "seconds": 6.82
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 5.07
+      },
+      {
+        "nodeid": "tests/test_alpine_worker.py::test_transfer_keeps_running_after_api_process_is_killed",
+        "seconds": 5.01
+      }
+    ],
+    "slowest_25": [
+      {
+        "nodeid": "tests/test_native_placement_review_gate.py::test_collection_error_reports_source_markers_without_broadening_execution_scope[syntax]",
+        "seconds": 10.2,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_biotin_cache.py::test_survives_restart_but_endpoint_or_solver_version_changes_invalidate",
+        "seconds": 6.82,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 5.07,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_worker.py::test_transfer_keeps_running_after_api_process_is_killed",
+        "seconds": 5.01,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[False->]",
+        "seconds": 4.5,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration.py::test_case_insensitive_branch_name_conflict_gets_deterministic_suffix",
+        "seconds": 4.26,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_promotion_preserves_displaced_head_as_recoverable_version",
+        "seconds": 3.8,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_revision_history_and_comparison_report_lineage_and_deltas",
+        "seconds": 3.73,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_cross_process_style_cas_allows_only_one_competing_writer",
+        "seconds": 3.72,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration.py::test_force_takeover_changes_owner",
+        "seconds": 3.63,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_stale_promotion_is_rejected_without_extra_recovery_version",
+        "seconds": 3.63,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_overlapping_topology_autosave_adopts_identical_winning_head",
+        "seconds": 3.41,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration.py::test_busy_branch_can_auto_fork_with_conflict_free_name",
+        "seconds": 3.37,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_biotin_cache.py::test_simultaneous_views_solve_once",
+        "seconds": 3.29,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_headless_oxdna_build.py::test_display_route_surfaces_extra_bases",
+        "seconds": 3.26,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_restart.py::test_restart_resumes_remaining_steps_preserving_prior_trajectory",
+        "seconds": 3.22,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_autosave_after_undo_redo_and_further_edit",
+        "seconds": 3.08,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_overlapping_different_topology_autosave_preserves_conflict",
+        "seconds": 2.96,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_gold_strep_dna.py::test_job_api_builds_full_fixed_core_model[CPU]",
+        "seconds": 2.85,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_biotin_cache.py::test_corrupt_disk_is_disposable_and_failed_fits_are_cached",
+        "seconds": 2.82,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+        "seconds": 2.72,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_save_as_forks_identity_and_keeps_old_file",
+        "seconds": 2.68,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_revision_relation_classifies_ahead_behind_and_diverged",
+        "seconds": 2.45,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+        "seconds": 2.45,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration.py::test_lease_is_single_writer_and_owner_can_renew_and_release",
+        "seconds": 2.37,
+        "slow_marked": false
+      }
+    ]
+  },
+  "status": "Verified zero per-test violators in corrected broad FAST run. Aggregate runtime 131.34s for 14808 tests; no marker/budget changes. Suite still has unrelated correctness failures.",
+  "diagnosis": [
+    {
+      "test": "native placement review gate syntax collection",
+      "original_seconds": 10.2,
+      "focused_setup_seconds": 1.23,
+      "focused_call_seconds": 0.26,
+      "cause": "Subprocess pytest import/collection; no numeric solve. Original broad-run delay does not reproduce in isolation.",
+      "action": "Retain fast invariant coverage; no marker or budget change."
+    },
+    {
+      "test": "biotin disk cache restart",
+      "original_seconds": 6.82,
+      "focused_setup_seconds": 1.08,
+      "focused_call_seconds": 0.28,
+      "cause": "Several real SQLite durable cache writes; solver is mocked. Broad-run delay does not reproduce in isolation.",
+      "action": "Retain fast coverage; no evidence of genuine heavy computation."
+    },
+    {
+      "test": "durable creation/recovery/edit",
+      "original_seconds": 5.07,
+      "focused_setup_seconds": 1.15,
+      "focused_call_seconds": 2.68,
+      "cause": "Real durable filesystem writes plus verification worker startup; focused run remains below 5 seconds.",
+      "action": "Retain coverage and recheck under broad load."
+    },
+    {
+      "test": "Alpine client killed during transfer",
+      "original_seconds": 5.01,
+      "focused_call_seconds": 1.21,
+      "cause": "Overlong AF_UNIX socket path caused fixture startup to wait until timeout; pytest resolves aliases.",
+      "action": "Use physical short mounted Archive TMPDIR; 12 Alpine tests pass. No production code or guard changed."
+    }
+  ],
+  "verification_report": {
+    "per_test_budget_sec": 5.0,
+    "total_test_seconds": 478.7,
+    "n_tests": 14808,
+    "sim_running": false,
+    "sim_reason": "",
+    "slowest_files_15": [
+      {
+        "file": "tests/test_headless_oxdna_build.py",
+        "seconds": 24.6,
+        "n_tests": 45,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_oxdna_relaxation.py",
+        "seconds": 21.2,
+        "n_tests": 248,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_api.py",
+        "seconds": 20.8,
+        "n_tests": 17,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_project_revisions.py",
+        "seconds": 10.0,
+        "n_tests": 23,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_vr_representation_loading.py",
+        "seconds": 9.8,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_recovery.py",
+        "seconds": 9.5,
+        "n_tests": 36,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_coating_evaluation.py",
+        "seconds": 7.9,
+        "n_tests": 27,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_creation.py",
+        "seconds": 7.2,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_native_streptavidin_proof.py",
+        "seconds": 7.1,
+        "n_tests": 20,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_trajectory_thinning.py",
+        "seconds": 7.1,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_constraints.py",
+        "seconds": 6.8,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_native_protein_input_proof.py",
+        "seconds": 6.6,
+        "n_tests": 16,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_headless_spec_build.py",
+        "seconds": 6.2,
+        "n_tests": 81,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_repair_persistence.py",
+        "seconds": 5.3,
+        "n_tests": 16,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_cache.py",
+        "seconds": 5.0,
+        "n_tests": 53,
+        "n_slow_marked": 0
+      }
+    ],
+    "violators": [],
+    "slowest_25": [
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+        "seconds": 3.09,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_repair_persistence.py::test_content_addressed_project_revision_retains_draft_and_proposed_source_bytes[True]",
+        "seconds": 2.9,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+        "seconds": 2.86,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+        "seconds": 2.79,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 2.7,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+        "seconds": 2.5,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_download_queue.py::test_worker_queues_second_job_and_client_cancellation_does_not_cancel_it",
+        "seconds": 2.48,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+        "seconds": 2.18,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[True]",
+        "seconds": 2.12,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_protein_input_proof.py::test_valid_inline_input_restores_corrupt_derived_project_cache",
+        "seconds": 2.12,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_runpod_script.py::TestChainScriptActuallyRuns::test_stall_watchdog_kills_a_wedged_step",
+        "seconds": 2.02,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_biotin_cache.py::test_survives_restart_but_endpoint_or_solver_version_changes_invalidate",
+        "seconds": 2.01,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_snupi_job.py::test_kill_pid_terminates_detached_process",
+        "seconds": 2.01,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_connectivity_proof.py::test_two_face_cold_replay_endpoint_edit_and_changed_shared_junction_repair",
+        "seconds": 1.91,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+        "seconds": 1.91,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+        "seconds": 1.89,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_connectivity_proof.py::test_registered_connectivity_pipeline_cold_replay_and_endpoint_edit",
+        "seconds": 1.8,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_generated_joined_proof.py::test_generated_joined_path_edit_regenerates_without_samples_or_recovery",
+        "seconds": 1.71,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_assembly_simulation_parity.py::test_fem_preparation_yields_api_event_loop[cando]",
+        "seconds": 1.65,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_overlapping_identical_autosave_adopts_winning_head",
+        "seconds": 1.64,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_streptavidin_proof.py::test_both_sources_are_owned_dependencies_and_survive_portable_save_after_removal",
+        "seconds": 1.6,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_assembly_simulation_parity.py::test_fem_preparation_yields_api_event_loop[snupi]",
+        "seconds": 1.54,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[revert]",
+        "seconds": 1.51,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_cluster_join_api.py::test_manual_moves_around_join_seek_and_delete_in_chronological_order",
+        "seconds": 1.5,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[delete]",
+        "seconds": 1.5,
+        "slow_marked": false
+      }
+    ]
+  }
+}

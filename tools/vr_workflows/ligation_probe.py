@@ -74,7 +74,9 @@ def run(socket, output, role, expected_revision=None):
         assert live.state['radial_edit']['open']
         items = live.state['radial_edit']['items']
         assert [i['label'] for i in items] == ['LIGATE','NICK','UNDO','REDO','COPY','PASTE']
-        assert [i['enabled'] for i in items] == [True,True,True,True]
+        # Clipboard entries follow the four edit commands and have their own
+        # selection/clipboard readiness; preserve the edit readiness check.
+        assert [i['enabled'] for i in items[:4]] == [True,True,True,True]
         from .edit_wheel_check import slide
         slide(live,index,preset,trials)
         live.capture_to(out/f'wheel-{index}', discard_source=True)

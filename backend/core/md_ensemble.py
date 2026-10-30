@@ -683,4 +683,6 @@ def build_replica_package(
     child.error = None
     child.user_stopped = False
     child.save(workspace)
+    from backend.core.namd_input_provenance import capture
+    capture(child, workspace)
     return child_pkg

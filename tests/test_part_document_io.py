@@ -260,3 +260,21 @@ def test_library_open_limit_is_explicit_and_precedes_identity_rewrite(tmp_path, 
     assert error.value.status_code == 413
     assert error.value.detail["code"] == "document_transport_limit"
     assert path.read_bytes() == b"x" * 20
+
+
+@pytest.mark.parametrize('text', ['', 'ascii', 'éé', '🧬', 'aé🧬'])
+def test_text_admission_exact_utf8_boundary(text):
+    size = len(text.encode('utf-8'))
+    assert transport.check_text(text, limit=size) is text
+    with pytest.raises(transport.DocumentLimit):
+        transport.check_text(text, limit=size - 1)
+
+
+def test_text_admission_keeps_subclass_and_surrogate_behavior():
+    class Expanded(str):
+        def __getitem__(self, key):
+            return 'é'
+    with pytest.raises(transport.DocumentLimit):
+        transport.check_text(Expanded('a'), limit=1)
+    with pytest.raises(UnicodeEncodeError):
+        transport.check_text('\ud800', limit=10)

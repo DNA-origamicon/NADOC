@@ -9,7 +9,8 @@ from backend.core.models import Design
 
 
 @pytest.fixture(autouse=True)
-def inline_export(monkeypatch):
+def inline_export(monkeypatch, tmp_path):
+    monkeypatch.setattr(vr, "_vr_temporary_directory", lambda: tmp_path)
     # These tests inject edits during export in this process. Worker transport
     # and exception propagation have separate real-process coverage.
     def export(body, design, representations=None):
@@ -114,3 +115,23 @@ def test_concurrent_same_identity_edit_during_export_is_rejected(monkeypatch, tm
 @pytest.fixture(autouse=True)
 def isolated_native_review_journal(monkeypatch, tmp_path):
     monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path / "placement-reports"))
+
+
+@pytest.mark.parametrize('replacement', [None, {'pid': 123}, {'event_path': 'another'}])
+def test_export_releases_lifecycle_lock_and_rejects_retired_session(monkeypatch, tmp_path, replacement):
+    session, body = setup(monkeypatch, tmp_path)
+    source = tmp_path / 'candidate.gz'
+    def export(*args):
+        assert vr._STATE_LOCK.acquire(blocking=False), 'CPU export held the lifecycle lock'
+        try:
+            active = None if replacement is None else {**session, **replacement}
+            monkeypatch.setattr(vr, '_read_state', lambda: active)
+        finally:
+            vr._STATE_LOCK.release()
+        source.write_bytes(b'candidate')
+        return source
+    monkeypatch.setattr('backend.api.vr_scene_export.export_scene', export)
+    with pytest.raises(HTTPException, match='VR session changed during'):
+        publish_scene(body)
+    assert not source.exists()
+    assert not Path(session['event_path'] + '.scene').exists()

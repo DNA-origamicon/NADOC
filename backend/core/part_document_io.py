@@ -74,6 +74,10 @@ def check_text(text, *, limit=None, label="Part document") -> str:
     limit = MAX_DOCUMENT_BYTES if limit is None else limit
     if len(text) > limit:
         raise DocumentLimit(label, limit)
+    # Built-in ASCII strings have exactly one UTF-8 byte per character.
+    # Subclasses retain their original slicing/encoding behavior below.
+    if type(text) is str and text.isascii():
+        return text
     size = 0
     for start in range(0, len(text), _CHUNK):
         size += len(text[start:start + _CHUNK].encode("utf-8"))

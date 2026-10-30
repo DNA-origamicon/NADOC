@@ -26,7 +26,7 @@ describe('VR bend desktop executor', () => {
   it('commits curvature, mirrors the scene and undoes exactly one feature', async () => {
     const { bend, api, feedback, event, state } = setup()
     expect(bend.handle(event)).toBe(true); await settled()
-    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, ['h'], false, [], { expectedDesignId: 'design', expectedRevision: 4, onCommitted: expect.any(Function), targets: [{ kind: 'cluster', id: 'c' }] })
+    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, ['h'], false, [], { expectedDesignId: 'design', expectedRevision: 4, onCommitted: expect.any(Function), deferGeometry: true, targets: [{ kind: 'cluster', id: 'c' }] })
     expect(api.refreshNativeVRScene).toHaveBeenCalledOnce()
     expect(feedback.mock.calls.at(-1)[1]).toBe('succeeded')
     bend.handle(event); await settled();expect(api.addDeformation).toHaveBeenCalledOnce()

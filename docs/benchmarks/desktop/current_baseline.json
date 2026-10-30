@@ -1,0 +1,1119 @@
+{
+  "started_utc": "2026-10-22T16:12:55.068453+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "node": "v22.22.2",
+  "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+  "git_head": "a7e570ddd44cdcec15b3c90f2f1907c9446d39b6",
+  "dirty_paths": [
+    " M backend/api/crud.py",
+    " M backend/api/routes_md.py",
+    " M backend/api/routes_vr_scene.py",
+    " M backend/api/vr_view_tools.py",
+    " M backend/api/vr_view_transport.py",
+    " M backend/core/md_ensemble.py",
+    " M frontend/e2e/vr_view_tools_capture.spec.js",
+    " M frontend/src/api/client.js",
+    " M frontend/src/api/client_operation_timing.test.js",
+    " M frontend/src/main.js",
+    " M frontend/src/scene/clash_overlay.js",
+    " M frontend/src/scene/deform_view.js",
+    " M frontend/src/scene/dimension_persistence.js",
+    " M frontend/src/scene/dimension_persistence.test.js",
+    " M frontend/src/scene/vr_bend.js",
+    " M frontend/src/scene/vr_bend.test.js",
+    " M frontend/src/scene/vr_sweep.test.js",
+    " M frontend/src/scene/vr_sweep_commit.js",
+    " M frontend/src/scene/vr_tool_transaction.js",
+    " M frontend/src/scene/vr_tool_transaction.test.js",
+    " M frontend/src/scene/vr_view_batch_encoder.js",
+    " M frontend/src/scene/vr_view_batch_encoder.test.js",
+    " M frontend/src/scene/vr_view_tools.js",
+    " M frontend/src/scene/vr_view_tools_publish.test.js",
+    " M frontend/src/ui/jobs_panel_freshness.test.js",
+    " M frontend/src/ui/jobs_panel_model.js",
+    " M frontend/src/ui/view_tool_buttons.js",
+    " M frontend/src/viewer/runtime.js",
+    " M frontend/src/viewer/runtime.test.js",
+    " M memory/project_native_vr.md",
+    " M native/vr_viewer/src/view_snapshot_inbox.hpp",
+    " M native/vr_viewer/src/view_tools_stream.inc",
+    " M native/vr_viewer/tests/view_transform_stream_gl_test.cpp",
+    " M tests/test_cadnano_editor_api.py",
+    " M tests/test_md_ensemble.py",
+    " M tests/test_vr_extrude_sidebar.py",
+    " M tests/test_vr_scene_refresh.py",
+    " M tests/test_vr_view_tools.py",
+    " M tests/test_vr_view_transport.py",
+    " M tools/vr_workflows/extrude_sidebar.py",
+    " M tools/vr_workflows/ligation_probe.py",
+    " M tools/vr_workflows/menu_tour.py",
+    " M tools/vr_workflows/tour_catalog.py",
+    "?? backend/core/namd_input_provenance.py",
+    "?? docs/audits/cpd_production_20ns_20261019/",
+    "?? docs/audits/cpd_production_copy_verification_20261019.json",
+    "?? docs/audits/namd_existing_jobs_verification_20261019.json",
+    "?? docs/audits/namd_input_provenance_20261019.json",
+    "?? docs/audits/session_close_20261019/",
+    "?? docs/benchmarks/desktop/",
+    "?? frontend/e2e/session_close_performance.spec.js",
+    "?? frontend/e2e/vr_edit_latency.spec.js",
+    "?? frontend/playwright.close-review.config.js",
+    "?? frontend/src/scene/vr_view_panel_compression.js",
+    "?? frontend/src/scene/vr_view_panel_compression.test.js",
+    "?? scripts/analyze_cpd_production.py",
+    "?? scripts/benchmark_desktop_baseline.py",
+    "?? scripts/benchmark_desktop_core.py",
+    "?? scripts/compare_cpd_baselines.py",
+    "?? scripts/desktop_benchmark_inventory.py",
+    "?? tests/test_namd_input_provenance.py",
+    "?? tests/test_vr_edit_latency.py"
+  ],
+  "harness_sha256": {
+    "frontend/scripts/benchmark-loading-open.mjs": "936e0ccfba20d1cd15afb65969c0182f5a2bf8ac0d419dd306d7b7687f8bdb80",
+    "scripts/benchmark_assembly_fk.py": "f09ae451723ff7822327881a4522976f32b1386044d6f95e8cbc0e100c816a57",
+    "scripts/benchmark_assembly_shared_index.py": "e1964bf98bbc057c97d9f6b26d0ba7bfb8e2e67e8f1f9694836b205462e6b287",
+    "scripts/benchmark_desktop_core.py": "dacf960093e05acfa01d1232eb96f84d87f51970dfe35c3f1a26b28d984f2e95",
+    "scripts/benchmark_part_inputs.py": "c3af6a933f44d57e857ea796eaee9f72000b5823317a2d84d9ab997a4c23934f"
+  },
+  "scope": "Synthetic CPU microbenchmarks; not HTTP, GPU, browser FPS or user-observed latency.",
+  "runs": [
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "-m",
+        "scripts.benchmark_desktop_core"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 5.0561899819877,
+      "result": {
+        "scope": "Synthetic in-memory CPU pipeline; no disk, HTTP, complex junctions or rendering. First-call is not a fresh-process cold start.",
+        "repeats": 15,
+        "gc": "enabled",
+        "cases": [
+          {
+            "helices": 6,
+            "bp_per_helix": 84,
+            "nucleotides": 1008,
+            "json_bytes": 8563,
+            "snapshot_base64_bytes": 1936,
+            "operations": {
+              "construct_bundle": {
+                "first_call_ms": 0.2900830004364252,
+                "median_ms": 0.1383789931423962,
+                "p95_ms": 0.17736101290211082,
+                "samples_ms": [
+                  0.15181401977315545,
+                  0.14718499733135104,
+                  0.17736101290211082,
+                  0.14495101640932262,
+                  0.14144499436952174,
+                  0.13731600483879447,
+                  0.1383789931423962,
+                  0.13866901281289756,
+                  0.13717601541429758,
+                  0.13492201105691493,
+                  0.135112990392372,
+                  0.14018299407325685,
+                  0.13532399316318333,
+                  0.13477200991474092,
+                  0.13486199895851314
+                ],
+                "correctness": "passed"
+              },
+              "native_display_geometry": {
+                "first_call_ms": 7.534784992458299,
+                "median_ms": 5.270448978990316,
+                "p95_ms": 31.772304006153718,
+                "samples_ms": [
+                  7.2180920105893165,
+                  31.772304006153718,
+                  5.270448978990316,
+                  5.028285988373682,
+                  5.728785996325314,
+                  5.330041021807119,
+                  5.01400901703164,
+                  5.030549975344911,
+                  5.048774997703731,
+                  28.336086019407958,
+                  5.571702989982441,
+                  5.051991000073031,
+                  4.965579020790756,
+                  5.224373016972095,
+                  5.8553440030664206
+                ],
+                "correctness": "passed"
+              },
+              "serialize_design_json": {
+                "first_call_ms": 0.07692398503422737,
+                "median_ms": 0.019466009689494967,
+                "p95_ms": 0.022321008145809174,
+                "samples_ms": [
+                  0.022321008145809174,
+                  0.020589010091498494,
+                  0.02182001480832696,
+                  0.019516999600455165,
+                  0.019466009689494967,
+                  0.01959598739631474,
+                  0.01958699431270361,
+                  0.019736995454877615,
+                  0.019126018742099404,
+                  0.019186001736670732,
+                  0.019176019122824073,
+                  0.01922601950354874,
+                  0.019175990018993616,
+                  0.01907598925754428,
+                  0.01924598473124206
+                ],
+                "correctness": "passed"
+              },
+              "parse_validate_design_json": {
+                "first_call_ms": 0.17436599591746926,
+                "median_ms": 0.06539301830343902,
+                "p95_ms": 0.10615799692459404,
+                "samples_ms": [
+                  0.08215400157496333,
+                  0.10615799692459404,
+                  0.07278600241988897,
+                  0.06844798917882144,
+                  0.06609299452975392,
+                  0.06553198909386992,
+                  0.06539301830343902,
+                  0.06459100404754281,
+                  0.06470098742283881,
+                  0.06454100366681814,
+                  0.06573300925083458,
+                  0.06356899393722415,
+                  0.0639689969830215,
+                  0.06386000313796103,
+                  0.06297801155596972
+                ],
+                "correctness": "passed"
+              },
+              "encode_history_snapshot": {
+                "first_call_ms": 0.09704200783744454,
+                "median_ms": 0.037429999792948365,
+                "p95_ms": 0.06429001223295927,
+                "samples_ms": [
+                  0.06429001223295927,
+                  0.053230003686621785,
+                  0.04715798422694206,
+                  0.04166801227256656,
+                  0.03872197703458369,
+                  0.03781102714128792,
+                  0.036999001167714596,
+                  0.037429999792948365,
+                  0.0368189939763397,
+                  0.037429999792948365,
+                  0.03637801273725927,
+                  0.03650799044407904,
+                  0.03646800178103149,
+                  0.03636800101958215,
+                  0.03609698615036905
+                ],
+                "correctness": "passed"
+              },
+              "decode_history_snapshot": {
+                "first_call_ms": 0.08574000094085932,
+                "median_ms": 0.0729160092305392,
+                "p95_ms": 0.10799200390465558,
+                "samples_ms": [
+                  0.07407899829559028,
+                  0.10799200390465558,
+                  0.07717497646808624,
+                  0.07467999239452183,
+                  0.07368801743723452,
+                  0.07355798152275383,
+                  0.07308699423447251,
+                  0.0727660080883652,
+                  0.07260500569827855,
+                  0.0729160092305392,
+                  0.07245599408634007,
+                  0.0720839889254421,
+                  0.07156300125643611,
+                  0.07208500755950809,
+                  0.07170499884523451
+                ],
+                "correctness": "passed"
+              }
+            }
+          },
+          {
+            "helices": 24,
+            "bp_per_helix": 84,
+            "nucleotides": 4032,
+            "json_bytes": 29722,
+            "snapshot_base64_bytes": 3108,
+            "operations": {
+              "construct_bundle": {
+                "first_call_ms": 0.5017580115236342,
+                "median_ms": 0.35764899803325534,
+                "p95_ms": 0.42567600030452013,
+                "samples_ms": [
+                  0.42567600030452013,
+                  0.3897290152963251,
+                  0.36397099029272795,
+                  0.3638299822341651,
+                  0.3628389968071133,
+                  0.35764899803325534,
+                  0.357398996129632,
+                  0.3575990267563611,
+                  0.35751902032643557,
+                  0.3544029896147549,
+                  0.3527899971231818,
+                  0.35766902146860957,
+                  0.3566679952200502,
+                  0.3544730134308338,
+                  0.361655984306708
+                ],
+                "correctness": "passed"
+              },
+              "native_display_geometry": {
+                "first_call_ms": 22.287311003310606,
+                "median_ms": 25.323440990177915,
+                "p95_ms": 63.718463003169745,
+                "samples_ms": [
+                  63.66720702499151,
+                  25.323440990177915,
+                  58.096216002013534,
+                  23.66760399308987,
+                  63.718463003169745,
+                  21.718226984376088,
+                  23.77828099997714,
+                  55.34347699722275,
+                  24.539774021832272,
+                  57.71806900156662,
+                  22.730259981472045,
+                  56.9649200187996,
+                  23.852939979406074,
+                  56.381519010756165,
+                  25.10448099928908
+                ],
+                "correctness": "passed"
+              },
+              "serialize_design_json": {
+                "first_call_ms": 0.21203700453042984,
+                "median_ms": 0.06851900252513587,
+                "p95_ms": 0.07317698327824473,
+                "samples_ms": [
+                  0.07317698327824473,
+                  0.07227601599879563,
+                  0.06951001705601811,
+                  0.068938999902457,
+                  0.06892901728861034,
+                  0.06821699207648635,
+                  0.06835800013504922,
+                  0.06851900252513587,
+                  0.06843800656497478,
+                  0.06802799180150032,
+                  0.06793698412366211,
+                  0.07194498903118074,
+                  0.06832802318967879,
+                  0.06853797822259367,
+                  0.06823698640801013
+                ],
+                "correctness": "passed"
+              },
+              "parse_validate_design_json": {
+                "first_call_ms": 0.41265200707130134,
+                "median_ms": 0.2666389918886125,
+                "p95_ms": 0.34053699346259236,
+                "samples_ms": [
+                  0.30648300889879465,
+                  0.3218420024495572,
+                  0.29492200701497495,
+                  0.2726099919527769,
+                  0.34053699346259236,
+                  0.26962399715557694,
+                  0.26630901265889406,
+                  0.2646649954840541,
+                  0.26460501248948276,
+                  0.2689929970074445,
+                  0.26623799931257963,
+                  0.2636029967106879,
+                  0.2666389918886125,
+                  0.2659770252648741,
+                  0.26661899755708873
+                ],
+                "correctness": "passed"
+              },
+              "encode_history_snapshot": {
+                "first_call_ms": 0.1750570081640035,
+                "median_ms": 0.11482500121928751,
+                "p95_ms": 0.1833429851103574,
+                "samples_ms": [
+                  0.1356939901597798,
+                  0.12806997983716428,
+                  0.1833429851103574,
+                  0.14048299635760486,
+                  0.1280590076930821,
+                  0.12308999430388212,
+                  0.11797097977250814,
+                  0.11482500121928751,
+                  0.11176898260600865,
+                  0.11018599616363645,
+                  0.10723000741563737,
+                  0.10606899741105735,
+                  0.10428501991555095,
+                  0.10245200246572495,
+                  0.10119998478330672
+                ],
+                "correctness": "passed"
+              },
+              "decode_history_snapshot": {
+                "first_call_ms": 0.26177900144830346,
+                "median_ms": 0.29064397676847875,
+                "p95_ms": 0.3707239811774343,
+                "samples_ms": [
+                  0.3000209981109947,
+                  0.3707239811774343,
+                  0.29083399567753077,
+                  0.29436100157909095,
+                  0.28929102700203657,
+                  0.29064397676847875,
+                  0.2915560035035014,
+                  0.28881101752631366,
+                  0.35682698944583535,
+                  0.28938098694197834,
+                  0.2893109922297299,
+                  0.2891409967560321,
+                  0.2883700071834028,
+                  0.29068399453535676,
+                  0.28624600963667035
+                ],
+                "correctness": "passed"
+              }
+            }
+          },
+          {
+            "helices": 96,
+            "bp_per_helix": 84,
+            "nucleotides": 16128,
+            "json_bytes": 114730,
+            "snapshot_base64_bytes": 7220,
+            "operations": {
+              "construct_bundle": {
+                "first_call_ms": 2.3792010033503175,
+                "median_ms": 1.550880988361314,
+                "p95_ms": 1.7068230081349611,
+                "samples_ms": [
+                  1.550880988361314,
+                  1.6130369913298637,
+                  1.7068230081349611,
+                  1.5156950103119016,
+                  1.572781999129802,
+                  1.658693014178425,
+                  1.50069801020436,
+                  1.5004870074335486,
+                  1.6685620066709816,
+                  1.5059080033097416,
+                  1.499614998465404,
+                  1.669894001679495,
+                  1.5038030105642974,
+                  1.5047049964778125,
+                  1.6665080038364977
+                ],
+                "correctness": "passed"
+              },
+              "native_display_geometry": {
+                "first_call_ms": 189.7257050150074,
+                "median_ms": 189.0368269814644,
+                "p95_ms": 268.09886199771427,
+                "samples_ms": [
+                  221.15863498765975,
+                  189.0368269814644,
+                  268.09886199771427,
+                  187.1092510118615,
+                  190.72528497781605,
+                  191.20125600602478,
+                  183.09529300313443,
+                  182.01446000603028,
+                  184.6421759983059,
+                  185.17884000902995,
+                  183.7790920108091,
+                  176.67748700478114,
+                  264.90866401582025,
+                  191.6212509968318,
+                  190.76359597966075
+                ],
+                "correctness": "passed"
+              },
+              "serialize_design_json": {
+                "first_call_ms": 0.5573930102400482,
+                "median_ms": 0.2733109868131578,
+                "p95_ms": 0.34703899291343987,
+                "samples_ms": [
+                  0.34703899291343987,
+                  0.28211798053234816,
+                  0.2733109868131578,
+                  0.2665890206117183,
+                  0.2801140071824193,
+                  0.28343001031316817,
+                  0.26690997765399516,
+                  0.27024498558603227,
+                  0.26997498935088515,
+                  0.2790119906421751,
+                  0.2664589846972376,
+                  0.2684920036699623,
+                  0.26751001132652164,
+                  0.27781998505815864,
+                  0.29147599707357585
+                ],
+                "correctness": "passed"
+              },
+              "parse_validate_design_json": {
+                "first_call_ms": 1.719857013085857,
+                "median_ms": 1.1834140168502927,
+                "p95_ms": 1.3918640033807606,
+                "samples_ms": [
+                  1.1834140168502927,
+                  1.2509100197348744,
+                  1.3675380032509565,
+                  1.0792689863592386,
+                  1.232385024195537,
+                  1.063638977939263,
+                  1.062568015186116,
+                  1.3275539968162775,
+                  1.0709539928939193,
+                  1.2628920085262507,
+                  1.0493029840290546,
+                  1.3918640033807606,
+                  1.072946994099766,
+                  1.06204702751711,
+                  1.299971976550296
+                ],
+                "correctness": "passed"
+              },
+              "encode_history_snapshot": {
+                "first_call_ms": 0.5566820036619902,
+                "median_ms": 0.40266301948577166,
+                "p95_ms": 0.4162889963481575,
+                "samples_ms": [
+                  0.4162889963481575,
+                  0.4113989998586476,
+                  0.4098459903616458,
+                  0.403393991291523,
+                  0.40027900831773877,
+                  0.3994470171164721,
+                  0.4008800024166703,
+                  0.39950700011104345,
+                  0.40038899169303477,
+                  0.3987759992014617,
+                  0.40506699588149786,
+                  0.4059889761265367,
+                  0.40367600740864873,
+                  0.40266301948577166,
+                  0.4026629903819412
+                ],
+                "correctness": "passed"
+              },
+              "decode_history_snapshot": {
+                "first_call_ms": 1.2649560230784118,
+                "median_ms": 1.2204629892949015,
+                "p95_ms": 1.5803170099388808,
+                "samples_ms": [
+                  1.2232989829499274,
+                  1.5803170099388808,
+                  1.2204629892949015,
+                  1.3257999962661415,
+                  1.1311559937894344,
+                  1.1250539973843843,
+                  1.3714359956793487,
+                  1.1197749990969896,
+                  1.2892710219603032,
+                  1.138589985202998,
+                  1.119615015340969,
+                  1.3953300076536834,
+                  1.1653699912130833,
+                  1.3299480197019875,
+                  1.1337309842929244
+                ],
+                "correctness": "passed"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "command": [
+        "node",
+        "frontend/scripts/benchmark-loading-open.mjs"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 4.918680266971933,
+      "result": {
+        "baseline": "pre-batch inert sources with SHA256 in audit directory",
+        "results": [
+          {
+            "operation": "first_open_cpu",
+            "atoms": 30000,
+            "bonds": 29700,
+            "format": "object",
+            "beforeMs": 12.447966000000008,
+            "afterMs": 6.227429000000029,
+            "speedup": 1.9988932832473802,
+            "exactBuffers": true
+          },
+          {
+            "operation": "first_open_cpu",
+            "atoms": 30000,
+            "bonds": 29700,
+            "format": "columnar",
+            "beforeMs": 10.242741000000024,
+            "afterMs": 6.545293999999899,
+            "speedup": 1.5649015918918512,
+            "exactBuffers": true
+          },
+          {
+            "operation": "cached_compact_frame",
+            "atoms": 30000,
+            "serialSpan": 240000,
+            "beforeMs": 1.0148280000000796,
+            "afterMs": 0.8488579999999502,
+            "speedup": 1.1955215124321608,
+            "exactBuffers": true,
+            "eliminatedSparseScratchBytes": 5760000
+          },
+          {
+            "operation": "first_open_cpu",
+            "atoms": 150000,
+            "bonds": 148500,
+            "format": "object",
+            "beforeMs": 77.93432500000017,
+            "afterMs": 53.797424999999976,
+            "speedup": 1.448662738039975,
+            "exactBuffers": true
+          },
+          {
+            "operation": "first_open_cpu",
+            "atoms": 150000,
+            "bonds": 148500,
+            "format": "columnar",
+            "beforeMs": 67.84431099999983,
+            "afterMs": 40.38277100000005,
+            "speedup": 1.680031095439185,
+            "exactBuffers": true
+          },
+          {
+            "operation": "cached_compact_frame",
+            "atoms": 150000,
+            "serialSpan": 1200000,
+            "beforeMs": 5.960489999999481,
+            "afterMs": 4.133681999999681,
+            "speedup": 1.441932398283163,
+            "exactBuffers": true,
+            "eliminatedSparseScratchBytes": 28800000
+          },
+          {
+            "operation": "rapid_scrub_reads",
+            "version": "before",
+            "reads": [
+              0,
+              8,
+              16,
+              24,
+              32,
+              40,
+              48
+            ]
+          },
+          {
+            "operation": "rapid_scrub_reads",
+            "version": "after",
+            "reads": [
+              0,
+              48
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_assembly_fk.py",
+        "--count",
+        "100",
+        "--repeats",
+        "15",
+        "--topology",
+        "chain"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.28776143200229853,
+      "result": {
+        "environment": {
+          "python": "3.12.3"
+        },
+        "fixture": {
+          "instances": 100,
+          "joints": 99,
+          "rigidEvery": 4,
+          "topology": "chain"
+        },
+        "fkMove": {
+          "raw": [
+            0.05850900197401643,
+            0.04497400368563831,
+            0.03634797758422792,
+            0.03346300218254328,
+            0.03487500362098217,
+            0.03736998769454658,
+            0.033823976991698146,
+            0.03195001045241952,
+            0.03658898640424013,
+            0.031158007914200425,
+            0.03229102003388107,
+            0.0328820024151355,
+            0.032772019039839506,
+            0.03179899067617953,
+            0.05037500523030758
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.033823976991698146,
+            "p95Ms": 0.05850900197401643,
+            "minMs": 0.031158007914200425,
+            "maxMs": 0.05850900197401643,
+            "meanMs": 0.03727859972665707
+          },
+          "checksum": 158.40000000000003
+        },
+        "connectorPostpass": {
+          "raw": [
+            0.024495006073266268,
+            0.022521999198943377,
+            0.021199986804276705,
+            0.022402004105970263,
+            0.020578998373821378,
+            0.021810992620885372,
+            0.02504698932170868,
+            0.021671003196388483,
+            0.020698003936558962,
+            0.02142001176252961,
+            0.02002698602154851,
+            0.03709999145939946,
+            0.02443601260893047,
+            0.0267100112978369,
+            0.02154102548956871
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.021810992620885372,
+            "p95Ms": 0.03709999145939946,
+            "minMs": 0.02002698602154851,
+            "maxMs": 0.03709999145939946,
+            "meanMs": 0.023443934818108875
+          },
+          "checksum": 1584
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_assembly_fk.py",
+        "--count",
+        "500",
+        "--repeats",
+        "15",
+        "--topology",
+        "chain"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.6546267569938209,
+      "result": {
+        "environment": {
+          "python": "3.12.3"
+        },
+        "fixture": {
+          "instances": 500,
+          "joints": 499,
+          "rigidEvery": 4,
+          "topology": "chain"
+        },
+        "fkMove": {
+          "raw": [
+            0.12597499880939722,
+            0.1793959818314761,
+            0.11544598964974284,
+            0.11420398368500173,
+            0.16101097571663558,
+            0.12934199185110629,
+            0.1250940258614719,
+            0.16623100964352489,
+            0.11143798474222422,
+            0.14714599819853902,
+            0.11949401232413948,
+            0.16145198605954647,
+            0.10316297993995249,
+            0.1789339876268059,
+            0.12986297952011228
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.12934199185110629,
+            "p95Ms": 0.1793959818314761,
+            "minMs": 0.10316297993995249,
+            "maxMs": 0.1793959818314761,
+            "meanMs": 0.1378792590306451
+          },
+          "checksum": 798.3999999999999
+        },
+        "connectorPostpass": {
+          "raw": [
+            0.13399100862443447,
+            0.14613301027566195,
+            0.11133801308460534,
+            0.11969401384703815,
+            0.10637898230925202,
+            0.11830098810605705,
+            0.12206798419356346,
+            0.10918499901890755,
+            0.13095498434267938,
+            0.10581800597719848,
+            0.22045199875719845,
+            0.12184798833914101,
+            0.10831299005076289,
+            0.15621198690496385,
+            0.12224901001900434
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.12184798833914101,
+            "p95Ms": 0.22045199875719845,
+            "minMs": 0.10581800597719848,
+            "maxMs": 0.22045199875719845,
+            "meanMs": 0.12886239759003124
+          },
+          "checksum": 7984
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_assembly_fk.py",
+        "--count",
+        "1500",
+        "--repeats",
+        "15",
+        "--topology",
+        "chain"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 2.543193693010835,
+      "result": {
+        "environment": {
+          "python": "3.12.3"
+        },
+        "fixture": {
+          "instances": 1500,
+          "joints": 1499,
+          "rigidEvery": 4,
+          "topology": "chain"
+        },
+        "fkMove": {
+          "raw": [
+            0.49933401169255376,
+            0.6243780080694705,
+            0.8479959797114134,
+            0.5062370037194341,
+            0.5317250033840537,
+            0.573563011130318,
+            0.5816779739689082,
+            1.9268539908807725,
+            0.5441279790829867,
+            0.5242899933364242,
+            0.525131996255368,
+            0.6465490150731057,
+            1.0464980150572956,
+            0.7713419909123331,
+            0.5500889965333045
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.573563011130318,
+            "p95Ms": 1.9268539908807725,
+            "minMs": 0.49933401169255376,
+            "maxMs": 1.9268539908807725,
+            "meanMs": 0.7133195312538495
+          },
+          "checksum": 2398.4000000000005
+        },
+        "connectorPostpass": {
+          "raw": [
+            0.5371439910959452,
+            24.562527978559956,
+            0.5808570131193846,
+            0.623406027443707,
+            0.49634897732175887,
+            0.6359700055327266,
+            1.0527700069360435,
+            0.5712690181098878,
+            0.5934399960096925,
+            0.6114540155977011,
+            0.6057439895812422,
+            1.1491889890749007,
+            0.5457410006783903,
+            0.6807830068282783,
+            0.5289789987728
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.6057439895812422,
+            "p95Ms": 24.562527978559956,
+            "minMs": 0.49634897732175887,
+            "maxMs": 24.562527978559956,
+            "meanMs": 2.2517082009774945
+          },
+          "checksum": 23984
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_assembly_fk.py",
+        "--count",
+        "500",
+        "--repeats",
+        "15",
+        "--topology",
+        "star"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.7385205890168436,
+      "result": {
+        "environment": {
+          "python": "3.12.3"
+        },
+        "fixture": {
+          "instances": 500,
+          "joints": 499,
+          "rigidEvery": 4,
+          "topology": "star"
+        },
+        "fkMove": {
+          "raw": [
+            4.977570992195979,
+            5.147479008883238,
+            4.982340993592516,
+            5.202172003919259,
+            5.061126983491704,
+            5.27798300026916,
+            5.154070997377858,
+            5.244088999461383,
+            5.0140189996454865,
+            5.835666990606114,
+            5.115067993756384,
+            5.213422002270818,
+            4.987639986211434,
+            5.624712008284405,
+            5.066137004178017
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 5.147479008883238,
+            "p95Ms": 5.835666990606114,
+            "minMs": 4.977570992195979,
+            "maxMs": 5.835666990606114,
+            "meanMs": 5.193566530942917
+          },
+          "checksum": 814.3999999999999
+        },
+        "connectorPostpass": {
+          "raw": [
+            0.10540700168348849,
+            0.11410299339331686,
+            0.10965601541101933,
+            0.11309099500067532,
+            0.09825400775298476,
+            0.09967698133550584,
+            0.09652000153437257,
+            0.14177500270307064,
+            0.11372199514880776,
+            0.09324500570073724,
+            0.12173698632977903,
+            0.10204099817201495,
+            0.10405501234345138,
+            0.11568600893951952,
+            0.10926497634500265
+          ],
+          "summary": {
+            "n": 15,
+            "medianMs": 0.10926497634500265,
+            "p95Ms": 0.14177500270307064,
+            "minMs": 0.09324500570073724,
+            "maxMs": 0.14177500270307064,
+            "meanMs": 0.10921559878624976
+          },
+          "checksum": 7984
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_assembly_shared_index.py",
+        "--pairs",
+        "500",
+        "--repeats",
+        "15"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 4.332208754000021,
+      "result": {
+        "environment": {
+          "python": "3.12.3",
+          "repeats": 15
+        },
+        "fixture": {
+          "independentMates": 500,
+          "instances": 1000,
+          "joints": 500
+        },
+        "sharedFkAdjacency": {
+          "before": {
+            "raw": [
+              130.4961080022622,
+              139.53154100454412,
+              137.22758999210782,
+              149.13500400143676,
+              141.6019430034794,
+              144.20271798735484,
+              141.41129597555846,
+              153.17458100616932,
+              144.77968699065968,
+              148.1435089954175,
+              148.27073700143956,
+              146.37452000170015,
+              156.63280899752863,
+              157.7767690178007,
+              156.28800500417128
+            ],
+            "summary": {
+              "n": 15,
+              "medianMs": 146.37452000170015,
+              "p95Ms": 157.7767690178007,
+              "minMs": 130.4961080022622,
+              "maxMs": 157.7767690178007,
+              "meanMs": 146.33645446544202
+            },
+            "checksum": -125250
+          },
+          "after": {
+            "raw": [
+              11.707079014740884,
+              12.806655984604731,
+              12.357525993138552,
+              12.195373012218624,
+              12.155839009210467,
+              11.608675005845726,
+              12.022259004879743,
+              11.061212018830702,
+              11.964210018049926,
+              12.869874015450478,
+              12.483792990678921,
+              12.368296011118218,
+              12.187157990410924,
+              11.11373002640903,
+              11.791255994467065
+            ],
+            "summary": {
+              "n": 15,
+              "medianMs": 12.155839009210467,
+              "p95Ms": 12.869874015450478,
+              "minMs": 11.061212018830702,
+              "maxMs": 12.869874015450478,
+              "meanMs": 12.046195739336932
+            },
+            "checksum": -125250
+          }
+        }
+      }
+    },
+    {
+      "command": [
+        "/home/jojo/Work/NADOC/.venv/bin/python",
+        "scripts/benchmark_part_inputs.py"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 0.6876283269957639,
+      "result": {
+        "scope": "warm in-memory explicit capture and input replay; no physical outputs",
+        "repeats": 9,
+        "capture_limits_unchanged": {
+          "nodes": 30000,
+          "bytes": 2000000,
+          "cooperative_seconds": 0.025
+        },
+        "cases": [
+          {
+            "features": 1,
+            "atoms": 3,
+            "deduplicated_source_bytes": 241,
+            "source_count": 1,
+            "capture_median_ms": 0.5517120007425547,
+            "capture_max_ms": 0.6672579911537468,
+            "proof_median_ms": 0.23959798272699118,
+            "statuses": [
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import"
+            ]
+          },
+          {
+            "features": 32,
+            "atoms": 96,
+            "deduplicated_source_bytes": 241,
+            "source_count": 1,
+            "capture_median_ms": 1.597438007593155,
+            "capture_max_ms": 1.9782099989242852,
+            "proof_median_ms": 2.8388299979269505,
+            "statuses": [
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import"
+            ]
+          },
+          {
+            "features": 128,
+            "atoms": 384,
+            "deduplicated_source_bytes": 241,
+            "source_count": 1,
+            "capture_median_ms": 5.20759099163115,
+            "capture_max_ms": 5.421932990429923,
+            "proof_median_ms": 10.826491983607411,
+            "statuses": [
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import",
+              "reproduced_import"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "scratch_remaining": [],
+  "finished_utc": "2026-10-22T16:13:14.306572+00:00"
+}

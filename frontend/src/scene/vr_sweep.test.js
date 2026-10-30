@@ -211,7 +211,7 @@ it.each([false, true])('edits the saved Sweep and guards Undo against later chan
   const controller = createVRSweepCommit({ preflight, transaction: { clear: vi.fn() }, api, getState: () => state, sendFeedback: async () => ({ published: true }) })
   const event = { mode: 'sweep', action: 'confirm', targetKind: 'none', targetIdentity: null, targetOwnerTokens: [], sequence: 1, configSequence: 7 }
   expect((await controller.handle(event)).accepted).toBe(true)
-  expect(api.editFeature).toHaveBeenCalledWith(0, expect.objectContaining({ sweep_id: 'saved', expected_revision: 4 }))
+  expect(api.editFeature).toHaveBeenCalledWith(0, expect.objectContaining({ sweep_id: 'saved', expected_revision: 4 }), { onCommitted: expect.any(Function), deferGeometry: true })
   expect(api.createSweep).not.toHaveBeenCalled()
   expect(state.currentDesign.feature_log).toHaveLength(1)
   if (stale) { revision++; state.currentDesign = { ...state.currentDesign } }

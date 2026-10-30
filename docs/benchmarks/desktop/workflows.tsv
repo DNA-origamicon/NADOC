@@ -1,0 +1,55 @@
+id	area	operation	owner_glob	evidence	fixture_and_measurement
+D01	documents	Parse and validate design JSON	backend/core/models.py	current	6/24/96 helices; parse wall time and bytes
+D02	documents	Serialize design JSON	backend/core/models.py	current	Same designs; serialization wall time and bytes; disk save separate
+D03	documents	Open file to first useful frame	frontend/src/perf/viewer_file_open.js	gap	Small/medium/large copied designs; cold/warm click-to-visible frame and peak RSS
+D04	documents	Save, autosave and recovery	backend/api/documents.py	current:round4_document_screen.json	History lengths 0/100/1000; snapshot, disk flush, recovery and UI stall separately
+D05	documents	Tabs, projects, close and reload	frontend/src/app/lifecycle.js	gap	1/10/50 tabs; close latency, autosave completion, retained heap and listeners
+D06	documents	Library and filesystem browsing	backend/api/routes_fs.py	current:round4_document_screen.json	100/1000/10000 entries; list/search wall time and response bytes
+D07	authoring	Construct primitive bundle	backend/core/lattice.py	current	6/24/96 helices x 84 bp; construction CPU and topology counts
+D08	rendering	Native display geometry	backend/core/design_geometry.py	current:round1_geometry_emission.json	Same bundles; geometry CPU, nucleotide count, unchanged input
+D09	authoring	Scaffold routing and sequence assignment	backend/api/routes_scaffold_routing.py	gap	6/24/96 helices; routing time, sequence validation and response-to-frame
+D10	authoring	Staples, nicks, crossovers, ligation	backend/api/part_ligation_commands.py	gap	Single/bulk edits; command, history, geometry and first-frame phases
+D11	authoring	Overhang connections and motion	backend/api/routes_overhang_connections.py	current:round3_screen.json	10/100/1000 candidate connections; lookup and recompute, then desktop edit latency
+D12	authoring	Extrude, sweep, bend and section editing	backend/api/routes_frame_extrusion.py	gap	Short/long paths and multi-selection; preview p95 and commit-to-frame
+D13	authoring	caDNAno import and editor	backend/api/routes_part_cadnano_import.py	scripts/benchmark_cadnano_route.py	Small/large imports; decode, reconstruction, editor update and first paint
+D14	authoring	Copy, paste and repeated patterns	backend/api/routes_part_element_copy.py	scripts/benchmark_part_element_copy.py	1/100/1000 copies; capture, transform, publish, serialized bytes
+D15	history	Encode and decode history snapshots	backend/api/state.py	current	6/24/96 helices; encode/decode CPU and compressed size; empty-history fixture
+D16	history	Record mutation and undo/redo	backend/api/state.py	current:round4_history_screen.json	0/100/1000 history; record, undo, redo and first-frame latency
+D17	history	Scrub, seek and reconstruct history	backend/api/part_evaluation.py	current:round2_history_screen.json	Beginning/middle/end cursors; warm/cold replay and desktop slider-to-frame
+D18	history	Recipe edit and repair drafts	backend/api/part_recipe_edit.py	../../audits/feature_history_20261014/recipe_edit_benchmark_hardening.json	Prefix lengths 1/100/1000; reconstruction, comparison and commit latency
+D19	history	Pinned input capture and proof replay	backend/api/part_proof_commands.py	current	1/32/128 PDB imports; capture/proof median, admission result and bytes
+D20	history	Immutable evaluation and registered batch publication	backend/api/part_immutable_worker.py	../../audits/feature_history_20261014/validation_immutable_jobs_benchmark_p6.json	Batch widths 1/10/100; admission, worker, publication and retention RSS
+D21	assembly	Move instances and propagate joints	backend/core/assembly_fk.py	current	100/500/1500 chain and 500 star; FK median/p95; moved graph scope matters
+D22	assembly	Enforce connector coincidence	backend/core/assembly_fk.py	current:round1_connectors.json	500 independent mates; connector CPU and legacy checksum comparison
+D23	assembly	Build geometry for repeated instances	backend/api/routes_assembly_geometry.py	gap	1/100/1000 instances with shared/unique sources; payload, draw calls, first frame
+D24	assembly	Groups, joints, gears, belts and loadouts	backend/api/routes_assembly_joints.py	gap	Chain/star/closed loop and configuration switch; solve and interaction latency
+D25	assembly	Assembly animation and polymerization	backend/api/routes_assembly_animations.py	gap	100/1000 instances; setup, frame p95, memory growth, constraints
+D26	chemistry	Protein and aptamer import	backend/api/routes_protein.py	../../audits/feature_history_20261014/protein_free_import_benchmark_p4.json	Small/large PDB; parser, capture, atomistic/trace build and first frame
+D27	chemistry	Nanoparticle attachment and connection lookup	backend/api/routes_nanoparticle_attachment.py	scripts/benchmark_pending_np_connections.py	10/100/1000 particles; dependency lookup, transform, overlay and serialization
+D28	chemistry	Thiol and coating edits	backend/api/part_thiol_commands.py	../../audits/feature_history_20261014/coating_jobs_benchmark_long_history_p4.json	Dense coating plus long history; admission, capture, job publication, first frame
+D29	chemistry	Photoproduct and conjugate edits	backend/api/routes_photoproducts.py	gap	Single/bulk existing validated templates; edit time and display refresh
+D30	rendering	Atomistic first-open CPU build	frontend/src/scene/atomistic_renderer.js	current:round1_renderer_confirmation.json	30k/150k atoms; object/columnar buffers; CPU construction only
+D31	playback	Compact atom frame expansion and stream access	frontend/src/scene/md_atom_frames_bin.js	current	30k/150k atoms; sparse serials, cached decode and bounded cache
+D32	playback	Atomistic interpolation and live coordinates	frontend/src/scene/atomistic_renderer.js	current:round2_playback_confirmation.json	30k/150k atoms; interpolation CPU plus browser p95 and GPU time separately
+D33	playback	MD periodic-image frame placement	backend/core/md_trajectory.py	../../audits/active_visualization_20260925/md_benchmark.json	211k/612k atoms; cold topology and warm per-frame CPU
+D34	rendering	Surface generation and export	backend/core/surface.py	current:round2_surface_remesh.json	Coarse/fine grids; voxelization, mesh, serialization, peak RSS and output equivalence
+D35	rendering	Surface recolour and motion	frontend/src/scene/surface_renderer.js	current:round3_final_colour_surface.json	Fixed topology vs changed topology; normals, colour buffers and CPU update
+D36	rendering	Solvent and protein trace rendering	frontend/src/scene/protein_trace_renderer.js	current:round3_solvent_confirmation.json	20k/100k waters and long traces; rebuild CPU, allocations and GPU frame time
+D37	rendering	Orbit, zoom, LOD and representation changes	frontend/src/perf/viewer_performance.js	frontend/e2e/viewer_performance_benchmark.spec.js	Real copied designs; orbit frame p50/p95/p99, GPU identity, pixels and draw counts
+D38	interaction	Picking, hover, selection and drag	frontend/src/scene/selection_controller.js	current:round3_final_colour_surface.json	Increasing visible nucleotide counts; input-to-highlight and drag p95, long tasks
+D39	interaction	Dimensions, annotations and clash overlays	backend/api/routes_dimensions.py	gap	0/100/1000 overlays; query, rebuild, picking and first frame
+D40	rendering	Screenshot, photo and animation export	frontend/src/viewer/viewer_screenshot.js	gap	Viewport/4K and short video; render, encode, bytes and peak memory
+D41	simulation	CanDo/SNUPI stiffness and analysis	backend/physics/fem_solver.py	../../audits/performance_20260925/benchmark.json	504/3528 nodes; stiffness, eigensolve and postprocessing separately
+D42	simulation	Thermal/FEM and corotational solve	backend/physics/snupi_corotational.py	scripts/benchmark_fem_thermal.py	Increasing nodes/constraints; iteration count, convergence and solve time
+D43	simulation	Prepare/export NAMD, oxDNA, mrDNA inputs	backend/api/routes_export_md.py	gap	Representative topology sizes; validation, package construction, bytes and RSS
+D44	simulation	Local engine execution and throughput	backend/core/benchmark_runner.py	gap	Existing approved engine fixtures only; setup vs steps/second, device and atom count
+D45	jobs	Queue, cancel, poll and reconnect	backend/api/routes_jobs.py	gap	0/10/100 jobs; API p95, poll rate, panel long tasks; fake workers only
+D46	jobs	Remote upload, download and resume	backend/api/routes_runpod.py	gap	Recorded/replayed transport and isolated fixtures; transfer bytes, retries, status latency
+D47	playback	Trajectory cold read, seek and prefetch	backend/core/md_trajectory.py	scripts/benchmark_namd_trajectory.py	Existing copied trajectories; frame read/decode/upload, cache hits, sustained FPS
+D48	simulation	Metrics and plots for trajectories	backend/api/routes_md_metrics.py	gap	Frame/atom sweeps; aggregate CPU, API bytes, plot first paint and interactive zoom
+D49	sharing	Desktop shared viewer and prepared scene	frontend/src/viewer/prepared_viewer.js	gap	Small/large scenes; initial transfer, decode, first useful frame and reconnect
+D50	sharing	Live collaboration and shared annotations	backend/api/routes_project_collaboration.py	gap	2/10 simulated peers; update-to-visible, fanout bytes and stale state rejection
+D51	shell	Panels, menus, search and feature lists	frontend/src/ui/feature_log_panel.js	gap	100/1000/10000 rows; open/search/scroll p95 and DOM count
+D52	shell	Startup, session cache and resource retention	backend/api/startup_cache.py	gap	Cold/warm process and 20 open/close cycles; ready time, RSS plateau and heap
+D53	analysis	Shape comparison and readiness checks	backend/api/routes_shape_metrics.py	scripts/benchmark_dna_comparison.py	Increasing topology size; validate/compare CPU and UI card first paint
+D54	simulation	Parameterization and experimental screening	backend/parameterization/param_extract.py	gap	Read-only fixture input extraction and cached model inference; CPU/RSS, no fitting campaign

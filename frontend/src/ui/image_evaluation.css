@@ -1,0 +1,32 @@
+.ie-modal { width: min(96vw, 1700px) !important; max-width: 96vw !important; }
+.ie-modal .modal__body { overflow: auto; }
+.image-evaluation { font-size: 13px; }
+.ie-layout { display: grid; grid-template-columns: 190px minmax(300px, 1fr) 290px; gap: 14px; }
+.ie-layout aside { max-height: 70vh; overflow: auto; }
+.ie-layout h3 { font-size: 14px; }
+.ie-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+.ie-toolbar input[type=number], [data-calibration] input { width: 65px; }
+.ie-viewport { height: 57vh; overflow: auto; background: #ddd; border: 1px solid #666; }
+.ie-stage { position: relative; min-width: 50%; }
+.ie-stage img, .ie-stage svg { position: absolute; width: 100%; height: 100%; left: 0; top: 0; }
+.ie-stage svg [role=button] { cursor: pointer; pointer-events: all; }
+.ie-stage svg [role=button]:focus, .ie-stage .ie-selected { stroke: #f000b0; stroke-width: 4; outline: none; }
+.ie-layout button { display: block; text-align: left; width: 100%; padding: 8px; margin: 5px 0; white-space: normal; }
+.ie-layout .ie-toolbar button { width: auto; }
+[data-candidates] img { display: block; width: 100%; max-height: 130px; object-fit: contain; background: white; }
+[data-candidates] [aria-pressed=true] { outline: 2px solid #4d9cff; }
+[data-detail] { padding: 8px; background: #253d50; color: #fff; min-height: 45px; }
+[data-calibration] label { display: flex; justify-content: space-between; margin: 5px; }
+.ie-legend { font-size: 12px; }
+[data-limits] { padding-left: 18px; }
+[data-limits] li { margin: 8px 0; }
+@media (max-width: 1000px) { .ie-layout { grid-template-columns: 150px minmax(260px, 1fr); } .ie-layout aside:last-child { grid-column: 1 / -1; max-height: 30vh; } }
+.image-evaluation input[type=number], .image-evaluation select { background: #24313d; color: #edf3f8; border: 1px solid #687786; border-radius: 3px; padding: 5px; }
+.image-evaluation [data-note-box] { margin: 8px 0; }
+.image-evaluation [data-notes] { max-height: 100px; overflow: auto; font-size: 12px; }
+.ie-layout aside, .ie-main { min-width: 0; }
+.ie-modal .modal__body { padding-top: 8px; }
+.image-evaluation [data-brick-status] { font-size: 12px; line-height: 1.5; }
+.image-evaluation [data-brick-mapping] { max-height: 180px; overflow: auto; }
+.image-evaluation [data-brick-mapping] label { display: flex; gap: 8px; justify-content: space-between; margin: 4px; }
+.image-evaluation [data-brick-mapping] select { max-width: 75%; }

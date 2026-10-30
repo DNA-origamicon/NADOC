@@ -24,6 +24,29 @@ class SimulationPanel {
  std::optional<size_t> wheelHand;
  int drag=-1;std::optional<size_t> dragHand;float dragFraction=0;
  static constexpr float shift=.4F,up=.15F;
+ static constexpr float selectedJobScale=2.F;
+ static constexpr double scaleDuration=.22;
+ float requestedScale=1.F,appliedScale=1.F,scaleFrom=1.F;
+ double scaleStarted=0;
+ bool scaling=false;
+ // Animate the shared placement, keeping rendering, ray targets and grips in
+ // agreement. Incremental ratios retain manual resizing even during a tween.
+ void syncScale(){
+  if(!menu || !menu->open)return;
+  const float next=selected&&focused&&!menu->customTab&&menu->tab().key=="dynamics"?selectedJobScale:1.F;
+  if(next==requestedScale && !scaling)return;
+  const double now=menu->animationClock();
+  if(next!=requestedScale){
+   scaleFrom=appliedScale;scaleStarted=now;requestedScale=next;scaling=true;
+  }
+  const float t=float(std::clamp((now-scaleStarted)/scaleDuration,0.,1.));
+  const float eased=t*t*(3.F-2.F*t);
+  const float factor=scaleFrom+(requestedScale-scaleFrom)*eased;
+  const float base=menu->placement.scale()/appliedScale;
+  menu->placement.setScale(base*factor);
+  appliedScale=menu->placement.scale()/base;
+  if(t>=1.F){scaling=false;if(requestedScale==1.F)appliedScale=1.F;}
+ }
  bool modal()const{return wheelHand || trajectoryUi.popup || !numberId.empty() || mapper.prompt.active();}
  bool ready()const{return sequence<=acknowledged;}
  void bind(SidebarMenu& target,SidebarMenu* right=nullptr){
@@ -33,6 +56,7 @@ class SimulationPanel {
   target.dynamicScrollTo=[](const std::string&,float){};target.dynamicThumb=[](const std::string&){return MenuPanelBounds{};};
  }
  bool poll(const std::string& path){
+  syncScale();
   bool changed=false;
   if(!path.empty()&&!inbox)inbox=std::make_unique<ViewSnapshotInbox>(path+".simulations",false);
   if(pending.valid() && pending.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{adopt(pending.get());changed=true;}catch(const std::exception&){} }
@@ -52,6 +76,7 @@ class SimulationPanel {
   engines=next.engines;jobs=next.jobs;views=next.views;
   if(engineChanged || jobChanged || next.mode!=snapshot.mode || (!trajectoryUi.popup && !wheelHand && !(sequence>acknowledged && requested=="t:configure")))trajectory=next.trajectory;
   snapshot=std::move(next);
+  syncScale();
 
  }
  bool send(const std::string& id,double value=0){if(!ready()||version<1)return false;requested=id;requestedValue=value;requestedFirst=trajectory.first;requestedLast=std::max(1,trajectory.last);requestedInterval=trajectory.interval;requestedVersion=version;++sequence;return true;}
@@ -106,7 +131,7 @@ class SimulationPanel {
   if(!action.starts_with("simulation:"))return false;
   const auto id=action.substr(11);
   if(id=="local:transport"||id=="local:overlays"){overlayOptions=id=="local:overlays";viewOffset=0;return false;}
-  if(id=="local:back"){focused=false;return false;}if(id=="local:prev"||id=="local:next"){scroll(focused,id.ends_with("prev")?-1:1);return false;}
+  if(id=="local:back"){focused=false;syncScale();return false;}if(id=="local:prev"||id=="local:next"){scroll(focused,id.ends_with("prev")?-1:1);return false;}
   if(id=="local:modesprev"){modeOffset=modeOffset>8?modeOffset-8:0;return false;}if(id=="local:modesnext"){modeOffset+=8;return false;}
   if(id=="local:cancel"){numberId.clear();mapper.close();trajectoryUi.close();return false;}
   if(id=="local:erase"){if(!digits.empty())digits.pop_back();numberReplace=false;return false;}

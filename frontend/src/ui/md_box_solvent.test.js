@@ -111,3 +111,45 @@ it('recommends 6 nm per face for free DNA and displays measured clearance',async
  expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:6})
  expect(document.getElementById('md-box-clearance').textContent).toContain('unavailable')
 })
+
+it('shows the saved job box and actual ions without fitting the current design',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const state={currentDesign:{id:'control',metadata:{}},currentGeometry:[1]},listeners=[]
+ const api={getMdSolventMeta:vi.fn(async()=>({ready:true,box_nm:[6.093,8.3438,12.8142],species:{MG:52,CL:11,NA:0}})),fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[14.093,16.344,20.659]}}))}
+ ui=initBoxSolvent({api,store:{getState:()=>state,subscribe:fn=>{listeners.push(fn);return()=>{}}}})
+ const events=[],listen=e=>events.push(e.detail)
+ window.addEventListener('nadoc:box-solvent-details',listen)
+ try{
+  ui.selectJob({job_id:'control',design_name:'2hb_1xT',created_at:1792944569,status:'completed'},{padding_nm:2,box_mode:'bbox'})
+  document.getElementById('md-box-solvent-toggle').click()
+  document.getElementById('md-box-view-details').click()
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,estimated:false,dimensions:[6.093,8.3438,12.8142],numbers:{mg:52,cl:11,na:0}}))
+  expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+  expect(document.getElementById('md-box-padding').disabled).toBe(true)
+  state.currentGeometry=[2];listeners.forEach(fn=>fn())
+  expect(events.at(-1).dimensions).toEqual([6.093,8.3438,12.8142])
+  expect(document.getElementById('md-box-clearance').textContent).not.toContain('X−')
+  ui.beginPreparation()
+  expect(document.getElementById('md-box-padding').disabled).toBe(false)
+  expect(ui.payload().padding_nm).toBe(6)
+  await vi.waitFor(()=>expect(api.fetchProtocolBoxPreview).toHaveBeenCalled())
+ }finally{window.removeEventListener('nadoc:box-solvent-details',listen)}
+})
+
+it('rejects stale job reads and never substitutes defaults for unavailable saved boxes',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const pending=[],api={getMdSolventMeta:vi.fn(()=>new Promise(resolve=>pending.push(resolve))),fetchProtocolBoxPreview:vi.fn()}
+ ui=initBoxSolvent({api,store:{getState:()=>({}),subscribe:()=>()=>{}}})
+ document.getElementById('md-box-solvent-toggle').click()
+ ui.selectJob({job_id:'a',created_at:1,status:'completed'},{padding_nm:2})
+ await vi.waitFor(()=>expect(pending).toHaveLength(1))
+ ui.selectJob({job_id:'b',created_at:2,status:'completed'},{padding_nm:6})
+ await vi.waitFor(()=>expect(pending).toHaveLength(2))
+ pending[0]({ready:true,box_nm:[6,8,12]})
+ pending[1]({ready:false,box_nm:null})
+ await vi.waitFor(()=>expect(document.getElementById('md-box-warnings').textContent).toContain('No default box is substituted'))
+ expect(document.getElementById('md-box-x').value).toBe('')
+ expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+})

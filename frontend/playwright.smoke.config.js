@@ -26,6 +26,7 @@ process.env.NADOC_E2E_API_BASE ??= `http://127.0.0.1:${BACKEND_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: process.env.NADOC_E2E_OUTPUT_DIR || './test-results',
   globalTeardown: './e2e/global-teardown.js',
   globalTimeout: 360_000,      // 6 min whole-run cap → self-abort + server teardown
   timeout: 30_000,

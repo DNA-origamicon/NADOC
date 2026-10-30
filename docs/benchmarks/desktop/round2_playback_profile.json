@@ -1,0 +1,198 @@
+{
+  "scope": "Node CPU diagnostic; 100 warmed updates per operation, 150k atoms. Sampling counts are not user latency or GPU timing.",
+  "rendererSha256": "57d6d3e0741bee0e13fc09d68259c81ad932ff3e625fb18e1e6b2f7c724efab3",
+  "results": [
+    {
+      "operation": "live_md",
+      "samples": 1064,
+      "topSelf": [
+        {
+          "function": "_updateFrameCoordinates",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+          "line": 401,
+          "selfSamples": 444
+        },
+        {
+          "function": "writeBondMatrix",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+          "line": 157,
+          "selfSamples": 334
+        },
+        {
+          "function": "normalize",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 3777,
+          "selfSamples": 105
+        },
+        {
+          "function": "dot",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4417,
+          "selfSamples": 64
+        },
+        {
+          "function": "toArray",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 6859,
+          "selfSamples": 56
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 17
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 15
+        },
+        {
+          "function": "(garbage collector)",
+          "source": "",
+          "line": 0,
+          "selfSamples": 13
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 4
+        },
+        {
+          "function": "toArray",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 6859,
+          "selfSamples": 4
+        },
+        {
+          "function": "dot",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4417,
+          "selfSamples": 3
+        },
+        {
+          "function": "normalize",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 3777,
+          "selfSamples": 2
+        },
+        {
+          "function": "post",
+          "source": "node:inspector",
+          "line": 118,
+          "selfSamples": 1
+        },
+        {
+          "function": "_objectTable",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atom_table.js",
+          "line": 89,
+          "selfSamples": 1
+        },
+        {
+          "function": "writeBondMatrix",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+          "line": 157,
+          "selfSamples": 1
+        }
+      ]
+    },
+    {
+      "operation": "interpolation",
+      "samples": 858,
+      "topSelf": [
+        {
+          "function": "writeBondMatrix",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+          "line": 157,
+          "selfSamples": 290
+        },
+        {
+          "function": "applyPositionLerp",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+          "line": 1178,
+          "selfSamples": 282
+        },
+        {
+          "function": "normalize",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 3777,
+          "selfSamples": 114
+        },
+        {
+          "function": "toArray",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 6859,
+          "selfSamples": 71
+        },
+        {
+          "function": "dot",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4417,
+          "selfSamples": 54
+        },
+        {
+          "function": "(garbage collector)",
+          "source": "",
+          "line": 0,
+          "selfSamples": 11
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 6
+        },
+        {
+          "function": "dot",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4417,
+          "selfSamples": 6
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 5
+        },
+        {
+          "function": "multiplyScalar",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 4186,
+          "selfSamples": 4
+        },
+        {
+          "function": "toArray",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 6859,
+          "selfSamples": 4
+        },
+        {
+          "function": "writeBondMatrix",
+          "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+          "line": 157,
+          "selfSamples": 4
+        },
+        {
+          "function": "interpolation",
+          "source": "file:///home/jojo/Work/NADOC/frontend/scripts/profile-desktop-playback.mjs",
+          "line": 31,
+          "selfSamples": 3
+        },
+        {
+          "function": "normalize",
+          "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+          "line": 3777,
+          "selfSamples": 3
+        },
+        {
+          "function": "post",
+          "source": "node:inspector",
+          "line": 118,
+          "selfSamples": 1
+        }
+      ]
+    }
+  ]
+}

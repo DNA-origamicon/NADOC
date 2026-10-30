@@ -1,0 +1,180 @@
+{
+  "scope": "Sampled CPU for whole screening harness, including baseline/current and assertion overhead; attribution only, not latency.",
+  "top_self": [
+    {
+      "function": "_colorByMode",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 619
+    },
+    {
+      "function": "_colorByMode",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 607
+    },
+    {
+      "function": "_alphaOfRow",
+      "source": "data:text/javascript;base64,LyoqCiAqIEF0b21pc3RpYyByZW5kZXJlciDigJQgUGhhc2UgQUEuCiAqCiAqIFJlbmRlcnMgdGhlIGhlYXZ5LWF0b20gYWxsLWF0b20gbW9kZWwgdXNpbmcgb25lIFRIUkVFLkluc3RhbmNlZE1lc2ggcGVyCiAqIGVsZW1lbnQgdHlwZSAoUCwgQywgTiwgTyDigJQgNCBkcmF3IGNh",
+      "self_samples": 596
+    },
+    {
+      "function": "(garbage collector)",
+      "source": "",
+      "self_samples": 571
+    },
+    {
+      "function": "_alphaOfRow",
+      "source": "data:text/javascript;base64,LyoqCiAqIEF0b21pc3RpYyByZW5kZXJlciDigJQgUGhhc2UgQUEuCiAqCiAqIFJlbmRlcnMgdGhlIGhlYXZ5LWF0b20gYWxsLWF0b20gbW9kZWwgdXNpbmcgb25lIFRIUkVFLkluc3RhbmNlZE1lc2ggcGVyCiAqIGVsZW1lbnQgdHlwZSAoUCwgQywgTiwgTyDigJQgNCBkcmF3IGNh",
+      "self_samples": 569
+    },
+    {
+      "function": "_normalColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 512
+    },
+    {
+      "function": "_alphaOfRow",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 502
+    },
+    {
+      "function": "_alphaOfRow",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 474
+    },
+    {
+      "function": "_normalColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 466
+    },
+    {
+      "function": "_normalColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 432
+    },
+    {
+      "function": "_normalColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 410
+    },
+    {
+      "function": "_applyColors",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 267
+    },
+    {
+      "function": "writeAttribute",
+      "source": "data:text/javascript;base64,LyoqCiAqIFN1cmZhY2UgcmVuZGVyZXIg4oCUIFZkVyBhbmQgU0VTIG1vbGVjdWxhciBzdXJmYWNlcy4KICoKICogUmVuZGVycyBhIHRyaWFuZ3VsYXRlZCBzdXJmYWNlIG1lc2ggcmV0dXJuZWQgYnkgR0VUIC9hcGkvZGVzaWduL3N1cmZhY2UuCiAqIFRoZSBtZXNoIGlzIGJ1aWx0",
+      "self_samples": 260
+    },
+    {
+      "function": "colorForAtom",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 252
+    },
+    {
+      "function": "writeAttribute",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/surface_renderer.js",
+      "self_samples": 252
+    },
+    {
+      "function": "colorForAtom",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 241
+    },
+    {
+      "function": "_applyColors",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 235
+    },
+    {
+      "function": "computeVertexNormals",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 225
+    },
+    {
+      "function": "computeVertexNormals",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 221
+    },
+    {
+      "function": "colorForAtom",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 204
+    },
+    {
+      "function": "_applyColors",
+      "source": "data:text/javascript;base64,LyoqCiAqIEF0b21pc3RpYyByZW5kZXJlciDigJQgUGhhc2UgQUEuCiAqCiAqIFJlbmRlcnMgdGhlIGhlYXZ5LWF0b20gYWxsLWF0b20gbW9kZWwgdXNpbmcgb25lIFRIUkVFLkluc3RhbmNlZE1lc2ggcGVyCiAqIGVsZW1lbnQgdHlwZSAoUCwgQywgTiwgTyDigJQgNCBkcmF3IGNh",
+      "self_samples": 189
+    },
+    {
+      "function": "colorForAtom",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 186
+    },
+    {
+      "function": "_applyColors",
+      "source": "data:text/javascript;base64,LyoqCiAqIEF0b21pc3RpYyByZW5kZXJlciDigJQgUGhhc2UgQUEuCiAqCiAqIFJlbmRlcnMgdGhlIGhlYXZ5LWF0b20gYWxsLWF0b20gbW9kZWwgdXNpbmcgb25lIFRIUkVFLkluc3RhbmNlZE1lc2ggcGVyCiAqIGVsZW1lbnQgdHlwZSAoUCwgQywgTiwgTyDigJQgNCBkcmF3IGNh",
+      "self_samples": 154
+    },
+    {
+      "function": "resolveAtomColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 134
+    },
+    {
+      "function": "resolveAtomColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 123
+    },
+    {
+      "function": "setClusterDisplay",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 109
+    },
+    {
+      "function": "colorAt",
+      "source": "data:text/javascript;base64,LyoqCiAqIEF0b21pc3RpYyByZW5kZXJlciDigJQgUGhhc2UgQUEuCiAqCiAqIFJlbmRlcnMgdGhlIGhlYXZ5LWF0b20gYWxsLWF0b20gbW9kZWwgdXNpbmcgb25lIFRIUkVFLkluc3RhbmNlZE1lc2ggcGVyCiAqIGVsZW1lbnQgdHlwZSAoUCwgQywgTiwgTyDigJQgNCBkcmF3IGNh",
+      "self_samples": 94
+    },
+    {
+      "function": "highlight",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 93
+    },
+    {
+      "function": "getY",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 90
+    },
+    {
+      "function": "getX",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 88
+    },
+    {
+      "function": "getY",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 86
+    },
+    {
+      "function": "",
+      "source": "",
+      "self_samples": 84
+    },
+    {
+      "function": "getZ",
+      "source": "file:///home/jojo/Work/NADOC/frontend/node_modules/three/build/three.core.js",
+      "self_samples": 84
+    },
+    {
+      "function": "resolveAtomColor",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/color_resolver.js",
+      "self_samples": 83
+    },
+    {
+      "function": "_applyColors",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer.js",
+      "self_samples": 80
+    }
+  ]
+}

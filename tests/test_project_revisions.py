@@ -533,3 +533,19 @@ def test_topology_autosave_commit_race(monkeypatch, tmp_path, identical):
         with pytest.raises(BranchConflict):
             refresh_active_revision(tmp_path, changed)
     assert ProjectRevisionStore(tmp_path).branch_head(baseline.id, "main") == winners[0].revision_id
+
+
+def test_materialized_branch_does_not_decode_embedded_snapshot_on_metadata_save(tmp_path, monkeypatch):
+    from backend.core.models import Annotation
+    import backend.core.project_revisions as revisions
+
+    saved = refresh_active_revision(tmp_path, _design())
+    previous_head = saved.loadouts[0].head_revision_id
+    def unexpected_decode(*args, **kwargs):
+        pytest.fail("unchanged branch head must not decode the portable fallback")
+    monkeypatch.setattr(revisions, "decode_snapshot", unexpected_decode)
+    edited = saved.model_copy(update={"annotations": [Annotation(text="cluster note")]})
+    result = refresh_active_revision(tmp_path, edited)
+    assert result.loadouts[0].head_revision_id != previous_head
+    restored = ProjectRevisionStore(tmp_path).load_design(result.id, result.loadouts[0].head_revision_id)
+    assert restored.annotations[0].text == "cluster note"

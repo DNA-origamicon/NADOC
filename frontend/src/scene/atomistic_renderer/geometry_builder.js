@@ -159,8 +159,30 @@ export function writeBondMatrix(state, out, offset, ax, ay, az, bx, by, bz, radi
   const len = dir.length()
   if (len < 1e-9) return false
   state.bondMid.set(ax + bx, ay + by, az + bz).multiplyScalar(0.5)
-  state.tmpQ.setFromUnitVectors(state.yAxis, dir.normalize())
+  state.tmpQ.setFromUnitVectors(state.yAxis, dir.multiplyScalar(1 / (len || 1)))
   state.tmpS.set(radius, len, radius)
-  state.tmpMat.compose(state.bondMid, state.tmpQ, state.tmpS).toArray(out, offset)
+  // Same arithmetic/order as Matrix4.compose, directly into the destination.
+  // Avoid writing then copying a temporary 16-number matrix for every bond.
+  const { x, y, z, w } = state.tmpQ
+  const x2 = x + x, y2 = y + y, z2 = z + z
+  const xx = x * x2, xy = x * y2, xz = x * z2
+  const yy = y * y2, yz = y * z2, zz = z * z2
+  const wx = w * x2, wy = w * y2, wz = w * z2
+  out[offset] = (1 - (yy + zz)) * radius
+  out[offset + 1] = (xy + wz) * radius
+  out[offset + 2] = (xz - wy) * radius
+  out[offset + 3] = 0
+  out[offset + 4] = (xy - wz) * len
+  out[offset + 5] = (1 - (xx + zz)) * len
+  out[offset + 6] = (yz + wx) * len
+  out[offset + 7] = 0
+  out[offset + 8] = (xz + wy) * radius
+  out[offset + 9] = (yz - wx) * radius
+  out[offset + 10] = (1 - (xx + yy)) * radius
+  out[offset + 11] = 0
+  out[offset + 12] = state.bondMid.x
+  out[offset + 13] = state.bondMid.y
+  out[offset + 14] = state.bondMid.z
+  out[offset + 15] = 1
   return true
 }

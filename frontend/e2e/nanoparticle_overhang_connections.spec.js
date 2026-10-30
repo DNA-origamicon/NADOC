@@ -206,6 +206,7 @@ test.describe('nanoparticle handle overhang connection versions', () => {
     // preview and backend must use the same exact backbone joint, otherwise
     // the nanoparticle visibly jumps when Apply replaces preview geometry.
     await page.evaluate(id => window.__nadocTest.nanoparticles.select(id), particle.id)
+    await page.evaluate(() => document.getElementById('menu-tools-translate-rotate').click())
     await expect.poll(() => page.evaluate(() =>
       window.__nadocTest.nanoparticles.gizmoAttached())).toBe(true)
     expect(await page.evaluate(() => window.__nadocTest.nanoparticles.gizmoSetTransform(

@@ -62,6 +62,7 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     _lastClashes = null
     designRenderer?.clearClashHighlight?.()
     _legend?.classList.remove('visible')
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   /** Re-resolve the LAST report against the current backbone entries — no refetch.
@@ -72,6 +73,7 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     const entries = clashEntriesFor(_lastClashes, designRenderer?.getBackboneEntries?.() || [])
     if (entries.length) designRenderer?.setClashHighlight?.(entries)
     else designRenderer?.clearClashHighlight?.()
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   /** Re-fetch the clash report and repaint (no-op while toggled off). */
@@ -95,6 +97,7 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     const entries = clashEntriesFor(clashes, designRenderer?.getBackboneEntries?.() || [])
     if (entries.length) designRenderer?.setClashHighlight?.(entries)
     else designRenderer?.clearClashHighlight?.()
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
     _setLegend(report?.count ?? 0)
   }
 

@@ -582,13 +582,16 @@ class ProjectRevisionStore:
         """Migrate embedded loadouts to revision objects, idempotently."""
         migrated: list[DesignLoadout] = []
         for loadout in design.loadouts:
-            snapshot = decode_snapshot(loadout.design_snapshot_gz_b64)
-            # Legacy copied snapshots can carry the old project identity.
-            snapshot = snapshot.model_copy(update={"id": design.id, "metadata": design.metadata})
             head = self.branch_head(design.id, loadout.id)
             if loadout.head_revision_id and head == loadout.head_revision_id:
                 migrated.append(loadout)
                 continue
+            # Already-materialized branches need no embedded snapshot decode.
+            # Large portable designs carry compressed history in that snapshot;
+            # decoding it on every annotation autosave is pure duplicate work.
+            snapshot = decode_snapshot(loadout.design_snapshot_gz_b64)
+            # Legacy copied snapshots can carry the old project identity.
+            snapshot = snapshot.model_copy(update={"id": design.id, "metadata": design.metadata})
             # A portable .nadoc includes its loadout snapshots, but the local
             # revision sidecar may not have travelled with it. With no local
             # branch, seed it from that embedded snapshot below. Only an

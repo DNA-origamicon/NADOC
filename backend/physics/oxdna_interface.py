@@ -333,8 +333,8 @@ def strand_extension_tails(design: Design) -> dict[str, dict[str, object]]:
 def crossover_extra_base_junctions(
     design: Design,
 ) -> dict[tuple[str, int], tuple[str, str]]:
-    """Map each strand-domain junction that carries crossover extra bases to
-    ``(crossover_id, extra_bases_string)``.
+    """Map each strand-domain junction carrying extra bases to
+    ``(junction_id, extra_bases_string)`` for crossovers and forced ligations.
 
     Keyed by ``(strand_id, prev_domain_index)`` — the junction sitting *after*
     domain ``prev_domain_index`` of that strand (i.e. before domain
@@ -345,7 +345,8 @@ def crossover_extra_base_junctions(
     ``extra_base_xover_src``): a crossover's extra bases are single-stranded
     nucleotides on the crossover-owning strand, inserted at the domain→domain
     transition where the strand leaves one helix's 3′ exit for the next helix's
-    5′ entry.  Forced-ligation extra bases are intentionally out of scope here.
+    5′ entry. Forced ligations match both directed endpoints, including same-helix
+    connections and connections whose endpoint BP indices differ.
     """
     # Register each crossover at ONLY its owning (src) half — the half sitting at a
     # domain 3′ end — mirroring the atomistic ground truth's ``domain_end_to_strand``
@@ -372,7 +373,14 @@ def crossover_extra_base_junctions(
         else:
             continue  # neither half is a domain 3′ end (no in-chain insert site)
         pos_to_xo[(owning.helix_id, owning.index)] = (xo.id, xo.extra_bases)
-    if not pos_to_xo:
+    from backend.core.topology_integrity import forced_edge, slot
+
+    forced_inserts = {
+        forced_edge(fl): (fl.id, fl.extra_bases)
+        for fl in getattr(design, "forced_ligations", ())
+        if fl.extra_bases
+    }
+    if not pos_to_xo and not forced_inserts:
         return {}
 
     out: dict[tuple[str, int], tuple[str, str]] = {}
@@ -380,6 +388,13 @@ def crossover_extra_base_junctions(
         doms = strand.domains
         for di in range(len(doms) - 1):
             prev, nxt = doms[di], doms[di + 1]
+            forced = forced_inserts.get((
+                slot(prev.helix_id, prev.end_bp, prev.direction),
+                slot(nxt.helix_id, nxt.start_bp, nxt.direction),
+            )) if forced_inserts else None
+            if forced is not None:
+                out[(strand.id, di)] = forced
+                continue
             if prev.helix_id != nxt.helix_id and prev.end_bp == nxt.start_bp:
                 hit = pos_to_xo.get((prev.helix_id, prev.end_bp))
                 if hit is not None:

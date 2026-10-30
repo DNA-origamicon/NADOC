@@ -1,0 +1,66 @@
+[
+  {
+    "case": "demo_and_per_helix",
+    "leaked_setup": true,
+    "python_doc": "__comparison__58cf2e34-90b1-4946-8aa9-bf0bb3c7fbb1",
+    "http_doc": "__default__",
+    "result": "assertion_failed",
+    "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 26, in <module>\n  File \"<stdin>\", line 13, in <lambda>\n  File \"/home/jojo/Work/NADOC/tests/test_native_placement_endpoints.py\", line 30, in test_demo_and_per_helix_routes_share_full_authority\n    assert response.json()['geometry'] == expected\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+  },
+  {
+    "case": "demo_and_per_helix",
+    "leaked_setup": false,
+    "python_doc": "__default__",
+    "http_doc": "__default__",
+    "result": "passed",
+    "traceback": ""
+  },
+  {
+    "case": "populated_lattice",
+    "leaked_setup": true,
+    "python_doc": "__comparison__6e14dc5c-e918-4ef3-a974-040b8f50c0b1",
+    "http_doc": "__default__",
+    "result": "assertion_failed",
+    "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 26, in <module>\n  File \"<stdin>\", line 13, in <lambda>\n  File \"/home/jojo/Work/NADOC/tests/test_native_placement_endpoints.py\", line 49, in test_added_lattice_helix_serializes_only_real_canonical_nucleotides\n    assert record in expected\n           ^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+  },
+  {
+    "case": "populated_lattice",
+    "leaked_setup": false,
+    "python_doc": "__default__",
+    "http_doc": "__default__",
+    "result": "passed",
+    "traceback": ""
+  },
+  {
+    "case": "overhang_unposed",
+    "leaked_setup": true,
+    "python_doc": "__comparison__642108c8-b964-412c-897e-3cd290f7d0c1",
+    "http_doc": "__default__",
+    "result": "assertion_failed",
+    "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 26, in <module>\n  File \"<stdin>\", line 13, in <lambda>\n  File \"/home/jojo/Work/NADOC/tests/test_native_placement_endpoints.py\", line 72, in test_overhang_joint_frame_uses_exact_final_native_residue\n    assert response.status_code == 200, response.text\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {\"detail\":\"Overhang 'ovhg_h_XY_0_3_0_5p' not found.\"}\n"
+  },
+  {
+    "case": "overhang_unposed",
+    "leaked_setup": false,
+    "python_doc": "__default__",
+    "http_doc": "__default__",
+    "result": "passed",
+    "traceback": ""
+  },
+  {
+    "case": "overhang_posed",
+    "leaked_setup": true,
+    "python_doc": "__comparison__ce3d4972-eb01-4855-be4b-3daf5998b73c",
+    "http_doc": "__default__",
+    "result": "assertion_failed",
+    "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 26, in <module>\n  File \"<stdin>\", line 13, in <lambda>\n  File \"/home/jojo/Work/NADOC/tests/test_native_placement_endpoints.py\", line 72, in test_overhang_joint_frame_uses_exact_final_native_residue\n    assert response.status_code == 200, response.text\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {\"detail\":\"Overhang 'ovhg_h_XY_0_3_0_5p' not found.\"}\n"
+  },
+  {
+    "case": "overhang_posed",
+    "leaked_setup": false,
+    "python_doc": "__default__",
+    "http_doc": "__default__",
+    "result": "passed",
+    "traceback": ""
+  }
+]

@@ -4048,6 +4048,10 @@ async def _prepare_job_bg(
                 force_gpu_resident=(body.gpu_resident == "on"),
             )
         _audit_external_force_configs(job_dir / package_subdir)
+        from backend.core.namd_input_provenance import capture as capture_namd_inputs
+        receipt_job = MdJob.load(job_id, ws)
+        receipt_job.package_subdir = package_subdir
+        await run_in_threadpool(capture_namd_inputs, receipt_job, ws)
         logger.info(
             "prep %s: done; package=%s name_stem=%s segments=%d",
             job_id,
@@ -4671,7 +4675,9 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
             d["health_samples_total"] = full_health_count
         d["failure_details"] = _failure_diagnostics(j)
         _decorate_terminal_segment_progress(j, d, ws)
-        d.update(legacy_job_status(_md_job_fingerprint(j), current_fp, engine="namd"))
+        from backend.core.namd_input_provenance import job_status as namd_input_status
+        d.update(namd_input_status(j, ws, legacy_job_status(
+            _md_job_fingerprint(j), current_fp, engine="namd")))
         # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
         # uncached size comes back None (frontend renders it blank) and is filled in by
         # the background warm below, appearing on the next poll.
@@ -4768,7 +4774,9 @@ async def get_md_job(job_id: str) -> dict:
         row = _minimization_from_package(job.package_dir(_workspace()))
         if row is not None:
             d["minimization"] = asdict(row)
-    d.update(legacy_job_status(_md_job_fingerprint(job), current_active_design_fingerprint(), engine="namd"))
+    from backend.core.namd_input_provenance import job_status as namd_input_status
+    legacy = legacy_job_status(_md_job_fingerprint(job), current_active_design_fingerprint(), engine="namd")
+    d.update(await run_in_threadpool(namd_input_status, job, _workspace(), legacy))
     d["early_stop_pending"] = pending_early_stop(job_id, _workspace())
     return d
 
@@ -6131,6 +6139,8 @@ async def _spawn_md_production_impl(
         child_manifest_path.write_text(
             json.dumps(child_manifest, indent=2), encoding="utf-8"
         )
+        from backend.core.namd_input_provenance import capture as capture_namd_inputs
+        capture_namd_inputs(child, _workspace())
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
     # 'queued' so the submit-review card can size resources + hand it to SLURM

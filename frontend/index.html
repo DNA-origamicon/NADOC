@@ -4262,21 +4262,27 @@
           <button class="dropdown-item" id="menu-help-broadcast" aria-pressed="false">Broadcast to presentation…</button>
           <button class="dropdown-item" id="menu-help-open-log">Open Log</button>
           <button class="dropdown-item" id="menu-help-about-file">About this file…</button>
-          <button class="dropdown-item" id="menu-help-generate-design">Generate design…</button>
-          <button class="dropdown-item" id="menu-help-t-junctions">T-junction routing previews…</button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-connectivity" aria-pressed="false" title="Preview nanoparticle connectivity using shared-section bundle splits.">Connectivity<span class="menu-toggle-pill"></span></button>
+          <div class="submenu-item" id="menu-help-experimental">Experimental <span class="icon icon--xs" style="margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-help-nanobase-inventory">Nanobase publication inventory…</button>
+              <button class="dropdown-item" id="menu-help-image-evaluation">Image evaluation…</button>
+              <button class="dropdown-item" id="menu-help-generate-design">Generate design…</button>
+              <button class="dropdown-item" id="menu-help-t-junctions">T-junction routing previews…</button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-help-connectivity" aria-pressed="false" title="Preview nanoparticle connectivity using shared-section bundle splits.">Connectivity<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item" id="menu-help-cpd-progress">CPD progress…</button>
+              <button class="dropdown-item" id="menu-help-tt-cpd-trajectories">TT-CPD Model Trajectories…</button>
+              <button class="dropdown-item" id="menu-help-tt-cpd-scientific-review">TT-CPD Scientific Review…</button>
+              <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-help-peg-testing" aria-pressed="false">PEG testing<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
+            </div>
+          </div>
           <button class="dropdown-item" id="menu-help-md-engines">MD Engines (install / status)…</button>
-          <button class="dropdown-item" id="menu-help-cpd-progress">CPD progress…</button>
-          <button class="dropdown-item" id="menu-help-tt-cpd-trajectories">TT-CPD Model Trajectories…</button>
-          <button class="dropdown-item" id="menu-help-tt-cpd-scientific-review">TT-CPD Scientific Review…</button>
           <button class="dropdown-item" id="menu-help-tailscale-setup">Tailscale Workspace Setup…</button>
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
           <button class="dropdown-item" id="menu-help-open-steamvr" title="Start SteamVR. In a NADOC VR session, choose Desktop in the controller menu for the live interactive workstation view.">Open SteamVR / Desktop…</button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-view-vr" aria-pressed="false" title="View the current 3D scene in an immersive VR headset."><span class="vr-menu-label">View in VR</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-help-vr-desktop-3d" aria-pressed="true" title="Turn off desktop 3D drawing during native VR to leave more GPU time for the headset. Editing and synchronization continue.">Desktop 3D during VR<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-peg-testing" aria-pressed="false">PEG testing<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
         </div>
       </div>
 
@@ -4917,6 +4923,57 @@
                   </label>
                   <div id="oxdna-jobs-strain-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="oxdna-jobs-strain-bar" style="margin-top:3px;display:none"></div>
+                  <!-- Sparse trajectory: the whole lineage, strided to ~200 frames -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">
+                    <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectories from job chain
+                  </label>
+                  <!-- Full trajectory: THIS job only, every frame oxDNA wrote, no stride -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:not-allowed;opacity:0.5"
+                         title="Load saved frames from this job only, excluding ancestors. The frame interval below controls how many frames are loaded.">
+                    <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View trajectory (this job)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:var(--text-xs)"
+                         title="Load every Nth saved frame from this job. 1 loads all saved frames; 10 loads frames 1, 11, 21, etc. Saved files are unchanged. The job-chain overview retains its automatic downsampling.">
+                    This job: frame interval
+                    <input id="oxdna-jobs-traj-interval" type="number" min="1" max="100000000" step="1" value="1"
+                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </label>
+                  <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="oxdna-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
+                  <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <button id="oxdna-jobs-traj-play" title="Play / pause"
+                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <button id="oxdna-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
+                      <div style="position:relative;flex:1;min-width:0">
+                        <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                               style="width:100%;display:block;margin:0">
+                        <!-- stage-transition markers overlaid on the slider track -->
+                        <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                      </div>
+                      <button id="oxdna-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
+                    </div>
+                    <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother motion. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
+                      <input id="oxdna-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
+                    </label>
+                  </div>
+                  <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
+                       displays above. Only matters when the scene is in an atomistic or
+                       surface representation; CG beads ignore it. -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:8px"
+                         title="When the scene is in an atomistic or surface representation, oxDNA frames are rebuilt into that heavy geometry. Coarse snaps the trajectory to a downsampled set of pre-built frames (fast). Fine rebuilds the exact frame on every step (accurate, but can be very slow on large designs).">
+                    Atomistic/surface detail:
+                    <select id="oxdna-jobs-heavy-granularity"
+                            style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                      <option value="coarse">Coarse — snap to downsampled frames (fast)</option>
+                      <option value="fine">Fine — rebuild every frame (slow)</option>
+                    </select>
+                  </label>
+                  <div id="oxdna-jobs-heavy-warn" style="display:none;font-size:9px;color:#d29922;margin-top:2px">
+                    Fine mode rebuilds the full atomistic/surface geometry every frame — playback &amp; scrubbing can be very slow. Toggle the display off any time to cancel.
+                  </div>
                   <!-- Occupancy clouds: the top-N most likely CONFIGURATIONS, superposed. -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="The most likely CONFIGURATIONS over the sampling run, superposed. Frames are clustered by shape; each cluster's real medoid frame is drawn, opacity set by how often the structure is in that state. A plate that flips between saddle senses shows BOTH — the flexibility map averages them into one flat structure that never occurs. Reports 'unimodal' when there is only one state, and 'drift' when the run is still moving one way rather than switching.">
@@ -4989,57 +5046,6 @@
                   </div>
                   <div id="oxdna-jobs-occupancy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="oxdna-jobs-occupancy-legend" style="display:none;margin-top:3px;max-height:132px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
-                  <!-- Sparse trajectory: the whole lineage, strided to ~200 frames -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">
-                    <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectories from job chain
-                  </label>
-                  <!-- Trajectory: THIS job only, with optional saved-frame interval -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:not-allowed;opacity:0.5"
-                         title="Load saved frames from this job only, excluding ancestors. The frame interval below controls how many frames are loaded.">
-                    <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View trajectory (this job)
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:var(--text-xs)"
-                         title="Load every Nth saved frame from this job. 1 loads all saved frames; 10 loads frames 1, 11, 21, etc. Saved files are unchanged. The job-chain overview retains its automatic downsampling.">
-                    This job: frame interval
-                    <input id="oxdna-jobs-traj-interval" type="number" min="1" max="100000000" step="1" value="1"
-                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  </label>
-                  <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <div id="oxdna-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
-                  <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <button id="oxdna-jobs-traj-play" title="Play / pause"
-                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                      <button id="oxdna-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
-                      <div style="position:relative;flex:1;min-width:0">
-                        <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                               style="width:100%;display:block;margin:0">
-                        <!-- stage-transition markers overlaid on the slider track -->
-                        <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                      </div>
-                      <button id="oxdna-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
-                    </div>
-                    <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother motion. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
-                      <input id="oxdna-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
-                    </label>
-                  </div>
-                  <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
-                       displays above. Only matters when the scene is in an atomistic or
-                       surface representation; CG beads ignore it. -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:8px"
-                         title="When the scene is in an atomistic or surface representation, oxDNA frames are rebuilt into that heavy geometry. Coarse snaps the trajectory to a downsampled set of pre-built frames (fast). Fine rebuilds the exact frame on every step (accurate, but can be very slow on large designs).">
-                    Atomistic/surface detail:
-                    <select id="oxdna-jobs-heavy-granularity"
-                            style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
-                      <option value="coarse">Coarse — snap to downsampled frames (fast)</option>
-                      <option value="fine">Fine — rebuild every frame (slow)</option>
-                    </select>
-                  </label>
-                  <div id="oxdna-jobs-heavy-warn" style="display:none;font-size:9px;color:#d29922;margin-top:2px">
-                    Fine mode rebuilds the full atomistic/surface geometry every frame — playback &amp; scrubbing can be very slow. Toggle the display off any time to cancel.
-                  </div>
                 </div>
               </div>
 
@@ -6368,6 +6374,70 @@
                   <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                   <div id="md-jobs-flex-legend" style="display:none"></div>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
+                    <input id="md-jobs-traj-toggle" name="md-viz" type="radio" value="traj" disabled> View trajectory
+                  </label>
+                  <div id="md-jobs-traj-opts" style="display:none;align-items:center;gap:6px;margin-top:4px;padding-left:18px;flex-wrap:wrap">
+                    <label for="md-jobs-traj-interval" style="font-size:var(--text-xs);color:#8b949e">Frame interval</label>
+                    <input id="md-jobs-traj-interval" type="number" value="20" min="1" max="100000" step="1"
+                           title="Load every Nth frame of each written segment — the DCD stride, as when importing a trajectory into VMD. 1 = every frame written."
+                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <span id="md-jobs-traj-frames-hint" style="font-size:10px;color:#8b949e;min-height:13px"></span>
+                  </div>
+                  <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
+                  <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <button id="md-jobs-traj-play" title="Play / pause"
+                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <button id="md-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
+                      <div style="position:relative;flex:1;min-width:0">
+                        <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                               style="width:100%;display:block;margin:0">
+                        <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                      </div>
+                      <button id="md-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
+                    </div>
+                    <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother beads, atoms and ions. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
+                      <input id="md-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
+                    </label>
+                  </div>
+
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;opacity:0.5" title="Available for NAMD nanopore simulations with a saved trajectory.">
+                    <input id="md-ion-paths-toggle" name="md-viz" type="radio" value="ion-paths" disabled> View nanopore ion paths
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px;opacity:0.5" title="Average the selected ion's displacement vectors in spatial bins around the nanopore.">
+                    <input id="md-ion-vector-field-toggle" name="md-viz" type="radio" value="ion-vector-field" disabled> View ion vector field
+                  </label>
+                  <div id="md-ion-paths-options" style="display:none;padding-left:18px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
+                    <label>Frames before crossing <input id="md-ion-paths-before" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <label>Frames after crossing <input id="md-ion-paths-after" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
+                    <div id="md-ion-paths-path-options">
+                      <label>Line thickness (px) <input id="md-ion-paths-width" type="number" min="0.5" max="12" step="0.5" value="2" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label>
+                      <label style="display:block;margin-top:5px">Path coloring <select id="md-ion-paths-color" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="species">Ion species</option><option value="time">Earliest → latest frame</option></select></label>
+                      <label for="md-ion-paths-percentage" style="display:block;margin-top:6px">Ion paths shown <output id="md-ion-paths-percentage-label" for="md-ion-paths-percentage">100%</output></label>
+                      <input id="md-ion-paths-percentage" type="range" min="0" max="100" step="1" value="100" style="width:100%" title="Show a stable subset of complete paths. 0% leaves the average origami and nanopore visible.">
+                    </div>
+                    <div id="md-ion-paths-vector-options" style="display:none;margin-top:5px">
+                      <label>Ion species <select id="md-ion-paths-species" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="NA">Na⁺</option><option value="CL">Cl⁻</option><option value="MG">Mg²⁺</option><option value="K">K⁺</option><option value="CA">Ca²⁺</option></select></label><br>
+                      <label for="md-ion-paths-density" style="display:block;margin-top:5px">Arrow density <output id="md-ion-paths-density-label" for="md-ion-paths-density">14</output></label>
+                      <input id="md-ion-paths-density" type="range" min="4" max="64" step="1" value="14" style="width:100%" title="Number of spatial bins along the longest dimension. Only occupied bins produce arrows.">
+                      <label style="display:block;margin-top:2px">Exact density <input id="md-ion-paths-density-number" type="number" min="4" max="1000000" step="1" value="14" style="width:72px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px" title="Enter densities above the slider's 64-bin limit."> bins</label>
+                      <label for="md-ion-paths-arrow-scale" style="display:block;margin-top:5px">Arrow size <output id="md-ion-paths-arrow-scale-label" for="md-ion-paths-arrow-scale">1.00×</output></label>
+                      <input id="md-ion-paths-arrow-scale" type="range" min="0.25" max="3" step="0.05" value="1" style="width:100%" title="Uniformly scale the length and thickness of every arrow.">
+                      <label style="display:block;margin-top:5px">Vector magnitude <select id="md-ion-paths-magnitude" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="size">Arrow size</option><option value="color">Color coded</option></select></label>
+                      <div style="margin-top:4px">Arrows average saved-frame displacements within occupied spatial bins for the selected ion.</div>
+                    </div>
+                    <div>Saved simulation frames, independent of playback interval. Large windows are supported up to the available frames; windows clip at segment ends.</div>
+                    <button id="md-ion-paths-retry" type="button" style="margin-top:4px">Reload ion data</button>
+                    <div>Cyan: RMSF average origami, placed in the first saved frame. Grey: simulated graphene nanopore and aperture. Paths include recrossings.</div>
+                    <div><span style="color:#ab5cf2">Na⁺</span> · <span style="color:#1ff01f">Cl⁻</span> · <span style="color:#ffdc32">Mg²⁺</span> · <span style="color:#8f40d4">K⁺</span> · <span style="color:#3dff00">Ca²⁺</span></div>
+                  </div>
+                  <progress id="md-ion-paths-progress" max="100" value="0" hidden aria-label="Nanopore ion visualization loading progress" style="width:100%;height:10px;accent-color:#58a6ff"></progress>
+                  <div id="md-ion-paths-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px" role="status"></div>
+
                   <!-- Per-thymine KIMMDY score; every other base receives the zero color. -->
                   <label id="md-jobs-photoproduct-option"
                          style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
@@ -6459,69 +6529,6 @@
                   <div id="md-jobs-occupancy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-occupancy-legend" style="display:none;margin-top:3px;max-height:132px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                   <!-- View trajectory: scrub every written segment (relaxation + production) -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
-                    <input id="md-jobs-traj-toggle" name="md-viz" type="radio" value="traj" disabled> View trajectory
-                  </label>
-                  <div id="md-jobs-traj-opts" style="display:none;align-items:center;gap:6px;margin-top:4px;padding-left:18px;flex-wrap:wrap">
-                    <label for="md-jobs-traj-interval" style="font-size:var(--text-xs);color:#8b949e">Frame interval</label>
-                    <input id="md-jobs-traj-interval" type="number" value="20" min="1" max="100000" step="1"
-                           title="Load every Nth frame of each written segment — the DCD stride, as when importing a trajectory into VMD. 1 = every frame written."
-                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <span id="md-jobs-traj-frames-hint" style="font-size:10px;color:#8b949e;min-height:13px"></span>
-                  </div>
-                  <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <div id="md-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
-                  <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <button id="md-jobs-traj-play" title="Play / pause"
-                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                      <button id="md-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
-                      <div style="position:relative;flex:1;min-width:0">
-                        <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                               style="width:100%;display:block;margin:0">
-                        <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                      </div>
-                      <button id="md-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
-                    </div>
-                    <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px" title="Use a cubic curve through nearby saved frames for smoother beads, atoms and ions. Pause returns to the last saved frame. Surfaces deform approximately with nucleotide motion during playback; pause restores the exact saved-frame surface. Curves may overshoot or pass through obstacles.">
-                      <input id="md-jobs-traj-interpolate" type="checkbox" checked> Smooth playback
-                    </label>
-                  </div>
-
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;opacity:0.5" title="Available for NAMD nanopore simulations with a saved trajectory.">
-                    <input id="md-ion-paths-toggle" name="md-viz" type="radio" value="ion-paths" disabled> View nanopore ion paths
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:4px;opacity:0.5" title="Average the selected ion's displacement vectors in spatial bins around the nanopore.">
-                    <input id="md-ion-vector-field-toggle" name="md-viz" type="radio" value="ion-vector-field" disabled> View ion vector field
-                  </label>
-                  <div id="md-ion-paths-options" style="display:none;padding-left:18px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
-                    <label>Frames before crossing <input id="md-ion-paths-before" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
-                    <label>Frames after crossing <input id="md-ion-paths-after" type="number" min="1" max="1000000" step="1" value="10" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label><br>
-                    <div id="md-ion-paths-path-options">
-                      <label>Line thickness (px) <input id="md-ion-paths-width" type="number" min="0.5" max="12" step="0.5" value="2" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"></label>
-                      <label style="display:block;margin-top:5px">Path coloring <select id="md-ion-paths-color" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="species">Ion species</option><option value="time">Earliest → latest frame</option></select></label>
-                      <label for="md-ion-paths-percentage" style="display:block;margin-top:6px">Ion paths shown <output id="md-ion-paths-percentage-label" for="md-ion-paths-percentage">100%</output></label>
-                      <input id="md-ion-paths-percentage" type="range" min="0" max="100" step="1" value="100" style="width:100%" title="Show a stable subset of complete paths. 0% leaves the average origami and nanopore visible.">
-                    </div>
-                    <div id="md-ion-paths-vector-options" style="display:none;margin-top:5px">
-                      <label>Ion species <select id="md-ion-paths-species" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="NA">Na⁺</option><option value="CL">Cl⁻</option><option value="MG">Mg²⁺</option><option value="K">K⁺</option><option value="CA">Ca²⁺</option></select></label><br>
-                      <label for="md-ion-paths-density" style="display:block;margin-top:5px">Arrow density <output id="md-ion-paths-density-label" for="md-ion-paths-density">14</output></label>
-                      <input id="md-ion-paths-density" type="range" min="4" max="64" step="1" value="14" style="width:100%" title="Number of spatial bins along the longest dimension. Only occupied bins produce arrows.">
-                      <label style="display:block;margin-top:2px">Exact density <input id="md-ion-paths-density-number" type="number" min="4" max="1000000" step="1" value="14" style="width:72px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px" title="Enter densities above the slider's 64-bin limit."> bins</label>
-                      <label for="md-ion-paths-arrow-scale" style="display:block;margin-top:5px">Arrow size <output id="md-ion-paths-arrow-scale-label" for="md-ion-paths-arrow-scale">1.00×</output></label>
-                      <input id="md-ion-paths-arrow-scale" type="range" min="0.25" max="3" step="0.05" value="1" style="width:100%" title="Uniformly scale the length and thickness of every arrow.">
-                      <label style="display:block;margin-top:5px">Vector magnitude <select id="md-ion-paths-magnitude" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px"><option value="size">Arrow size</option><option value="color">Color coded</option></select></label>
-                      <div style="margin-top:4px">Arrows average saved-frame displacements within occupied spatial bins for the selected ion.</div>
-                    </div>
-                    <div>Saved simulation frames, independent of playback interval. Large windows are supported up to the available frames; windows clip at segment ends.</div>
-                    <button id="md-ion-paths-retry" type="button" style="margin-top:4px">Reload ion data</button>
-                    <div>Cyan: RMSF average origami, placed in the first saved frame. Grey: simulated graphene nanopore and aperture. Paths include recrossings.</div>
-                    <div><span style="color:#ab5cf2">Na⁺</span> · <span style="color:#1ff01f">Cl⁻</span> · <span style="color:#ffdc32">Mg²⁺</span> · <span style="color:#8f40d4">K⁺</span> · <span style="color:#3dff00">Ca²⁺</span></div>
-                  </div>
-                  <progress id="md-ion-paths-progress" max="100" value="0" hidden aria-label="Nanopore ion visualization loading progress" style="width:100%;height:10px;accent-color:#58a6ff"></progress>
-                  <div id="md-ion-paths-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px" role="status"></div>
 
                   <!-- ── Solvent & periodic cell ──────────────────────────────
                        CHECKBOXES, deliberately NOT peers in the name="md-viz"

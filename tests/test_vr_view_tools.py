@@ -92,7 +92,7 @@ def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, 
     async def stream():
         yield data
     result = asyncio.run(publish(SimpleNamespace(stream=stream)))
-    assert result == {'published':True,'bytes':len(data),'transform_updates':False,'atlas_patches':False}
+    assert result == {'published':True,'bytes':len(data),'transform_updates':False,'atlas_patches':False,'compressed_panels':False}
     assert delivered == [data]
     if ipc:
         assert not (tmp_path/'event.viewtools').exists()
@@ -148,3 +148,12 @@ def test_panel_only_rejects_geometry_and_panel_scene_update_rotates_it():
     assert np.allclose(np.frombuffer(result,dtype='<f4',offset=52,count=3),[3,2,-1])
     invalid=bytearray(data);struct.pack_into('<I',invalid,8,9)
     with pytest.raises(HTTPException):validate_and_rotate(invalid,np.eye(3))
+
+
+@pytest.mark.parametrize('schema',[10,11])
+def test_compressed_panel_is_lossless_bounded_and_rejects_trailing_runs(schema):
+    header=b'NADOCVT1'+struct.pack('<10I',schema,12,256,0,0,0,768,768,0,17)+struct.pack('<I',11)
+    packed=struct.pack('<II',768*768,0x7f7f7f7f)
+    assert validate_and_rotate(header+packed,np.eye(3))==header+packed
+    for bad in [packed[:-1],packed+b'trailing',packed+packed,struct.pack('<II',0,0),struct.pack('<II',768*768-1,0),struct.pack('<II',2**32-1,0)]:
+        with pytest.raises(HTTPException):validate_and_rotate(header+bad,np.eye(3))

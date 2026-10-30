@@ -16,7 +16,7 @@ test('Help T-junction previews expose directed joining, poses and isolated viewe
   })
   const open = async () => {
     await page.locator('.menu-item').filter({ has: page.getByRole('button', { name: 'Help', exact: true }) }).hover()
-    await page.locator('#menu-help-t-junctions').click()
+    await page.locator('#menu-help-experimental').hover(); await page.locator('#menu-help-t-junctions').click()
   }
   await open()
   const dialog = page.getByRole('dialog', { name: 'Routing concept preview · Bundle T-junctions' })

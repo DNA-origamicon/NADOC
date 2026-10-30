@@ -1,0 +1,325 @@
+{
+  "scope": "Instrumented CPU diagnostic; three warmed detailed 6hb-84bp surface builds; overlapping cumulative costs are not additive",
+  "top_self": [
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/skimage/measure/_marching_cubes_lewiner.py",
+      "line": 151,
+      "function": "_marching_cubes_lewiner",
+      "calls": 144,
+      "self_seconds": 1.330887304,
+      "cumulative_seconds": 1.3678122860000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.ndimage._nd_image.binary_erosion>",
+      "calls": 288,
+      "self_seconds": 1.1054397930000002,
+      "cumulative_seconds": 1.1054397930000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.ndimage._nd_image.correlate1d>",
+      "calls": 432,
+      "self_seconds": 0.850613723,
+      "cumulative_seconds": 0.850613723
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_remesh.py",
+      "line": 48,
+      "function": "remesh_sharp_patches",
+      "calls": 36,
+      "self_seconds": 0.729836409,
+      "cumulative_seconds": 3.1401267440000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+      "calls": 98256,
+      "self_seconds": 0.581969555,
+      "cumulative_seconds": 0.582005122
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_remesh.py",
+      "line": 41,
+      "function": "_normals",
+      "calls": 681,
+      "self_seconds": 0.45332393000000004,
+      "cumulative_seconds": 0.673004118
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'argsort' of 'numpy.ndarray' objects>",
+      "calls": 180,
+      "self_seconds": 0.35014238000000003,
+      "cumulative_seconds": 0.35014238000000003
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'sort' of 'numpy.ndarray' objects>",
+      "calls": 936,
+      "self_seconds": 0.34197997300000005,
+      "cumulative_seconds": 0.34197997300000005
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface.py",
+      "line": 101,
+      "function": "_stamp_spheres",
+      "calls": 576,
+      "self_seconds": 0.323133488,
+      "cumulative_seconds": 0.476634543
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_tiled.py",
+      "line": 34,
+      "function": "continuous_cloud_surface",
+      "calls": 36,
+      "self_seconds": 0.316291041,
+      "cumulative_seconds": 4.6324388800000005
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_tiled.py",
+      "line": 24,
+      "function": "weld_key_indices",
+      "calls": 36,
+      "self_seconds": 0.24676175900000002,
+      "cumulative_seconds": 0.280514199
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.csr_matvecs>",
+      "calls": 465,
+      "self_seconds": 0.22665932000000003,
+      "cumulative_seconds": 0.22665932000000003
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_remesh.py",
+      "line": 17,
+      "function": "_edge_table",
+      "calls": 72,
+      "self_seconds": 0.147258457,
+      "cumulative_seconds": 0.909478976
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.csr_sort_indices>",
+      "calls": 72,
+      "self_seconds": 0.137327416,
+      "cumulative_seconds": 0.137327416
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface_remesh.py",
+      "line": 124,
+      "function": "score",
+      "calls": 294,
+      "self_seconds": 0.130568799,
+      "cumulative_seconds": 0.339192545
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.coo_tocsr>",
+      "calls": 108,
+      "self_seconds": 0.12055033000000001,
+      "cumulative_seconds": 0.12055033000000001
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/lib/_arraysetops_impl.py",
+      "line": 806,
+      "function": "_isin",
+      "calls": 144,
+      "self_seconds": 0.08068826800000001,
+      "cumulative_seconds": 0.111115166
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'astype' of 'numpy.ndarray' objects>",
+      "calls": 2517,
+      "self_seconds": 0.064621701,
+      "cumulative_seconds": 0.064621701
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method numpy._core._multiarray_umath.c_einsum>",
+      "calls": 654,
+      "self_seconds": 0.056603841,
+      "cumulative_seconds": 0.056603841
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/_core/numeric.py",
+      "line": 1567,
+      "function": "cross",
+      "calls": 726,
+      "self_seconds": 0.053799973,
+      "cumulative_seconds": 0.092666966
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface.py",
+      "line": 494,
+      "function": "compute_split_surfaces_from_cloud",
+      "calls": 3,
+      "self_seconds": 0.046156973000000004,
+      "cumulative_seconds": 8.561155902000001
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.csr_matmat>",
+      "calls": 36,
+      "self_seconds": 0.043018455000000004,
+      "cumulative_seconds": 0.043018455000000004
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/backend/core/surface.py",
+      "line": 610,
+      "function": "smooth_mesh",
+      "calls": 36,
+      "self_seconds": 0.040920883000000005,
+      "cumulative_seconds": 0.7174901640000001
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'reduceat' of 'numpy.ufunc' objects>",
+      "calls": 72,
+      "self_seconds": 0.036600469000000004,
+      "cumulative_seconds": 0.036600469000000004
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py",
+      "line": 86,
+      "function": "_wrapreduction_any_all",
+      "calls": 91617,
+      "self_seconds": 0.036312101,
+      "cumulative_seconds": 0.27073045500000004
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method numpy.asarray>",
+      "calls": 11571,
+      "self_seconds": 0.035427741000000006,
+      "cumulative_seconds": 0.035427741000000006
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'acquire' of '_thread.lock' objects>",
+      "calls": 16128,
+      "self_seconds": 0.033166228,
+      "cumulative_seconds": 0.554564232
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method numpy.zeros>",
+      "calls": 1659,
+      "self_seconds": 0.029700419000000002,
+      "cumulative_seconds": 0.029700419000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method _thread.start_new_thread>",
+      "calls": 2304,
+      "self_seconds": 0.028939583,
+      "cumulative_seconds": 0.028939583
+    },
+    {
+      "file": "/usr/lib/python3.12/threading.py",
+      "line": 999,
+      "function": "run",
+      "calls": 2304,
+      "self_seconds": 0.028389299000000003,
+      "cumulative_seconds": 0.04624845
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method numpy._core._multiarray_umath._unique_hash>",
+      "calls": 864,
+      "self_seconds": 0.027871421,
+      "cumulative_seconds": 0.027871421
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/lib/_shape_base_impl.py",
+      "line": 625,
+      "function": "column_stack",
+      "calls": 306,
+      "self_seconds": 0.026821111,
+      "cumulative_seconds": 0.027385498
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py",
+      "line": 2598,
+      "function": "norm",
+      "calls": 2880,
+      "self_seconds": 0.024910422,
+      "cumulative_seconds": 0.19345707
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.csr_sum_duplicates>",
+      "calls": 72,
+      "self_seconds": 0.023132028000000002,
+      "cumulative_seconds": 0.023132028000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method scipy.sparse._sparsetools.csr_matmat_maxnnz>",
+      "calls": 36,
+      "self_seconds": 0.021755706,
+      "cumulative_seconds": 0.021755706
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py",
+      "line": 2548,
+      "function": "all",
+      "calls": 90864,
+      "self_seconds": 0.021342442,
+      "cumulative_seconds": 0.11866549100000001
+    },
+    {
+      "file": "/usr/lib/python3.12/threading.py",
+      "line": 973,
+      "function": "start",
+      "calls": 2304,
+      "self_seconds": 0.020971374,
+      "cumulative_seconds": 0.190664416
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'repeat' of 'numpy.ndarray' objects>",
+      "calls": 162,
+      "self_seconds": 0.019699838,
+      "cumulative_seconds": 0.019699838
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'ravel' of 'numpy.ndarray' objects>",
+      "calls": 3276,
+      "self_seconds": 0.019366082,
+      "cumulative_seconds": 0.019366082
+    },
+    {
+      "file": "/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/numpy/_core/shape_base.py",
+      "line": 218,
+      "function": "vstack",
+      "calls": 72,
+      "self_seconds": 0.01884264,
+      "cumulative_seconds": 0.019058618000000003
+    }
+  ]
+}

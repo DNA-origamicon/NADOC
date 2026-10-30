@@ -16,9 +16,23 @@ from tests.test_part_repair_draft_evaluation import source as saved_source
 
 
 @pytest.fixture
-def ready(monkeypatch):
+def ready(monkeypatch, request):
     identity = f"__comparison__{uuid4()}"
     token = doc_context.set_current_doc(identity)
+    job_id = None
+
+    def cleanup():
+        try:
+            with jobs._lock:
+                if job_id is not None:
+                    jobs._jobs.pop(job_id, None)
+            state.drop_doc(identity)
+        finally:
+            doc_context.reset_current_doc(token)
+
+    # Setup can fail (for example at capture admission) before reaching yield.
+    # Register cleanup immediately so following tests cannot inherit this doc.
+    request.addfinalizer(cleanup)
     source = saved_source()
     state.load_design(source)
     revision = state.revision()
@@ -30,10 +44,10 @@ def ready(monkeypatch):
         finally:
             jobs._slot.release()
     monkeypatch.setattr(jobs, "_submit", submit)
-    request = {"operation": "repair", "expected_revision": revision,
+    payload = {"operation": "repair", "expected_revision": revision,
         "repair": {"repair_version": 1, "expected_design_id": source.id, "expected_revision": revision,
                    "actions": [action.model_dump(mode="json") for action in source.repair_draft.actions]}}
-    job_id = jobs.start(request)["job_id"]
+    job_id = jobs.start(payload)["job_id"]
     lease = {"projection_version": 1, "expected_design_id": source.id, "expected_revision": revision,
              "expected_draft_id": source.repair_draft.draft_id, "expected_generation": source.repair_draft.generation}
     with jobs._lock:
@@ -71,13 +85,7 @@ def ready(monkeypatch):
             h.closed += 1
 
     monkeypatch.setattr(comparison, "ComparisonWorker", Worker)
-    try:
-        yield h
-    finally:
-        with jobs._lock:
-            jobs._jobs.pop(job_id, None)
-        state.drop_doc(identity)
-        doc_context.reset_current_doc(token)
+    yield h
 
 
 def test_projection_is_private_uses_one_catalog_and_keeps_candidate_committable(ready):

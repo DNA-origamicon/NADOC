@@ -1,0 +1,65 @@
+{
+  "method": "Actual copy_md_job handler and production package builder executed twice per source in a temporary isolated workspace, with cloned real parent inputs; launch forbidden. Temporary copies removed. Active-design guard supplied the matching parent fingerprint.",
+  "results": [
+    {
+      "source_job": "edb512c46112",
+      "relaxation_parent": "6d6c46163a00",
+      "copies": [
+        {
+          "seed": 1818617587,
+          "checkpoint": "2hb_1xT_CPD_cis-syn-I_04_300K_NPT_MGHH_only_p10",
+          "coordinate_sha256": "20da285baa54d95348822a84c3cc91fe933fea4beaa42c894405f91b47a2d3af",
+          "queued_without_launch": true,
+          "all_production_directives_match_except_seed": true,
+          "temperature_K": 300,
+          "duration_ns": 20,
+          "timestep_fs": 2,
+          "hmr": false,
+          "rigid_bonds": "all"
+        },
+        {
+          "seed": 1048730399,
+          "checkpoint": "2hb_1xT_CPD_cis-syn-I_04_300K_NPT_MGHH_only_p10",
+          "coordinate_sha256": "20da285baa54d95348822a84c3cc91fe933fea4beaa42c894405f91b47a2d3af",
+          "queued_without_launch": true,
+          "all_production_directives_match_except_seed": true,
+          "temperature_K": 300,
+          "duration_ns": 20,
+          "timestep_fs": 2,
+          "hmr": false,
+          "rigid_bonds": "all"
+        }
+      ]
+    },
+    {
+      "source_job": "e345c67349bf",
+      "relaxation_parent": "935bbecba8cf",
+      "copies": [
+        {
+          "seed": 2087092918,
+          "checkpoint": "2hb_1xT_CPD_cis-anti-I_04_300K_NPT_MGHH_only_p10",
+          "coordinate_sha256": "a2dd7ea89a159d898ead2f75ad1856fb81a9b27e1139eb274dc33f94b7bc512f",
+          "queued_without_launch": true,
+          "all_production_directives_match_except_seed": true,
+          "temperature_K": 300,
+          "duration_ns": 20,
+          "timestep_fs": 2,
+          "hmr": false,
+          "rigid_bonds": "all"
+        },
+        {
+          "seed": 722946049,
+          "checkpoint": "2hb_1xT_CPD_cis-anti-I_04_300K_NPT_MGHH_only_p10",
+          "coordinate_sha256": "a2dd7ea89a159d898ead2f75ad1856fb81a9b27e1139eb274dc33f94b7bc512f",
+          "queued_without_launch": true,
+          "all_production_directives_match_except_seed": true,
+          "temperature_K": 300,
+          "duration_ns": 20,
+          "timestep_fs": 2,
+          "hmr": false,
+          "rigid_bonds": "all"
+        }
+      ]
+    }
+  ]
+}

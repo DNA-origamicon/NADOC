@@ -1,0 +1,54 @@
+{
+  "scope": "Sampled current-only CPU attribution, 100 warmed atomistic solvent frames, 100k waters/25k ions; no GPU timing",
+  "samples": 804,
+  "topSelf": [
+    {
+      "function": "writeBondMatrix",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+      "line": 157,
+      "selfSamples": 514
+    },
+    {
+      "function": "_drawWater",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/md_solvent_overlay.js",
+      "line": 178,
+      "selfSamples": 240
+    },
+    {
+      "function": "(garbage collector)",
+      "source": "",
+      "line": 0,
+      "selfSamples": 23
+    },
+    {
+      "function": "_drawIons",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/md_solvent_overlay.js",
+      "line": 222,
+      "selfSamples": 15
+    },
+    {
+      "function": "setFrame",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/md_solvent_overlay.js",
+      "line": 281,
+      "selfSamples": 9
+    },
+    {
+      "function": "post",
+      "source": "node:inspector",
+      "line": 118,
+      "selfSamples": 1
+    },
+    {
+      "function": "impostorsEnabled",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/impostor_material.js",
+      "line": 32,
+      "selfSamples": 1
+    },
+    {
+      "function": "writeBondMatrix",
+      "source": "file:///home/jojo/Work/NADOC/frontend/src/scene/atomistic_renderer/geometry_builder.js",
+      "line": 157,
+      "selfSamples": 1
+    }
+  ]
+}

@@ -99,11 +99,13 @@ test('real view handlers export compact annotations and acknowledge simple toggl
   window.fetch=async(url,options)=>{
    if(url!='/api/vr/view-tools')return original(url,options)
    const buffer=await options.body.arrayBuffer(),h=new Uint32Array(buffer,8,10)
-   packets.push({at:performance.now(),ack:h[9],bytes:buffer.byteLength})
-   return new Response('{"atlas_patches":true,"transform_updates":true}',{status:200})
+   packets.push({at:performance.now(),ack:h[9],schema:h[0],bytes:buffer.byteLength})
+   return new Response('{"atlas_patches":true,"transform_updates":true,"compressed_panels":true}',{status:200})
   }
   const c=createVRViewTools({scene:window.__nadocScene,getState:store.getState})
-  const stats=[]
+  const stats=[],prewarmStart=performance.now()
+  await c.prepare()
+  const prewarmMs=performance.now()-prewarmStart
   try{
    for(const [index,key] of [[3,'loopSkips'],[4,'grid'],[0,'lengthHeatmap'],[1,'sequences'],[2,'undefinedBases'],[5,'overhangNames']]){
     const sequence=index+1,start=performance.now();await c.activate(index,sequence)
@@ -111,11 +113,11 @@ test('real view handlers export compact annotations and acknowledge simple toggl
      if(performance.now()-start>5000)throw Error('View acknowledgement timeout: '+key)
      await new Promise(r=>setTimeout(r,10))
     }
-    stats.push({key,ms:packets.find(p=>p.ack===sequence).at-start,bytes:packets.find(p=>p.ack===sequence).bytes})
+    stats.push({key,ms:packets.find(p=>p.ack===sequence).at-start,bytes:packets.find(p=>p.ack===sequence).bytes,schema:packets.find(p=>p.ack===sequence).schema})
    }
    const v=await captureVRView(window.__nadocScene)
    const annotations=v.batches.filter(b=>b.vertices[7]===-3 || b.vertices[7]===-4)
-   return {stats,annotation_batches:annotations.length,annotation_instances:annotations.reduce((n,b)=>n+b.instances.length/20,0),errors:[]}
+   return {stats,prewarmMs,annotation_batches:annotations.length,annotation_instances:annotations.reduce((n,b)=>n+b.instances.length/20,0),errors:[]}
   }finally{window.fetch=original}
  })
  expect(report.annotation_batches).toBeGreaterThan(0)

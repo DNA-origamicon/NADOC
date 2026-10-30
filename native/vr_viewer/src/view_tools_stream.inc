@@ -14,8 +14,8 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
  const auto start=std::chrono::steady_clock::now();std::ifstream file;std::istringstream memory;
  if(packet)memory.str(std::move(*packet));else file.open(path,std::ios::binary);
  std::istream& in=packet?static_cast<std::istream&>(memory):static_cast<std::istream&>(file);char magic[8];IncomingView out;auto& h=out.header;
- if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]<4||h[0]>9)||h[1]==current)return {};
- const bool atlas=h[0]<6;out.transformsOnly=h[0]==7;out.panelOnly=h[0]==9;out.panelPatch=h[0]>=8;
+ if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]<4||h[0]>11)||h[1]==current)return {};
+ const bool atlas=h[0]<6;out.transformsOnly=h[0]==7;out.panelOnly=h[0]==9||h[0]==11;out.panelPatch=h[0]>=8;
  std::shared_ptr<TransformBase> fresh;
  if(h[0]>=7){uint32_t baseVersion=0;if(!in.read((char*)&baseVersion,4)||!base||baseVersion!=base->version||baseVersion>=h[1])return {};
   if((out.transformsOnly || out.panelOnly) && h[2]!=base->flags)return {};
@@ -40,7 +40,18 @@ static std::optional<IncomingView> readView(const std::string& path,uint32_t cur
   for(auto& instance:b.instances)instance.matrix=normalization*instance.matrix;
   b.annotation=nadoc_vr::view_opaque::annotation(b.vertices);
   out.batches.push_back(std::move(b));}
- if(!in.read((char*)out.pixels.data(),out.pixels.size())||in.peek()!=std::char_traits<char>::eof())return {};
+ if(h[0]>=10){
+  // Bound exact RGBA run expansion; no image resampling or partial decode.
+  std::vector<unsigned char> packed(out.pixels.size());in.read((char*)packed.data(),packed.size());
+  const auto bytes=in.gcount();if(bytes<=0||size_t(bytes)>=packed.size())return {};
+  if(bytes%8)return {};size_t output=0;
+  for(size_t i=0;i<size_t(bytes);i+=8){
+   uint32_t count=0;std::memcpy(&count,packed.data()+i,4);
+   if(!count || count>(out.pixels.size()-output)/4)return {};
+   for(uint32_t n=0;n<count;++n){std::memcpy(out.pixels.data()+output,packed.data()+i+4,4);output+=4;}
+  }
+  if(output!=out.pixels.size())return {};
+ }else if(!in.read((char*)out.pixels.data(),out.pixels.size())||in.peek()!=std::char_traits<char>::eof())return {};
  if(out.panelOnly){out.readEpochMs=epoch;out.parseMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();return out;}
  for(auto* list:{&out.triangles,&out.lines})for(auto& v:*list)v.p=(v.p-center)*scale+origin;
  for(auto& s:out.sprites){s.p=(s.p-center)*scale+origin;s.size*=scale;}

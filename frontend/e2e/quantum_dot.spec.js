@@ -39,6 +39,8 @@ test('quantum-dot catalog imports vendor-sized particles and uses the gold movem
   expect(particle.quantum_dot.product_code).toBe('HECZ600-10')
   expect(particle.quantum_dot.spectra.source_page).toBe(8)
   expect(particle.diameter_nm).toBe(9.5)
+  expect(await page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
+  await page.evaluate(() => document.getElementById('menu-tools-translate-rotate').click())
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(true)
   await expect(page.locator('#mr-current-selection')).toContainText('Quantum dot')
   expect(await page.evaluate(() => window.__nadocTest.nanoparticles.rendered()[0].metalness)).toBe(0)

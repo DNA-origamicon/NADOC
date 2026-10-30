@@ -1,0 +1,8 @@
+{
+  "previous": "__default__",
+  "after_failed_setup": "__comparison__a59a4549-936b-4632-bfe8-fea3417c8b48",
+  "context_leaked": true,
+  "leaked_session_present": true,
+  "exception": "HTTP 413 capture budget exceeded",
+  "scope": "Original fixture loaded from Git in disposable process; forced same admission exception as broad-suite setup error. No source replacement."
+}

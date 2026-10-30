@@ -72,17 +72,29 @@ def acquired(state, hand, identifier):
 def click(live, hand, identifier, preset, trials):
     for attempt in range(3):
         control = find_control(live, hand, identifier)
+        observations = []
+
+        def observe_acquisition(state):
+            current = next((c for c in state['controls']
+                            if c.get('sidebar') == ('left' if hand == 0 else 'right')
+                            and c.get('id') == identifier), None)
+            observations.append({'frame': state['frame'], 'control': current,
+                                 'hover_id': state['sidebars'][hand]['hover_id']})
+            return acquired(state, hand, identifier)
+
         trial = reach_target(
             live,
             control["position"],
             preset,
             4200 + len(trials),
-            acquired=lambda s: acquired(s, hand, identifier),
+            acquired=observe_acquisition,
             target_position=control_approach(
                 control, live.state["hands"][1]["position"]
             ),
         )
-        trial.update(side=hand, control=identifier, attempt=attempt + 1)
+        trial.update(side=hand, control=identifier, attempt=attempt + 1, target_control=control,
+                     final_hover_id=live.state["sidebars"][hand]["hover_id"],
+                     acquisition_observations=observations)
         trial["hit"] = bool(
             trial["acquired_with_feedback"] and acquired(live.state, hand, identifier)
         )

@@ -4154,6 +4154,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       getRelaxPresets: () => api.getRelaxPresets(),
       fetchProtocolPlan: body => api.fetchProtocolPlan(body),
       fetchProtocolBoxPreview: body => api.fetchProtocolBoxPreview(body),
+      getMdSolventMeta: id => api.getMdSolventMeta(id),
       // The client returns null on a non-OK response, so the wizard needs this to say
       // WHY a plan came back empty instead of showing a blank table.
       lastErrorMessage: () => api.lastErrorMessage?.(),
@@ -4772,7 +4773,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
     surfaceCard.select(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs), explicit)
     _userDeselected = false   // an explicit pick supersedes a previous deselection
-    if (_selectedId === jobId) { _syncSurfaceCard(); return }
+    if (_selectedId === jobId) { boxSolvent?.selectJob(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs)); _syncSurfaceCard(); return }
     ionPaths?.off()
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
@@ -4793,7 +4794,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _syncRunTargetToJob(selectedJob)
     const prep = mdInheritedPrepParams(selectedJob, _jobs)
     screeningCard.restore(prep)
-    boxSolvent?.restore(prep)
+    boxSolvent?.selectJob(selectedJob, prep)
     surfaceCard.restore(prep)
     if (surfaceAxisEl) surfaceAxisEl.value = prep.graphene_surface_axis || ''
     if (surfaceOffsetEl) surfaceOffsetEl.value = String(prep.graphene_surface_offset_nm ?? 0)
@@ -4908,6 +4909,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
+    boxSolvent?.clearJob()
     _grapheneSelectionId = null
     surfaceCard.clear()
     surfaceCard.restore()

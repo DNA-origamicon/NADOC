@@ -1,0 +1,46 @@
+{
+  "observed_job": "37d39cc6b88f",
+  "error": "No calibrated oxDNA conversion for this placement source.",
+  "attribution": "No before snapshot; existing derived caches preserved. No deletion authorized or performed.",
+  "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/37d39cc6b88f/analysis_cache",
+  "files": [
+    {
+      "name": "md_rmsf_atomistic-9c2e86bcce151c465fe2d43c0b910186087a1eced883decac05c4dfbedd9337b.json",
+      "bytes": 794511,
+      "mtime_ns": 1792698064922203689
+    },
+    {
+      "name": "md_rmsf_atomistic-9c2e86bcce151c465fe2d43c0b910186087a1eced883decac05c4dfbedd9337b.lock",
+      "bytes": 0,
+      "mtime_ns": 1792698064629701666
+    },
+    {
+      "name": "md_rmsf_surface-da934af9788cf881c2e366fc1d98c6d7a70db0a62b753c9e15a602559b086cdf.json",
+      "bytes": 394060,
+      "mtime_ns": 1792698065059068452
+    },
+    {
+      "name": "md_rmsf-692f93e525b94f2dab0d0161237d358e6dbb1f4d7077615d830213f8457d4269.json",
+      "bytes": 41119,
+      "mtime_ns": 1792698064629640812
+    },
+    {
+      "name": "md_rmsf_surface-da934af9788cf881c2e366fc1d98c6d7a70db0a62b753c9e15a602559b086cdf.lock",
+      "bytes": 0,
+      "mtime_ns": 1792698064922203689
+    },
+    {
+      "name": "_measure-0c1fe2fe4efcc290fa2c552b2b8a07b850a0612463c6c3e8c266a8500640cbf1.lock",
+      "bytes": 0,
+      "mtime_ns": 1792698065065041158
+    },
+    {
+      "name": "md_rmsf-692f93e525b94f2dab0d0161237d358e6dbb1f4d7077615d830213f8457d4269.lock",
+      "bytes": 0,
+      "mtime_ns": 1792698055173053195
+    }
+  ],
+  "browser_log_birth_epoch_seconds": 1792731487,
+  "all_observed_cache_files_predate_browser_attempt": true,
+  "resolution": "Interrupted original test and verified server exit; subsequent browser test used an empty Archive workspace with lifespan disabled and passed. Existing user-job caches preserved."
+}

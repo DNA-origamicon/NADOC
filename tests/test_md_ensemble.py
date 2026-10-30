@@ -954,3 +954,20 @@ def test_replica_reads_a_child_local_anchor_source(tmp_path: Path):
     assert not (parent.package_dir(tmp_path) / "restraints_anchors.pdb").exists()
     manifest = json.loads((pkg / "manifest.json").read_text())
     assert manifest["anchors"]["n_atoms_anchored"] == 2
+
+
+def test_production_child_seals_its_own_inputs(tmp_path):
+    from backend.core.models import Design
+    from backend.core.namd_input_provenance import RECEIPT, design_digest
+    parent = _make_parent(tmp_path)
+    design = Design()
+    (parent.job_dir(tmp_path) / 'design.json').write_text(design.model_dump_json())
+    child = _build_replica(tmp_path, parent)
+    receipt = json.loads((child.job_dir(tmp_path) / RECEIPT).read_text())
+    assert receipt['job_id'] == child.job_id
+    assert receipt['parent_job_id'] == parent.job_id
+    assert receipt['design_sha256'] == design_digest(design)
+    paths = {item['path'] for item in receipt['files']}
+    assert 'equilibrated.coor' in paths
+    assert 'forcefield/par_all36_na.prm' in paths
+    assert any(name.endswith('.conf') for name in paths)

@@ -1034,3 +1034,12 @@ long backend GC scan without changing GC for later objects. Four-isomer
 atomistic checks pass, but browser-side request waits and encoding outliers
 remain. Use the new startup factory on the next normal backend start; the live
 session was deliberately not restarted. See `docs/audits/vr_publication_20261021.json`.
+
+### MV-52 — PENDING: scientific alignment of p7560 reconstruction markers (2026-10-27)
+
+Review Gerling Fig.S1 Page3 with reference42hb(1)-(3), offset17 and proposed
+nick/junction markers enabled. Confirm helix40/41 markers under the selected BP
+calibration and legibility at desktop size. These are hypothesis coordinates;
+markers do not recalibrate the PDF or change design topology. Automated DOM/API
+checks cover selections, numeric helix labels and four marker targets. Full
+scientific alignment remains conditional on the editable row/BP calibration.

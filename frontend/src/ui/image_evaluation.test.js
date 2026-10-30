@@ -1,0 +1,81 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { estimateIndices, showImageEvaluation } from './image_evaluation.js'
+vi.mock('../shared/doc_id.js', () => ({ docHeaders: () => ({ 'X-NADOC-Doc': 'active-gerling-tab' }) }))
+let dialog
+const candidate = { id: 'p1-f1', label: 'Page 1 · candidate', page: 1, rows: [100, 200], columns: [100, 400], crossovers: [{ x: 100, y1: 100, y2: 200, rows: [0, 1], side: 'left', column: 0 }], endpoints: [{ x: 50, y: 100, row: 0 }], flags: [{ kind: 'spacing', detail: 'Possible stretched drawing.', x: 250, y: 100, column: 0 }], path_count: 3, limitations: ['Indices are inferred.'], aspect: 2, image: 'data:image/png;base64,AA==' }
+const upload = () => { const input = document.querySelector('[data-file]'); Object.defineProperty(input, 'files', { value: [new File(['%PDF-'], 'test.pdf', { type: 'application/pdf' })], configurable: true }); input.dispatchEvent(new Event('change')) }
+afterEach(() => { dialog?.close(); dialog = null; document.body.replaceChildren(); vi.restoreAllMocks() })
+it('calibrates estimates without pretending to recover missing planes', () => {
+  expect(estimateIndices([10, 20, 45], 13, 7, { 2: 41 })).toEqual([13, 20, 41])
+})
+it('imports, selects, inspects and recalibrates a figure without a design', async () => {
+  const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ figures: [candidate], notes: [], method: 'test' }) })
+  dialog = showImageEvaluation({ fetchImpl }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('1 routing candidate'))
+  document.querySelector('[data-candidates] button').click()
+  expect(document.querySelectorAll('[data-stage] svg')).toHaveLength(1)
+  document.querySelector('[data-flags] button').click()
+  expect(document.querySelector('[data-detail]').textContent).toContain('stretched')
+  const first = document.querySelector('[data-first]'); first.value = '13'; first.dispatchEvent(new Event('change'))
+  expect(document.querySelector('[data-stage]').textContent).toContain('~13')
+  const override = document.querySelector('[aria-label="BP index for column 1"]'); override.value = '34'; override.dispatchEvent(new Event('change'))
+  expect(document.querySelector('[data-stage]').textContent).toContain('~34')
+  expect(fetchImpl).toHaveBeenCalledOnce()
+  expect(showImageEvaluation({ fetchImpl })).toBe(dialog)
+})
+it('handles failure and aborts a pending upload on close', async () => {
+  const fetchImpl = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: 'Invalid PDF' }) })
+  dialog = showImageEvaluation({ fetchImpl }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toBe('Invalid PDF'))
+  const signal = fetchImpl.mock.calls[0][1].signal; dialog.close(); expect(signal.aborted).toBe(true)
+})
+it('reports no candidates without inventing a diagram', async () => {
+  dialog = showImageEvaluation({ fetchImpl: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ figures: [], notes: ['Raster unsupported.'] }) }) }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-status]').textContent).toContain('No supported vector'))
+  expect(document.querySelector('[data-notes]').textContent).toContain('Raster unsupported')
+  expect(document.querySelector('[data-export]').disabled).toBe(true)
+})
+it('toggles exact Brick spans, exposes evidence, refreshes thresholds and remaps rows', async () => {
+  const matches = { reference: { title: 'Table S1 · Brick' }, design_name: 'Draft', minimum: 6, domains_checked: 1, skipped_strands: [], helices: [{ id: 'h0', label: 'h0' }, { id: 'h1', label: 'h1' }], matches: [{ strand_id: 's', strand_name: 'Staple', domain_index: 0, helix_id: 'h0', offset: 0, length: 6, sequence: 'ACGTCA', start_bp: 1, end_bp: 6, full_domain: true, published_index: 12, published_offset: 3 }] }
+  const fetchImpl = vi.fn(async url => ({ ok: true, json: async () => url.includes('brick-matches') ? matches : { figures: [candidate], notes: [] } }))
+  dialog = showImageEvaluation({ fetchImpl }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-candidates] button')).not.toBeNull())
+  document.querySelector('[data-candidates] button').click()
+  const toggle = document.querySelector('[data-brick-toggle]'); toggle.click()
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-brick-match]')).toHaveLength(1))
+  expect(fetchImpl.mock.calls.find(([url]) => url.includes('brick-matches'))[1].headers).toEqual({ 'X-NADOC-Doc': 'active-gerling-tab' })
+  document.querySelector('[data-brick-match]').dispatchEvent(new MouseEvent('click'))
+  expect(document.querySelector('[data-detail]').textContent).toContain('Brick 12 (base 4)')
+  expect(document.querySelector('[data-brick-status]').textContent).toContain('1/1 matching spans visible')
+  const row = document.querySelector('[aria-label="Sequence helix for image row 0"]'); row.value = ''; row.dispatchEvent(new Event('change'))
+  expect(document.querySelectorAll('[data-brick-match]')).toHaveLength(0)
+  toggle.click(); toggle.click()
+  expect(fetchImpl).toHaveBeenCalledTimes(2)
+  document.querySelector('[data-brick-refresh]').click()
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3))
+})
+it('reports a missing design without losing the imported figure', async () => {
+  const fetchImpl = vi.fn(async url => ({ ok: !url.includes('brick-matches'), json: async () => url.includes('brick-matches') ? { detail: 'Open a sequenced design.' } : { figures: [candidate], notes: [] } }))
+  dialog = showImageEvaluation({ fetchImpl }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-candidates] button')).not.toBeNull())
+  document.querySelector('[data-candidates] button').click(); document.querySelector('[data-brick-toggle]').click()
+  await vi.waitFor(() => expect(document.querySelector('[data-brick-status]').textContent).toContain('Open a sequenced design'))
+  expect(document.querySelectorAll('[data-stage] svg')).toHaveLength(1)
+})
+it('requests the new offset, labels helices visibly and draws alternative reconstruction positions', async () => {
+  const fig = { ...candidate, rows: Array.from({ length: 42 }, (_, i) => 20 + i * 5), columns: [10, 30, 50, 70, 90, 110, 130] }
+  const matches = { reference: { title: '42hb (1)-(3)', sheet: '42hb (1)-(3)' }, preview: { notice: 'p7560 offset 17: hypothetical' }, design_name: 'Draft', minimum: 12, domains_checked: 1, skipped_strands: [], helices: Array.from({ length: 42 }, (_, i) => ({ id: `internal_${i}`, label: String(i) })), matches: [{ strand_id: 's', strand_name: 'Staple', domain_index: 0, helix_id: 'internal_41', offset: 0, length: 17, sequence: 'ACTATTAAAGAACGTGG', start_bp: 21, end_bp: 37, full_domain: true, published_index: 46, published_offset: 13 }] }
+  const fetchImpl = vi.fn(async url => ({ ok: true, json: async () => url.includes('brick-matches') ? matches : { figures: [fig], notes: [] } }))
+  dialog = showImageEvaluation({ fetchImpl }); upload()
+  await vi.waitFor(() => expect(document.querySelector('[data-candidates] button')).not.toBeNull())
+  document.querySelector('[data-candidates] button').click()
+  const register = document.querySelector('[data-sequence-register]'); register.value = '17'; register.dispatchEvent(new Event('change'))
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-brick-match]')).toHaveLength(1))
+  expect(fetchImpl.mock.calls.at(-1)[0]).toContain('reference=42hb13&register=17')
+  document.querySelector('[data-reconstruction-toggle]').click()
+  expect(document.querySelectorAll('[data-reconstruction-position]')).toHaveLength(4)
+  document.querySelector('[data-brick-match]').dispatchEvent(new MouseEvent('click'))
+  expect(document.querySelector('[data-detail]').textContent).toContain('helix 41 BP')
+  expect(document.querySelector('[data-detail]').textContent).not.toContain('internal_41')
+  expect(document.querySelector('[data-brick-status]').textContent).toContain('J22/B539')
+})

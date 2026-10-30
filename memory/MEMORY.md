@@ -12,6 +12,8 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 ## Read first when relevant
 
+- [Visible helix labels](feedback_helix_labels.md) — use viewer labels in all communication and UI, never internal helix IDs.
+
 - [Debug visibility](feedback_debug_visibility.md) — autonomously improve viewing conditions, preserve the behavior under test, verify user-visible output; reusable Codex skill.
 
 - [VR human motion](project_vr_human_motion.md) — archived BEHAVIOR Vive recordings, movement modeller, live/Witness adapters; steady_fast first, all four presets for final validation.
@@ -85,6 +87,8 @@ Files are `feedback_<name>.md`. Match the name against what you're editing; each
 **[namd_4fs_production_only](feedback_namd_4fs_production_only.md)** (4.0 fs is the ONLY production dt — fix the clash, never lower)
 
 ## Active topic files
+
+- [Image evaluation](project_image_evaluation.md) — Help PDF vector-diagram review, BP calibration, routing flags and reconstruction uncertainty.
 
 Files are `project_<name>.md`. Bold = read before touching that area.
 

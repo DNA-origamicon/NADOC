@@ -1,0 +1,58 @@
+{
+  "before": [
+    {
+      "path": "/media/jojo/Archive/nr3-dy6exyi5/browser/workspace",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/media/jojo/Archive/nr3-dy6exyi5/browser/captures",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false,
+      "entries": []
+    }
+  ],
+  "credentials_before": [],
+  "doc": "__e2e__desktop-playback-round2",
+  "cleanup": "afterEach closes/deletes document; global teardown removes prefixed artifacts and credentials; explicit owned scratch removal after process reference checks",
+  "startup": "Isolated empty Archive workspace, lifespan off, existing shared review ledger now explicitly reviewed",
+  "diagnostic_retry_before": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "preserved_failed_capture": "/media/jojo/Archive/nr3-dy6exyi5/browser/captures-first-pixel-failure",
+    "change": "Add state labels and exact matrix/color hashes; no acceptance threshold or view changes"
+  },
+  "control_before": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "condition": "Original renderer compared with itself, same view and strict pixel threshold",
+    "preserved_capture": "/media/jojo/Archive/nr3-dy6exyi5/browser/captures-buffer-diagnostic"
+  },
+  "writer_only_before": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "condition": "Independent original writeBondMatrix with shared unchanged geometry/material exports; eliminate duplicated constructors as a confound",
+    "prior_control": "Original-versus-original passed"
+  },
+  "after": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "credentials": [],
+    "process_references": [],
+    "retained_failed_capture": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round2/module-duplication-pixel-diagnostic",
+    "result": "Original-original control and historical-writer/current-writer comparison pass, 30 exact pixel states and picking; whole-module historical constructor mismatch retained."
+  }
+}

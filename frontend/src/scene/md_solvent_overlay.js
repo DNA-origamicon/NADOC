@@ -191,32 +191,28 @@ export function initMdSolventOverlay(scene, { onGrapheneChange = () => {} } = {}
     // Atomistic: O and both H, from the 9-float O,H,H record.
     const rO = _ballstick ? BALL_RADIUS : ELEMENTS.O.vdw
     const rH = _ballstick ? BALL_RADIUS * 0.75 : ELEMENTS.H.vdw
-    _writeSpheres(_sphereMesh('waterO', rO, n, false, ELEMENTS.O.color),
-      xyz, n, 9, 0, atomInstanceScale(rO))
-
+    const oMesh = _sphereMesh('waterO', rO, n, false, ELEMENTS.O.color)
     const hMesh = _sphereMesh('waterH', rH, n * 2, false, ELEMENTS.H.color)
-    const hScale = atomInstanceScale(rH)
+    const oScale = atomInstanceScale(rO), hScale = atomInstanceScale(rH)
+    const bonds = _ballstick ? _bondMesh(n * 2) : null
+    if (!bonds) _hide('bonds')
+    const oOut = oMesh.instanceMatrix.array, hOut = hMesh.instanceMatrix.array
+    const bOut = bonds?.instanceMatrix.array
+    // Read each O,H,H record once and share its coordinates across sphere/bond writes.
     for (let i = 0; i < n; i++) {
-      const o = i * 9
+      const o = i * 9, m = i * 16
+      const ox = xyz[o], oy = xyz[o + 1], oz = xyz[o + 2]
+      writeSphereMatrix(oOut, m, ox, oy, oz, oScale)
       for (let k = 0; k < 2; k++) {
-        const p = o + 3 + k * 3
-        writeSphereMatrix(hMesh.instanceMatrix.array, (i * 2 + k) * 16,
-          xyz[p], xyz[p + 1], xyz[p + 2], hScale)
+        const p = o + 3 + k * 3, hm = (i * 2 + k) * 16
+        const hx = xyz[p], hy = xyz[p + 1], hz = xyz[p + 2]
+        writeSphereMatrix(hOut, hm, hx, hy, hz, hScale)
+        if (bOut) writeBondMatrix(_geom, bOut, hm, ox, oy, oz, hx, hy, hz, BOND_RADIUS)
       }
     }
+    _uploadMatrices(oMesh)
     _uploadMatrices(hMesh)
-
-    if (!_ballstick) { _hide('bonds'); return }
-    const bonds = _bondMesh(n * 2)
-    for (let i = 0; i < n; i++) {
-      const o = i * 9
-      for (let k = 0; k < 2; k++) {
-        const p = o + 3 + k * 3
-        writeBondMatrix(_geom, bonds.instanceMatrix.array, (i * 2 + k) * 16,
-          xyz[o], xyz[o + 1], xyz[o + 2], xyz[p], xyz[p + 1], xyz[p + 2], BOND_RADIUS)
-      }
-    }
-    _uploadMatrices(bonds)
+    if (bonds) _uploadMatrices(bonds)
   }
 
   function _drawIons(frame) {

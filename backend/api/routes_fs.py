@@ -103,14 +103,16 @@ def _list_dir(path: Path) -> dict:
         raise HTTPException(400, detail=f"not a directory: {path}")
     entries = []
     try:
-        for child in sorted(path.iterdir(), key=lambda p: p.name.lower()):
-            if child.name.startswith("."):
-                continue
-            try:
-                if child.is_dir():
-                    entries.append({"name": child.name, "path": str(child)})
-            except OSError:
-                continue  # unreadable entry — skip
+        with os.scandir(path) as children:
+            for child in children:
+                if child.name.startswith("."):
+                    continue
+                try:
+                    if child.is_dir():
+                        entries.append({"name": child.name, "path": str(path / child.name)})
+                except OSError:
+                    continue  # unreadable entry — skip
+        entries.sort(key=lambda entry: entry["name"].lower())
     except PermissionError:
         raise HTTPException(403, detail=f"permission denied: {path}")
     parent = str(path.parent) if path.parent != path else None

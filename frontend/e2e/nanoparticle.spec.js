@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('gold nanosphere is scriptable through create, resize, move, and delete', async ({ page }) => {
   test.setTimeout(90_000)
-  await page.goto('/')
+  await page.goto('/?doc=__e2e__nanoparticle-selection')
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
   await page.click('#menu-file-new')
   // Persisted E2E designs MUST use this prefix; global-teardown removes them
@@ -10,7 +10,8 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
   await page.fill('#new-design-name', '__e2e__nanoparticle')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible()
-  await page.waitForFunction(() => Boolean(window.__nadocTest?.nanoparticles))
+  await page.waitForFunction(() => Boolean(window.__nadocTest?.nanoparticles)
+    && window.__nadocTest.store.getState().currentDesign?.metadata?.name === '__e2e__nanoparticle')
 
   const created = await page.evaluate(() => window.__nadocTest.nanoparticles.create(10))
   const id = created.nanoparticle_id
@@ -22,8 +23,7 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
     position: [15, 10, 15], target: [0, 0, 0],
   }))
 
-  // A click is selection, not an orbit gesture, and immediately arms the same
-  // Move/Rotate gizmo used by proteins.
+  // A click highlights the individual particle. Movement requires explicit activation.
   const point = await page.evaluate(id => window.__nadocTest.nanoparticles.screenPosition(id), id)
   expect(await page.evaluate(point => window.__nadocTest.nanoparticles.hitAt(point), point))
     .toMatchObject({ id })
@@ -38,8 +38,22 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
   }, point)
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.selected()))
     .toEqual({ kind: 'nanoparticle', id })
+  expect(await page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
+  await expect(page.locator('#move-rotate-panel')).not.toBeVisible()
+  const emissive = await page.evaluate(id => {
+    let intensity = null
+    window.__nadocTest.scene.traverse(o => { if (o.userData.nanoparticleId === id && o.material) intensity = o.material.emissiveIntensity })
+    return intensity
+  }, id)
+  expect(emissive).toBe(0.35)
+  await page.evaluate(() => document.getElementById('menu-tools-translate-rotate').click())
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(true)
   await expect(page.locator('#move-rotate-panel')).toBeVisible()
+  // Finish the explicit tool session before testing ordinary selection/orbit.
+  await page.evaluate(() => { const c = document.getElementById('canvas'); c.tabIndex = 0; c.focus() })
+  await page.keyboard.press('m')
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().translateRotateActive)).toBe(false)
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
 
   // Right-click actions must remain mounted through the button click. The old
   // unconditional pointerdown closer removed the Edit button before click fired.
@@ -74,6 +88,7 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.selected())).toBeNull()
 
   await page.evaluate(id => window.__nadocTest.nanoparticles.select(id), id)
+  await page.evaluate(() => document.getElementById('menu-tools-translate-rotate').click())
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(true)
   await page.keyboard.press('Escape')
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.selected())).toBeNull()

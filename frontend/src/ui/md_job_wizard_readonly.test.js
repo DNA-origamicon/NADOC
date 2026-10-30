@@ -537,14 +537,15 @@ describe('box dimension overrides', () => {
   })
 
   it('locks dimension inputs and reset for completed jobs', async () => {
-    const { wiz } = setup()
+    const { wiz, api } = setup()
+    api.getMdSolventMeta=vi.fn(async()=>({box_nm:[10,25,12]}))
     await wiz.openReadOnly({ ...JOB,
       prep_params: { ...JOB.prep_params, box_size_nm: [null, 25, null] },
       prep_params_set: [...JOB.prep_params_set, 'box_size_nm'],
     })
     const group = modalRoot().querySelector('[data-testid="box-size-controls"]')
     for (const control of group.querySelectorAll('input, button')) expect(control.disabled).toBe(true)
-    expect(group.querySelector('[aria-label="Box Y (nm)"]').value).toBe('25')
+    await vi.waitFor(()=>expect(group.querySelector('[aria-label="Box Y (nm)"]').value).toBe('25.000'))
   })
 })
 
@@ -760,4 +761,45 @@ describe('nanopore-only production controls', () => {
     const shown = labels()
     for (const name of NANOPORE_LABELS) expect(shown.some(t => t.includes(name))).toBe(true)
   })
+})
+
+it('starts a new relaxation from setup intent rather than the historical job box being viewed',async()=>{
+ let values={padding_nm:2,box_mode:'bbox',box_size_nm:null}
+ const preparation={keys:new Set(Object.keys(values)),payload:()=>({...values}),summary:()=> 'Box setup',
+  beginPreparation:vi.fn(()=>{values={...values,padding_nm:6}}),acceptPreview:vi.fn()}
+ const {wiz,api,launch}=setup({preparation})
+ await wiz.open(null,{viewJob:JOB})
+ expect(preparation.beginPreparation).not.toHaveBeenCalled()
+ await wiz.open('relaxation')
+ expect(preparation.beginPreparation).toHaveBeenCalledTimes(1)
+ expect(api.fetchProtocolPlan.mock.calls.at(-1)[0]).toMatchObject({padding_nm:6,box_size_nm:null})
+ ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+ footerButtons().find(b=>b.textContent.includes('Create job')).click()
+ await vi.waitFor(()=>expect(launch).toHaveBeenCalled())
+ expect(launch.mock.calls[0][0]).toMatchObject({padding_nm:6,box_size_nm:null})
+ wiz.close()
+})
+
+it('reads saved box dimensions in View settings even when the current design and request disagree',async()=>{
+ const {wiz,api}=setup()
+ api.fetchProtocolBoxPreview=vi.fn(async()=>({box_preview:{calculated_nm:[14,16,20]}}))
+ api.getMdSolventMeta=vi.fn(async()=>({ready:true,box_nm:[6.093,8.344,12.814]}))
+ await wiz.open(null,{viewJob:{...JOB,prep_params:{...JOB.prep_params,box_size_nm:[10,11,12]}}})
+ await vi.waitFor(()=>expect(document.querySelector('[aria-label="Box Z (nm)"]').value).toBe('12.814'))
+ expect(api.getMdSolventMeta).toHaveBeenCalledWith(JOB.job_id)
+ expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+ expect(document.querySelector('[aria-label="Box X (nm)"]').disabled).toBe(true)
+ expect(document.body.textContent).toContain('Initial cell from this job’s saved package')
+ wiz.close()
+})
+
+it('does not fabricate a current-design box for an unavailable historical package',async()=>{
+ const {wiz,api}=setup()
+ api.getMdSolventMeta=vi.fn(async()=>({ready:false,box_nm:null}))
+ api.fetchProtocolBoxPreview=vi.fn()
+ await wiz.open(null,{viewJob:JOB})
+ await vi.waitFor(()=>expect(document.body.textContent).toContain('Saved box unavailable'))
+ expect(document.querySelector('[aria-label="Box X (nm)"]').value).toBe('')
+ expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+ wiz.close()
 })

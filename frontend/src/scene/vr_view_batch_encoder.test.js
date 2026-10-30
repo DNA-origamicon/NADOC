@@ -49,6 +49,7 @@ it('packs exact current world matrices and colors while excluding invisible/dege
   }
   const first = encoder.instances(mesh, { radius: 2 })
   expect(first).toEqual(new Float32Array(expected))
+  expect(encoder.instances(mesh,{radius:2})).toBe(first)
   mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(9, 9, 9))
   const next = encoder.instances(mesh, { radius: 2 })
   expect(next[12]).toBe(19); expect(first[12]).toBe(10)
@@ -62,4 +63,14 @@ it('invalidates interleaved attribute uploads and supports unindexed unlit templ
   data.array[0] = 4; data.needsUpdate = true
   expect(encoder.vertices(g, mat, group, null)[0]).toBe(4)
   expect(first[0]).toBe(0)
+})
+
+it('invalidates reused instance alpha when its interpretation changes',()=>{
+ const {g,mat,encoder}=fixture(),mesh=new THREE.InstancedMesh(g,mat,1)
+ mesh.setMatrixAt(0,new THREE.Matrix4());mesh.updateMatrixWorld(true)
+ const alpha=new THREE.InstancedBufferAttribute(new Uint8Array([128]),1,false)
+ g.setAttribute('instanceAlpha',alpha)
+ expect(encoder.instances(mesh)[19]).toBe(128)
+ alpha.normalized=true
+ expect(encoder.instances(mesh)[19]).toBeCloseTo(128/255)
 })

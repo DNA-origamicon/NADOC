@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
+import indexHtml from '../../index.html?raw'
 import { simulationControls, simulationViewActive, createVRSimulations } from './vr_simulations.js'
 import { simulationJobSummary, simulationProgress } from './vr_simulation_controls.js'
 it('shows observed completion time, running progress, and finished relaxation state', () => {
@@ -128,4 +129,14 @@ it('reads wrapped and external labels without controls or DOM cloning',()=>{
   expect(controls.find(c=>c.element.id==='b').label).toBe('External gamma')
   expect(clone).not.toHaveBeenCalled()
  }finally{clone.mockRestore()}
+})
+
+it('keeps lower-priority views last in desktop markup and the native VR adapter', () => {
+  const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
+  for (const [engine, name, tail] of [['namd', 'md-viz', ['photoproduct', 'occupancy']], ['oxdna', 'oxdna-viz', ['occupancy']]]) {
+    const desktop = [...doc.querySelectorAll(`input[name="${name}"]`)].map(el => el.value)
+    expect(desktop.slice(-tail.length)).toEqual(tail)
+    const native = simulationControls(doc, engine).filter(c => c.kind === 'mode').map(c => c.group)
+    expect(native).toEqual(desktop)
+  }
 })

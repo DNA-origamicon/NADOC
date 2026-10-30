@@ -1,9 +1,20 @@
 import * as THREE from 'three'
 
-// Cache only local mesh records. Instance poses/colors/visibility are always read
-// anew. Attribute identity and upload versions follow Three's mutation contract.
+function sameBuffer(a,b) {
+  if(!a)return !b
+  if(!b || a.byteLength!==b.byteLength)return false
+  const wordAligned=(a.byteOffset%4===0 && b.byteOffset%4===0 && a.byteLength%4===0)
+  const Type=wordAligned?Uint32Array:Uint8Array,width=wordAligned?4:1
+  const x=new Type(a.buffer,a.byteOffset,a.byteLength/width),y=new Type(b.buffer,b.byteOffset,b.byteLength/width)
+  for(let i=0;i<x.length;i++)if(x[i]!==y[i])return false
+  return true
+}
+
+// Local templates follow Three's attribute upload contract. Instance records
+// additionally compare exact input bytes, including edits before GPU upload.
 export function createVRBatchEncoder() {
-  const cache = new WeakMap()
+  const cache = new WeakMap(), poseCache = new WeakMap()
+  let cachedPoseBytes=0
   const pos = new THREE.Vector3(), normal = new THREE.Vector3(), color = new THREE.Color()
   const matrix = new THREE.Matrix4(), instance = new THREE.Matrix4(), radius = new THREE.Vector3()
   function vertices(geometry, material, group, uv, slot = 0, annotation = false) {
@@ -41,6 +52,13 @@ export function createVRBatchEncoder() {
     return records
   }
   function instances(mesh, spec) {
+    const alphaAttribute=mesh.geometry.attributes.instanceAlpha
+    const key=[mesh.count,spec?.radius,...mesh.matrixWorld.elements]
+    for(const a of [mesh.instanceMatrix,mesh.instanceColor,alphaAttribute])key.push(a,a?.version,a?.array,a?.normalized,a?.itemSize,a?.offset,a?.data,a?.data?.version,a?.data?.stride)
+    const previous=poseCache.get(mesh)
+    const inputs=[mesh.instanceMatrix?.array,mesh.instanceColor?.array,alphaAttribute?.isInterleavedBufferAttribute?alphaAttribute.data.array:alphaAttribute?.array]
+    const unchanged=previous && inputs.every((a,i)=>sameBuffer(a,previous.inputs[i]))
+    if(unchanged && key.length===previous.key.length && key.every((v,i)=>v===previous.key[i]))return previous.records
     const records = new Float32Array(mesh.count * 20)
     let offset = 0
     for (let i = 0; i < mesh.count; i++) {
@@ -53,7 +71,13 @@ export function createVRBatchEncoder() {
       records.set(matrix.elements, offset); offset += 16
       records[offset++] = color.r; records[offset++] = color.g; records[offset++] = color.b; records[offset++] = alpha
     }
-    return records.subarray(0, offset)
+    const result=records.subarray(0, offset)
+    const bytes=inputs.reduce((n,a)=>n+(a?.byteLength??0),0)+records.byteLength
+    if(cachedPoseBytes-(previous?.bytes??0)+bytes<=8*1024*1024){
+      cachedPoseBytes+=bytes-(previous?.bytes??0)
+      poseCache.set(mesh,{key,records:result,inputs:inputs.map(a=>a?.slice()),bytes})
+    }else if(previous){cachedPoseBytes-=previous.bytes;poseCache.delete(mesh)}
+    return result
   }
   return { vertices, instances }
 }

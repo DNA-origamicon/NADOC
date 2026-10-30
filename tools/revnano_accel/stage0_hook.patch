@@ -1,0 +1,25 @@
+diff --git a/stage0.py b/stage0.py
+index df2dac1..d8008b2 100644
+--- a/stage0.py
++++ b/stage0.py
+@@ -12,6 +12,9 @@ from REVNANO import parameters
+ from REVNANO import srt
+ from REVNANO import dna
+ 
++# Optional external, deterministic, bounded-memory Pass 2 executor.
++parallel_builder = None
++
+ 
+ 
+ 
+@@ -127,6 +130,10 @@ def build_staple_routing_trees(origami, MU_MIN, SIGMA, BETA, revnano_determinist
+ 
+ 	print("Generating routing trees for other staples... [SIGMA = %d, MU_MIN = %d]" % (SIGMA, MU_MIN))
+ 
++	if parallel_builder is not None :
++		parallel_builder(origami, staple_routing_trees, MU_MIN, SIGMA, BETA)
++		return
++
+ 	for staple_id, staple_seq in enumerate(origami["staples53"]) :
+ 
+ 		if staple_id in origami["staple_ids_with_1definite_route"] :		# already has tree made

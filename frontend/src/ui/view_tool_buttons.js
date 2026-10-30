@@ -146,6 +146,7 @@ export function initViewToolButtons({
       _gridHelper.quaternion.identity()
     }
     _syncVtButtons()
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   function _syncVtButtons() {

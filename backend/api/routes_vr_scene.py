@@ -1,5 +1,6 @@
 """Revision-checked publication of canonical topology to an existing VR session."""
 import os
+import threading
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -7,6 +8,9 @@ from backend.api import state as design_state
 from backend.api.doc_context import get_current_doc
 
 router = APIRouter()
+
+# Serialize refresh publication without holding the lifecycle lock during CPU work.
+_REFRESH_LOCK = threading.Lock()
 
 class VRSceneRefreshRequest(BaseModel):
     expected_design_id: str = Field(min_length=1)
@@ -33,44 +37,49 @@ def _same_scene_source(before, after):
 
 def publish_scene(body):
     from backend.api import routes_vr as vr
-    with vr._STATE_LOCK:
-        session = vr._read_state()
-        if not session or session.get('doc_id') != get_current_doc():
-            raise HTTPException(409, detail='VR session belongs to a different document or is unavailable')
-        from backend.api.routes_placement_integrity import require_native_placement_review_clear
-        require_native_placement_review_clear(event_path=session['event_path'])
-        design, revision = design_state.get_design_with_revision()
-        if design is None or design.id != body.expected_design_id or revision != body.expected_revision:
-            raise HTTPException(409, detail='Design changed before scene refresh')
-        request = vr.VRLaunchRequest.model_validate(session['launch_request'])
+    with _REFRESH_LOCK:
+        with vr._STATE_LOCK:
+            session = vr._read_state()
+            if not session or session.get('doc_id') != get_current_doc():
+                raise HTTPException(409, detail='VR session belongs to a different document or is unavailable')
+            identity = tuple(session.get(key) for key in ('event_path', 'pid', 'doc_id'))
+            from backend.api.routes_placement_integrity import require_native_placement_review_clear
+            require_native_placement_review_clear(event_path=session['event_path'])
+            design, revision = design_state.get_design_with_revision()
+            if design is None or design.id != body.expected_design_id or revision != body.expected_revision:
+                raise HTTPException(409, detail='Design changed before scene refresh')
+            request = vr.VRLaunchRequest.model_validate(session['launch_request'])
+            selected = None
+            if session.get('lazy_representations'):
+                rep = vr._event_payload(session).get('representation', 'full')
+                request = request.model_copy(update={'representation': rep})
+                selected = {'full', {'beads': 'full', 'vdw': 'ballstick'}.get(rep, rep)}
         from backend.api.vr_scene_export import export_scene
-        if session.get('lazy_representations'):
-            rep = vr._event_payload(session).get('representation', 'full')
-            request = request.model_copy(update={'representation': rep})
-            selected = {'full', {'beads': 'full', 'vdw': 'ballstick'}.get(rep, rep)}
-            source = export_scene(request, design, selected)
-        else:
-            source = export_scene(request, design)
-        manifest = Path(session['event_path'] + '.scene')
+        source = export_scene(request, design, selected)
+        manifest = Path(identity[0] + '.scene')
         pending = manifest.with_name(manifest.name + '.next')
         try:
-            current, current_revision = design_state.get_design_with_revision()
-            if current is None or current.id != body.expected_design_id or (
-                current_revision != revision and not _same_scene_source(design, current)
-            ):
-                raise HTTPException(409, detail='Design changed during scene refresh')
-            revision = current_revision
-            destination = Path(session['event_path'] + f'.scene-{revision}')
-            previous = manifest.read_text().split()[-1] if manifest.exists() else None
-            require_native_placement_review_clear(event_path=session['event_path'])
-            os.replace(source, destination)
-            pending.write_text(f'NADOCVR_SCENE 1 {revision} {destination}\n')
-            pending.chmod(0o600)
-            os.replace(pending, manifest)
-            if previous and previous != str(destination):
-                old = Path(previous)
-                if old.parent == destination.parent and old.name.startswith(Path(session['event_path']).name + '.scene-'):
-                    old.unlink(missing_ok=True)
+            with vr._STATE_LOCK:
+                active = vr._read_state()
+                if not active or tuple(active.get(key) for key in ('event_path', 'pid', 'doc_id')) != identity:
+                    raise HTTPException(409, detail='VR session changed during scene refresh')
+                current, current_revision = design_state.get_design_with_revision()
+                if current is None or current.id != body.expected_design_id or (
+                    current_revision != revision and not _same_scene_source(design, current)
+                ):
+                    raise HTTPException(409, detail='Design changed during scene refresh')
+                revision = current_revision
+                destination = Path(session['event_path'] + f'.scene-{revision}')
+                previous = manifest.read_text().split()[-1] if manifest.exists() else None
+                require_native_placement_review_clear(event_path=session['event_path'])
+                os.replace(source, destination)
+                pending.write_text(f'NADOCVR_SCENE 1 {revision} {destination}\n')
+                pending.chmod(0o600)
+                os.replace(pending, manifest)
+                if previous and previous != str(destination):
+                    old = Path(previous)
+                    if old.parent == destination.parent and old.name.startswith(Path(session['event_path']).name + '.scene-'):
+                        old.unlink(missing_ok=True)
         finally:
             source.unlink(missing_ok=True)
             pending.unlink(missing_ok=True)

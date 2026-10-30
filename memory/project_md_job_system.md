@@ -13,6 +13,17 @@ interactive production creation still queues for Run. The prior queue-only
 production endpoint stranded chains after their first completed stage. The real
 three-stage orchestration regression (mock engine only) now completes all stages.
 
+## Saved box display (2026-10-25)
+
+Box and solvent now separates selected prepared jobs from new preparation intent.
+Selected jobs use `getMdSolventMeta` for initial package dimensions and actual ion
+counts, label their source and creation date, and do not recompute clearance using
+the current design. Unavailable package dimensions never fall back to defaults.
+View settings also uses the saved cell rather than estimating from the open design.
+New relaxation restores document setup; production still inherits its package.
+See `docs/namd_box_sizing.md`. This fixes a misleading historical-job preview;
+it does not change any existing simulation box or ionic composition.
+
 ## Solvent padding default (2026-09-30)
 
 New explicit-solvent jobs, the Recommended box control, hardware estimates, and

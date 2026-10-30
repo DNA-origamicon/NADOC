@@ -1,0 +1,18 @@
+.ni-modal { width: min(1600px, 96vw); max-width: 96vw; }
+.ni-modal .modal__body { min-height: 0; overflow: auto; }
+.nanobase-inventory { font-size: 12px; color: var(--color-text, #e6edf3); }
+.nanobase-inventory > p { margin: 0 0 10px; line-height: 1.5; }
+.ni-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 10px; }
+.ni-controls label { display: flex; flex-direction: column; gap: 4px; }
+.ni-controls input, .ni-controls select, .ni-controls button { color: #e6edf3; background: #21262d; border: 1px solid #58616b; border-radius: 4px; padding: 6px; }
+.ni-controls input { width: 250px; }
+.ni-scroll { max-height: 65vh; overflow: auto; border: 1px solid #484f58; }
+.ni-scroll table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1100px; table-layout: fixed; }
+.ni-scroll caption { text-align: left; padding: 8px; }
+.ni-scroll th { position: sticky; top: 0; z-index: 1; background: #21262d; text-align: left; }
+.ni-scroll th, .ni-scroll td { padding: 9px; vertical-align: top; border-bottom: 1px solid #484f58; overflow-wrap: anywhere; }
+.ni-scroll td p { margin: 4px 0; }
+.ni-scroll tbody tr:nth-child(even) { background: #21262d55; }
+.ni-scroll a { color: #7fc1ff; }
+.ni-scroll summary { cursor: pointer; }
+.ni-scroll details p { font-size: 11px; }

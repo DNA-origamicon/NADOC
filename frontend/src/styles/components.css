@@ -1043,6 +1043,12 @@ body:has(#right-panel.locked-inactive) .toast {
 .modal--wizard { width: min(1500px, 96vw); }
 
 .wizard { display: flex; flex-direction: column; gap: var(--space-3); }
+.wizard[hidden] { display: none; }
+.oxdna-job-settings-view > * + * { margin-top: var(--space-3); }
+.oxdna-recorded-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3); margin: 0; }
+.oxdna-recorded-fields > div { min-width: 0; padding: var(--space-3); border: 1px solid var(--color-border-default); border-radius: var(--radius-sm); }
+.oxdna-recorded-fields dt { color: var(--color-text-muted); margin-bottom: var(--space-2); text-transform: capitalize; }
+.oxdna-recorded-fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
 
 .wizard-modes,
 .wizard-preset-cards { display: flex; gap: var(--space-2); flex-wrap: wrap; }

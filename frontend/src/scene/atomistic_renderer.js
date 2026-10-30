@@ -54,6 +54,7 @@ import {
 } from './instance_alpha.js'
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
+import { buildAtomSerialIndex } from './atom_serial_index.js'
 
 const sharedColors = { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null }
 let _vdwScale = 1.0
@@ -350,8 +351,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       // legacy object array can be sparse/reordered, so map serial → row.
       let rowOfSerial = null
       if (!table.columnar || table.raw.serial) {
-        rowOfSerial = new Map()
-        for (let i = 0; i < n; i++) rowOfSerial.set(table.serial(i), i)
+        rowOfSerial = buildAtomSerialIndex(table)
       }
       const ends = [0, 0]
       const idx = new Int32Array(nBonds * 2)

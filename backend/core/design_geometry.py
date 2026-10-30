@@ -253,24 +253,30 @@ def _strand_nucleotide_info(
         last = strand.domains[-1]
         five_prime_key = (first.helix_id, first.start_bp, first.direction)
         three_prime_key = (last.helix_id, last.end_bp, last.direction)
+        strand_id = strand.id
+        strand_type = strand.strand_type.value
+        is_reference = strand.is_reference
         for di, domain in enumerate(strand.domains):
             if helix_ids is not None and domain.helix_id not in helix_ids:
                 continue
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
+            helix_id = domain.helix_id
+            direction = domain.direction
+            overhang_id = domain.overhang_id
             for bp in range(lo, hi + 1):
-                key = (domain.helix_id, bp, domain.direction)
+                key = (helix_id, bp, direction)
                 info[key] = {
-                    "strand_id": strand.id,
-                    "strand_type": strand.strand_type.value,
+                    "strand_id": strand_id,
+                    "strand_type": strand_type,
                     "is_five_prime": key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
                     "domain_index": di,
-                    "overhang_id": domain.overhang_id,
-                    "is_reference": strand.is_reference,
-                    "is_flexible_segment": (strand.id, di, bp, domain.direction)
+                    "overhang_id": overhang_id,
+                    "is_reference": is_reference,
+                    "is_flexible_segment": (strand_id, di, bp, direction)
                     in flex_marks,
-                    "is_unpaired": (domain.helix_id, bp, domain.direction) in _unpaired,
+                    "is_unpaired": key in _unpaired,
                 }
     return info
 
@@ -582,12 +588,20 @@ def _geometry_for_helices(
         if not arrs.get("placement_source"):
             raise NativePlacementError(f"Unplaced nucleotide arrays on helix {helix_id}.")
         bp_list = arrs["bp_indices"].tolist()
-        dir_arr = arrs["directions"]
+        dir_arr = arrs["directions"].tolist()
         pos_list = arrs["positions"].tolist()
         base_list = arrs["base_positions"].tolist()
         bn_list = arrs["base_normals"].tolist()
         at_list = arrs["axis_tangents"].tolist()
         sites = arrs["placement_source"] == SOURCE
+        if sites:
+            # Convert complete columns once, rather than creating NumPy row
+            # views and Python lists for every nucleotide. Placement is already
+            # authoritative here; preserve the same paired subtraction order.
+            axis_points = arrs["axis_points"].tolist()
+            radial_hats = arrs["radial_hats"].tolist()
+            azimuths = arrs["azimuths"].tolist()
+            groove_offsets = (arrs["azimuths"][1::2] - arrs["azimuths"][0::2]).tolist()
         copies: dict[tuple[int, Direction], int] = {}
         for i in range(M):
             bp = bp_list[i]
@@ -626,10 +640,10 @@ def _geometry_for_helices(
                     "axis_tangent": at_list[i],
                     "placement_source": arrs["placement_source"],
                     **({"helical_site": {
-                        "axis_point": arrs["axis_points"][i].tolist(),
-                        "radial_hat": arrs["radial_hats"][i].tolist(),
-                        "azimuth_rad": float(arrs["azimuths"][i]),
-                        "groove_offset_rad": float(arrs["azimuths"][i // 2 * 2 + 1] - arrs["azimuths"][i // 2 * 2]),
+                        "axis_point": axis_points[i],
+                        "radial_hat": radial_hats[i],
+                        "azimuth_rad": azimuths[i],
+                        "groove_offset_rad": groove_offsets[i // 2],
                         "phase_roll_rad": roll,
                     }} if sites else {}),
                     **sinfo,

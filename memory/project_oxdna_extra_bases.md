@@ -1,5 +1,16 @@
 # Crossover extra bases → oxDNA (single-stranded inserts)
 
+2026-10-28: **forced-ligation inserts are included too.** Gerling reconstruction
+exposed missing TT bases after junctions were classified as forced ligations.
+`crossover_extra_base_junctions` now matches each forced ligation's complete,
+directed pair of endpoints against an actual consecutive-domain transition.
+Same-helix and unequal-BP connections work; reversed polarity/wrong endpoint
+does not acquire an insert. Existing crossover ownership logic is unchanged.
+All consumers of the canonical walk share the corrected particle order/count.
+No placement formula or phase constant changed. Six new regression cases in
+`tests/test_oxdna_forced_ligation_inserts.py`; all six pass (three failed before
+the fix). Existing extra-base and extension checks:48 passed,6 skipped.
+
 `Crossover.extra_bases` (e.g. "TT" — single-stranded thymines that relieve junction
 strain) are now materialized as real ssDNA nucleotides in the oxDNA topology +
 configuration. Before this work they reached only the atomistic/GROMACS path
@@ -28,8 +39,9 @@ All wiring is in `backend/physics/oxdna_interface.py`:
 - `crossover_extra_base_junctions(design)` — mirrors the atomistic `extra_base_xover_src`
   rule: an extra-base crossover inserts on the **owning strand** at the domain→domain
   transition (`prev.helix_id != next.helix_id and prev.end_bp == next.start_bp`).
-  Keyed strand-scoped `(strand_id, prev_domain_index)`. Crossover-only (forced
-  ligations out of scope). Base identity comes from the `extra_bases` chars, NOT from
+  Keyed strand-scoped `(strand_id, prev_domain_index)`. Forced ligations additionally
+  match both directed endpoints, without the same-BP/inter-helix restriction.
+  Base identity comes from the `extra_bases` chars, NOT from
   `strand.sequence` (which excludes them — so inserts do not consume `seq_idx`).
   **Owning-strand selection (reciprocal-crossover bug, fixed 2026-06-25):** register
   each crossover at ONLY its owning (src) half — the half sitting at a domain 3′ end,

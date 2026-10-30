@@ -1,0 +1,205 @@
+{
+  "scope": "One warm cProfile call, 96 helices x 84 bp. Instrumented timings are diagnostic, not baseline latency. Cumulative rows overlap.",
+  "top_cumulative": [
+    {
+      "source": "backend/core/design_geometry.py",
+      "line": 811,
+      "function": "_geometry_for_design",
+      "calls": 1,
+      "self_ms": 1.0192970000000001,
+      "cumulative_ms": 204.46403200000003
+    },
+    {
+      "source": "backend/core/design_geometry.py",
+      "line": 495,
+      "function": "_geometry_for_helices",
+      "calls": 1,
+      "self_ms": 1.1668960000000002,
+      "cumulative_ms": 203.444735
+    },
+    {
+      "source": "backend/core/design_geometry.py",
+      "line": 573,
+      "function": "_emit_arrs",
+      "calls": 96,
+      "self_ms": 63.986811,
+      "cumulative_ms": 79.291134
+    },
+    {
+      "source": "backend/core/native_slab_placement.py",
+      "line": 220,
+      "function": "attach_native_slab_poses",
+      "calls": 1,
+      "self_ms": 6.002738000000001,
+      "cumulative_ms": 43.41817
+    },
+    {
+      "source": "backend/core/design_geometry.py",
+      "line": 156,
+      "function": "native_full_arrays_for_helix",
+      "calls": 96,
+      "self_ms": 0.311853,
+      "cumulative_ms": 35.667786
+    },
+    {
+      "source": "backend/core/design_geometry.py",
+      "line": 218,
+      "function": "_strand_nucleotide_info",
+      "calls": 1,
+      "self_ms": 26.860847,
+      "cumulative_ms": 33.564199
+    },
+    {
+      "source": "backend/core/native_slab_placement.py",
+      "line": 187,
+      "function": "_expected_slab_poses",
+      "calls": 1,
+      "self_ms": 11.569217000000002,
+      "cumulative_ms": 28.644818
+    },
+    {
+      "source": "backend/core/native_full_placement.py",
+      "line": 80,
+      "function": "place_native_full",
+      "calls": 96,
+      "self_ms": 2.2480379999999998,
+      "cumulative_ms": 18.772152000000002
+    },
+    {
+      "source": "backend/core/deformation.py",
+      "line": 1705,
+      "function": "deformed_nucleotide_arrays",
+      "calls": 96,
+      "self_ms": 0.243171,
+      "cumulative_ms": 14.369633000000002
+    },
+    {
+      "source": "backend/core/geometry.py",
+      "line": 590,
+      "function": "nucleotide_positions_arrays",
+      "calls": 96,
+      "self_ms": 1.6899590000000002,
+      "cumulative_ms": 12.096792
+    },
+    {
+      "source": "backend/core/native_full_placement.py",
+      "line": 46,
+      "function": "positions_in_native_frame",
+      "calls": 96,
+      "self_ms": 1.9387670000000001,
+      "cumulative_ms": 9.647386000000001
+    },
+    {
+      "source": "backend/core/geometry.py",
+      "line": 145,
+      "function": "_frame_from_helix_axis",
+      "calls": 96,
+      "self_ms": 0.522896,
+      "cumulative_ms": 6.03103
+    },
+    {
+      "source": "backend/core/cpd_representation.py",
+      "line": 50,
+      "function": "apply_base_only_cpd_geometry",
+      "calls": 1,
+      "self_ms": 3.8403150000000004,
+      "cumulative_ms": 5.385524
+    },
+    {
+      "source": "backend/core/cpd_representation.py",
+      "line": 80,
+      "function": "apply_cpd_context_geometry",
+      "calls": 1,
+      "self_ms": 3.350099,
+      "cumulative_ms": 4.868245
+    },
+    {
+      "source": "backend/core/flexible_segments.py",
+      "line": 35,
+      "function": "unpaired_bead_keys",
+      "calls": 1,
+      "self_ms": 3.596296,
+      "cumulative_ms": 4.610013
+    },
+    {
+      "source": "backend/core/deformation.py",
+      "line": 176,
+      "function": "effective_helix_for_geometry",
+      "calls": 192,
+      "self_ms": 0.116577,
+      "cumulative_ms": 2.794363
+    },
+    {
+      "source": "backend/core/native_slab_placement.py",
+      "line": 201,
+      "function": "<genexpr>",
+      "calls": 16129,
+      "self_ms": 1.8624720000000001,
+      "cumulative_ms": 2.709099
+    },
+    {
+      "source": "backend/core/deformation.py",
+      "line": 67,
+      "function": "_normalize_helix_for_grid",
+      "calls": 192,
+      "self_ms": 0.5618150000000001,
+      "cumulative_ms": 2.410645
+    },
+    {
+      "source": "backend/core/geometry.py",
+      "line": 181,
+      "function": "_strand_beads",
+      "calls": 96,
+      "self_ms": 1.4606360000000003,
+      "cumulative_ms": 1.9177970000000002
+    },
+    {
+      "source": "backend/core/native_slab_placement.py",
+      "line": 137,
+      "function": "_native_slab_array_poses",
+      "calls": 1,
+      "self_ms": 0.19268300000000002,
+      "cumulative_ms": 1.696824
+    },
+    {
+      "source": "backend/core/native_full_placement.py",
+      "line": 64,
+      "function": "at",
+      "calls": 384,
+      "self_ms": 1.2987330000000001,
+      "cumulative_ms": 1.450868
+    },
+    {
+      "source": "backend/core/native_full_placement.py",
+      "line": 113,
+      "function": "<genexpr>",
+      "calls": 576,
+      "self_ms": 0.405662,
+      "cumulative_ms": 1.250591
+    },
+    {
+      "source": "backend/core/native_slab_placement.py",
+      "line": 205,
+      "function": "<genexpr>",
+      "calls": 16129,
+      "self_ms": 1.248748,
+      "cumulative_ms": 1.248748
+    },
+    {
+      "source": "backend/core/native_full_placement.py",
+      "line": 57,
+      "function": "<genexpr>",
+      "calls": 384,
+      "self_ms": 0.263837,
+      "cumulative_ms": 1.024559
+    },
+    {
+      "source": "backend/core/deformation.py",
+      "line": 1345,
+      "function": "apply_overhang_rotation_if_needed",
+      "calls": 96,
+      "self_ms": 0.791031,
+      "cumulative_ms": 0.843798
+    }
+  ]
+}

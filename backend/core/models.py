@@ -129,6 +129,12 @@ class Mat4x4(BaseModel):
 
     @classmethod
     def from_array(cls, arr: np.ndarray) -> Mat4x4:
+        # Transform math produces ordinary float64 arrays. Convert their C-order
+        # values in NumPy rather than allocating/boxing each scalar in Python.
+        # Retain validation and the legacy coercion path for other dtypes and
+        # array subclasses (notably masked arrays).
+        if type(arr) is np.ndarray and arr.dtype == np.float64:
+            return cls(values=arr.ravel().tolist())
         return cls(values=[float(v) for v in arr.flatten()])
 
 

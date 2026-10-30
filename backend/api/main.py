@@ -527,6 +527,8 @@ app.include_router(nanoparticles_router, prefix="/api")
 from backend.api.routes_nanoparticle_attachment import router as nanoparticle_attachment_router
 app.include_router(nanoparticle_attachment_router, prefix="/api")
 app.include_router(project_collaboration_router, prefix="/api")
+from backend.api.routes_image_evaluation import router as image_evaluation_router
+app.include_router(image_evaluation_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
 
 

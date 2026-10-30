@@ -651,7 +651,14 @@ export function initAtomSurfaceDisplay({
     // (switching full→atomistic would drop strand/base/cluster colouring).
     if (mode !== 'off') _refreshAtomColors()
     if (_deferToOverlay) return
-    if (mode !== 'off' && !_atomDataCache) {
+    if (mode !== 'off' && _atomDataCache) {
+      // Simulation controllers replace the renderer's model without replacing
+      // this native-design cache. Re-selecting the same mode does not rebuild
+      // the renderer, so restore its data as well as its colors and mode.
+      atomisticRenderer.update(_atomDataCache)
+      _refreshAtomColors()
+      atomisticRenderer.highlight(atomSelectionForState(store.getState()))
+    } else if (mode !== 'off') {
       const toastToken = ++_atomToastToken
       showPersistentToast('Loading atomistic model…', {
         diagnostic: {
@@ -665,7 +672,7 @@ export function initAtomSurfaceDisplay({
       })
       try {
         const data = await _ensureAtomData()
-        if (data && atomisticRenderer.getMode() === mode) {
+        if (data && atomisticRenderer.getMode() === mode && !getSimOverlayWillDriveHeavy('atomistic')) {
           atomisticRenderer.update(data)
           _refreshAtomColors()
           atomisticRenderer.highlight(atomSelectionForState(store.getState()))

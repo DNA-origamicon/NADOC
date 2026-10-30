@@ -39,5 +39,6 @@ def send_snapshot(event_path, data, *, display=True, capabilities=None):
         if capabilities is not None:
             capability = client.recv(1)
             capabilities['transform_updates'] = bool(capability) and capability[0] >= 7
+            capabilities['compressed_panels'] = bool(capability) and capability[0] >= 11
             capabilities['atlas_patches'] = bool(capability) and capability[0] >= 8
     return True

@@ -50,9 +50,11 @@ def command_input(entry):
             "pivot": entry.pivot,
         }
     else:
-        return getattr(entry, "op_kind", getattr(entry, "op_subtype", kind)), getattr(
-            entry, "params", {}
-        )
+        try:
+            operation = entry.op_kind
+        except AttributeError:
+            operation = getattr(entry, "op_subtype", kind)
+        return operation, getattr(entry, "params", {})
     return kind, {**params, "_proof_version": entry.proof_version}
 
 

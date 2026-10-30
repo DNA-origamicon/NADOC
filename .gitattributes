@@ -3,3 +3,4 @@ tools/oxdna_memory/*.patch -whitespace
 backend/data/proteins/*.pdb -whitespace
 tools/oxdna_thermostat/*.patch -whitespace
 scripts/validation/**/*.patch -whitespace
+tools/revnano_accel/*.patch -whitespace
