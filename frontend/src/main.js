@@ -115,6 +115,7 @@ import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
+import { initGeometryReview } from './ui/geometry_review.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
 import { initExtraBaseMetricsAudit } from './ui/extra_base_metrics_audit.js'
 import { initHullAudit } from './ui/hull_audit.js'
@@ -6972,11 +6973,8 @@ async function main() {
 
   initCreateSeam({ store, api })
 
-  // Read-only, isolated current/candidate molecular geometry comparison.
-  initMolecularPlacementAudit({
-    setMenuToggle: _setMenuToggle,
-    getColorState: () => store.getState(),
-  })
+  initGeometryReview()
+  initMolecularPlacementAudit({ setMenuToggle: _setMenuToggle, getColorState: () => store.getState() })
   initExtraBaseMetricsAudit({ setMenuToggle: _setMenuToggle })
   initHullAudit({
     getState: () => store.getState(),
