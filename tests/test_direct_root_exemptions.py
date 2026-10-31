@@ -96,7 +96,8 @@ def test_native_connect_matches_unfitted_geometry_and_cold_replays(native):
     assert result["checked_commands"] == 4
     assert len(direct_connection_exemptions(connected)) == 1  # binding + duplex deduplicated
     driven = connected.overhang_bindings[0].driven_oh_id
-    assert capture_root_lengths(connected, [driven])[driven]["viewer"] == pytest.approx(7.558951938676602)
+    # Native distance after the explicitly approved 14.625-degree template offset.
+    assert capture_root_lengths(connected, [driven])[driven]["viewer"] == pytest.approx(7.558586405959171)
 
 
 def test_native_unapply_restores_exact_original_atoms_and_replays(native):

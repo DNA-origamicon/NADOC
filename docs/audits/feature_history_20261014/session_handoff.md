@@ -1,141 +1,126 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 9 (last production gates: October 28).
+Sessions since last gate flip or milestone close: 10 (last production gates: October 28).
 The active goal supersedes recurring stop-loss confirmation. The October 28 deadline was missed.
 
-**Tools done: 4/4. CAD: 26/34 complete, 1 core exit (FH-27) and 7 parked milestones remain.**
-FH-18/25/26/28, ISSUE-99 and ISSUE-126 stay closed. No production gate or milestone changed.
+**Tools done: 4/4. CAD: 26/34 complete; FH-27 and 7 parked milestones remain.**
+FH-18/25/26/28, ISSUE-99 and ISSUE-126 stay closed. No gate or milestone changed.
 
-## Active task and binding policy — October 31
+## Scope and next task — October 31
 
-The user expanded the task to **all remaining FULL-suite failures**, including junction balance.
-Single next task: review remaining failures by actual app accessibility before further repairs.
-User policy: no app-facing option means experimental; avoid broader fixes for such workflows.
-Keep molecular candidates isolated. Do not reopen closed milestones.
-Automatic placement preserves covalent root lengths ahead of collisions. Roots sharing one rigid
-cluster without defined relative joint/flexible motion retain strain; exempt Relax is an exact no-op
-with a notice and no new history/undo. Never infer flexibility, split clusters or close these roots.
+User renewed FULL authorization, limiting repairs to fully implemented app features.
+No app option, or an explicitly experimental app option, means excluded from repair.
+Single next task: obtain the pending molecular review decisions, then promote only an authorized
+candidate and validate its implemented feature. Neither remaining molecular failure is fixed yet.
+Keep thresholds, goldens, scientific exclusions and test guards intact. Do not reopen milestones.
+
+Automatic placement preserves covalent root lengths ahead of collisions. Roots in one rigid cluster
+without defined relative joint/flexible motion retain strain; exempt Relax is an exact no-op with a
+notice and no history/undo. Do not invent flexibility, split clusters or close these exempt roots.
 Manual moves may stretch roots; repositioned-overhang collisions remain the user's responsibility.
-The NP 2 nm contact exemption covers only the host strand. The five-atom Direct closure is withdrawn.
+The NP 2 nm exemption covers only its host strand. The five-atom Direct closure remains withdrawn.
 
-## Repairs and validation
+## Completed FULL and resolved family
 
-Entry HEAD: `f2c6081c` (Direct/root checkpoint; parent `f966f12a`). Evidence uses
-`.development-artifacts/feature-history-focus/remaining-failures/` (abbreviated **E**).
-Latest completed authorized FULL: **20,416 passed / 15 failed / 26 skipped / 2 errors**,
-20,459 software cases, 3,594.55 s, two workers. `E/full.{log,json}` and `full-timings.json`.
-Memory peak 6,444,445,696 bytes; high events 287, max/OOM/OOM-kill all zero.
-Its 3,967,379,279-byte scratch is absent. Both previously failing historical drains passed.
-The user-opened FULL window expired **October 31, 03:54:25 MDT**; do not renew or bypass it.
-Focused development checks remain authorized. CPD and physical convergence campaigns remain excluded.
+Entry HEAD: `38c05cab978eaa2c09d875ab245adf3dfbaabbb2`; parent `f2c6081c`, original `f966f12a`.
+Evidence root **E**: `.development-artifacts/feature-history-focus/remaining-failures/`.
+Current evidence **I**: `E/implemented-features/`. No production placement changed this session.
 
-**Five families repaired; 15 original failing/error cases pass focused:**
-- Reach planning (10): plan from the stationary covalent host O3′/P pivot used by attachment.
-  Preserve fixed particle centers, reach refusal, root lengths and collision diagnostics.
-- Inserted-root identity (1): choose the unique actual covalent edge across the owning strand's
-  boundary copies. Missing/nonterminal/ambiguous ownership still refuses. Four added traversal
-  checks cover inserted 3′/5′ roots in Viewer/Export.
-- Strained linker fixture (1): native complement→bridge covalent bond is already 3.887128 nm
-  (CG 3.370113 nm), with both roots in one rigid cluster. The native integration test requires
-  public structural refusal for flagged, already-strained linker edges; missing identities, bad
-  pairs and unrelated errors still fail. No decoder guard or production placement changed.
-- Junction balance (2): user explicitly approved **14.625°** template-frame offset and exact
-  geometry-lock refresh. Both original balance failures pass; lattice phases and tolerances stay fixed.
-- Voltron area (1): user explicitly approved the obsolete area reference correction only.
-  After the approved offset, area is **19044.137046 nm²**. The 5% tolerance, pinned fixture,
-  surface algorithm, volume/count references and other panel entries are unchanged.
+`E/full-implemented-baseline.{log,json}`: SMART **FULL (FULL suite) [test-dedicated session OPEN]**;
+**20,435 passed / 5 failed / 26 skipped / 0 errors**, 20,466 cases, 3,447.62 s, two workers.
+No DEFERRED groups. FULL collected before the Direct reference edit and new candidate unit tests.
+Peak 6,444,376,064 B; high events 234, max/OOM/OOM-kill zero; guarded 8 GiB/6 GiB/512 MiB limits.
+Its 4,029,987,513-byte scratch `/tmp/nf-7j06t7ay` is absent. Resource evidence is in I.
+The old FULL window expired October 31 at 03:54:25 MDT. The renewed window is
+**October 31, 10:52:09–14:52:09 MDT**; do not renew its marker or assume later broad authorization.
+Focused development checks remain authorized after that window. No additional FULL has run.
 
-Focused evidence: `reach-focused.log` **3 passed / 58.57 s**; `generator-focused.log`
-**21 passed / 902.01 s**; `linker-verified.log` **2 passed / 60.93 s** (actual ds/ss native controls).
-`approved-focused.log`: **12 junction + 10 geometry-lock + 1 Voltron tests passed**, 50.23 s total.
-Its scratch is absent. A first launcher rejected unsupported multi-target arguments before testing;
-accepted validation used separate `just test-focused` targets under the resource wrapper.
-`failure-families.json` maps every original failure/error to its cause and evidence.
+Direct Connect/Relax: corrected only the absolute reference after the user-approved 14.625° offset,
+7.558951938676602 → **7.558586405959171 nm**, retaining its tolerance. Unfitted Viewer/Export atom
+identity, cold replay, exact exempt no-op/history, manual notice and nonexempt constraints remain.
+`I/direct-focused.{log,json}`: **10 passed / 6.00 s**; its scratch is absent.
+This resolves one of the five FULL failure families. Four failures remain: two eligible, two excluded.
 
-Required post-offset SMART: **FAST (fast suite only), 19,802 passed / 2 failed / 19 skipped**,
-724.10 s; `E/smart-junction.{log,json}`. Both prior junction failures pass. Newly red: the Direct
-absolute-distance pin and section-proof timeout listed below. Zero unmarked 5 s violators;
-aggregate 765 s / 90 s backstop debt remains. Skill triage: 1,387.7 s summed test time over 19,823
-cases, no individual offender or demonstrated shared slowdown. No reclassification/budget change.
-Observed peak 2,835,836,928 bytes; high/max/OOM/OOM-kill zero; 2,752,891,140-byte scratch absent.
-Exact deferral: “DEFERRED: this change would have needed the FULL suite, but no test-dedicated
-session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.”
-App Open/Full previously passed on generated NP platform: 51 helices, 129 strands, 13,212 nt,
-3 particles/attachments, 17 rows, max graft residual 3.90e-14 nm, no page errors. Both roots absent.
-Post-offset 2HB app Open/Full passed and final image was inspected: 2 helices / 5 strands /
-140 nt, no page errors. Both roots are absent. First screenshot had the file-open overlay; the
-harness-only visibility wait fixed it. Evidence: `E/junction-app/`, `junction-browser-final.log`.
+## Exact remaining failures
 
-## Exact remaining failures and decisions
+1. **Eligible — mrDNA → Use as NAMD seed.**
+   `tests/test_mrdna_pipeline.py::TestSyntheticRoundTrip::test_zero_step_position_accuracy`
+   Mean error **0.6911751375159637 nm** vs <0.10; max limit 0.25 unchanged.
+   The reader treats paired-midpoint DNA particles as an axis, ignores O-particle orientation and
+   assigns identity geometrically from an intermediate restart. Its ideal oracle also differs from
+   native seed coordinates. Production reader and oracle remain locked pending demonstrated approval.
+2. **Eligible — Assembly → Polymerize Origami / NAMD preparation.**
+   `tests/test_assembly_flatten.py::test_smallo_poly_namd_seed_has_no_ring_piercings`
+   One canonical 0.16-nm O3′(ext2)–P(ext1) bond crosses its own ext2 sugar ring in a 5′ extension.
+   Bond serials **48262/48233**; ring **48264/48263/48261/48259/48260**.
+   Same graph: current 14.625° gives 1 piercing, prior 14.6° gives 0, current repeat gives 1 with
+   byte-identical atoms. Max offset-induced displacement 0.465617 nm. No approved-offset reversion.
+3. **Excluded — experimental Python-only corner optimizer.**
+   `tests/test_headless_corner_build.py::test_fold_optimizer_reduces_clashes_and_beats_reference`
+   13 bead clashes vs ≤11. No app command/HTTP route; opening saved corner designs does not expose
+   the optimizer. No repair, reclassification, threshold change or renewed placement request.
+4. **Excluded — experimental CPD numerical-history case.**
+   `tests/test_part_transform_numerical_host.py::test_real_numerical_host_prepare_evaluate_apply_undo_reload_and_cold_proof[cpd-free]`
+   Here `family=cpd`, `gesture=free`; it is not a CPD-free design. Apply reports failure after 47.2895 s;
+   the nested reason is truncated in pytest output. Do not rerun/repair CPD. The existing selector
+   strips parameter suffixes before checking CPD, so this case escaped exclusion. The shared dirty
+   `tests/scientific_validation.py` is untouched; any next broad run must honor the CPD exclusion.
 
-1. `tests/test_mrdna_pipeline.py::TestSyntheticRoundTrip::test_zero_step_position_accuracy`
-   Legacy reconstruction mean error 0.6911751375 nm vs <0.10 nm; max limit remains 0.25 nm.
-   The old ideal oracle also differs from native CG seeds (mean/max 0.253191/0.998488 nm).
-   Production decoder, seed reconstruction and that oracle remain unchanged and unapproved.
-2. `tests/test_headless_corner_build.py::test_fold_optimizer_reduces_clashes_and_beats_reference`
-   Current 13 bead clashes vs ≤11. Raw seam max <1 nm, total ≤3.43 nm, angle 90±5° remain intact.
-   User clarified the model is experimental and asked about access. Saved workspace corner files
-   can be opened; `build_corner()` is Python-only, with no app command or HTTP route.
-   Its July 9 test is an experimental optimizer benchmark. Park its geometry repair. The placement
-   approval request is set aside; test classification/thresholds remain unchanged during review.
-3. `tests/test_direct_root_exemptions.py::test_native_connect_matches_unfitted_geometry_and_cold_replays`
-   Newly red absolute pin: 7.558586405959171 vs 7.558951938676602 nm after the approved offset.
-   Unfitted atom equality and cold replay PASS; this covers app Direct Connect/Relax. No runtime
-   root-repair regression demonstrated. Test-reference correction remains to be reviewed.
-4. `tests/test_native_section_proof.py::test_deleted_section_group_reports_missing_route_and_cascades_only_dependents`
-   Newly red: extra synchronous proof hits its 0.5 s limit. Deletion/dependency checks PASS.
-   Sections are used by Help → Generate design → Branched → Join branches and feature-log Delete.
-   The failing synchronous proof endpoint has no frontend caller; investigate the harness without
-   raising its guard. This is not evidence of failed app deletion.
-`E/remaining-accessibility.json`: 4 failed cases, 1 entirely non-app workflow (corner), plus
-1 test-only verification failure supporting app history. Other 2 cover user-facing Direct/MRDNA.
+The earlier section-proof timeout **passed this FULL**. Its specialized fixture supports the
+explicitly experimental Branched generator; no timeout/guard change or experimental repair.
+`I/scope.json` records app entry points and the complete five-failure classification.
 
-## Molecular evidence and limits
+## Isolated molecular reviews and blockers
 
-Approved junction review: `E/junction-review/review.html`; 72 Viewer/Export phase cases,
-44 square/228 honeycomb covalent boundaries checked before placement. Offset 14.625° derives from
-(8.23° + 171.02°)/2 − 150°/2. Balance residuals <0.000182 nm; atom/bond identities unchanged.
-Viewer max displacement 0.000459 nm; Export 0.105564 nm. Some phases gain contacts; piercings do
-not improve. Negative examples and per-junction evidence remain. Five exact stamps and 925 bridge
-lengths were refreshed only after approval; all junction-key sets and tolerances are unchanged.
-Voltron provenance: `E/surface-review.html`, `surface-conventions.json`, `approved-refresh.json`.
-Legacy reconstruction area 18152.584097 nm² was within the old 5% band. September 20 retired that
-placement but left Voltron's area reference behind. This was not a surface-algorithm repair.
+**mrDNA:** `I/mrdna-transport-review/review.html`; pending async user approval, no answer yet.
+180 real-file controls: 36 phases × zero PDB/DCD, rigid motion, local twist and prior-stage restart.
+Zero atom displacement is exact; rigid error ≤8.903806e-6 nm, twist ≤2.072995e-6 nm; restart equals
+its direct control exactly. Scratch absent. `I/transport-focused.log`: **3 passed / 2.90 s**.
+Candidate transports native atoms without rebuilding linkers, using DNA centers for global drift
+and O particles for local rotation. Only fully paired, direct, unposed Fine sites qualify.
+Unpaired/inserted/coarse/interpolated/posed designs remain unsupported; this is not a general decoder.
+Native strain stays visible: original-phase zero has 12 bond flags, prescribed twist 16; some swept
+native phases retain piercings. These are reconstruction-fidelity controls, not simulation readiness.
+The approval question includes the demonstrated placement and native zero-step reference correction,
+retaining 0.10/0.25 nm limits. Existing physical gates remain. Do not infer approval from elapsed time.
+The older file-level prototype rebuilt linkers after float32 noise, moving atoms by 0.073959 nm
+under rigid motion; `E/mrdna-seed-probe.json` records why that prototype must not be promoted.
 
-MRDNA candidate remains isolated in `experiments/`. Existing `E/mrdna-calibrated-motion/` has
-108 prescribed-motion cases (36 phases × zero/rigid/local twist), zero dynamics. Zero-motion atoms
-are exact; rigid atom error ≤1.07e-13 nm; local-twist rigid-template error ≤4.08e-15 nm.
-Nonrigid linker rebuilding differs by up to 0.312597 nm. Only direct paired fine sites qualify;
-ssDNA/coarse/interpolated/loop-copy sites refuse. Ten motion/refusal tests pass guarded in 2.65 s.
-An earlier 2.91 s invocation lacked the wrapper; the accepted repeat used it. Old aborted
-`mrdna-phase-sweep` evidence is invalid because grid normalization erased its phase changes.
-Current A/B comparator is production MD-seed reconstruction, not manifest display decoding.
-New file-level prototype `experiments/mrdna_seed_candidate.py` regenerates the original native
-fine reference: an intermediate-stage PDB must not reset earlier deformation. Its queued probe
-was canceled before execution for the user's scope review; `E/mrdna-seed-probe-status.json`.
-The prototype is unqualified, unapproved, and has no production caller; resume only within scope.
+**Terminal extension:** current isolated candidate in `experiments/terminal_extension_bridge_*`.
+It acts only on an existing internal O3′–P own-sugar piercing. Hold native C3′–O3′ direction, constrain
+all four bridge lengths to existing canonical values and fit the remaining three angles; preserve
+all roots, sugars, bases, unrelated links and topology. Failed solves retain the current linker.
+The actual smallO candidate removes the piercing, contacts 37→36, bond flags 241→241; only five
+internal-link atoms move, max 0.291085 nm. All 12 roots and nonextension atoms are exact.
+Its C3 oriented volume remains negative; angles O3′–P–O5′ 103.6→97.002° and P–O5′–C5′
+120.9→113.887°. These explicit tradeoffs require review; no production authorization yet.
+`I/terminal-fixed-exit-review/review.html`: **37 comparisons**, 156 root checks exact, no new
+piercings or bond flags. Thirteen phases introduce 1–2 contacts; a shown OP2–C4′ pair is **0.07524 nm**.
+Maximum swept displacement 0.398053 nm; angle deviations reach 11.41°. These negative examples
+are material limits, not simulation-readiness evidence. The bounded Export/NAMD approval question
+is pending; no answer received. `I/terminal-focused.log`: **3 passed / 3.27 s**, including chirality,
+canonical lengths, rigid-pose consistency and infeasible-span refusal.
 
-Corner candidate remains isolated: `E/corner-qualified-review/review.html` has 74 pre-offset cases,
-24 active comparisons and 50 explicit no-ops for infeasible initial poses. Default rigid refinement
-13→8 bead clashes, raw seam max 0.715856 nm, total 2.729436 nm, angle 91.173041°.
-Atom contacts 20→11, piercings 8→4, bond flags 9→9; NEW piercings are shown explicitly.
-It preserves topology/lengths but is not an authored Move/Rotate history or saved candidate design.
-First two-2HB controls all refused; replacement controls use the native 56-bp length-only builder.
-Do not promote this candidate while the experimental test scope is unresolved.
+Rejected tail prototypes remain in I: changing every internal initialization introduces piercings
+at phases 30/40/310; retrying only self-piercings still inverts C3 in smallO. That second sweep was
+terminated at 12 completed comparisons (exit 143), not passed. The current candidate adds the native
+C3 direction and exact-length constraints; do not promote either rejected initialization prototype.
 
-## Earlier work and shared-worktree closeout
+## Earlier decisions and shared-worktree closeout
 
-`f2c6081c` resolved all 52 Direct/root FAST failures: 5 nonterminal fixtures, 3 reversed/ambiguous
-fixtures, 4 unreachable inputs, 39 Viewer/Export conflicts, 1 driver-switch fixture. Constraints and
-atomic refusal remain. Nonexempt frozen 2×2 relocation still needs separately approved geometry.
-Preserve `workspace/Geometry Review/Platform - Root-preserving.nadoc`: 9 attachments, 3 particles,
-45 helices, 124 strands, 13,176 nt, 58 rows. Later user save changed its hash; coordinate equality
-was not requalified. Current/Candidate files remain historical four-attachment captures.
+`f2c6081c` resolved all 52 Direct/root FAST failures. `38c05cab` repaired reach planning, inserted-root
+identity, the documented already-strained native linker fixture, approved junction balance and
+Voltron's approved area reference. The current FULL confirms those earlier failures stay resolved.
+Approved 14.625° template offset, five exact locks and 925 bridge lengths remain; lattice phases and
+detectors are unchanged. Approved Voltron area is 19044.137046 nm² at unchanged 5% tolerance.
+Earlier app checks and evidence stay in E; no new frontend or production geometry change this session.
+Preserve `workspace/Geometry Review/Platform - Root-preserving.nadoc` (9 attachments); its later user
+save was not requalified. Historical four-attachment Current/Candidate captures remain historical.
 
-Commit explicit owned paths locally, `history: ...`; no push, stash, reset, restore or history rewrite.
-All 203 pre-existing dirty entries still match entry hashes. Only approved constants/surface oracle
-changed among the 14 locked inputs; see `E/ownership-post-approved.json`. Recheck before commit.
-Pre-existing API/VR/simulation/activity/memory-hygiene work stays untouched and unstaged.
-Final lint and memory hygiene checks pass (0 errors/warnings); owned experiment Ruff checks pass.
-Local checkpoint includes the owned repairs and isolated diagnostics; the four review items remain.
-No frontend behavior change; `main.js` LOC delta 0. No gate/milestone reopened or closed.
+Ownership: 203 pre-existing dirty entries, including 202 recorded file hashes and one untracked
+`memory/details/` directory without an entry hash. All recorded file hashes match; that directory
+was not edited. API/VR/simulation/activity/memory-hygiene work remains untouched and unstaged.
+Local checkpoint uses eight explicit owned paths: the Direct test, this handoff, two MRDNA
+candidate/review modules, two terminal candidate/review modules and their two focused test files.
+No push, stash, reset, restore or history rewrite. Final lint, owned Ruff, diff and memory hygiene
+checks pass (0 memory errors/warnings). No new frontend/app check: production geometry is unchanged.
