@@ -1,24 +1,11 @@
-"""Relax a BOUND direct duplex + the direct-relax solver's MINIMAL-MOTION /
-idempotency guarantee.
+"""Root-preserving Relax, joint motion, idempotency and atomic refusal.
 
-Two concerns:
-
-  * ``POST /design/duplexes/{id}/relax`` (Proposal-B) resolves driver/driven from a
-    bound duplex and runs the shared ``direct_relax`` solve — the sibling of
-    ``relax_overhang_binding`` for a duplex with no legacy binding.
-  * The solve is UNDER-CONSTRAINED (the 2-DOF overhang swing can close the tip↔root
-    bond at any hinge angle), so it must resolve the redundant hinge DOF by
-    MINIMISING TOTAL MOTION — which makes it idempotent (re-relaxing an already-closed
-    bond must not keep drifting the hinge) and stops the "hinge decreased too much /
-    overshoot" the raw Powell result produced.
-
-Uses an IMMUTABLE frozen copy of the 2x2 test design (``tests/fixtures/…``) — the live
-``workspace/2x2_OH_test.nadoc`` is edited by hand between sessions.
+Feasible inline-root inputs exercise successful motion. Frozen 2x2 crossover
+fixtures retain their Viewer/Export incompatibility and must refuse unchanged.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +17,7 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.direct_relax import relax_direct_binding
+from tests.direct_root_fixtures import connected_root_pair, assert_preserved_roots
 from backend.core.models import (
     ClusterRigidTransform,
     Design,
@@ -46,32 +34,13 @@ from backend.core.models import (
 client = TestClient(app)
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "relax_2x2_binding.nadoc"
-# A pose the user hand-set so the tip↔root bond is ALREADY closer than one bond
-# length (chord ≈ 0.38 nm < 0.67 nm target) — pins the one-sided floor (no back-off).
-_CLOSE_FIXTURE = (
-    Path(__file__).resolve().parent / "fixtures" / "relax_2x2_closebond.nadoc"
-)
-# Untracked fixtures with no headless builder yet (design-automation AF-FIXTURES); the tests that
-# read them skip cleanly where absent (fresh checkout / other computer). The 422/404 error-path
-# tests build in-memory and stay unguarded so they still run everywhere.
-_needs_fixture = pytest.mark.skipif(
-    not _FIXTURE.exists(),
-    reason="relax_2x2_binding.nadoc missing (untracked; regen via AF-FIXTURES builder)",
-)
-_needs_close_fixture = pytest.mark.skipif(
-    not _CLOSE_FIXTURE.exists(),
-    reason="relax_2x2_closebond.nadoc missing (untracked; regen via AF-FIXTURES builder)",
-)
+_CLOSE_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "relax_2x2_closebond.nadoc"
 
 
 @pytest.fixture(autouse=True)
 def _reset_state():
     yield
     design_state.set_design(_demo_design())
-
-
-def _load_fixture() -> Design:
-    return Design.model_validate(json.loads(_FIXTURE.read_text()))
 
 
 def _hinge_angle_deg(design: Design) -> float:
@@ -89,13 +58,9 @@ def _driver_overhang_rotation(design: Design, driver_oh_id: str) -> np.ndarray:
     )
 
 
-@_needs_fixture
 def test_relax_is_idempotent():
-    """The bridge-method relax is idempotent in its FINAL pose: a second relax of the
-    relaxed result reproduces the same driven-cluster pose AND the same duplex placement
-    (the re-seat zeros then re-derives the same absolute placement, and the clash spin
-    lands on the same min angle), so nothing drifts."""
-    design = _load_fixture()
+    """A settled nonexempt connection preserves both builder outputs exactly."""
+    design = connected_root_pair()
     b = design.overhang_bindings[0]
 
     out1, _i1 = relax_direct_binding(design, b.driver_oh_id, b.driven_oh_id)
@@ -107,62 +72,70 @@ def test_relax_is_idempotent():
     r2 = _driver_overhang_rotation(out2, b.driver_oh_id)
     assert float(np.linalg.norm(r2 - r1)) < 1e-2
     assert abs(_hinge_angle_deg(out2) - _hinge_angle_deg(out1)) < 1.0
+    assert_preserved_roots(out1)
+    assert_preserved_roots(out2)
+    from backend.core.atomistic import build_atomistic_model
+    assert build_atomistic_model(out2) == build_atomistic_model(out1)
 
 
-@_needs_close_fixture
-def test_relax_opens_an_over_compressed_bond_to_natural_length():
-    """Bridge method is TWO-SIDED (like the dsDNA linker bridge): a bond CLOSER than
-    one backbone step (the frozen fixture's chord ≈ 0.38 nm — an over-compressed steric
-    clash) is opened back out to the natural target (≈ 0.67 nm) by the cluster kinematics.
-    Relieving the compression is what makes a subsequent simulation easier to equilibrate.
-    (Supersedes the old one-sided 'don't back off' floor — see LESSONS E7.)"""
-    design = Design.model_validate(json.loads(_CLOSE_FIXTURE.read_text()))
+def test_relax_opens_an_over_compressed_bond_to_original_length():
+    """Manual compression returns to both original covalent lengths, not a CG target."""
+    from backend.core.overhang_root_constraints import overhang_root_bond
+
+    design = connected_root_pair(displacement=(0, 0, 0))
+    root = overhang_root_bond(design, "oh_b")
+    delta = .8 * (root.moving - root.fixed)
+    design = design.copy_with(cluster_transforms=[c.model_copy(update={
+        "translation": (np.asarray(c.translation) + delta).tolist()})
+        if c.id == "cB" else c for c in design.cluster_transforms])
+    assert overhang_root_bond(design, "oh_b").length_nm == pytest.approx(.2 * root.length_nm, abs=1e-10)
     b = design.overhang_bindings[0]
 
     out, info = relax_direct_binding(design, b.driver_oh_id, b.driven_oh_id)
     assert info["final_chord_nm"] == pytest.approx(info["target_nm"], abs=0.15)
+    assert_preserved_roots(out)
 
 
-@_needs_fixture
 def test_relax_closes_a_stretched_bond_via_cluster_motion_only():
-    """From a neutralised (un-posed) state the ~7 nm stretched bond closes to the natural
-    target using the CLUSTER kinematics (joint rotation about the JOINT axis) — the clash
-    spin lives on the DUPLEX (driver overhang rotation), never on the cluster about the
-    overhang axis, so the whole driven part stays put apart from the joint hinge."""
-    design = _load_fixture()
+    """Only the declared joint moves the parent; the duplex fit preserves both roots."""
+    from backend.core.models import ClusterJoint, _local_to_world_joint
+    from backend.core.linker_relax import _composed_transform
+
+    design = connected_root_pair(displacement=(0, 0, 0))
     b = design.overhang_bindings[0]
-    # Neutralise the stored pose (identity driven cluster + identity driver overhang).
-    c2 = design.cluster_transforms[1].model_copy(
-        update={"rotation": [0, 0, 0, 1.0], "translation": [0, 0, 0.0]}
-    )
-    drv = next(i for i, o in enumerate(design.overhangs) if o.id == b.driver_oh_id)
-    oh = design.overhangs[drv].model_copy(
-        update={"rotation": [0, 0, 0, 1.0], "translation": [0, 0, 0.0]}
-    )
-    ohs = [oh if i == drv else o for i, o in enumerate(design.overhangs)]
-    design = design.model_copy(
-        update={
-            "cluster_transforms": [design.cluster_transforms[0], c2],
-            "overhangs": ohs,
-        }
-    )
+    parent = next(c for c in design.cluster_transforms if c.id == "cB")
+    joint = ClusterJoint(id="fixture-hinge", cluster_id=parent.id,
+        local_axis_origin=[-5., 0., 0.], local_axis_direction=[0., 1., 0.],
+        min_angle_deg=-180., max_angle_deg=180.)
+    origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, parent)
+    q, t = _composed_transform(parent, np.asarray(origin), np.asarray(axis), np.pi / 2)
+    design = design.copy_with(cluster_joints=[joint], cluster_transforms=[c.model_copy(update={
+        "rotation": q, "translation": t}) if c.id == parent.id else c for c in design.cluster_transforms])
 
     out, info = relax_direct_binding(design, b.driver_oh_id, b.driven_oh_id)
     assert info["final_chord_nm"] == pytest.approx(info["target_nm"], abs=0.2)
     assert any(
         abs(t) > 1.0 for t in info["thetas_deg"]
     )  # the joint carried the closure
+    assert info["moved_cluster_ids"] == [parent.id]
+    assert_preserved_roots(out)
+    assert out.strands == design.strands
+    assert out.helices == design.helices
+    moved_parent = next(c for c in design.cluster_transforms if c.id == parent.id)
+    origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, moved_parent)
+    q, t = _composed_transform(moved_parent, np.asarray(origin), np.asarray(axis),
+                              np.deg2rad(info["thetas_deg"][0]))
+    actual = next(c for c in out.cluster_transforms if c.id == parent.id)
+    np.testing.assert_allclose(actual.rotation, q, atol=1e-10)
+    np.testing.assert_allclose(actual.translation, t, atol=1e-10)
 
 
 # ── Route: relax a bound duplex (Proposal-B path) ─────────────────────────────
 
 
-@_needs_fixture
 def test_relax_bound_duplex_route_closes_and_is_idempotent():
-    """A bound duplex resolves driver/driven and relaxes via the same solve. The
-    frozen design is already relocated (shared with its binding), so marking the
-    duplex bound lets the route drive it; re-relaxing must stay put."""
-    design = _load_fixture()
+    """The duplex HTTP route preserves both roots and a repeated Relax stays put."""
+    design = connected_root_pair()
     dx = design.duplexes[0].model_copy(update={"bound": True})
     design = design.model_copy(update={"duplexes": [dx]})
     design_state.set_design(design)
@@ -171,6 +144,33 @@ def test_relax_bound_duplex_route_closes_and_is_idempotent():
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["final_chord_nm"] == pytest.approx(info["target_nm"], abs=0.6)
+    assert_preserved_roots(design_state.get_or_404())
+    poses = design_state.get_or_404().cluster_transforms
+    assert client.post(f"/api/design/duplexes/{dx.id}/relax").status_code == 200
+    assert design_state.get_or_404().cluster_transforms == poses
+
+
+@pytest.mark.parametrize("path", [_FIXTURE, _CLOSE_FIXTURE], ids=["stretched", "compressed"])
+def test_frozen_2x2_linker_conflict_refuses_without_history_or_pose_change(path):
+    """Keep the original assets: neither builder's covalent length may be sacrificed."""
+    from fastapi import HTTPException
+    if not path.exists():
+        pytest.skip(f"{path.name} fixture missing")
+    design = Design.model_validate_json(path.read_text())
+    binding = design.overhang_bindings[0]
+    before = design.model_dump_json()
+    with pytest.raises(HTTPException, match="native viewer and export root linkers"):
+        relax_direct_binding(design, binding.driver_oh_id, binding.driven_oh_id)
+    assert design.model_dump_json() == before
+    dx = design.duplexes[0].model_copy(update={"bound": True})
+    design_state.load_design(design.copy_with(duplexes=[dx]))
+    current, revision = design_state.get_design_with_revision()
+    depth = design_state.undo_depth()
+    response = client.post(f"/api/design/duplexes/{dx.id}/relax")
+    assert response.status_code == 422
+    assert "native viewer and export root linkers" in response.json()["detail"]
+    assert design_state.get_design_with_revision() == (current, revision)
+    assert design_state.undo_depth() == depth
 
 
 # ── Route guards ──────────────────────────────────────────────────────────────

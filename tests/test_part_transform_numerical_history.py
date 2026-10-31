@@ -58,7 +58,7 @@ def native_duplex_prefix():
     free-end to right root, with left driving. No imported or fabricated duplex
     graph substitutes for the real command output.
     """
-    source, identities = _overhang_prefix()
+    source, identities = _overhang_prefix(inline=True)
     source = snapshot(source, "duplex-connect", {
         "history_seed": _seed(3), "duplex_id": "numerical-duplex", "created_at": 1.0,
         "binding_ids": [], "overhang_a_id": identities["driver"],
@@ -283,7 +283,7 @@ def test_numerical_source_is_a_complete_native_recipe_before_any_solver(factory)
         assert kinds == ["bundle-create", "crossover-place", "crossover-extra-bases"]
         assert source.crossovers[0].extra_bases == "TT"
     else:
-        assert kinds.count("overhang-extrude") == 2
+        assert kinds.count("strand-end-resize") == 2
         assert kinds[-2:] == ["duplex-connect", "joint-place"]
         # Direct duplex relocation owns its prior topology; no legacy
         # OverhangBinding row is required by this native connection workflow.

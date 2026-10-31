@@ -35,6 +35,8 @@ def overhang_root_bond(design, overhang_id, *, fast_bridges=True):
     ]
     if not found:
         raise ValueError("Overhang root could not be resolved.")
+    if len(found) != 1:
+        raise ValueError("Automatic fitting requires an unambiguous overhang domain.")
     strand, index, domain = found[0]
     if len(strand.domains) == 1:
         return None

@@ -1273,10 +1273,8 @@ def _relaxed_direct_binding_pair(
     """(before, after, driver_oh_id, driven_oh_id): an applied DIRECT binding and
     its relaxed result via hb.relax_overhang_binding (the unified solve).
 
-    ``cluster_b_translation`` sets the separate-cluster gap. Apply now SEATS the duplex
-    at the oriented midpoint (both bonds minimized), so a *large* gap is needed for the
-    separate-cluster relax to still have a stretched residual to close (a small gap is
-    already closed by placement → a valid no-op). Ignored when ``same_body``."""
+    ``cluster_b_translation`` supplies a manual duplex displacement after a feasible
+    Connect; automatic placement preserves roots. Ignored when ``same_body``."""
     from backend.api import headless_build as hb
     from backend.api import state as design_state
     from tests.test_headless_build import _applied_direct_binding

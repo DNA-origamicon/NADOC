@@ -46,8 +46,16 @@ def source(*, rooted=False, equal=False, binding=False):
             sub_domains=[SubDomain(id="sd-" + key, start_bp_offset=0, length_bp=length)]))
     bindings = [OverhangBinding(id="binding", name="B1", created_at=1.0,
         sub_domain_a_id="sd-a", sub_domain_b_id="sd-b", overhang_a_id="oh-a", overhang_b_id="oh-b")] if binding else []
-    return Design(helices=helices, strands=strands, overhangs=overhangs,
-                  crossovers=crossovers, overhang_bindings=bindings)
+    design = Design(helices=helices, strands=strands, overhangs=overhangs,
+                    crossovers=crossovers, overhang_bindings=bindings)
+    if rooted:
+        # Storage/register tests exercise deliberately strained same-body Direct
+        # connections. Separate, nonexempt roots retain their refusal coverage
+        # in test_direct_root_constraints; no linker convention is relaxed here.
+        from backend.core.models import ClusterRigidTransform
+        design = design.copy_with(cluster_transforms=[ClusterRigidTransform(
+            id="root-body", helix_ids=["root-a", "root-b"], name="Fixed host roots")])
+    return design
 
 
 def params(**values):
@@ -312,6 +320,8 @@ def test_bound_driver_patch_keeps_native_topology_and_tracks_partial_registers()
                                     binding.prior_driven_topology)
     topology = compute_bind_topology(reverted, binding, driver_side="b",
         forced_ligation_id=identity_factory(SEED)("binding-driver-ligation", [binding.id]))
+    from backend.core.direct_root_placement import rooted_binding_topology
+    topology = rooted_binding_topology(reverted, topology)
     expected = apply_bind_topology(reverted, topology)
     expected = expected.copy_with(overhang_bindings=[binding.model_copy(update={
         "prior_driven_topology": topology.snapshot})])

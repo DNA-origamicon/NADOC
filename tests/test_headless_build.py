@@ -158,12 +158,13 @@ def _hc_neighbors(r, c):
     return [(r + dr, c + dc) for dr, dc in offs]
 
 
-def _place_one_overhang(d):
+def _place_one_overhang(d, *, exclude_strand_ids=()):
     """Extrude one valid staple overhang on a routed/broken bundle; return the
     design.  Mirrors test_overhang_extrude_places_a_valid_candidate's search."""
     hobj = {h.id: h for h in d.helices}
     occ = {h.grid_pos for h in d.helices}
-    for hid, bp, dirn, is5 in _staple_termini(d):
+    eligible = d.copy_with(strands=[s for s in d.strands if s.id not in exclude_strand_ids])
+    for hid, bp, dirn, is5 in _staple_termini(eligible):
         r, c = hobj[hid].grid_pos
         for nr, nc in _hc_neighbors(r, c):
             if (nr, nc) in occ:
@@ -664,8 +665,9 @@ def _place_two_overhangs_on_6hb():
     hb.assign_scaffold_sequence()
     d = _place_one_overhang(design_state.get_or_404())
     assert d is not None and len(d.overhangs) == 1, "first overhang site"
-    d = _place_one_overhang(d)
+    d = _place_one_overhang(d, exclude_strand_ids={o.strand_id for o in d.overhangs})
     assert d is not None and len(d.overhangs) == 2, "second overhang site"
+    assert len({o.strand_id for o in d.overhangs}) == 2
     return d, [o.id for o in d.overhangs]
 
 
@@ -1286,10 +1288,11 @@ def test_relax_ss_linker_degenerate_hinge_is_a_noop():
 
 
 def _applied_direct_binding(*, cluster_b_translation=(4.0, 0.0, 0.0), same_body=False):
-    """A + B as [root → overhang-tip] staples; a DIRECT connection APPLIED (B's tip
-    relocated onto A's helix via _cv_create_bound_binding, neither consumed, the
-    tip↔root bond left stretched). Separate clusters + a joint on B's cluster (the
-    1-DOF case) unless ``same_body``. Returns ``(seeded_design, binding_id)``."""
+    """Connect feasible roots, then manually displace the duplex for Relax.
+
+    Automatic Connect cannot manufacture the stretched input anymore. The
+    same-body variant deliberately retains its native relocated strain.
+    """
     L = 16
     ha = Helix(
         id="e2r_ha",
@@ -1405,18 +1408,28 @@ def _applied_direct_binding(*, cluster_b_translation=(4.0, 0.0, 0.0), same_body=
             "cluster_joints": joints,
         }
     )
+    if not same_body:
+        from tests.direct_root_fixtures import reachable_parent_translation
+        translation = reachable_parent_translation(d, "oh_a", "oh_b", "cB")
+        d = d.copy_with(cluster_transforms=[c.model_copy(update={"translation": translation})
+            if c.id == "cB" else c for c in d.cluster_transforms])
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
+    if not same_body:
+        import numpy as np
+        from backend.core.duplex_cluster import duplex_cluster_for
+        child = duplex_cluster_for(d, "oh_a")
+        d = d.copy_with(cluster_transforms=[c.model_copy(update={
+            "translation": (np.asarray(c.translation) + cluster_b_translation).tolist()})
+            if c.id == child.id else c for c in d.cluster_transforms])
     return d, d.overhang_bindings[0].id
 
 
 def test_relax_overhang_binding_closes_tip_root_chord():
-    """hb.relax_overhang_binding swings A's overhang duplex + rotates the jointed
-    cluster so the driven overhang's stretched tip↔root chord collapses toward one
-    backbone bond — strain reduced, a pose moved, topology untouched
+    """hb.relax_overhang_binding restores a manually displaced overhang duplex:
+    strain reduced, a pose moved, topology untouched
     (assert_direct_binding_relaxed_pose). Also flips the route's headless coverage.
 
-    Apply now SEATS the duplex at the oriented midpoint (both bonds minimized), so a
-    large cluster gap is used to leave a genuine stretched residual for the relax."""
+    The stretch is a manual duplex move after a root-preserving Connect."""
     seeded, bid = _applied_direct_binding(cluster_b_translation=(8.0, 0.0, 0.0))
     design_state.set_design(seeded)
     before = design_state.get_or_404()
@@ -1628,7 +1641,9 @@ def _bindable_pair_headless(*, seq_a="AAGGAAGG", seq_b="CCTTCCTT"):
         d = design_state.get_or_404()
         hobj = {h.id: h for h in d.helices}
         occupied = {h.grid_pos for h in d.helices}
-        for hid, bp, dirn, is5 in _staple_termini(d):
+        used = {o.strand_id for o in d.overhangs}
+        eligible = d.copy_with(strands=[s for s in d.strands if s.id not in used])
+        for hid, bp, dirn, is5 in _staple_termini(eligible):
             if hid not in hobj:
                 continue
             r, c = hobj[hid].grid_pos

@@ -298,8 +298,8 @@ def _demo_with_free_root(lo=20, hi=27):
     base = _demo_design()
     staple = next(s for s in base.strands if s.id == "staple_0")
     dom = staple.domains[0]
-    left = dom.model_copy(update={"start_bp": dom.start_bp, "end_bp": lo - 1})
-    right = dom.model_copy(update={"start_bp": hi + 1, "end_bp": dom.end_bp})
+    left = dom.model_copy(update={"start_bp": lo - 1, "end_bp": 0})
+    right = dom.model_copy(update={"start_bp": 41, "end_bp": hi + 1})
     pieces = [staple.model_copy(update={"domains": [left]}),
               staple.model_copy(update={"id": "staple_0_right", "domains": [right]})]
     return base.copy_with(strands=[s for s in base.strands if s.id != "staple_0"] + pieces)
@@ -344,8 +344,8 @@ def _seed_end_to_root() -> tuple[Design, str, str]:
         domains=[
             Domain(
                 helix_id="demo_helix",
-                start_bp=20,
-                end_bp=27,
+                start_bp=27,
+                end_bp=20,
                 direction=Direction.REVERSE,
             ),
             Domain(
@@ -500,8 +500,8 @@ def _seed_diff_length_direct() -> tuple[Design, str, str]:
         domains=[
             Domain(
                 helix_id="demo_helix",
-                start_bp=20,
-                end_bp=27,
+                start_bp=27,
+                end_bp=20,
                 direction=Direction.REVERSE,
             ),
             Domain(

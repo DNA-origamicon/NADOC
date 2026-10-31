@@ -8,9 +8,6 @@ See `memory/project_overhang_duplex_foundation.md`.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -31,9 +28,6 @@ from backend.core.models import (
     Vec3,
 )
 from backend.core.validator import validate_design
-
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "relax_2x2_binding.nadoc"
-
 
 @pytest.fixture(autouse=True)
 def _reset_state():
@@ -212,54 +206,35 @@ def test_headless_connect_duplex_relocates_driven():
 
 
 def _fixture_bound_duplex_design() -> tuple[Design, str]:
-    """Frozen 2x2 design with its display duplex marked bound (the relocation already
-    exists, shared with the binding) so the duplex route can drive the shared solve."""
-    d = Design.model_validate(json.loads(_FIXTURE.read_text()))
-    dx = d.duplexes[0].model_copy(update={"bound": True})
-    return d.model_copy(update={"duplexes": [dx]}), dx.id
+    """A feasible automatic connection followed by an explicit manual displacement."""
+    from tests.test_headless_build import _applied_direct_binding
+    from backend.core.duplex import synthesize_duplexes_from_bindings
+    d, _ = _applied_direct_binding()
+    dx = synthesize_duplexes_from_bindings(d)[0].model_copy(update={"bound": True})
+    return d.copy_with(duplexes=[dx]), dx.id
 
 
-@pytest.mark.skipif(
-    not _FIXTURE.exists(), reason="relax_2x2_binding.nadoc fixture missing"
-)
 def test_headless_relax_duplex_closes_bond_and_oracle():
     """hb.relax_duplex on a bound duplex closes the driven overhang's stretched
-    tip↔root bond (pose-only) — pinned by assert_duplex_relaxed. Start from a
-    neutralised pose so there's a real ~7 nm bond to close (require_reduced)."""
+    tip↔root bond (pose-only) after a manual displacement. The oracle must reject
+    an unchanged pose and both covalent root targets must be restored."""
     from backend.api import headless_build as hb
     from tests.automation_harness import assert_duplex_relaxed
 
     before, dxid = _fixture_bound_duplex_design()
-    # Neutralise the stored pose so the bond is genuinely stretched pre-relax.
-    c2 = before.cluster_transforms[1].model_copy(
-        update={"rotation": [0, 0, 0, 1.0], "translation": [0, 0, 0.0]}
-    )
-    ohs = [
-        o.model_copy(update={"rotation": [0, 0, 0, 1.0]})
-        if o.id == before.duplexes[0].left.overhang_id
-        else o
-        for o in before.overhangs
-    ]
-    before = before.model_copy(
-        update={
-            "cluster_transforms": [before.cluster_transforms[0], c2],
-            "overhangs": ohs,
-        }
-    )
     design_state.set_design(before)
 
     after = hb.relax_duplex(dxid)
     # Oracle: chord closed + a pose moved + topology unchanged (can-go-red on a no-op).
     assert_duplex_relaxed(before, after, dxid)
+    from tests.direct_root_fixtures import assert_preserved_roots
+    assert_preserved_roots(after)
+    with pytest.raises(AssertionError):
+        assert_duplex_relaxed(before, before, dxid)
 
 
-@pytest.mark.skipif(
-    not _FIXTURE.exists(), reason="relax_2x2_binding.nadoc fixture missing"
-)
 def test_headless_relax_duplex_is_idempotent():
-    """The bridge-method relax is idempotent in its FINAL pose: after one relax, a second
-    relax reproduces the same driven-cluster transform (arc-min already at target; the
-    duplex clash spin re-derives the same absolute angle), so nothing drifts."""
+    """A second Relax retains every cluster pose and both covalent lengths."""
     from backend.api import headless_build as hb
 
     before, dxid = _fixture_bound_duplex_design()
@@ -273,3 +248,6 @@ def test_headless_relax_duplex_is_idempotent():
         return np.asarray(list(c.rotation) + list(c.translation), dtype=float)
 
     assert float(np.linalg.norm(cluster_pose(twice) - cluster_pose(once))) < 1e-2
+    assert twice.cluster_transforms == once.cluster_transforms
+    from tests.direct_root_fixtures import assert_preserved_roots
+    assert_preserved_roots(twice)

@@ -99,10 +99,38 @@ def test_root_lookup_distinguishes_two_paired_domains_on_one_strand():
                                        [expected.x, expected.y, expected.z], atol=1e-12)
 
 
+def test_duplicate_overhang_domain_refuses_before_selecting_any_root():
+    from backend.core.direct_root_policy import root_length_exemptions
+
+    source = _seed(same_body=True)
+    strand = next(s for s in source.strands if any(d.overhang_id == "oh_a" for d in s.domains))
+    source = source.copy_with(strands=[*source.strands, strand.model_copy(update={"id": "duplicate"})])
+    before = source.model_dump_json()
+    assert not root_length_exemptions(source, ["oh_a", "oh_b"])
+    with pytest.raises(ValueError, match="unambiguous overhang domain"):
+        capture_root_lengths(source, ["oh_a", "oh_b"])
+    assert source.model_dump_json() == before
+
+
+def test_internal_overhang_with_two_covalent_boundaries_is_not_a_single_root():
+    from backend.core.direct_root_policy import root_length_exemptions
+
+    source = _seed(same_body=True)
+    strand = next(s for s in source.strands if any(d.overhang_id == "oh_a" for d in s.domains))
+    tail = strand.domains[-1].model_copy(update={"start_bp": 12, "end_bp": 15, "overhang_id": None})
+    source = source.copy_with(strands=[s.model_copy(update={"domains": [*s.domains, tail]})
+        if s.id == strand.id else s for s in source.strands])
+    before = source.model_dump_json()
+    assert not root_length_exemptions(source, ["oh_a", "oh_b"])
+    with pytest.raises(ValueError, match="terminal overhang root"):
+        capture_root_lengths(source, ["oh_a", "oh_b"])
+    assert source.model_dump_json() == before
+
+
 def test_changed_linker_convention_refuses_without_publishing():
     from tests.test_part_duplex_commands import source, build, connect_params
 
-    original = source(rooted=True)
+    original = source(rooted=True).copy_with(cluster_transforms=[])
     before = original.model_dump_json()
     with pytest.raises(HTTPException, match="native viewer and export root linkers"):
         build("duplex-connect", original, connect_params())

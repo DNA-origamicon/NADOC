@@ -57,6 +57,28 @@ def test_native_tails_are_stable_overhangs_and_can_form_sidebar_duplex(client):
     state.load_design(restored)
     a = next(o for o in tails if o.id.endswith('3p'))
     b = next(o for o in d.overhangs if o.strand_id == 'stap')
+    # The original 6 nm gap is unreachable without stretching the covalent
+    # roots. Preserve that refusal, then author a feasible parent pose for the
+    # tail-pairing/core-preservation checks below.
+    request = {'overhang_a_id': a.id, 'overhang_b_id': b.id,
+        'overhang_a_attach': 'free_end', 'overhang_b_attach': 'free_end', 'driver': 'left'}
+    before, revision = state.get_design_with_revision()
+    depth = state.undo_depth()
+    refused = client.post('/api/design/duplexes/connect', json=request)
+    assert refused.status_code == 422
+    assert 'preserving its covalent root bonds' in refused.json()['detail']
+    assert state.get_design_with_revision() == (before, revision)
+    assert state.undo_depth() == depth
+    from backend.core.models import ClusterRigidTransform
+    from backend.core.direct_root_placement import capture_root_lengths
+    from tests.direct_root_fixtures import reachable_parent_translation
+    parent = ClusterRigidTransform(id='ordinary-parent', helix_ids=['ordinary'])
+    restored = restored.copy_with(cluster_transforms=[*restored.cluster_transforms, parent])
+    translation = reachable_parent_translation(restored, a.id, b.id, parent.id)
+    restored = restored.copy_with(cluster_transforms=[c.model_copy(update={'translation': translation})
+        if c.id == parent.id else c for c in restored.cluster_transforms])
+    targets = capture_root_lengths(restored, [a.id, b.id])
+    state.load_design(restored)
     result = call(client, 'POST', 'duplexes/connect', json={
         'overhang_a_id': a.id, 'overhang_b_id': b.id,
         'overhang_a_attach': 'free_end', 'overhang_b_attach': 'free_end',
@@ -64,6 +86,8 @@ def test_native_tails_are_stable_overhangs_and_can_form_sidebar_duplex(client):
     })
     assert result['design']['duplexes']
     paired = state.get_design()
+    for oid, expected in targets.items():
+        assert capture_root_lengths(paired, targets)[oid] == pytest.approx(expected, abs=1e-8)
     assert not native_core_paired(paired.helices[0], paired)
     geom = _geometry_for_design(paired)
     for site in core:

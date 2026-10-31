@@ -1,10 +1,8 @@
-"""Phase 4b — duplex driver toggle RE-PLACES geometry (#4 + #1: entire driven
-domain relocates onto the new driver's helix, via the proven bind machinery).
+"""The frozen separate-arm 2x2 connection must refuse incompatible root lengths.
 
-Verified on the real `2x2_OH_test` fixture (two clusters, two 10-mer overhangs).
-Bind them, then flip the duplex driver and assert the shared duplex helix moves
-from the old driver's helix to the new driver's helix. See
-`memory/project_overhang_duplex_foundation.md`.
+Driver-switch success is covered on explicit same-body inputs in
+``test_part_duplex_commands``. Do not change this asset or its linker atoms to
+make the former unconstrained relocation succeed.
 """
 
 from __future__ import annotations
@@ -57,7 +55,7 @@ def _helix_of(overhang_id: str) -> str:
     return ""
 
 
-def test_driver_flip_replaces_geometry_on_2x2():
+def test_2x2_binding_refuses_linker_conflict_before_driver_switch():
     design_state.set_design(Design.from_json(open(FIXTURE, encoding="utf-8").read()))
 
     # Complementary sequences so a binding can be created (RC(OH1) == OH2).
@@ -81,30 +79,14 @@ def test_driver_flip_replaces_geometry_on_2x2():
     )
     assert r.status_code == 201, r.text
     bid = design_state.get_design().overhang_bindings[0].id
-    assert (
-        client.patch(
-            f"/api/design/overhang-bindings/{bid}", json={"bound": True}
-        ).status_code
-        == 200
-    )
-
-    # Driver heuristic picks side 'a' (OH1): OH2's domain relocated onto OH1's helix.
-    assert _helix_of(OH2) == HELIX1, (
-        "driven OH2 should sit on driver OH1's helix after bind"
-    )
+    before, revision = design_state.get_design_with_revision()
+    depth = design_state.undo_depth()
+    original = before.model_dump_json()
+    response = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
+    assert response.status_code == 422
+    assert "native viewer and export root linkers" in response.json()["detail"]
+    assert design_state.get_design_with_revision() == (before, revision)
+    assert design_state.undo_depth() == depth
+    assert design_state.get_design().model_dump_json() == original
     assert _helix_of(OH1) == HELIX1
-
-    # Derive the duplex (driver='left' == OH1, matching the heuristic).
-    did = client.post("/api/design/duplexes/sync-from-bindings").json()["design"][
-        "duplexes"
-    ][0]["id"]
-
-    # Flip the driver → OH2 drives; the ENTIRE driven domain (now OH1) must
-    # relocate onto OH2's helix, and the binding driver follows (#4).
-    r = client.patch(f"/api/design/duplexes/{did}", json={"driver": "right"})
-    assert r.status_code == 200, r.text
-    assert design_state.get_design().overhang_bindings[0].driver_oh_id == OH2
-    assert _helix_of(OH1) == HELIX2, (
-        "driven OH1 should now sit on driver OH2's helix after flip"
-    )
     assert _helix_of(OH2) == HELIX2

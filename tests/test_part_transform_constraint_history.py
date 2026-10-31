@@ -73,7 +73,7 @@ def _flexible_prefix(name=None):
     return source, ids
 
 
-def _overhang_prefix(name=None):
+def _overhang_prefix(name=None, *, inline=False):
     source = snapshot(create_empty_part(name or "Native overhang constraints", "HONEYCOMB"),
         "bundle-create", {"cells": [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]],
             "length_bp": 42, "name": name or "Native overhang constraints", "lattice_type": "HONEYCOMB",
@@ -90,9 +90,26 @@ def _overhang_prefix(name=None):
         site = next(site for site in valid_overhang_sites(source)
                     if site["helix_id"] == planned["helix_id"] and site["is_five_prime"] == planned["is_five_prime"])
         before = {item.id for item in source.overhangs}
-        source = snapshot(source, "overhang-extrude", {**site, "direction": site["direction"].value,
-            "length_bp": 12, "reuse_existing_helix": False, "history_seed": _seed(3 + index)}, f"endpoint-{index}")
+        if inline:
+            strand = next(s for s in source.strands if not s.is_scaffold
+                          and s.domains[0].helix_id == site["helix_id"])
+            source = snapshot(source, "strand-end-resize", {"entries": [{
+                "strand_id": strand.id, "helix_id": site["helix_id"],
+                "end": "5p" if site["is_five_prime"] else "3p", "delta_bp": 12,
+            }]}, f"endpoint-{index}")
+        else:
+            source = snapshot(source, "overhang-extrude", {**site, "direction": site["direction"].value,
+                "length_bp": 12, "reuse_existing_helix": False, "history_seed": _seed(3 + index)}, f"endpoint-{index}")
         ids["driver" if index == 0 else "driven"] = next(item.id for item in source.overhangs if item.id not in before)
+    if inline:
+        # Cross-helix extrusion changes Viewer/Export linker conventions on
+        # relocation and correctly refuses separate-arm Connect. History tests
+        # need a feasible connection, with both arms still independently owned.
+        from tests.direct_root_fixtures import reachable_parent_translation
+        translation = reachable_parent_translation(source, ids["driver"], ids["driven"], ids["primary"])
+        source = _append(source, m.ClusterOpLogEntry(id="seat-driven-parent", proof_version=1,
+            cluster_id=ids["primary"], translation=translation,
+            rotation=[0, 0, 0, 1], pivot=[0, 0, 0]))
     return source, ids
 
 
@@ -128,7 +145,7 @@ def constraint_recipe(kind="flexible", *, suffix=True, driver=False, name=None):
                 "name": "Other owner hinge", "local_axis_origin": [0, 0, 0], "local_axis_direction": [1, 0, 0],
                 "min_angle_deg": -15, "max_angle_deg": 15}, "auxiliary-joint-create")
     else:
-        source, ids = _overhang_prefix(name)
+        source, ids = _overhang_prefix(name, inline=kind == "duplex")
         if kind == "duplex":
             source = snapshot(source, "duplex-connect", {"history_seed": _seed(5), "duplex_id": "native-duplex",
                 "created_at": 1.0, "binding_ids": [], "overhang_a_id": ids["driver"],
@@ -180,6 +197,13 @@ def test_constraint_fixture_uses_real_producers_and_is_independently_cold_reprod
             frozenset((ids["primary"], ids["auxiliary"])), frozenset((ids["auxiliary"], ids["fixed"]))}
         assert all_cluster_gates(source)[ids["primary"]]["gate"]
     elif kind == "duplex":
+        from backend.core.direct_root_placement import capture_root_lengths
+        from backend.core.direct_root_policy import root_length_exemptions
+        targets = source.duplexes[0].prior_driven_topology["root_bond_lengths_nm"]
+        assert set(targets) == {ids["driver"], ids["driven"]}
+        assert not root_length_exemptions(source, targets)
+        for oid, expected in targets.items():
+            assert capture_root_lengths(source, targets)[oid] == pytest.approx(expected, abs=1e-8)
         child = _owner(source, ids["auxiliary"])
         assert child.parent_cluster_id == ids["fixed"] and child.overhang_duplex_driver_id == ids["driver"]
         assert _owner(source, ids["fixed"]).translation == [2, -1, .5]
