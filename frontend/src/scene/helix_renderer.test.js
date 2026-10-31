@@ -181,7 +181,7 @@ describe('presentation paths preserve live geometry', () => {
     expect(slabParams).not.toContain('_slabCenterAt')
 
     const stapleVisibility = HR.slice(HR.indexOf('setStapleVisibility(visible)'))
-    expect(stapleVisibility.slice(0, 2400)).toContain('_preHideSlabMatrix')
+    expect(stapleVisibility.slice(0, 2400)).toContain('this.setHiddenNucs(_hiddenNucKeys)')
     expect(stapleVisibility.slice(0, 2400)).not.toContain('_slabCenterAt')
   })
 })

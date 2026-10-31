@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { describe, it, expect } from 'vitest'
 import {
-  isVisibleChain, backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
+  isVisibleInstance, makeProjector, isVisibleChain, backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, resolveIndividualBaseElements,
 } from './base_pick.js'
 
@@ -269,5 +269,28 @@ describe('candidatesInRect — the lasso', () => {
 
   it('returns empty without a rect', () => {
     expect(candidatesInRect(cands, null, project)).toEqual([])
+  })
+})
+
+describe('rendered instance visibility for picking', () => {
+  it('rejects hidden bases and zero-radius cones while preserving visible neighbours', () => {
+    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 2)
+    mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 0, -5))
+    mesh.setMatrixAt(1, new THREE.Matrix4().makeTranslation(1, 0, -5))
+    const camera = new THREE.PerspectiveCamera()
+    camera.updateMatrixWorld()
+    const project = makeProjector(camera, { getBoundingClientRect: () => ({ width: 100, height: 100 }) })
+    const candidate = { instMesh: mesh, id: 0 }
+    expect(project(candidate)).not.toBeNull()
+    const alpha = new THREE.InstancedBufferAttribute(new Float32Array([0, 1]), 1)
+    mesh.geometry.setAttribute('instanceAlpha', alpha)
+    expect(project(candidate)).toBeNull()
+    expect(isVisibleInstance(mesh, 1)).toBe(true)
+    alpha.setX(0, 1)
+    mesh.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 3, 0).setPosition(0, 0, -5))
+    expect(project(candidate)).toBeNull()
+    expect(isVisibleInstance(mesh, 1)).toBe(true)
+    const parent = new THREE.Group(); parent.add(mesh); parent.visible = false
+    expect(isVisibleInstance(mesh, 1)).toBe(false)
   })
 })

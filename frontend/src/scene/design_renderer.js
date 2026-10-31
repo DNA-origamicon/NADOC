@@ -1151,6 +1151,8 @@ export function initDesignRenderer(scene, storeRef) {
         // Still run post-rebuild side-effects that depend on design state.
         if (newState.staplesHidden !== prevState.staplesHidden) {
           _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+          _previewGlowLayer.refresh()
+          _glowLayer.refresh()
         }
         if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
           _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
@@ -1198,6 +1200,8 @@ export function initDesignRenderer(scene, storeRef) {
     // Hide/show all staple strands.
     if (newState.staplesHidden !== prevState.staplesHidden) {
       _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+      _previewGlowLayer.refresh()
+      _glowLayer.refresh()
     }
 
     // Isolate a single staple strand (dim all others).
@@ -1494,6 +1498,11 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
+      // Stopping an inactive simulation must not restore authored coordinates:
+      // cluster previews live in the instance buffers until their commit finishes.
+      // Multiple simulation panels receive the same design-change notification,
+      // so clearing an already-cleared overlay must also be idempotent.
+      if (updates == null && _activeFemUpdates == null) return
       _activeFemUpdates = Array.isArray(updates)
         ? updates.map(u => ({ ...u, backbone_position: [...u.backbone_position] }))
         : null
@@ -1917,7 +1926,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
-     * Hide/show nucleotides by domain-aware key set.  Keys are either:
+     * Hide/show nucleotides and their axes by baseKey(nuc, copy), or:
      *   'h:<helix_id>'                 — hide whole helix (helix-level cluster)
      *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
      * Persists across geometry rebuilds.
@@ -1926,6 +1935,7 @@ export function initDesignRenderer(scene, storeRef) {
     setHiddenNucs(keys) {
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
       _helixCtrl?.setHiddenNucs(new Set([..._hiddenNucKeys, ...[..._previewHelices].map(id => `h:${id}`)]))
+      this.refreshAllGlow()
     },
 
     /**

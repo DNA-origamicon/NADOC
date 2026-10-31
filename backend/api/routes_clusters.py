@@ -101,7 +101,10 @@ def add_cluster(body: AddClusterBody) -> dict:
     )
 
     from backend.core.part_overlay_commands import build
-    grouped = build("cluster_create", design, {"cluster": ct.model_dump(mode="json")})
+    try:
+        grouped = build("cluster_create", design, {"cluster": ct.model_dump(mode="json")})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if body.log:
         # Record the cluster-creation step in the feature log so a design's

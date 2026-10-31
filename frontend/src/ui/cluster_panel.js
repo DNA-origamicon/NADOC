@@ -107,16 +107,21 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     if (!currentDesign) return
     const n = (currentDesign.cluster_transforms?.length ?? 0) + 1
 
-    if (domainRefs.length) {
-      // Domain-level cluster: transform only the selected domains
-      const domainIds = domainRefs.map(ref => ({ strand_id: ref.strandId, domain_index: ref.domainIndex }))
-      const helixIds  = _helixIdsFromDomainIds(domainIds, currentDesign)
-      if (!helixIds.length) return
-      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
-    } else if (strandIds.length) {
-      const helixIds = _helixIdsFromStrandIds(strandIds, currentDesign)
-      if (!helixIds.length) return
-      await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+    try {
+      if (domainRefs.length) {
+        // Extension geometry uses synthetic domain indices; clusters own the
+        // terminal domain that anchors the tail, never that synthetic index.
+        const domainIds = clusterDomainIdsFromSelection(refs, currentDesign)
+        const helixIds = _helixIdsFromDomainIds(domainIds, currentDesign)
+        if (!helixIds.length) return
+        await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
+      } else if (strandIds.length) {
+        const helixIds = _helixIdsFromStrandIds(strandIds, currentDesign)
+        if (!helixIds.length) return
+        await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
+      }
+    } catch (error) {
+      showToast(`Could not create cluster: ${error.message}`, { severity: 'error' })
     }
   })
 
@@ -594,4 +599,33 @@ function _helixIdsFromDomainIds(domainIds, design) {
     if (domain?.helix_id) helixSet.add(domain.helix_id)
   }
   return [...helixSet]
+}
+
+/** Resolve selected domains (including rendered extension tails) to topology. */
+export function clusterDomainIdsFromSelection(refs, design) {
+  const strands = new Map((design.strands ?? []).map(s => [s.id, s]))
+  const result = new Map()
+  const add = (strandId, domainIndex) => {
+    const strand = strands.get(strandId)
+    const count = strand?.domains?.length ?? 0
+    if (count && (domainIndex === -1 || domainIndex === count)) {
+      const end = domainIndex === -1 ? 'five_prime' : 'three_prime'
+      if (design.extensions?.some(e => e.strand_id === strandId && e.end === end)) {
+        domainIndex = end === 'five_prime' ? 0 : count - 1
+      }
+    }
+    if (!Number.isInteger(domainIndex) || !strand?.domains?.[domainIndex]) {
+      throw new Error('A selected domain no longer exists. Please select the domains again.')
+    }
+    result.set(JSON.stringify([strandId, domainIndex]), { strand_id: strandId, domain_index: domainIndex })
+  }
+  for (const ref of refs) {
+    if (ref.kind === 'domain') add(ref.strandId, ref.domainIndex)
+    if (ref.kind === 'strand') {
+      const strand = strands.get(ref.id)
+      if (!strand) throw new Error('A selected strand no longer exists.')
+      strand.domains.forEach((_, i) => add(strand.id, i))
+    }
+  }
+  return [...result.values()]
 }

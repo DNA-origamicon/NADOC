@@ -8,6 +8,7 @@
  */
 
 import * as THREE        from 'three'
+import { isVisibleInstance } from './base_pick.js'
 import { markAttributeRange } from './attribute_updates.js'
 import { BEAD_RADIUS }   from './helix_renderer.js'
 
@@ -150,6 +151,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
   }
 
   function _writeEntries(entries) {
+    entries = entries.filter(entry => !entry.instMesh || isVisibleInstance(entry.instMesh, entry.id))
     const count = entries.length
     _ensureCapacity(count)
     const attribute = mesh.instanceMatrix, values = attribute.array

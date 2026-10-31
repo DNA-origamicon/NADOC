@@ -50,6 +50,24 @@ export function isVisibleChain(obj) {
   return true
 }
 
+/** Picking and glow must follow the rendered instance, not just its mesh. */
+export function isVisibleInstance(mesh, id) {
+  if (!mesh || !isVisibleChain(mesh)) return false
+  if (mesh.material?.visible === false || mesh.material?.opacity === 0) return false
+  const alpha = mesh.geometry?.getAttribute?.('instanceAlpha')
+  if (alpha && alpha.getX(id) <= 0) return false
+  const values = mesh.instanceMatrix?.array
+  if (!values) return true
+  const offset = id * 16
+  // Hidden beads retain translation; hidden cones retain length but no radius.
+  // Every basis column must have nonzero length for a visible solid instance.
+  for (let start = 0; start <= 8; start += 4) {
+    const i = offset + start
+    if (values[i] ** 2 + values[i + 1] ** 2 + values[i + 2] ** 2 <= 1e-24) return false
+  }
+  return true
+}
+
 // ── Per-family candidate builders ────────────────────────────────────────────
 
 /**
@@ -240,6 +258,7 @@ export function resolveIndividualBaseElements(candidates = [], refs = []) {
 export function makeProjector(camera, canvas) {
   const rect = canvas.getBoundingClientRect()
   return (cand) => {
+    if (!isVisibleInstance(cand.instMesh, cand.id)) return null
     cand.instMesh.getMatrixAt(cand.id, _m4)
     _v3.setFromMatrixPosition(_m4).project(camera)
     if (_v3.z > 1) return null                       // behind the camera

@@ -45,7 +45,7 @@ import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
-  nearestCandidate, makeProjector, worldPosOf,
+  nearestCandidate, makeProjector, worldPosOf, isVisibleInstance,
   resolveIndividualBaseElements,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
@@ -1710,6 +1710,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   const _isHiddenReferenceArc = arc =>
     _isHiddenReferenceNuc(arc?.fromNuc) && _isHiddenReferenceNuc(arc?.toNuc)
 
+  const _isHiddenEntry = entry => !isVisibleInstance(entry?.instMesh, entry?.id) ||
+    _isHiddenReferenceNuc(entry?.nuc ?? entry?.fromNuc)
+
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone' | 'cylinder'
   let _strandId        = null
@@ -2062,11 +2065,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cHits = coneMeshes.length ? raycaster.intersectObjects(coneMeshes) : []
     const b0 = bHits.find(hit => {
       const entry = backboneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
-      return entry && !_isHiddenReferenceNuc(entry.nuc)
+      return entry && !_isHiddenEntry(entry)
     })
     const c0 = cHits.find(hit => {
       const cone = coneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
-      return cone && !_isHiddenReferenceStrand(cone.strandId)
+      return cone && !_isHiddenEntry(cone)
     })
     const bd = b0?.distance ?? Infinity, cd = c0?.distance ?? Infinity
     if (bd === Infinity && cd === Infinity) return null
@@ -2103,7 +2106,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
       if (!(e.nuc.is_five_prime || e.nuc.is_three_prime) || !e.instMesh.visible ||
-          _isHiddenReferenceNuc(e.nuc)) continue
+          _isHiddenEntry(e)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       const isScaf = e.nuc.strand_type === 'scaffold'
       if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
@@ -2123,7 +2126,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
-      if (!e.instMesh.visible || _isHiddenReferenceNuc(e.nuc)) continue
+      if (!e.instMesh.visible || _isHiddenEntry(e)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       if (!e.nuc.overhang_id) {
         const isScaf = e.nuc.strand_type === 'scaffold'
@@ -2148,7 +2151,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
-      if (!e.instMesh.visible || !e.nuc.overhang_id || _isHiddenReferenceNuc(e.nuc)) continue
+      if (!e.instMesh.visible || !e.nuc.overhang_id || _isHiddenEntry(e)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
       if (_hoverPos.z > 1) continue   // behind the camera
@@ -2165,7 +2168,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of _extensionEntries()) {
-      if (!e.instMesh.visible || !e.nuc.extension_id || _isHiddenReferenceNuc(e.nuc)) continue
+      if (!e.instMesh.visible || !e.nuc.extension_id || _isHiddenEntry(e)) continue
       _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
       if (_hoverPos.z > 1) continue
       const px = (_hoverPos.x * 0.5 + 0.5) * rect.width
@@ -2210,7 +2213,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // The bead set + a dedup key for what a click WOULD select at strand/domain/cluster
   // level, given the bead under the cursor — drives the generic red hover preview.
   function _previewSetForLevel(entry) {
-    const bb  = designRenderer.getBackboneEntries()
+    const bb  = designRenderer.getBackboneEntries().filter(e => !_isHiddenEntry(e))
     const sid = entry.nuc.strand_id
     if (_selLevel === 'strand') {
       return { key: `strand:${sid}`, beads: bb.filter(e => e.nuc.strand_id === sid) }
@@ -2257,7 +2260,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _hoverKey = key; _hoverBead = oe; _hoverCone = null; _hoverArc = null
         designRenderer.clearPreviewArc?.()
         const beads = designRenderer.getBackboneEntries().filter(b => b.nuc.overhang_id === ovhgId)
-        designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
+        designRenderer.setPreviewGlow(beads.map(b => ({ ...b, pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
       }
       return
     }
@@ -2272,7 +2275,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _hoverKey = key; _hoverBead = ee; _hoverCone = null; _hoverArc = null
         designRenderer.clearPreviewArc?.()
         const beads = _extensionEntries().filter(b => b.nuc.extension_id === ee.nuc.extension_id)
-        designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
+        designRenderer.setPreviewGlow(beads.map(b => ({ ...b, pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
       }
       return
     }
@@ -2287,7 +2290,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (c.key !== _hoverKey) {
         _hoverKey = c.key; _hoverBead = null; _hoverCone = null; _hoverArc = null
         designRenderer.clearPreviewArc?.()
-        designRenderer.setPreviewGlow([{ pos: worldPosOf(c, new THREE.Vector3()) }])
+        designRenderer.setPreviewGlow([{ ...c, pos: worldPosOf(c, new THREE.Vector3()) }])
       }
       return
     }
@@ -2300,7 +2303,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (_hoverBead !== e) {
         _hoverBead = e; _hoverCone = null; _hoverArc = null; _hoverKey = null
         designRenderer.clearPreviewArc?.()
-        designRenderer.setPreviewGlow([{ pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) }])
+        designRenderer.setPreviewGlow([{ ...e, pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) }])
       }
       return
     }
@@ -2333,7 +2336,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (pv.key !== _hoverKey) {
         _hoverKey = pv.key; _hoverBead = entry; _hoverCone = null; _hoverArc = null
         designRenderer.clearPreviewArc?.()
-        designRenderer.setPreviewGlow(pv.beads.map(e => ({ pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) })))
+        designRenderer.setPreviewGlow(pv.beads.map(e => ({ ...e, pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) })))
       }
       return
     }
@@ -2355,12 +2358,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (_hoverBead === target.entry) return
       _hoverBead = target.entry; _hoverCone = null; _hoverArc = null; _hoverKey = null
       designRenderer.clearPreviewArc?.()
-      designRenderer.setPreviewGlow([{ pos: target.entry.pos }])
+      designRenderer.setPreviewGlow([target.entry])
     } else if (target.kind === 'cone') {
       if (_hoverCone === target.cone) return
       _hoverCone = target.cone; _hoverBead = null; _hoverArc = null; _hoverKey = null
       designRenderer.clearPreviewArc?.()
-      designRenderer.setPreviewGlow([{ pos: target.cone.midPos }])
+      designRenderer.setPreviewGlow([{ ...target.cone, pos: target.cone.midPos }])
     } else {
       // Crossover arc → a yellow glow TUBE traced along the arc's polyline.
       if (_hoverArc === target.arc) return
@@ -2446,7 +2449,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (entries.length || directGlowEntries?.length) {
       _hoverKey = `vr:${identity}`
       designRenderer.setPreviewGlow(directGlowEntries ?? entries.map(entry => ({
-          pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
+          ...entry, pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
         })))
     }
     return owner
@@ -3255,6 +3258,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ...flexCandidates(flex?.group ?? null, design, design ? flexAnchorKey(design) : null),
       ...ssLinkCandidates(getOverhangLinkArcs?.()?.group ?? null),
     ].filter(candidate => {
+      if (!isVisibleInstance(candidate.instMesh, candidate.id)) return false
       if (candidate.nuc) return !_isHiddenReferenceNuc(candidate.nuc)
       if (candidate.family !== 'xover') return true
       const xo = design?.crossovers?.find(item => item.id === candidate.xoId)
@@ -3886,7 +3890,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // this hidden/full-representation bead would make the lasso key to stale CG space.
       const colRep = designRenderer.columnRepAt?.(entry.nuc.helix_id, entry.nuc.bp_index)
       if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick' || colRep === 'stick'))) continue
-      if (_isHiddenReferenceNuc(entry.nuc)) continue
+      if (_isHiddenEntry(entry)) continue
       if (!record(entry.nuc, boundsFor(entry), entry._copy)) continue
 
       const isScaffold = entry.nuc.strand_type === 'scaffold'
@@ -4389,7 +4393,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // target — clicking commits whatever is previewed (within _NEAR_HOVER_PX), so the
     // user selects what they saw highlighted without pixel-precise aiming. No active
     // preview (cursor beyond the snap radius) → fall through to the exact pick below.
-    if (_hoverBead && (_selLevel === 'end' || _selLevel === 'strand'
+    if (_hoverBead && !_isHiddenEntry(_hoverBead) && (_selLevel === 'end' || _selLevel === 'strand'
                        || _selLevel === 'domain' || _selLevel === 'cluster')) {
       _v2HandleBead(_hoverBead, backboneEntries, coneEntries); return
     }
@@ -4399,7 +4403,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Respect selection filter
     const selBackbone = backboneEntries.filter(e => {
-      if (_isHiddenReferenceNuc(e.nuc)) return false
+      if (_isHiddenEntry(e)) return false
       if (selectableTypes.overhangs && e.nuc.overhang_id) return true
       const isScaffold = e.nuc.strand_type === 'scaffold'
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
@@ -4408,7 +4412,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return selectableTypes.strands || selectableTypes.domains
     })
     const selCones = coneEntries.filter(e => {
-      if (_isHiddenReferenceStrand(e.strandId)) return false
+      if (_isHiddenEntry(e)) return false
       // Cross-helix "cones" are the invisible (radius-0) crossover connectors that
       // FEED the arc pipeline — a crossover is selected via its arc, never its cone.
       // Excluding them here is what stops an invisible cone being raycast-selected
@@ -4675,7 +4679,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Resolve cone hit once — used in multiple checks below.
     const coneHit = coneHits.find(hit => {
       const cone = coneEntries.find(c => c.instMesh === hit.object && c.id === hit.instanceId)
-      return cone && !_isHiddenReferenceStrand(cone.strandId)
+      return cone && !_isHiddenEntry(cone)
     })
     const hitCone = coneHit
       ? (coneEntries.find(c => c.instMesh === coneHit.object && c.id === coneHit.instanceId) ?? null)
@@ -4686,7 +4690,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const beadHits        = raycaster.intersectObjects(backboneMeshes)
     const beadHit = beadHits.find(hit => {
       const bead = backboneEntries.find(b => b.instMesh === hit.object && b.id === hit.instanceId)
-      return bead && !_isHiddenReferenceNuc(bead.nuc)
+      return bead && !_isHiddenEntry(bead)
     })
     const hitBead = beadHit
       ? (backboneEntries.find(b => b.instMesh === beadHit.object && b.id === beadHit.instanceId) ?? null)
@@ -4698,7 +4702,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const extensionHits = extensionMeshes.length ? raycaster.intersectObjects(extensionMeshes) : []
     const extensionHit = extensionHits.find(hit => {
       const entry = extensionEntries.find(item => item.instMesh === hit.object && item.id === hit.instanceId)
-      return entry && !_isHiddenReferenceNuc(entry.nuc)
+      return entry && !_isHiddenEntry(entry)
     })
     const extensionFrontmost = extensionHit && extensionHit.distance <= Math.min(
       beadHit?.distance ?? Infinity, coneHit?.distance ?? Infinity,

@@ -2164,7 +2164,7 @@ async function main() {
     document.getElementById('canvas-area'),
     camera,
     controls,
-    () => nucleotideLocalBox(navigationGeometry(store.getState())),
+    () => nucleotideLocalBox(navigationGeometry(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())),
   )
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
@@ -3320,7 +3320,8 @@ async function main() {
   function _centerOnStrand(strandId) {
     const { currentGeometry } = store.getState()
     if (!currentGeometry) return
-    const nucs = currentGeometry.filter(n => n.strand_id === strandId)
+    const nucs = navigationGeometry(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())
+      .filter(n => n.strand_id === strandId)
     if (!nucs.length) return
     let sx = 0, sy = 0, sz = 0
     for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
@@ -3337,7 +3338,7 @@ async function main() {
     const { assemblyActive } = state
     const box = assemblyActive
       ? assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox()
-      : nucleotideLocalBox(navigationGeometry(state))
+      : nucleotideLocalBox(navigationGeometry(state, visibilityController?.getEffectiveHiddenBaseKeys()))
     const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
     if (!pose) return
     controls.target.copy(pose.target)
@@ -3350,7 +3351,7 @@ async function main() {
   function _selectionBBox() {
     const st = store.getState()
     const refs = st.selection?.items ?? []
-    return selectionBBox(navigationGeometry(st), {
+    return selectionBBox(navigationGeometry(st, visibilityController?.getEffectiveHiddenBaseKeys()), {
       strandIds: new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)),
       domainRefs: new Set(refs.filter(ref => ref.kind === 'domain')
         .map(ref => `${ref.strandId}:${ref.domainIndex}`)),
@@ -3845,7 +3846,7 @@ async function main() {
     document.getElementById(`menu-view-orbit-${m}`)?.addEventListener('click', () => _setOrbitMode(m))
   }
   // Must precede _setOrbitMode — Multiscale reads the helix-axis field on construction.
-  setNavScaleProvider(makeSegmentCache(() => navigationDesign(store.getState())))
+  setNavScaleProvider(makeSegmentCache(() => navigationDesign(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())))
   _setOrbitMode('multiscale')  // default: zoom-to-cursor, scale-aware, no stall
 
   // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────
@@ -5924,7 +5925,7 @@ async function main() {
     store.subscribe((newState, prevState) => {
       // Snap orbit target to design centroid when geometry first appears.
       if (!prevState.currentGeometry && newState.currentGeometry?.length) {
-        const c = _geomCentroid(newState.currentGeometry)
+        const c = _geomCentroid(navigationGeometry(newState, visibilityController?.getEffectiveHiddenBaseKeys()))
         if (c) { controls.target.copy(c); controls.update() }
       }
     })

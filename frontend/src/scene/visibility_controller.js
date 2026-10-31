@@ -177,6 +177,9 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   return {
     hide, show, setHiddenClusters, unhideAll, undo, redo, isStrandShown,
     getHiddenBaseKeys: () => new Set(hidden),
+    // Read-only effective snapshot; replaced on each visibility change. Its identity
+    // invalidates navigation caches immediately, before persistence finishes.
+    getEffectiveHiddenBaseKeys: () => effectiveHidden,
     isBaseShown: key => !effectiveHidden.has(key),
     flushPersistence: () => persistChain,
     destroy: () => unsubscribe?.(),
