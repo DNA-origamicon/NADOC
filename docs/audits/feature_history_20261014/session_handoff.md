@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 10 (last production gates: October 28).
+Sessions since last gate flip or milestone close: 11 (last production gates: October 28).
 The active goal supersedes recurring stop-loss confirmation. The October 28 deadline was missed.
 
 **Tools done: 4/4. CAD: 26/34 complete; FH-27 and 7 parked milestones remain.**
@@ -10,8 +10,9 @@ FH-18/25/26/28, ISSUE-99 and ISSUE-126 stay closed. No gate or milestone changed
 
 User renewed FULL authorization, limiting repairs to fully implemented app features.
 No app option, or an explicitly experimental app option, means excluded from repair.
-Single next task: obtain the pending molecular review decisions, then promote only an authorized
-candidate and validate its implemented feature. Neither remaining molecular failure is fixed yet.
+Single next task: review the requested native polymerized-assembly captures and resolve the pending
+molecular decisions. The tail candidate's new 0.07524-nm contact remains a blocker to general use;
+neither remaining molecular failure is fixed or authorized for production yet.
 Keep thresholds, goldens, scientific exclusions and test guards intact. Do not reopen milestones.
 
 Automatic placement preserves covalent root lengths ahead of collisions. Roots in one rigid cluster
@@ -19,6 +20,27 @@ without defined relative joint/flexible motion retain strain; exempt Relax is an
 notice and no history/undo. Do not invent flexibility, split clusters or close these exempt roots.
 Manual moves may stretch roots; repositioned-overhang collisions remain the user's responsibility.
 The NP 2 nm exemption covers only its host strand. The five-atom Direct closure remains withdrawn.
+
+## Requested native review files — October 31
+
+User explicitly requested actual NADOC files and a precise inspection guide. Four standalone files
+in `workspace/Geometry Review/`: `Polymerized assembly - Current/Candidate.nadoc` and
+`Tail phase 210 - Current/Candidate.nadoc`. The first pair preserves the complete failing flattened
+three-repeat assembly (18 helices, 2394 nt, 49,086 atoms); the second shows the adverse 2HB control.
+Use **Ball & Stick / Stick**, then **Animations → Camera Poses**, views 03/04; Full is coarse-grained.
+Each includes identical paired cameras and a four-step camera tour. These are captured topology
+import roots with embedded exact atomistic references, not authored candidate histories or MD results.
+The two phase-control helix IDs are consistently namespaced to prevent legacy grid recovery from
+erasing the 210° phase on reopen; coordinates, atom serials and covalent connectivity are preserved.
+Generator: `experiments/terminal_extension_review_nadoc.py`; evidence: `I/nadoc-review/`.
+All four native files/render feeds verified against the captured atoms and bonds; maximum displayed
+coordinate-component rounding error 0.000006704 nm. Twelve saved views and four tour start/pause
+checks passed; whole-model and defect views inspected. Isolated browser scratch was removed.
+Generator check: four captures round-trip exactly, overwrite refused, 21.23 s; scratch removed.
+Guarded lint, owned Ruff and memory checks pass. Inspected temporary captures (2,537,335 B) removed;
+four user-requested NADOC files retained. All 202 baseline file hashes remain unchanged.
+This request authorizes these inspection files only. Production placement, locks and simulations
+remain unchanged. No additional FULL run; the recorded authorization window below still applies.
 
 ## Completed FULL and resolved family
 
@@ -120,7 +142,8 @@ save was not requalified. Historical four-attachment Current/Candidate captures 
 Ownership: 203 pre-existing dirty entries, including 202 recorded file hashes and one untracked
 `memory/details/` directory without an entry hash. All recorded file hashes match; that directory
 was not edited. API/VR/simulation/activity/memory-hygiene work remains untouched and unstaged.
-Local checkpoint uses eight explicit owned paths: the Direct test, this handoff, two MRDNA
+Prior checkpoint `09b74b37` used eight explicit owned paths: the Direct test, this handoff, two MRDNA
 candidate/review modules, two terminal candidate/review modules and their two focused test files.
 No push, stash, reset, restore or history rewrite. Final lint, owned Ruff, diff and memory hygiene
-checks pass (0 memory errors/warnings). No new frontend/app check: production geometry is unchanged.
+checks passed (0 memory errors/warnings). The new capture-only checkpoint owns the generator and
+this handoff; its native app check is recorded above. Production geometry remains unchanged.
