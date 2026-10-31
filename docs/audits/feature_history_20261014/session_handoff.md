@@ -42,8 +42,11 @@ It has 9 attachments, 3 fixed-center gold particles, 45 helices, 124 strands, 13
 feature rows. Maximum root-length change **1.70e-14 nm**; maximum graft residual **1.54e-14 nm**.
 Ordinary app Open/Full preserves all geometry/attachment records, shows all three gold meshes and
 has no page errors; screenshot inspected. No full-history editing/replay or simulation claim.
-SHA256: `c0bafdc8d855d050733306c257b921ab8069ff28b6caf034b6ded869585c5182`.
+Originally qualified SHA256: `c0bafdc8d855d050733306c257b921ab8069ff28b6caf034b6ded869585c5182`.
 Evidence: `.development-artifacts/feature-history-focus/root-bond-repair/` (manifest and cleanup).
+Final read-only check found a later saved workspace hash (`e2eb772d…`); counts, nine applied attachments
+and particle centers still match. Full coordinate equality was not requalified. Preserve this file;
+`workspace-current-observation.json` records the current state without replacing the original evidence.
 
 Focused passes: 9 root contracts, 10 attachment, 6 kinematics, 18 NP lifecycle and 9 review/platform.
 The 14-case generator matrix had 13 passes and one final gold-overlap refusal; advisory finalization
