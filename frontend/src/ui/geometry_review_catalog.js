@@ -29,5 +29,5 @@ export const geometryReviewCases = [
   { id: 'direct', title: 'Direct root linker — isolated diagnostic', load: loadDirect, loadRenderer: loadDirectRenderer },
   { id: 'direct-native', title: 'Direct — native Extrude, unreachable layout', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'native' },
   { id: 'direct-contact', title: 'Direct — phase control with atom contact', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'contact' },
-  { id: 'direct-reachable', title: 'Direct — native reachable 46-base connection', load: loadNativeDirect, loadRenderer: loadDirectRenderer },
+  { id: 'direct-reachable', title: 'Direct — same-cluster strain exemption', load: loadNativeDirect, loadRenderer: loadDirectRenderer },
 ]

@@ -5,7 +5,7 @@ import { auditDefectRows, auditMetricRows, auditStrandColorMap, copyAuditCameraS
 
 export function mountGeometryReview(host, evidence, { viewerFactory = createAttachmentReviewViewer } = {}) {
   host.innerHTML = `<h2 data-ref="title"></h2>
-    <p class="gr-notice">Isolated diagnostic. Current is a relocated draft refused by production; Candidate preserves its original root-linker groups. This candidate is not enabled in NADOC.</p>
+    <p class="gr-notice" data-ref="notice"></p>
     <p data-ref="context"></p>
     <div class="gr-toolbar"><label>Atom builder <select aria-label="Atom builder"><option value="viewer">Viewer</option><option value="export">Export</option></select></label><button data-ref="focus">Focus driven root</button><button data-ref="reset">Fit full design</button><span>Drag to orbit · scroll to zoom · cameras move together</span></div>
     <div class="gr-grid"></div>
@@ -16,13 +16,15 @@ export function mountGeometryReview(host, evidence, { viewerFactory = createAtta
     <details open><summary>Qualification limits</summary><ul data-ref="limits"></ul></details>`
   const ref = name => host.querySelector(`[data-ref="${name}"]`)
   const panels = ['current', 'candidate', 'difference', 'defects']
-  const titles = ['Current — refused draft', 'Candidate — isolated', 'Displacement overlay', 'Exact defects and moved atoms']
+  const titles = [evidence.current_title ?? 'Current — refused draft', evidence.candidate_title ?? 'Candidate — isolated', 'Displacement overlay', 'Exact defects and moved atoms']
   panels.forEach((id, i) => {
     const card = document.createElement('section'); card.className = 'gr-panel'
-    card.innerHTML = `<div class="gr-bar"><h2>${titles[i]}</h2><select aria-label="${id} representation"><option value="ballstick">Ball and Stick</option><option value="full">Full</option></select></div><div class="gr-view" data-view="${id}"></div>`
+    card.innerHTML = `<div class="gr-bar"><h2></h2><select aria-label="${id} representation"><option value="ballstick">Ball and Stick</option><option value="full">Full</option></select></div><div class="gr-view" data-view="${id}"></div>`
+    card.querySelector('h2').textContent = titles[i]
     host.querySelector('.gr-grid').append(card)
   })
   ref('title').textContent = evidence.label
+  ref('notice').textContent = evidence.notice ?? 'Isolated diagnostic. Current is a relocated draft refused by production; Candidate preserves its original root-linker groups. This candidate is not enabled in NADOC.'
   ref('context').textContent = evidence.full_geometry_changed
     ? 'Every atom and the complete parent geometry are included. Full shows the rigid duplex placement; Ball and Stick shows the exact root linkers and molecular contacts.'
     : 'Every atom and the complete parent geometry are included. Ball and Stick shows the linker changes. Full shows the surrounding DNA; the coarse nucleotide geometry is identical on both sides.'

@@ -1,4 +1,4 @@
-"""Full native producer/Direct A/B; never a production history receipt."""
+"""Retained same-cluster strain versus the withdrawn isolated closure."""
 
 from dataclasses import replace
 import gzip
@@ -18,7 +18,7 @@ from experiments.direct_linker_review import junction_metrics, model_data
 
 
 def build_review(output, summary_output):
-    from tests.test_part_pending_connection_versions import proof
+    from tests.test_part_pending_connection_versions import append, proof
 
     reference = native_source()
     native_proof = proof(reference)
@@ -27,7 +27,9 @@ def build_review(output, summary_output):
     candidate = proposed_connection_command(reference, connection_inputs(reference), reference=reference,
         capture=lambda design, *_: drafts.append(design.model_copy(deep=True)))
     assert len(drafts) == 1
-    current = drafts[0]
+    current = append(reference, "overhang-bulk", connection_inputs(reference), "direct-exempt")
+    current_proof = proof(current)
+    assert current_proof["status"] == "verified" and current_proof["checked_commands"] == 4
     driven = candidate.overhang_bindings[0].driven_oh_id
     designs = {"reference": reference, "current": current, "candidate": candidate}
     modes, junctions = {}, {}
@@ -58,24 +60,29 @@ def build_review(output, summary_output):
         oa, ob = (owner.get((a["strand_id"], a["helix_id"], a["bp_index"], a["direction"])) for a in (a, b))
         clash_scope["within_duplex" if oa and ob else "duplex_parent" if oa or ob else "parent_parent"] += 1
     bundle = {"schema": "nadoc.direct-linker-native-review.v1", "read_only": True,
-        "ready_for_review": True, "label": "Direct — native 46-base connection, fixed roots",
+        "ready_for_review": False, "disposition": "closure-withdrawn",
+        "label": "Direct — same-cluster strain exemption",
+        "current_title": "Current — strain retained", "candidate_title": "Candidate — withdrawn closure",
+        "notice": "Root-length preservation exemption: both host roots are fixed to one rigid cluster with no relative joint or flexible connection. Current retains the stretched root. The automatic closure shown in Candidate is withdrawn; NADOC does not infer the user's intent.",
         "fit_expected": True, "full_geometry_changed": True,
-        "fit_description": "Two native 46-base overhangs span the fixed host roots. Candidate moves the paired duplex rigidly while retaining both original root lengths in Viewer and Export. Parent poses remain fixed; collisions stay advisory. The fitted duplex passes through the bundle: all 71 clash pairs involve surrounding parent DNA; no pair is wholly inside the duplex. There are also 15 ring piercings, listed below.",
+        "fit_description": "Current is the native Direct connection with its 7.558952 nm driven root retained. No automatic closure is attempted for this rigid same-cluster case. The withdrawn Candidate reconstructed five linker atoms and moved the paired duplex rigidly to close both roots. Its duplex passes through the bundle: all 71 clash pairs involve surrounding parent DNA, with 15 ring piercings. These diagnostics remain visible and do not establish user intent or physical plausibility.",
         **{s + "_design": d.model_dump(mode="json") for s, d in designs.items()},
         **modes["viewer"], "export_models": modes["export"], "junctions": junctions,
         "midpoint_constraint_planes": [],
         "clash_scope": clash_scope,
         "native_prefix_proof": {"status": native_proof["status"], "checked_commands": 3},
+        "current_proof": {"status": current_proof["status"], "checked_commands": 4},
         "proposed_command": connection_inputs(reference),
         "construction": ["F1: Extrude 1 — six helices, 42 base pairs, honeycomb cells (0,1–3) and (1,1–3).",
             "F2: Extrude 2 — a 46-base 3′ overhang from cell (0,3), bp 41, into legal neighboring cell (0,4).",
             "F3: Extrude 3 — a 46-base 3′ overhang from cell (1,1), bp 0, into legal neighboring cell (1,0).",
-            "Connect 1, diagnostic continuation — end-to-root Direct connection; original sequences retained. Current is the exact draft entering placement, which production refuses. Candidate uses the same command with the isolated linker-preserving placement stage.",
-            "The first three features cold-replay from an empty root. The proposed Connect has no authored row or production verification receipt."],
-        "limitations": ["Candidate changes five native root-linker atoms before rigidly fitting the duplex; it does not change the sugar/base templates or any detector threshold.",
+            "F4: Connect 1 — end-to-root Direct connection; original sequences retained. Both host roots belong to the same rigid cluster, so the stretched driven root remains unchanged under the explicit exemption.",
+            "Current has four native features that cold-replay from an empty root. Candidate is a withdrawn diagnostic continuation of F1–F3; it has no authored Connect row or production verification receipt."],
+        "limitations": ["The automatic closure proposal is withdrawn. Existing strain may be intentional or accidental; NADOC cannot distinguish these from the design alone.",
+            "The withdrawn Candidate changes five native root-linker atoms before rigidly fitting the duplex; it does not change the sugar/base templates or any detector threshold.",
             "The complete before/after atom sets and exact defects are shown. A closed root does not certify absence of collisions or suitability for simulation.",
-            "Production Connect still refuses this input. The proposed geometry exists only in prepared review evidence; no candidate atoms are enabled for ordinary display, export or simulation.",
-            "The native three-feature prefix is verified. Candidate command reconstruction, driver changes, namespace ownership, native parent motion and Unapply are checked in the isolated diagnostic. Production history adoption still requires approval and integration qualification."],
+            "Production Connect retains this same-cluster strain; Relax leaves it unchanged. The withdrawn closure exists only in prepared review evidence, with no candidate atoms enabled for ordinary display, export or simulation.",
+            "Current's four-feature history and exact Unapply restoration are qualified. The retained diagnostic tests of Candidate do not authorize its adoption."],
         "related_controls": {"asset": controls.name, "sha256": hashlib.sha256(controls.read_bytes()).hexdigest(),
             "phase_cases": 36, "unchanged_2hb_cases": 22}}
     path = Path(output)
@@ -84,7 +91,8 @@ def build_review(output, summary_output):
     summary = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size,
         "junctions": junctions, "displacement": {k: v for k, v in bundle["displacement"].items() if k != "vectors"},
         "diagnostics": {name: {s: modes[name][s]["diagnostics"] for s in designs} for name in modes},
-        "prefix_proof": bundle["native_prefix_proof"], "ready_for_review": True}
+        "prefix_proof": bundle["native_prefix_proof"], "current_proof": bundle["current_proof"],
+        "ready_for_review": False, "disposition": bundle["disposition"]}
     Path(summary_output).write_text(json.dumps(summary, indent=2))
     print("PREPARED", path, summary["bytes"], summary["sha256"], flush=True)
 

@@ -101,12 +101,8 @@ def relax_duplex(duplex_id: str) -> dict:
     (e.g. a DIFFERENT-length root-to-root pair, which ``connect_duplex`` relocated
     via ``relocate_duplex`` instead of creating a binding).
 
-    Resolves driver/driven overhang ids from the duplex's ``driver`` field and runs
-    the SAME proven solve (``direct_relax.relax_direct_binding``): swing the driver's
-    overhang duplex about its root (persisted as the driver's ``OverhangSpec.rotation``,
-    the driven tip co-rotates) + cluster kinematics (rotate the connecting joint(s), else
-    rigid-translate the driven root cluster) so the driven overhang's stretched tip↔root
-    backbone bond closes to one bond length. The duplex stays bound.
+    Uses the same root-preserving solver and same-cluster strain exemption as
+    binding-backed Relax. An exempt connection remains unchanged without an undo.
     """
     from backend.core.direct_relax import relax_direct_binding
     from backend.core.validator import validate_design
@@ -131,7 +127,8 @@ def relax_duplex(duplex_id: str) -> dict:
     except Exception as exc:  # pragma: no cover - defensive
         raise HTTPException(422, detail=f"relax_duplex failed: {exc!r}")
 
-    design_state.set_design(updated)
+    if updated is not design:
+        design_state.set_design(updated)
     report = validate_design(updated)
     payload = _design_response_with_geometry(updated, report)
     payload["relax_info"] = info

@@ -69,15 +69,15 @@ def test_real_connect_topology_and_child_preserve_both_native_roots(source, conn
     assert_roots(source, connected)
 
 
-def test_production_connect_stays_refused_and_diagnostic_hook_is_restored(source):
-    from fastapi import HTTPException
+def test_production_connect_retains_same_cluster_strain_and_hook_is_restored(source):
     from backend.api.part_duplex_commands import build
     from backend.core import direct_root_placement
 
     native = direct_root_placement.place_direct_roots
     original = source.model_dump_json()
-    with pytest.raises(HTTPException, match="native viewer and export root linkers"):
-        build("duplex-connect", source, connect_inputs(source))
+    connected = build("duplex-connect", source, connect_inputs(source))
+    model = build_atomistic_model(connected)
+    assert root_endpoints(connected, model, source.overhangs[1].id)["length_nm"] > 7.
     assert source.model_dump_json() == original
     assert direct_root_placement.place_direct_roots is native
 

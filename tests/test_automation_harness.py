@@ -1297,28 +1297,20 @@ def test_direct_binding_relaxed_pose_oracle_passes_on_real_relax():
     assert_direct_binding_relaxed_pose(before, after, drv, dvn)
 
 
-def test_direct_binding_relaxed_pose_oracle_accepts_same_body_swing():
-    """Same-rigid-body: apply now seats the duplex at the ORIENTED midpoint, so the
-    swing the relax used to perform is already applied — the relax is a valid no-op
-    (no cluster can move, orientation already optimal). The oracle passes as a
-    topology-only check (require_reduced=False), and we confirm apply already closed
-    the bond to within ~one backbone step of the target."""
-    import math
-
-    from backend.core.direct_relax import _bead_pos, _find_driven_tip_and_root
-    from backend.api.crud import _geometry_for_design
+def test_direct_binding_relaxed_pose_oracle_accepts_explicit_same_body_exemption():
+    """Same rigid host: retain strain exactly; the topology-only oracle still applies."""
+    from backend.core.direct_root_placement import capture_root_lengths
+    from backend.core.direct_root_policy import direct_connection_exemptions
     from tests.automation_harness import assert_direct_binding_relaxed_pose
 
     before, after, drv, dvn = _relaxed_direct_binding_pair(same_body=True)
     assert_direct_binding_relaxed_pose(before, after, drv, dvn, require_reduced=False)
-    # Apply's oriented placement already minimized the same-body bond.
-    s, _i, td, rd, cb, cr = _find_driven_tip_and_root(before, dvn)
-    nucs = _geometry_for_design(before)
-    chord = math.dist(
-        _bead_pos(nucs, strand_id=s.id, helix_id=td.helix_id, bp=cb),
-        _bead_pos(nucs, strand_id=s.id, helix_id=rd.helix_id, bp=cr),
-    )
-    assert chord < 1.5, chord
+    assert after == before
+    roots = capture_root_lengths(before, [drv, dvn])
+    assert capture_root_lengths(after, [drv, dvn]) == roots
+    targets = before.overhang_bindings[0].prior_driven_topology["root_bond_lengths_nm"]
+    assert roots[dvn]["viewer"] > targets[dvn]["viewer"] + 1.
+    assert direct_connection_exemptions(after)[0]["code"] == "same_rigid_cluster"
 
 
 def test_direct_binding_relaxed_pose_oracle_fires_on_noop():

@@ -29,14 +29,9 @@ def relax_overhang_binding(binding_id: str) -> dict:
     """Settle a DIRECT binding's geometry — UNIFIED for root-to-root AND
     end-to-root (2026-06-30).
 
-    A direct connection relocated the driven overhang's tip onto the driver's
-    helix on apply, leaving the driven tip↔root backbone bond stretched across
-    helices. This closes that bond to one backbone-bond length (~0.67 nm) by
-    swinging the driver's overhang duplex about its root (persisted as the
-    driver's OverhangSpec.rotation; the driven tip co-rotates) plus cluster
-    kinematics (rotate the connecting joint(s), else rigid-translate the driven
-    root cluster). Same rigid body → swing only. The binding stays bound — there
-    is no longer an unbind/rebind dance.
+    Preserve the original covalent root lengths using existing parent kinematics.
+    Roots fixed to one rigid cluster retain their strain with an explicit exemption;
+    this no-op adds no history or undo state. Collisions remain advisory.
     """
     from backend.core.direct_relax import relax_direct_binding
     from backend.core.validator import validate_design
@@ -55,7 +50,8 @@ def relax_overhang_binding(binding_id: str) -> dict:
     except Exception as exc:
         raise HTTPException(422, detail=f"relax_overhang_binding failed: {exc!r}")
 
-    design_state.set_design(updated)
+    if updated is not design:
+        design_state.set_design(updated)
     report = validate_design(updated)
     payload = _design_response_with_geometry(updated, report)
     payload["relax_info"] = info

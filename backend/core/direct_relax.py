@@ -241,6 +241,7 @@ def relax_direct_binding(
 
     The legacy target_nm argument no longer changes chemical bond lengths.
     Parent joint/translation options are retained; collisions are advisory.
+    Roots fixed to one rigid cluster retain their existing strain with an exemption.
     """
     if target_nm != _DEFAULT_TARGET_NM:
         raise HTTPException(422, detail="Relax preserves the original covalent root lengths; target_nm cannot override them.")

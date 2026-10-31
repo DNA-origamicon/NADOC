@@ -30,13 +30,23 @@ def relax_direct_roots(design, driver, driven, *, joint_ids=None):
     from backend.core.direct_relax import _find_driven_tip_and_root, _relax_joint_selection
     from backend.core.duplex_cluster import dematerialize_duplex_cluster, duplex_cluster_for
     from backend.core.linker_relax import _composed_transform, _optimize_chord_angle, _rot_axis_angle
+    from backend.core.direct_root_policy import root_length_exemptions
 
     original = design
+    targets = _targets(original, driver, driven)
+    exemptions = root_length_exemptions(original, targets)
+    if exemptions:
+        # Also enforce any other, nonexempt roots sharing the moving duplex.
+        placed = place_direct_roots(original, driver, targets)
+        return placed, {"mode": "root_length_exemption", "unchanged": True,
+            "message": " ".join(row["message"] for row in exemptions),
+            "root_length_exemptions": exemptions, "moved_cluster_ids": [],
+            "same_body": True, "root_bond_lengths_nm": capture_root_lengths(original, targets),
+            "root_targets_nm": targets}
     child = duplex_cluster_for(design, driver)
     working = dematerialize_duplex_cluster(design, driver)
     _, _, tip, root, _, _ = _find_driven_tip_and_root(working, driven)
     ca, cb, same, clusters, selected = _relax_joint_selection(working, driver, tip.helix_id, root.helix_id, joint_ids)
-    targets = _targets(original, driver, driven)
     roots = {oid: overhang_root_bond(working, oid) for oid in targets}
     thetas = np.zeros(len(selected))
     moved = set()

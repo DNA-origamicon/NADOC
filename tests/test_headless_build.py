@@ -1441,26 +1441,22 @@ def test_relax_overhang_binding_is_pose_only():
     assert canonical_topology(before) == canonical_topology(after)
 
 
-def test_relax_overhang_binding_same_body_swings_duplex_only():
-    """Both overhangs on ONE rigid body: apply now seats the duplex at the ORIENTED
-    midpoint on its own (the pose lives on the child DUPLEX cluster), and no cluster joint
-    can move — so relax is a valid no-op that leaves topology intact. The apply-time
-    orientation is a non-identity duplex-cluster pose."""
+def test_relax_overhang_binding_same_body_retains_strain_without_moving_duplex():
+    """Neither Connect nor Relax swings a duplex between fixed same-cluster roots."""
     from backend.core.duplex_cluster import duplex_cluster_for
+    from backend.core.direct_root_policy import direct_connection_exemptions
 
     seeded, bid = _applied_direct_binding(same_body=True)
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_overhang_binding(bid)
-    assert_direct_binding_relaxed_pose(
-        before, after, "oh_a", "oh_b", require_reduced=False
-    )
-    # Apply already oriented the duplex → the driver's DUPLEX CLUSTER pose is non-identity.
+    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b", require_reduced=False)
+    assert after == before
     cl = duplex_cluster_for(before, "oh_a")
-    assert cl is not None and (
-        tuple(cl.rotation) != (0.0, 0.0, 0.0, 1.0)
-        or any(abs(t) > 1e-9 for t in cl.translation)
-    )
+    assert cl is not None
+    assert tuple(cl.rotation) == (0.0, 0.0, 0.0, 1.0)
+    assert cl.translation == [0., 0., 0.]
+    assert direct_connection_exemptions(after)[0]["code"] == "same_rigid_cluster"
 
 
 def _two_helices_with_crossover(*, with_joint):

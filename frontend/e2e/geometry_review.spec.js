@@ -89,7 +89,7 @@ test('Help geometry Review renders evidence, switches cases, and releases privat
     await modal.getByLabel('Review case', { exact: true }).selectOption(value)
     await expect(modal).toHaveAttribute('data-case', value, { timeout: 60_000 })
     await expect(modal.locator('canvas')).toHaveCount(4)
-    await expect(modal.locator('[data-ref="limits"]')).toContainText(value === 'direct-reachable' ? 'Production Connect still refuses' : 'unqualified')
+    await expect(modal.locator('[data-ref="limits"]')).toContainText(value === 'direct-reachable' ? 'Production Connect retains this same-cluster strain' : 'unqualified')
     if (value === 'direct') {
       await expect(modal.locator('[data-ref="roots"]')).toContainText('0.527230')
       await modal.getByRole('button', { name: 'Focus driven root' }).click()
@@ -131,5 +131,59 @@ test('Help geometry Review renders evidence, switches cases, and releases privat
   await expect.poll(() => page.evaluate(() => [...window.__reviewContexts].every(gl => gl.isContextLost()))).toBe(true)
   expect(await snapshot()).toBe(before)
   expect(writes).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('same-cluster strain notice is visible and Relax leaves the native design unchanged', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+  page.setDefaultTimeout(15_000)
+  const native = JSON.parse(gunzipSync(readFileSync(new URL('../src/ui/geometry_review_data/direct-native.json.gz', import.meta.url))))
+  const design = native.current_design
+  design.metadata.name = '__e2e__geometry-strain'
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/?doc=__e2e__geometry-strain')
+  await page.waitForFunction(() => !!window.__nadocTest)
+  await page.evaluate(async content => {
+    const api = await import('/src/api/client.js')
+    await api.importDesign(content)
+    document.getElementById('welcome-screen')?.classList.add('hidden')
+  }, JSON.stringify(design))
+  // API import bypasses the Open-file sidebar activation. Activate only this
+  // fixture's controls, as in the nanoparticle connection browser exercise.
+  await page.evaluate(() => {
+    const panel = document.getElementById('right-panel')
+    panel.style.display = 'block'; panel.classList.remove('hidden', 'locked-inactive')
+    const tabs = document.getElementById('right-tab-strip')
+    tabs.style.display = 'flex'; tabs.classList.remove('locked-inactive')
+    document.getElementById('overhang-connections-section').style.display = 'block'
+    document.getElementById('oconn-heading').click()
+    document.getElementById('oconn-body').style.display = 'block'
+  })
+  await page.locator('.right-tab-btn[data-tab="overhangs"]').click()
+  await expect(page.locator('#oconn-heading')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('direct-strain-setup.png') })
+  const notice = page.locator('.root-length-exemptions')
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText('Existing strain is retained')
+  await page.locator('#oconn-select-a').selectOption(design.overhangs[0].id)
+  await page.locator('#oconn-select-b').selectOption(design.overhangs[1].id)
+  const snapshot = () => page.evaluate(() => {
+    const state = window.__nadocTest.store.getState()
+    const d = state.currentDesign
+    return JSON.stringify({ log: d.feature_log, clusters: d.cluster_transforms, overhangs: d.overhangs, geometry: state.currentGeometry })
+  })
+  const before = await snapshot()
+  const response = page.waitForResponse(r => r.url().endsWith('/relax') && r.request().method() === 'POST')
+  await page.locator('#oconn-secondary').click()
+  const result = await response
+  expect(result.status(), await result.text()).toBe(200)
+  expect((await result.json()).relax_info.unchanged).toBe(true)
+  await expect(page.locator('#oconn-secondary')).toBeEnabled()
+  expect(await snapshot()).toBe(before)
+  await notice.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('direct-strain-notice.png') })
   expect(errors).toEqual([])
 })

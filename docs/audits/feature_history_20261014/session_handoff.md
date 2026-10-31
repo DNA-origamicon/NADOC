@@ -1,6 +1,6 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 6 (last production gates: October 28).
+Sessions since last gate flip or milestone close: 7 (last production gates: October 28).
 The active goal supersedes recurring stop-loss confirmation. The **October 28 before-6-p.m. America/Denver deadline was missed**.
 
 **Tools done: 4/4. CAD: 26/34 complete, 1 core exit (FH-27) and 7 parked milestones remain.**
@@ -10,50 +10,53 @@ ISSUE-126 duplicate-slot refusal/publication/repair/undo remains closed. Do not 
 
 ## Current user rule and next task — October 30
 
-Automatic NADOC processes must preserve overhang-root bond lengths ahead of collision avoidance.
+Automatic processes preserve root lengths ahead of collisions, EXCEPT same-cluster roots without a defined joint/flexible region between them: retain stretch and report an exemption (latest user correction).
 Manual edits may stretch roots. Collisions of repositioned overhangs are the user's responsibility,
 including NP positioning before simulation. The 2 nm contact exemption covers only the host strand.
 This authorizes root-preservation, supersedes the earlier shortest-root candidate, and leaves unrelated molecular changes, phase/threshold/golden changes and simulations unauthorized.
 
-**Single next task: obtain explicit approval for the demonstrated Direct linker reconstruction, then integrate it.**
-Use Help → geometry Review → “Direct — native reachable 46-base connection”. The root-priority
-policy is already authorized; the separate five-atom reconstruction remains isolated under the
-molecular gate. After approval, integrate it with native snapshot ownership/builders and cold history;
-then rerun producer/lifecycle checks and required FAST. Do not substitute imported fixtures for producers.
-Production checkpoint `a940249d` records original viewer/export root lengths and fits a rigid duplex.
-Connect keeps parents fixed; Relax uses existing joints/translation and checks both atom builders.
-Manual moves stay unrestricted. Root lengths have typed ownership/dependencies/namespace remapping;
-root lookup includes direction for opposite ends on one host strand. Prior 88 focused checks and
-imported app lifecycle pass (root delta ≤1.41e-12 nm). Binding-backed Relax's legacy history gap remains.
+**Single next task: triage the remaining 52 Direct/root FAST failures, starting with nonterminal root ownership; preserve the exemption and all nonexempt constraints.**
+Direct Connect retains the native relocated geometry when host roots share one rigid owner.
+Relax returns the exact input with an exemption and does not publish a new undo/history state.
+Ownership uses the host domain, excludes marked flexible anchors, and distinguishes separate arms
+under a common ancestor. A whole-body joint does not create relative motion between its roots;
+flexible connections require existing separate arm clusters. No automatic cluster cuts are inferred.
+Other roots sharing an exempt duplex must already meet their constraints or the operation refuses.
+Nonblocking API validation notices identify the cluster/roots in Overhang Connections; strict
+worker report schemas remain unchanged. No persisted exemption field is added.
+The five-atom closure is **withdrawn**; no atom templates or candidate atoms are promoted.
 
-Last backend `just test-smart`: **FAST (fast suite only), 19,173 passed / 497 failed / 19 skipped /
-50 errors**, 382.83 s, 19,739 cases; guard wall 420 s. 508 repeated linker incompatibility diagnostics.
-No production backend change this turn; this remains the latest broad result, not a qualified exit.
-The native crossover bridge disappears on relocation: some viewer/export roots share identical endpoint pairs despite different original lengths. A rigid transform alone cannot preserve both.
+Help → geometry Review → “Direct — same-cluster strain exemption” retains full native geometry.
+Current has genuine F1–F3 Extrude plus F4 Connect, independently cold-verified from an empty root.
+Its driven root stays **7.558952 nm**. Candidate is explicitly labelled “withdrawn closure”.
+The retained comparison shows its historical 71 parent/duplex clashes and 15 ring piercings;
+these do not establish intent or physical plausibility. Atom identities and thresholds remain unchanged.
+Review asset `direct-native.json.gz`: SHA256 `d5ae83df…`; 11,920 atoms in both builders.
+Old imported/unreachable/contact diagnostics remain in `direct-linker.json.gz` (`182dff7a…`).
 
-Isolated `experiments/direct_linker_candidate.py` transports original O3′ and P/OP1/OP2/O5′ groups,
-anchored at C3′/C5′, before authored poses. Sugar/base templates and thresholds stay unchanged.
-51 prior checks pass: 36 phase settings × both builders (root delta ≤1.61e-15 nm; adjacent bonds
-≤1.48e-15 nm), native shared-host roots, manual stretch/recovery, snapshot parity and unreachable refusal.
-Four phases restore contacts already present before Connect; none is new relative to that reference.
-All 22 reciprocal 2HB controls stay identical; positive/negative controls remain inspectable.
+Focused exemption checks: **10 passed (5.69 s)** — exact unfitted geometry, cold F4 proof,
+Unapply atom restoration/cold proof, reload/namespace/manual strain, separate arm ownership,
+nonexempt co-moving roots, and no-publication Relax through both HTTP handlers.
+Existing root constraints **12 passed (5.41 s)**; isolated native diagnostic controls **12 passed
+(23.05 s)**. The controls retain withdrawn geometry only for inspection, not production use.
+Strict worker boundary: **2 passed (2.85 s)**; actual dataclass serialization is covered by the 10 checks.
+Frontend focused **17 passed**. Review app **1 passed (2.2 m)**; notice/Relax app **1 passed
+(27.8 s)** after fixture sidebar activation. No app errors; exact geometry/history unchanged on Relax.
+Four captures inspected/hash-recorded/pruned; all five owned browser roots are independently absent.
+Frontend broad **9,496 passed / 1 skipped (349.69 s)**; isolated smoke **23 passed (2.4 m)**.
+`main.js` remains 7,347 lines, delta 0. Lint and whitespace pass.
+Evidence: `.development-artifacts/feature-history-focus/direct-root-repair/exemption-*`.
+Binding-backed nonexempt Relax's legacy history gap remains; `a940249d` owns the original root constraints.
 
-New `direct_linker_native.py` builds genuine F1–F3 Extrude commands from an empty root: a 6HB,
-42 bp bundle plus two legal 46-base 3′ overhangs at (0,3)/41 and (1,1)/0. Native prefix proof verifies.
-The real end-to-root Connect command runs only with isolated placement; it receives no authored F4
-or production receipt. **12 checks pass (23.34 s)**: independent cold reconstruction, opposite driver,
-binding driver change, typed dependencies, namespace, native parent motion and exact Unapply restoration.
-`direct_linker_native_review.py` retains all 11,920 atoms and parent geometry. Current is the refused
-pre-placement draft; Candidate preserves five linker atoms, then rigidly fits the paired duplex.
-Driven root: 7.558952 → 0.186511 nm Viewer / 0.217004 nm Export; max reference delta **1.73e-12 nm**.
-Adjacent bonds change ≤1.89e-15 nm. All 71 clashes involve parent DNA, none is internal to the duplex;
-15 ring piercings remain advisory. Export's six pre-existing bond flags are exactly retained.
-
-Review asset `frontend/src/ui/geometry_review_data/direct-native.json.gz`, SHA256 `3d760797…`; old imported/unreachable/contact controls remain in `direct-linker.json.gz` (`182dff7a…`).
-Frontend broad **9,495 passed / 1 skipped** (352.32 s); subsequent root-framing fix: **9 focused pass**.
-App review **1 passed** (2.3 m): zero errors/writes, open state unchanged, scenes released; images inspected.
-Isolated smoke **23 passed** (2.4 m); lint/whitespace pass. No normal builder imports the candidate.
-Evidence: `.development-artifacts/feature-history-focus/direct-root-repair/{native,linker}-*`. No phase/threshold/golden/guard changes.
+Latest backend `just test-smart`: **FAST (fast suite only), 19,739 passed / 54 failed / 19 skipped /
+0 errors**, 409.00 s, 19,812 cases; guard wall 445 s. No per-test 5 s violators; aggregate timing
+remains debt. Triage followed `triage-slow-tests`; no marker, threshold or guard changes.
+52 failures concern other Direct/root inputs (viewer/export linker incompatibility, nonterminal or
+ambiguous roots, unreachable fixtures); two are the retained square/honeycomb junction-balance oracles.
+Strict worker-report failures from the intermediate implementation are fixed; latest run has none.
+The same-cluster exemption, separate-root constraints and revised legacy same-body oracles pass.
+Evidence: `exemption-fast-qualified.log`, `exemption-fast-timings.json`; no failure is waived.
+Eight sealed-drain cases passed unchanged (29.55 s); broad-load drain qualification remains open.
 
 ## Completed NP root repair
 
@@ -84,7 +87,6 @@ square/honeycomb junction-balance oracles; the third NP stub fixture was correct
 Native incident `20261030T213106-c3ff173d61e2` was reviewed/acknowledged; the gate was clear.
 Exact broad deferral remains: “DEFERRED: this change would have needed the FULL suite, but no
 test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.”
-No marker, budget, guard or classification changes. All prior owned scratch is absent.
 
 ## MRDNA diagnosis retained; production unchanged
 
@@ -122,8 +124,7 @@ Prior expanded repairs: NAMD cancellation reaping, bad-frame audit fixture, reta
 branch resequencing and lazy proof/display imports. Branch focused pass (100.05 s); 243 cold-import
 checks pass (120.15 s), readiness median 1.138→0.656 s. Broad-load drains remain unproven.
 Branch app: 7,249 nt, 12 connections, 134 rows, fixed four particles, residual ≤9.30e-14 nm, no errors;
-`expanded-cleanup-final.json` confirms scratch absence. Previous frontend: 9,490 passed / 1 skipped;
-Geometry Review app 1/1, smoke 23/23 and build/lint passed at that earlier checkpoint.
+`expanded-cleanup-final.json` confirms scratch absence; earlier app/smoke/build/lint evidence remains retained.
 
 ## Review/history and scope boundaries
 
@@ -140,11 +141,10 @@ exact Cancel, one Apply/undo, stable identity, earliest-error feedback and failu
 
 ## Shared work and closeout
 
-Base HEAD: `65d51e1e`; production Direct `a940249d`, NP `37549296`, review UI `498fbc16`.
+Base HEAD: `f0f7bcac`; production Direct `a940249d`, NP `37549296`, review UI `498fbc16`.
 Commit only explicit owned paths under operating-contract §7; no push or history rewrite.
 Pre-existing API/VR/simulation/strict-host/activity/test/memory-hygiene edits stay untouched.
 Mixed memory, implementation/conftest/manual-debt reconciliation files remain uncommitted.
-Direct root work is a checkpoint with outstanding regression qualification, not an FH-27 closure.
-Inspected captures/intermediate bundles are pruned; prepared review evidence and compact logs remain.
-Owned review/smoke/pytest scratch is absent; no owned services remain. Native review gate is clear.
+Direct root work is a checkpoint, not FH-27 closure; compact logs/prepared review evidence remain.
+Owned review/smoke/pytest scratch is absent; `exemption-cleanup-final.json` records final verification.
 `main.js` LOC delta 0. The local checkpoint does not close FH-27 or authorize candidate production use.

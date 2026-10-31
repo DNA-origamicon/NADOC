@@ -187,8 +187,12 @@ router = APIRouter()
 
 def _validation_dict(report: ValidationReport, design: "Design | None" = None) -> dict:
     from backend.core.validator import _is_loop_strand
+    from backend.core.direct_root_policy import direct_connection_exemptions
 
     loop_ids: list[str] = []
+    # Worker reports retain their strict passed/results contract. Derive notices
+    # from the adopted design even when the report crossed that boundary.
+    exemptions = direct_connection_exemptions(design) if design is not None else []
     if design is not None:
         loop_ids = [
             s.id
@@ -199,6 +203,7 @@ def _validation_dict(report: ValidationReport, design: "Design | None" = None) -
         "passed": report.passed,
         "results": [{"ok": r.ok, "message": r.message} for r in report.results],
         "loop_strand_ids": loop_ids,
+        **({"exemptions": exemptions} if exemptions else {}),
     }
 
 

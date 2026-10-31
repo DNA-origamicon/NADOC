@@ -50,7 +50,7 @@ it('keeps the native unreachable case distinct from the feasible imported fixtur
   expect(viewers[0].bundle.current.atoms.length).toBeGreaterThan(400)
 })
 
-it('shows the complete reachable native duplex and its advisory contacts in both builders', () => {
+it('labels retained native strain and the withdrawn closure in both builders', () => {
   content = mountGeometryReview(host, nativeEvidence, { viewerFactory })
   expect(viewers[0].bundle.current.atoms).toHaveLength(11920)
   expect(viewers[1].bundle.candidate.atoms).toHaveLength(11920)
@@ -60,7 +60,10 @@ it('shows the complete reachable native duplex and its advisory contacts in both
   expect(host.querySelector('[data-ref="fit"]').textContent).toContain('71 clash pairs')
   expect(host.querySelector('[data-ref="fit"]').textContent).toContain('15 ring piercings')
   expect(host.querySelector('[data-ref="defects"]').textContent).toContain('PIERCING')
-  expect(host.querySelector('[data-ref="construction"]').textContent).toContain('no authored row or production verification receipt')
+  expect(host.querySelector('[data-ref="construction"]').textContent).toContain('F4: Connect 1')
+  expect(host.querySelector('[data-ref="notice"]').textContent).toContain('automatic closure shown in Candidate is withdrawn')
+  expect(host.querySelector('.gr-grid').textContent).toContain('Candidate — withdrawn closure')
+  expect(nativeEvidence.current_proof).toEqual({ status: 'verified', checked_commands: 4 })
   expect(host.querySelector('[data-ref="sweep"]').textContent).toContain('36 local-linker phase settings')
   host.querySelector('[data-ref="focus"]').click()
   const { camera, controls } = viewers[0]

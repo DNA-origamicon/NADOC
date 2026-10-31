@@ -31,6 +31,7 @@
  *   #oconn-list                       — interactive linker/binding list
  */
 
+import { initRootExemptionNotice } from './root_exemption_notice.js'
 import {
   CT_VARIANTS, ctTileSvg, ctIsForbidden, ctForbiddenReason, endOf,
   ctAttachPair, ctIsDirect, ctIsIndirect, ctVariantForConnection,
@@ -183,6 +184,7 @@ export function initOverhangConnectionsPanel({
   if (!_selectA || !_selectB || !_box || !_popover) return _api  // section absent
 
   _buildNanoparticleMode()
+  initRootExemptionNotice({ store, host: _body })
 
   try {
     const saved = localStorage.getItem(_STORAGE)
@@ -602,8 +604,8 @@ function _updateControls() {
   }
   // Secondary "Relax": settle the connection's geometry. For a LINKER that's the
   // joint optimization; for a DIRECT binding (root-to-root OR end-to-root) it's the
-  // unified swing-about-driver-root + cluster move that closes the driven overhang's
-  // stretched tip↔root bond. Enabled when the pair has a linker, a legacy binding,
+  // root-preserving solve, with fixed same-cluster strain retained as an exemption.
+  // Enabled when the pair has a linker, a legacy binding,
   // OR a bound duplex (the Proposal-B path for a binding-less direct connection).
   if (_secondaryBtn) {
     const c = _linkerForPair()
@@ -614,7 +616,7 @@ function _updateControls() {
     _secondaryBtn.title = c
       ? 'Relax this linker (optimize the joint so the connector collapses)'
       : (b || dx)
-        ? 'Relax: swing the duplex + move the clusters together so the embedded-strand bond closes'
+        ? 'Relax while preserving root lengths; strain between roots fixed to one rigid cluster is retained'
         : 'Apply a connection first, then relax it'
   }
 }
@@ -654,10 +656,9 @@ function _boundDuplexForPair() {
 /** Secondary "Relax" action: settle the connection's geometry.
  *   - Linker → relaxLinker (optimize the joint so the connector arcs collapse).
  *   - Direct binding (root-to-root OR end-to-root) → relaxOverhangBinding: the
- *     unified server-side solve swings the driver's overhang duplex about its root
- *     (the driven tip co-rotates) + cluster kinematics so the driven overhang's
- *     stretched tip↔root bond closes to one backbone bond. The binding stays bound
- *     (no unbind/rebind dance — apply already relocated it).
+ *     server preserves original covalent root lengths using existing kinematics,
+ *     except fixed same-cluster roots whose strain stays unchanged. The binding
+ *     stays bound, including when Relax reports that exemption.
  *   - Bound duplex with NO binding (Proposal-B direct connection) → relaxDuplex:
  *     the SAME solve, driver/driven resolved from the duplex. */
 async function _onSecondary() {
@@ -667,9 +668,9 @@ async function _onSecondary() {
   if (!c && !b && !dx) return
   if (_secondaryBtn) _secondaryBtn.disabled = true
   try {
-    if (c) await relaxLinker(c.id)
-    else if (b) await relaxOverhangBinding(b.id)
-    else await relaxDuplex(dx.id)
+    const result = c ? await relaxLinker(c.id)
+      : b ? await relaxOverhangBinding(b.id) : await relaxDuplex(dx.id)
+    if (result?.relax_info?.mode === 'root_length_exemption') showToast(result.relax_info.message)
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {

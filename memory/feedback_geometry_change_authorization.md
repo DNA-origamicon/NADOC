@@ -17,6 +17,16 @@ corresponding automatic fitting repair; it does not promote the earlier
 shortest-root-bond candidate, which still left a stretched bond. Preserve collision
 diagnostics and manual movement freedom. Do not trade root closure for clearance.
 
+**Same-cluster exception — subsequent user correction, 2026-10-30:** when both
+roots belong to the same rigid cluster, with no defined joint or flexible region
+between them, retain the stretched connection and explicitly note a root-length
+preservation exemption. Do not automatically swing the duplex, deform the parent,
+or reconstruct linker atoms to close it. The design alone cannot distinguish an
+expert deliberately testing strain from a novice's mistake. The demonstrated
+46-base same-cluster Direct closure is withdrawn, not approved. This exception
+supersedes the blanket automatic root-preservation rule for that configuration;
+manual freedom and advisory collision reporting remain in place.
+
 Descriptions such as "calibrated", "native", "ring-safe", or "lower-clash" are not sufficient
 evidence for a molecular-placement decision. They often fail to identify what is actually moving
 or why an oracle changes verdict.

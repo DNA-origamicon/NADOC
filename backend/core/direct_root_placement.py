@@ -120,10 +120,27 @@ def fit_root_transform(moving, fixed, lengths):
 
 
 def place_direct_roots(design, driver_id, targets):
-    """Place the existing rigid paired domains without stretching either root."""
+    """Preserve roots, except fixed roots on one rigid body: retain their strain."""
     from backend.core.duplex_cluster import dematerialize_duplex_cluster, duplex_cluster_for, materialize_duplex_cluster
+    from backend.core.direct_root_policy import root_length_exemptions
 
     if not targets:
+        return design
+    exemptions = root_length_exemptions(design, targets)
+    if exemptions:
+        exempt_ids = {oid for group in exemptions for oid in group["overhang_ids"]}
+        remaining = {oid: expected for oid, expected in targets.items() if oid not in exempt_ids}
+        # Retaining an exempt pose needs no atom construction or numerical fit.
+        # Only other roots on this duplex still need a distance check.
+        measured = capture_root_lengths(design, remaining)
+        # One rigid duplex cannot be moved to repair other roots while retaining
+        # an exempt group's authored strain. Do not extend the exemption to them.
+        for oid, expected in remaining.items():
+            if oid not in measured or any(name not in measured[oid] for name in expected):
+                raise ValueError("Direct placement lost a covalent root constraint")
+            if any(abs(measured[oid][name] - value) > ROOT_TOLERANCE_NM
+                   for name, value in expected.items()):
+                _refuse()
         return design
     cluster = duplex_cluster_for(design, driver_id)
     working = dematerialize_duplex_cluster(design, driver_id)
