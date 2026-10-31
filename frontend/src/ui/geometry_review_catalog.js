@@ -1,6 +1,7 @@
 // Prepared evidence only. Loading a review never runs a candidate fitting policy.
 const attachmentURL = new URL('./geometry_review_data/platform-attachment.json.gz', import.meta.url).href
 const directURL = new URL('./geometry_review_data/direct-linker.json.gz', import.meta.url).href
+const nativeDirectURL = new URL('./geometry_review_data/direct-native.json.gz', import.meta.url).href
 
 async function loadEvidence(url, { signal }) {
   const response = await fetch(url, { signal })
@@ -16,6 +17,7 @@ async function loadEvidence(url, { signal }) {
 }
 const loadAttachment = options => loadEvidence(attachmentURL, options)
 const loadDirect = options => loadEvidence(directURL, options)
+const loadNativeDirect = options => loadEvidence(nativeDirectURL, options)
 const loadDirectRenderer = () => import('./direct_linker_review.js')
 
 // Add future prepared issues here, using their own loader and content renderer.
@@ -27,4 +29,5 @@ export const geometryReviewCases = [
   { id: 'direct', title: 'Direct root linker — isolated diagnostic', load: loadDirect, loadRenderer: loadDirectRenderer },
   { id: 'direct-native', title: 'Direct — native Extrude, unreachable layout', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'native' },
   { id: 'direct-contact', title: 'Direct — phase control with atom contact', load: loadDirect, loadRenderer: loadDirectRenderer, control: 'contact' },
+  { id: 'direct-reachable', title: 'Direct — native reachable 46-base connection', load: loadNativeDirect, loadRenderer: loadDirectRenderer },
 ]

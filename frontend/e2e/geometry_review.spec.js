@@ -85,11 +85,11 @@ test('Help geometry Review renders evidence, switches cases, and releases privat
     else await expect(modal.locator('[data-ref="defect-list"] li')).toHaveCount(0)
     await expect(modal.locator('[data-ref="features"]')).not.toBeVisible()
   }
-  for (const value of ['direct', 'direct-native', 'direct-contact']) {
+  for (const value of ['direct', 'direct-native', 'direct-contact', 'direct-reachable']) {
     await modal.getByLabel('Review case', { exact: true }).selectOption(value)
     await expect(modal).toHaveAttribute('data-case', value, { timeout: 60_000 })
     await expect(modal.locator('canvas')).toHaveCount(4)
-    await expect(modal.locator('[data-ref="limits"]')).toContainText('unqualified')
+    await expect(modal.locator('[data-ref="limits"]')).toContainText(value === 'direct-reachable' ? 'Production Connect still refuses' : 'unqualified')
     if (value === 'direct') {
       await expect(modal.locator('[data-ref="roots"]')).toContainText('0.527230')
       await modal.getByRole('button', { name: 'Focus driven root' }).click()
@@ -98,11 +98,20 @@ test('Help geometry Review renders evidence, switches cases, and releases privat
     } else if (value === 'direct-native') {
       await expect(modal.locator('[data-ref="fit"]')).toContainText('still refuses')
       await expect(modal.locator('[data-ref="construction"]')).toContainText('F2: Extrude 2')
-    } else {
+    } else if (value === 'direct-contact') {
       await expect(modal.locator('[data-ref="defects"]')).toContainText('CLASH')
+    } else {
+      await expect(modal.locator('[data-ref="roots"]')).toContainText('7.558952')
+      await expect(modal.locator('[data-ref="roots"]')).toContainText('0.186511')
+      await expect(modal.locator('[data-ref="fit"]')).toContainText('71 clash pairs')
+      await expect(modal.locator('[data-ref="defects"]')).toContainText('PIERCING')
+      await modal.getByRole('button', { name: 'Focus driven root' }).click()
+      await settle()
+      await modal.screenshot({ path: testInfo.outputPath('direct-reachable-root.png') })
     }
     await modal.getByLabel('Atom builder', { exact: true }).selectOption('export')
     if (value === 'direct') await expect(modal.locator('[data-ref="roots"]')).toContainText('0.535730')
+    if (value === 'direct-reachable') await expect(modal.locator('[data-ref="roots"]')).toContainText('0.217004')
     await settle()
     const modes = modal.locator('.gr-bar select')
     for (let i = 0; i < 4; i++) await modes.nth(i).selectOption('full')
