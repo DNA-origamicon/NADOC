@@ -1,4 +1,4 @@
-"""The unapproved attachment candidate is isolated and keeps contact exclusions."""
+"""Historical review isolation and the authorized root-preserving replacement."""
 
 from types import SimpleNamespace
 
@@ -7,7 +7,9 @@ import pytest
 
 from experiments.attachment_bond_candidate import fit_shortest_root_bond
 from experiments.attachment_clearance_review import (
-    candidate_obstacles, candidate_host_obstacles, diagnostic_candidate,
+    candidate_obstacles,
+    candidate_host_obstacles,
+    diagnostic_candidate,
 )
 
 
@@ -61,13 +63,32 @@ def test_candidate_restores_fit_policy_on_normal_and_failed_exit(raises):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("provider, fit_provider", [
-    (candidate_obstacles, None), (candidate_host_obstacles, None),
-    (candidate_host_obstacles, fit_shortest_root_bond),
-])
-def test_isolated_platform_candidate_passes_original_connection_contract(provider, fit_provider):
+def test_platform_preserves_native_roots_in_both_atom_builders(monkeypatch):
+    from backend.api import nanoparticle_attachment
+    from backend.core.overhang_root_constraints import overhang_root_bond
     from backend.core.models import LatticeType
-    from tests.test_generator_connections import test_multiple_connections_close_without_moving_centers
+    from tests.test_generator_connections import (
+        test_multiple_connections_close_without_moving_centers,
+    )
 
-    with diagnostic_candidate(provider, fit_provider):
-        test_multiple_connections_close_without_moving_centers("platform", LatticeType.HONEYCOMB, 3)
+    native = nanoparticle_attachment.attach_nanoparticle
+    checked = []
+
+    def measured(design, pid, oid, **kwargs):
+        before = {
+            fast: overhang_root_bond(design, oid, fast_bridges=fast)
+            for fast in (True, False)
+        }
+        out, report = native(design, pid, oid, **kwargs)
+        for fast, bond in before.items():
+            after = overhang_root_bond(out, oid, fast_bridges=fast)
+            assert after.length_nm == pytest.approx(bond.length_nm, abs=1e-8)
+            np.testing.assert_allclose(after.fixed, bond.fixed, atol=1e-9)
+        checked.append(oid)
+        return out, report
+
+    monkeypatch.setattr(nanoparticle_attachment, "attach_nanoparticle", measured)
+    test_multiple_connections_close_without_moving_centers(
+        "platform", LatticeType.HONEYCOMB, 3
+    )
+    assert len(checked) == len(set(checked)) == 9

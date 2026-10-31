@@ -122,6 +122,26 @@ def test_infeasible_locked_center_does_not_mutate(attachment_source):
     assert state.get_design() == before
 
 
+def test_manual_gizmo_commits_the_saved_root_pivot(attachment_source):
+    from backend.core.nanoparticle import constrained_nanoparticle_move
+    from backend.core.nanoparticle_attachment_fit import attachment_joint
+
+    source, pid = attachment_source
+    bound, _ = attach_nanoparticle(source, pid, "target_3p")
+    version = bound.nanoparticle_connection_versions[0]
+    # A covalent-atom pivot differs from the legacy backbone-marker pivot.
+    pivot = np.asarray(version.constraint_root_nm) + [0.2, 0.4, 0.1]
+    version = version.model_copy(update={"constraint_root_nm": tuple(pivot)})
+    moved, report = constrained_nanoparticle_move(
+        bound, pid, version, fitting_geometry(bound),
+        pivot=[0, 0, 0], translation=[1, 2, 3], rotation=[0, 0, 0, 1],
+    )
+    np.testing.assert_array_equal(report["root"], pivot)
+    joint, local = attachment_joint(moved, version, fitting_geometry(moved))
+    particle = next(p for p in moved.nanoparticles if p.id == pid)
+    np.testing.assert_allclose(joint, (particle.pose.to_array() @ np.r_[local, 1])[:3], atol=1e-9)
+
+
 def test_stale_revision_and_incompatible_sequence_do_not_mutate(attachment_source):
     before, pid = attachment_source
     assert request(pid, expected_revision=-1).status_code == 409
@@ -131,6 +151,23 @@ def test_stale_revision_and_incompatible_sequence_do_not_mutate(attachment_sourc
     with pytest.raises(ValueError, match="complementary"):
         attach_nanoparticle(invalid, pid, "target_3p")
     assert state.get_design() == before
+
+
+def test_collision_is_advisory_for_an_otherwise_reachable_attachment(attachment_source):
+    from backend.core.models import Nanoparticle
+
+    source, pid = attachment_source
+    # A huge second gold sphere encloses every reachable pose of the attachment.
+    source = source.copy_with(
+        nanoparticles=[*source.nanoparticles, Nanoparticle(diameter_nm=1000)]
+    )
+    before = source.model_dump_json()
+    out, report = attach_nanoparticle(source, pid, "target_3p")
+    assert report["residual_nm"] < 0.02
+    assert report["clearance_nm"] < 0
+    assert report["warnings"]
+    assert out.nanoparticle_connection_versions[-1].applied
+    assert source.model_dump_json() == before
 
 
 def test_fixed_center_kernel_preserves_translation():
@@ -165,7 +202,7 @@ def test_rebind_after_unapply_preserves_fixed_center(attachment_source):
     )
 
 
-def test_other_particle_radius_is_an_obstacle():
+def test_other_particle_radius_is_reported_without_displacing_closed_links():
     from backend.core.nanoparticle_kinematics import solve_closed_loop_pose
 
     pose, report = solve_closed_loop_pose(
@@ -177,8 +214,9 @@ def test_other_particle_radius_is_an_obstacle():
         4.0,
         obstacle_radii=np.array([3.0]),
     )
-    assert report["max_penetration_nm"] <= 0.05
-    assert np.linalg.norm(pose[:3, 3]) >= 6.95
+    np.testing.assert_array_equal(pose, np.eye(4))
+    assert report["max_penetration_nm"] == 7.0
+    assert report["max_joint_error_nm"] == 0
 
 
 @pytest.mark.parametrize("edit", [False, True])

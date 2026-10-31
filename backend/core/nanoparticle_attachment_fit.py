@@ -39,12 +39,13 @@ def fit_swing(
     obstacle_tree=None,
     phase_samples=16,
     roll_samples=24,
+    root_bond=None,
 ):
-    """Search the sphere-intersection circle and duplex axial roll for clearance.
+    """Search root-preserving poses, using clearance only as a preference.
 
-    Both rigid rotations preserve the exact graft joint and crossover bead.
-    Evaluate emitted native DNA landmarks, including bases, before committing
-    a pose; the shortest swing alone can put the opposite strand inside gold.
+    The caller supplies the stationary covalent root atom as the pivot. Both
+    rotations preserve that root bond and the graft joint. Collisions remain
+    inspectable diagnostics; they cannot make fitting stretch the root bond.
     """
     length = np.linalg.norm(joint - root)
     delta = center - root
@@ -93,7 +94,24 @@ def fit_swing(
         )
         swing = _rotation_between(joint - root, target - root)
         axis = (target - root) / length
-        rotations = Rotation.from_rotvec(rolls[:, None] * axis).as_matrix() @ swing
+        feasible_rolls = rolls
+        if root_bond is not None:
+            from backend.core.overhang_root_constraints import root_preserving_rolls
+
+            feasible_rolls = root_preserving_rolls(swing, axis, root, root_bond, rolls)
+            if angles and "duplex_roll_deg" in angles:
+                feasible_rolls = (
+                    rolls
+                    if any(
+                        abs(np.sin((r - rolls[0]) / 2)) < 1e-7 for r in feasible_rolls
+                    )
+                    else np.empty(0)
+                )
+        if not len(feasible_rolls):
+            continue
+        rotations = (
+            Rotation.from_rotvec(feasible_rolls[:, None] * axis).as_matrix() @ swing
+        )
         transformed = np.einsum("kij,nj->kni", rotations, points - root) + root
         clearance = np.min(
             np.stack(
@@ -117,11 +135,11 @@ def fit_swing(
                 rotations[index],
                 {
                     "phase_deg": float(np.degrees(phase)),
-                    "duplex_roll_deg": float(np.degrees(rolls[index])),
+                    "duplex_roll_deg": float(np.degrees(feasible_rolls[index])),
                 },
             )
-    if best_clearance < 0:
+    if best is None:
         raise ValueError(
-            "No sampled fixed-center duplex orientation clears all gold cores. Try a longer duplex or a different particle arrangement."
+            "No reachable attachment pose preserves the covalent root bond. Move the nanoparticle or change the duplex length."
         )
     return best

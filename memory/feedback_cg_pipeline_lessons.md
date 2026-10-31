@@ -63,17 +63,21 @@ nucleotide), so per-STRAND splines fail. See `project_mrdna_bead_model.md` for t
 **Rule:** Do NOT attempt per-strand splines with mrdna ARBD fine-stage output. Do NOT assign
 direction (FORWARD/REVERSE) to individual DNA beads. Use per-helix splines only.
 
-**Why:** The mrdna fine stage has exactly 1 DNA bead per base pair (at FORWARD backbone position)
-and 1 O bead (orientation indicator). For U6hb (5036 nt = 2518 bp): 2518 DNA beads, 2518 O beads.
+**Why:** The current mrDNA list-reader seeds one DNA bead at the midpoint of the
+two paired input sites, with one O bead along its frame x axis. The old claim
+that it sits on the FORWARD backbone was corrected from native source/PDB
+evidence on October 30, 2026. For U6hb (5036 nt = 2518 bp): 2518 DNA beads, 2518 O beads.
 There is NO separate bead for REVERSE strand backbone. Direction assignment by radial angle comparison
 will misclassify ~50% of beads, producing duplicate positions and LJ overflow at EM step 0.
 
 **Symptom of violation:** 75+ duplicate positions in override dict, LJ initial energy > 1e30 kJ/mol,
 EM either crashes at step 0 or takes 0 steps with an extreme energy.
 
-**How to apply:** In `nuc_pos_override_from_arbd_strands`, deduplicate to (h_id, bp_idx) — NO direction
-key in the bead map. FORWARD positions come from the spline; REVERSE positions are reconstructed via
-`_rotate(fwd_rad, axis_hat, BDNA_MINOR_GROOVE_ANGLE_RAD)`. Full detail in `project_mrdna_bead_model.md`.
+**How to apply:** Keep paired particle identity; do not assign particles to strand
+directions from their radial angle. The production spline decoder still fails its
+zero-step accuracy check. Its isolated frame-transport investigation is not yet
+approved; follow the current contract in `project_mrdna_bead_model.md` rather than
+treating the historical spline prescription as a verified round trip.
 
 **Validated result (U6hb, 2026-04-24):** 500 baseline steps → 14 Phase 3b steps (0.03× ratio, PASS).
 

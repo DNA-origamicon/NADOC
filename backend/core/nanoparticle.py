@@ -69,17 +69,18 @@ def replace_gold_nanosphere(
 def constrained_nanoparticle_move(design: Design, nanoparticle_id: str, version, geometry,
                                   *, pivot, translation, rotation, preconstrained=False):
     """Protein-parity two-ball-joint move for one applied NP duplex."""
-    from scipy.spatial.transform import Rotation
     from backend.core.protein import gizmo_move_to_pose, resolve_overhang_anchor, _rotation_between
-    from backend.core.duplex_cluster import (
-        dematerialize_duplex_cluster, materialize_duplex_cluster, duplex_cluster_for,
-    )
+    from backend.core.duplex_cluster import duplex_cluster_for
+    from backend.core.overhang_root_constraints import rotate_overhang_about
 
     particle = next(p for p in design.nanoparticles if p.id == nanoparticle_id)
     conjugation = next(c for c in design.nanoparticle_conjugations
                        if c.nanoparticle_id == nanoparticle_id)
     record = next(r for r in conjugation.surface_strands if r.strand_id == version.strand_id)
     root, _ = resolve_overhang_anchor(geometry, version.overhang_id, "root")
+    if version.constraint_root_nm is not None:
+        # The live gizmo uses the saved attachment pivot; commit the same motion.
+        root = np.asarray(version.constraint_root_nm, dtype=float)
     if root is None:
         raise ValueError("Nanoparticle constraint cannot resolve the overhang crossover joint.")
     old_pose = particle.pose.to_array()
@@ -126,24 +127,7 @@ def constrained_nanoparticle_move(design: Design, nanoparticle_id: str, version,
 
     moved = design
     if cluster is not None:
-        cluster_id, cluster_name = cluster.id, cluster.name
-        moved = dematerialize_duplex_cluster(moved, version.overhang_id)
-        spec = next(o for o in moved.overhangs if o.id == version.overhang_id)
-        old_r = Rotation.from_quat(spec.rotation).as_matrix()
-        new_r = swing @ old_r
-        moved = moved.model_copy(update={"overhangs": [
-            o.model_copy(update={"rotation": Rotation.from_matrix(new_r).as_quat().tolist(),
-                                 # Overhang transforms rotate about their live
-                                 # crossover pivot.  Retaining the existing
-                                 # translation makes this a pure rigid swing;
-                                 # rebasing it as an origin-centred affine
-                                 # transform displaces the duplex twice.
-                                 "translation": list(spec.translation)})
-            if o.id == version.overhang_id else o for o in moved.overhangs
-        ]})
-        moved, _ = materialize_duplex_cluster(
-            moved, version.overhang_id, name=cluster_name, cluster_id=cluster_id,
-        )
+        moved = rotate_overhang_about(moved, version.overhang_id, swing, root)
     moved = replace_gold_nanosphere(moved, nanoparticle_id,
                                     pose=proposed.reshape(-1).tolist())
     return moved, {

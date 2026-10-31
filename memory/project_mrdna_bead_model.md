@@ -26,23 +26,33 @@ and sugar-phosphate strain** — a different length scale entirely. Longer coars
 reach it. Useful work targets crossover-endpoint geometry / restraint handoff or an all-atom
 local-fragment relaxation stage instead. Full run log: [mrdna_namd_inventory.md](mrdna_namd_inventory.md).
 
-## The Core Fact (read this first)
+## Current coordinate contract (verified October 30, 2026)
 
 **mrdna ARBD fine stage has exactly 1 DNA bead per BASE PAIR — NOT 1 per nucleotide.**
 
-For U6hb (5036 nt = 2518 bp): the PSF has **2518 DNA beads** and 2518 O beads (total 5036 atoms).
-Each DNA bead represents the FORWARD strand backbone position for that base pair.
-Each O bead is an orientation indicator at ~1.5 Å from the DNA bead.
+For the current list-reader bridge, the initial DNA contour is the **midpoint of
+the two input nucleotide positions**, not the FORWARD backbone or the ideal helix
+axis. The O bead is 1.5 Å along the supplied particle-frame x axis. Verified in
+local mrDNA `readers/segmentmodel_from_lists.py:set_splines` and
+`segmentmodel.py:_generate_one_bead`, and against a fresh 140-nt fine PSF/PDB.
+Its separate oxDNA backmapper's Rz(90°) is not a seed-to-final rotation.
 
-There is **no separate bead for the REVERSE strand backbone.** The REVERSE backbone position must
-be reconstructed synthetically using the minor-groove rotation from the FORWARD bead position.
+NADOC `_build_nt_arrays` supplies analytic CG sites for in-span nucleotides;
+native Full O5′ sites use a different chemical convention. Transport the chosen
+reference relative to the actual input-pair center. Do not silently replace one
+site convention with the other. `build_md_seed_override` still uses the legacy
+spline decoder: the retained zero-step failure is **not fixed in production**.
 
-```
-(helix axis) ← HELIX_RADIUS → [DNA bead] ← FORWARD backbone of bp N
-                                            |
-                              rotate 150°  v
-                              (axis)  ← HELIX_RADIUS → [reconstructed REVERSE]
-```
+The isolated `experiments/mrdna_frame_candidate.py` compares the same raw frame
+convention before/after motion. Zero-step CG error is ≤7.24e-6 nm on the 2HB
+fixture; known rigid motion/local twist checks pass. This is preliminary evidence,
+not an approved production decoder or simulation-ready atomistic seed. Phase,
+nonzero atomistic, ssDNA, coarse/interpolated and loop-copy coverage remain open.
+Evidence: `.development-artifacts/feature-history-focus/mrdna-decoder-review/`.
+
+The sections below retain the **historical April investigation**. Their claim
+that DNA beads sit on FORWARD backbones is superseded by the verified contract
+above; do not use that assumption for new decoder work.
 
 ## Why Per-Strand Splines Failed
 
@@ -70,7 +80,7 @@ print(f"Duplicate positions: {len(dups)}")  # → 75
 print(f"First dup: {dups[0]}")              # → same coord assigned to 17 nucleotides
 ```
 
-## What Works: Per-Helix Spline
+## Historical implementation: Per-Helix Spline
 
 The correct approach (implemented in commit 84e8148, 2026-04-24):
 1. Read initial fine PDB — this IS in NADOC coordinate frame

@@ -1,12 +1,11 @@
 """Nanoparticle diagnostics and constraints use the canonical terminal O5′ bead."""
 import numpy as np
 import pytest
-from types import SimpleNamespace
 from scipy.spatial.transform import Rotation
 
 from backend.api.routes_nanoparticles import _np_tether_measurements
 from backend.core.design_geometry import fitting_geometry
-from backend.core.models import Design, LatticeType, Mat4x4, Nanoparticle
+from backend.core.models import Design, LatticeType, Mat4x4, Nanoparticle, NanoparticleConnectionVersion
 from backend.core.nanoparticle import build_thiol_conjugation
 from backend.core.native_full_placement import NativePlacementError
 
@@ -49,7 +48,8 @@ def test_missing_saved_attachment_never_guesses_a_radial_molecular_joint(monkeyp
     conjugation, helices, strands = build_thiol_conjugation(
         particle, scheme="direct_thiol", sequence="ACGTAC", count=1)
     design = Design(nanoparticles=[particle], nanoparticle_conjugations=[conjugation], helices=helices, strands=strands)
-    version = SimpleNamespace(strand_id=strands[0].id, overhang_id="target")
+    version = NanoparticleConnectionVersion(
+        nanoparticle_id=particle.id, strand_id=strands[0].id, overhang_id="target")
     monkeypatch.setattr(protein, "resolve_overhang_anchor", lambda *_: (np.zeros(3), None))
     monkeypatch.setattr(duplex_cluster, "duplex_cluster_for", lambda *_: None)
     with pytest.raises(NativePlacementError, match="exact saved native backbone attachment"):

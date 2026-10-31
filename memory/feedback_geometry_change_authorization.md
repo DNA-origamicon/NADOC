@@ -6,6 +6,17 @@ originSessionId: full-test-2026-08-11
 ---
 # Molecular geometry changes require demonstrated authorization
 
+## Root-bond priority — explicit user correction, 2026-10-30
+
+Automatic NADOC placement must keep overhang-root bond distances fixed and must
+never overstretch a root bond to avoid collisions. Users may deliberately
+overstretch bonds through manual moves. Collisions involving overhangs outside
+their native position are advisory and the user's responsibility to resolve,
+including by positioning nanoparticles before simulation. This authorizes the
+corresponding automatic fitting repair; it does not promote the earlier
+shortest-root-bond candidate, which still left a stretched bond. Preserve collision
+diagnostics and manual movement freedom. Do not trade root closure for clearance.
+
 Descriptions such as "calibrated", "native", "ring-safe", or "lower-clash" are not sufficient
 evidence for a molecular-placement decision. They often fail to identify what is actually moving
 or why an oracle changes verdict.
@@ -74,3 +85,12 @@ A later cluster move carries every selected member from its current posed state,
 including earlier individual moves. Reset removes the individual pose component
 while retaining the cluster movement; replay consistency alone does not prove
 chronological correctness—compare against the move applied to prior displayed positions.
+
+Full-design review exception (2026-10-30): the user explicitly requested the entire
+attachment-review NADOC design in the workspace because the cropped viewer omitted
+the nanoparticles and surrounding structure. This authorizes separate, clearly named
+Current/Candidate `.nadoc` snapshots for native viewing. It does not authorize changing
+the production fitter, geometry locks, or simulation inputs. The requested copies in
+`workspace/Geometry Review/` preserve the exact full four-attachment comparison states;
+they are captured import roots, not replayable candidate construction histories or the
+completed nine-attachment design.

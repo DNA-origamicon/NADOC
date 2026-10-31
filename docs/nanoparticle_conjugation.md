@@ -58,13 +58,18 @@ Generate Design creates and sequences overhangs before calling this command's
 shared builder with fixed centers. The Conjugate Manager's selected-overhang Apply
 also uses this builder after creating the requested corona.
 
-Clearance is a geometric screen, not a molecular simulation: rigid duplex search
-checks native backbone/base landmarks against DNA and protein atoms (0.5 nm
-landmark separation, excluding the covalently adjacent 2 nm root neighbourhood),
-and gold cores against DNA, protein atoms and other particle cores. Hidden objects
-remain obstacles. The finite search can reject a feasible arrangement it did not
-find; it never guarantees a global optimum. Coated particles require their separate
-attachment chemistry and do not use this shortcut.
+Automatic attachment and nanoparticle relaxation preserve the actual covalent
+overhang-root bond. The rigid fit pivots about its stationary atom and solves the
+axial roll to preserve both native viewer and export linker geometries. A fit that
+cannot reach the graft while preserving the root is refused without changing the
+design. Manual Move/Rotate remains free to stretch the root.
+
+Clearance is advisory. The fit prefers greater separation among root-preserving
+poses, and reports DNA/protein/gold overlaps for the user to resolve before
+simulation. DNA/protein checks use the existing 0.5 nm landmark separation; only
+the overhang's own host strand receives the 2 nm root-contact exemption. Hidden
+objects remain included in diagnostics. No collision threshold or atom template
+is changed. Coated particles retain their separate attachment chemistry.
 
 Open the right-sidebar **Overhang Connections** card and choose
 **Nanoparticle ↔ Overhang**. Select a nanoparticle ssDNA handle and a target
@@ -83,9 +88,9 @@ anchors collectively. Multiple versions can coexist and be applied or unapplied;
 only the active compatible materialization is present in the design. During
 movement and relaxation, each handle–overhang duplex acts as a rigid linker,
 while the overhang crossover and handle-to-particle attachment behave as joints.
-The solver first reorients duplexes to reduce bond residuals, then translates the
-particle and applies DNA-avoidance displacement. All attached and unattached
-particle handles follow the solved particle pose.
+The solver closes the graft joints and reorients duplexes while preserving the
+native covalent root lengths. It reports remaining overlaps for the user to
+resolve. Attached duplexes and unattached particle handles follow the solved pose.
 
 ## Automation and regression testing
 

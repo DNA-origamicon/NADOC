@@ -49,13 +49,16 @@ def test_existing_handles_are_reused_once_before_creating_missing_handles():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("shape,lattice,count", [
-    ("auto", LatticeType.HONEYCOMB, 2),
-    ("auto", LatticeType.HONEYCOMB, 3),
-    ("auto", LatticeType.SQUARE, 3),
-    ("platform", LatticeType.HONEYCOMB, 3),
-    ("curved-rod", LatticeType.HONEYCOMB, 3),
-])
+@pytest.mark.parametrize(
+    "shape,lattice,count",
+    [
+        ("auto", LatticeType.HONEYCOMB, 2),
+        ("auto", LatticeType.HONEYCOMB, 3),
+        ("auto", LatticeType.SQUARE, 3),
+        ("platform", LatticeType.HONEYCOMB, 3),
+        ("curved-rod", LatticeType.HONEYCOMB, 3),
+    ],
+)
 def test_multiple_connections_close_without_moving_centers(shape, lattice, count):
     source = rod_source(lattice) if shape == "auto" else multi_source(lattice=lattice)
     before = source.model_dump_json()
@@ -67,35 +70,55 @@ def test_multiple_connections_close_without_moving_centers(shape, lattice, count
     assert Counter(c["particle_id"] for c in report["connections"]) == {
         p.id: count for p in source.nanoparticles
     }
-    assert len({c["strand_id"] for c in report["connections"]}) == count * len(source.nanoparticles)
-    assert len({c["overhang_id"] for c in report["connections"]}) == count * len(source.nanoparticles)
+    assert len({c["strand_id"] for c in report["connections"]}) == count * len(
+        source.nanoparticles
+    )
+    assert len({c["overhang_id"] for c in report["connections"]}) == count * len(
+        source.nanoparticles
+    )
     geometry = fitting_geometry(generated)
     for particle, original in zip(generated.nanoparticles, source.nanoparticles):
-        np.testing.assert_array_equal(particle.pose.to_array()[:3, 3], original.pose.to_array()[:3, 3])
+        np.testing.assert_array_equal(
+            particle.pose.to_array()[:3, 3], original.pose.to_array()[:3, 3]
+        )
         joints = []
         for version in generated.nanoparticle_connection_versions:
             if version.applied and version.nanoparticle_id == particle.id:
+                from backend.core.overhang_root_constraints import overhang_root_bond
+
+                root_bond = overhang_root_bond(generated, version.overhang_id)
+                np.testing.assert_allclose(version.constraint_root_nm, root_bond.fixed, atol=1e-9)
                 joint, local = attachment_joint(generated, version, geometry)
                 expected = (particle.pose.to_array() @ np.r_[local, 1])[:3]
                 assert np.linalg.norm(joint - expected) < 0.02
                 joints.append(joint)
-        for i, joint in enumerate(joints):
-            assert all(np.linalg.norm(joint - other) > 0.5 for other in joints[i + 1:])
-    attachments = [e for e in generated.feature_log if getattr(e, "op_kind", None) == "nanoparticle-attach-overhang"]
+        # Close every graft without moving its particle center. Inter-graft
+        # clearance is advisory; it must not override covalent root constraints.
+        assert np.isfinite(joints).all()
+    attachments = [
+        e
+        for e in generated.feature_log
+        if getattr(e, "op_kind", None) == "nanoparticle-attach-overhang"
+    ]
     assert len(attachments) == count * len(source.nanoparticles)
     # Native post-state snapshots retain the fitted graft sites and closed joints.
     from backend.api.state import decode_design_snapshot
+
     restored = decode_design_snapshot(attachments[-1].post_state_gz_b64)
     assert restored.nanoparticle_conjugations == generated.nanoparticle_conjugations
 
     if shape == "auto" and lattice == LatticeType.HONEYCOMB and count == 3:
         from backend.api.nanoparticle_attachment import attach_nanoparticle
         from backend.api.routes_nanoparticles import _set_np_version_applied
+
         last = generated.nanoparticle_connection_versions[-1]
         unbound = _set_np_version_applied(generated, last.id, False)
         rebound, measured = attach_nanoparticle(
-            unbound, last.nanoparticle_id, last.overhang_id,
-            strand_id=last.strand_id, fixed_center=True,
+            unbound,
+            last.nanoparticle_id,
+            last.overhang_id,
+            strand_id=last.strand_id,
+            fixed_center=True,
         )
         assert measured["residual_nm"] < 0.02
         assert sum(v.applied for v in rebound.nanoparticle_connection_versions) == 6

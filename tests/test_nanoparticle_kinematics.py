@@ -61,13 +61,20 @@ def test_closed_loop_solver_reports_infeasible_without_distorting_links():
     assert report["max_joint_error_nm"] > 1.0
 
 
-def test_closed_loop_solver_projects_nanoparticle_clearance():
+def test_closed_loop_solver_keeps_closed_links_when_clearance_conflicts():
     local = np.array([[2.0, 0, 0]])
     roots = np.array([[-8.0, 0, 0]])
     radii = np.array([10.0])
     obstacle = np.array([[0.0, 0, 0]])
     solved, report = solve_closed_loop_pose(
-        np.eye(4), local, roots, radii, obstacle, 4.0,
+        np.eye(4),
+        local,
+        roots,
+        radii,
+        obstacle,
+        4.0,
     )
-    assert np.linalg.norm(solved[:3, 3] - obstacle[0]) >= 3.95
-    assert report["max_penetration_nm"] <= 0.05
+    np.testing.assert_array_equal(solved, np.eye(4))
+    assert report["converged"]
+    assert report["max_joint_error_nm"] == 0
+    assert report["max_penetration_nm"] == 4.0

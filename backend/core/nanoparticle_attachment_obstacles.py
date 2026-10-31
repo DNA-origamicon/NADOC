@@ -30,6 +30,9 @@ def protein_points(design, geometry):
 
 
 def duplex_obstacles(geometry, version, root, proteins=()):
+    host_strands = {
+        n["strand_id"] for n in geometry if n.get("overhang_id") == version.overhang_id
+    }
     points = np.asarray(
         [
             n[key]
@@ -37,11 +40,13 @@ def duplex_obstacles(geometry, version, root, proteins=()):
             if n.get("strand_id") != version.strand_id
             and n.get("overhang_id") != version.overhang_id
             for key in ("backbone_position", "base_position")
+            if n.get("overhang_id") is not None
+            or n.get("strand_id") not in host_strands
+            or np.linalg.norm(np.asarray(n[key]) - root) > 2.0
         ],
         dtype=float,
     ).reshape((-1, 3))
-    # The covalently adjacent root neighbourhood is intentionally in contact.
-    points = points[np.linalg.norm(points - root, axis=1) > 2.0]
+    # Only the covalent host receives the near-root contact exemption.
     return cKDTree(np.concatenate([points, np.asarray(proteins).reshape((-1, 3))]))
 
 

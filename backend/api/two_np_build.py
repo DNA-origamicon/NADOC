@@ -1202,10 +1202,11 @@ def materialize(
     positions = np.array(
         [n[key] for n in geometry for key in ("backbone_position", "base_position")]
     )
+    warnings = []
     for p, center in zip(particles, centers):
         if np.min(np.linalg.norm(positions - center, axis=1)) < p.diameter_nm / 2:
-            raise ValueError(
-                "A generated DNA strand intersects a gold core. Try a longer duplex or a different particle arrangement."
+            warnings.append(
+                f"DNA overlaps nanoparticle {p.id}; adjust its placement before simulation."
             )
     before = rod
     rod = rod.copy_with(
@@ -1214,7 +1215,7 @@ def materialize(
                 update={
                     "relaxed": True,
                     "residual_nm": residuals[i],
-                    "constraint_root_nm": tuple(
+                    "constraint_root_nm": v.constraint_root_nm or tuple(
                         resolve_overhang_anchor(geometry, v.overhang_id, "root")[0]
                     ),
                 }
@@ -1238,6 +1239,7 @@ def materialize(
     )
     placement = {
         "connections": connections,
+        "warnings": warnings,
         "generated_helix_ids": sorted(rod_ids),
         "attachment_residuals_nm": residuals,
         "rod_offset_nm": offset,
