@@ -193,6 +193,8 @@ def _assert_bridges(stem: str, lengths: dict[str, float]) -> None:
     )
 
 
+# Refreshed 2026-10-31 after explicit approval of the 14.625 degree template
+# frame offset demonstrated in the junction A/B review. Tolerances are unchanged.
 # Fast: small crossover designs (<0.2 s each) — pin the per-atom stamp + the set and
 # closure of the crossover bridges.
 # Regenerated 2026-08-06: the MD-measured nucleotide templates became NADOC's native
@@ -200,16 +202,16 @@ def _assert_bridges(stem: str, lengths: dict[str, float]) -> None:
 # design.  Approved change, not drift — the templates were re-extracted from free NAMD
 # rather than tweaked, and the _PHASE_* constants were NOT touched.
 _FAST_GOLDEN = {
-    "6hb_test": "68b486cd3356d9aa6f1d4553efe924bd",  # 2 crossover bridges
-    "Con4": "954d26293804168311a65caf3224a930",  # 3
-    "2hb_xover_val": "abd46fcda6d2686e768f363a75efff2b",  # 4
+    "6hb_test": "5db4c71ed571a07154e91cf2c40a8d63",  # 2 crossover bridges
+    "Con4": "00be01f684f0391bc46ea31dfb5b9471",  # 3
+    "2hb_xover_val": "7431478b88bff8446e38022f84e566c1",  # 4
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
 # deformation pass — the two paths most sensitive to any stamp perturbation.
 _SLOW_GOLDEN = {
-    "U6hb": "b62226e0a61e626d41a1de9765d76674",  # 353 bridges
-    "multi_domain_test3_bend90": "8ba40dc2b2c1511614c3065fc9f1344f",  # 563 bridges
+    "U6hb": "fc31af756960dc817facdea94e704c71",  # 353 bridges
+    "multi_domain_test3_bend90": "6e8bddaf5d1fa68016c027d7b403b53f",  # 563 bridges
 }
 
 

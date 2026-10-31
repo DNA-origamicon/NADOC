@@ -173,7 +173,10 @@ FULL_REP_BALANCE_ROLL_SQUARE_DEG: float = (
 # representation and the balanced atomistic template frame.  Shared here so the two
 # sibling projections cannot silently apply different conventions.  This is not a
 # lattice-cell correction: it applies equally to FORWARD and REVERSE cells.
-ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = 14.6
+# O5' azimuth bisector: (8.23 + 171.02) / 2 - 150 / 2. The 14.625°
+# convention and its exact geometry-lock refresh were approved on 2026-10-31
+# after the full-phase Viewer/Export A/B review; lattice phases stay fixed.
+ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = 14.625
 
 
 # ── oxDNA simulation units ────────────────────────────────────────────────────

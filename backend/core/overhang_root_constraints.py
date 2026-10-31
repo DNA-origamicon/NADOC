@@ -53,7 +53,7 @@ def overhang_root_bond(design, overhang_id, *, fast_bridges=True):
         exclude_helix_ids={h.id for h in design.helices} - helices,
     )
 
-    def atom(helix, bp, direction, name):
+    def atoms(helix, bp, direction, name):
         hits = [
             a
             for a in model.atoms
@@ -63,18 +63,26 @@ def overhang_root_bond(design, overhang_id, *, fast_bridges=True):
             and a.direction == direction.value
             and a.name == name
         ]
-        if len(hits) != 1:
+        if not hits:
             raise ValueError(
                 "Automatic fitting requires an unambiguous covalent root bond."
             )
-        a = hits[0]
-        return a.serial, np.array([a.x, a.y, a.z])
+        return hits
 
-    mi, moving = atom(domain.helix_id, moving_bp, domain.direction, moving_name)
-    fi, fixed = atom(parent.helix_id, fixed_bp, parent.direction, fixed_name)
-    if (mi, fi) not in model.bonds and (fi, mi) not in model.bonds:
+    moving_atoms = atoms(domain.helix_id, moving_bp, domain.direction, moving_name)
+    fixed_atoms = atoms(parent.helix_id, fixed_bp, parent.direction, fixed_name)
+    bonds = {frozenset(pair) for pair in model.bonds}
+    # Insertions can emit several copies at one bp. The covalent graph, not
+    # their shared address or serial order, identifies the boundary endpoints.
+    pairs = [(moving, fixed) for moving in moving_atoms for fixed in fixed_atoms
+             if frozenset((moving.serial, fixed.serial)) in bonds]
+    if not pairs:
         raise ValueError("Overhang root atoms are not covalently bonded.")
-    return RootBond(fixed, moving)
+    if len(pairs) != 1:
+        raise ValueError("Automatic fitting requires an unambiguous covalent root bond.")
+    moving, fixed = pairs[0]
+    return RootBond(np.array([fixed.x, fixed.y, fixed.z]),
+                    np.array([moving.x, moving.y, moving.z]))
 
 
 def root_preserving_rolls(swing, axis, pivot, bond, preferred):

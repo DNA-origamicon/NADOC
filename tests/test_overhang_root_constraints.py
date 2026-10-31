@@ -72,6 +72,41 @@ def test_manual_cluster_translation_can_stretch_root(rooted):
     assert overhang_root_bond(moved, oid).length_nm > baseline.length_nm + 5
 
 
+@pytest.mark.parametrize("fast", [True, False], ids=["viewer", "export"])
+def test_inserted_root_copies_follow_covalent_traversal(rooted, fast):
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.models import Direction, LoopSkip
+
+    source, oid = rooted
+    strand = next(s for s in source.strands if any(d.overhang_id == oid for d in s.domains))
+    index = next(i for i, d in enumerate(strand.domains) if d.overhang_id == oid)
+    moving = strand.domains[index]
+    fixed = strand.domains[1 if index == 0 else index - 1]
+    endpoints = [(moving, moving.end_bp if index == 0 else moving.start_bp,
+                  "O3'" if index == 0 else "P", index == 0),
+                 (fixed, fixed.start_bp if index == 0 else fixed.end_bp,
+                  "P" if index == 0 else "O3'", index != 0)]
+    source = source.copy_with(helices=[h.model_copy(update={
+        "loop_skips": [*h.loop_skips, *[LoopSkip(bp_index=bp, delta=1)
+            for domain, bp, _, _ in endpoints if domain.helix_id == h.id]]})
+        for h in source.helices])
+    model = build_atomistic_model(source, fast_bridges=fast)
+    expected = []
+    for domain, bp, name, three_prime in endpoints:
+        # Forward traverses copy 0→1; Reverse traverses copy 1→0.
+        copy = int(three_prime == (domain.direction == Direction.FORWARD))
+        atom, = [a for a in model.atoms if a.strand_id == strand.id
+                 and a.helix_id == domain.helix_id and a.bp_index == bp
+                 and a.name == name and (a.copy_k or 0) == copy]
+        expected.append(atom)
+    edge = ((expected[1].serial, expected[0].serial) if index else
+            (expected[0].serial, expected[1].serial))
+    assert edge in model.bonds
+    bond = overhang_root_bond(source, oid, fast_bridges=fast)
+    np.testing.assert_array_equal(bond.moving, [expected[0].x, expected[0].y, expected[0].z])
+    np.testing.assert_array_equal(bond.fixed, [expected[1].x, expected[1].y, expected[1].z])
+
+
 def test_roll_constraint_preserves_viewer_and_export_root_bonds(rooted):
     source, oid = rooted
     fast = overhang_root_bond(source, oid)

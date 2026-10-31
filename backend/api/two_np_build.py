@@ -1037,6 +1037,15 @@ def materialize(
         if lateral:
             break
         root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
+        if standard or settings.connections_per_particle > 1:
+            from backend.core.overhang_root_constraints import overhang_root_bond
+
+            # Plan the same rigid sphere used by attach_nanoparticle. Its
+            # stationary atom is the host O3'/P, not the overhang O5' marker.
+            # Read the pre-bind root, as the attachment operation does.
+            bond = overhang_root_bond(unpaired, v.overhang_id)
+            if bond is not None:
+                root = bond.fixed
         joint, local = _joint(rod, v, geometry)
         reach = np.linalg.norm(joint - root) + np.linalg.norm(local)
         relative = frame.T @ (root - centers[particle_index])

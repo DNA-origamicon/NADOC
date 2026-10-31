@@ -22,8 +22,13 @@ Detail and every justifying measurement: [[project_atomistic_source_of_truth_arc
   1.126 nm and the other at 0.286; `FULL_REP_BALANCE_ROLL_SQUARE_DEG = 30 − ½·33.75 = 13.125°`
   fixes it on the render feeds only. Honeycomb 0.
 - **Atomistic junction-balance roll** — the same defect where it is exported: honeycomb linkers
-  0.586/1.086 nm → 0.7241/0.7242. One constant, `_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG = 14.6`,
-  because the offset is a template-convention property, not a lattice one.
+  0.586/1.086 nm → 0.7241/0.7242 with the original 14.6° offset. The shared
+  `ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG` is now **14.625°**, explicitly approved on
+  2026-10-31 from the measured O5′ bisector and 72-case Viewer/Export phase review.
+  Square/honeycomb balance residuals are <0.000182 nm; some phases gain contacts and
+  Export linker atoms move by up to 0.105564 nm. This is a template convention,
+  not a lattice correction; phase constants and detector thresholds are unchanged.
+  Evidence: `.development-artifacts/feature-history-focus/remaining-failures/junction-review/review.html`.
 - **The inversion** — `NucleotidePosition` carries the phase (`radial_hat` / `axis_point` /
   `azimuth_rad`); the CG bead is a projection of it, exactly; the stamp reads the phase, not the
   bead. Byte-identical. Then helical-site Phases 1–10 ([[project_helical_site]]).

@@ -7,7 +7,11 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
-from experiments.mrdna_frame_candidate import paired_particle_motion, transport_point
+from experiments.mrdna_frame_candidate import (
+    paired_particle_motion,
+    rigid_atom_transport,
+    transport_point,
+)
 
 
 def fixture():
@@ -96,6 +100,67 @@ def test_orientation_particles_carry_local_twist_without_moving_dna_centers():
         assert transport_point(motion["h", bp], point) == pytest.approx(
             expected, abs=1e-13
         )
+
+
+@pytest.mark.parametrize("moving", [False, True], ids=["zero", "rigid"])
+def test_written_particle_precision_does_not_deform_native_atoms(moving):
+    manifest, source, orientations, names, particles = fixture()
+    initial = np.round(particles, 5)
+    rotation = (
+        Rotation.from_euler("xyz", [17, -31, 67], degrees=True).as_matrix()
+        if moving
+        else np.eye(3)
+    )
+    shift = np.array([2.1, -0.9, 3.4]) if moving else np.zeros(3)
+    final = initial @ rotation.T + shift
+    motion = paired_particle_motion(
+        manifest,
+        source,
+        orientations,
+        names,
+        final,
+        initial_particle_positions_nm=initial,
+    )
+    # Distinct chemical sites, including a link between different particles.
+    points = source[::2] + [0.18, -0.29, 0.07]
+    reference = Row(
+        atoms=[
+            Row(helix_id="h", bp_index=i, name="P", x=p[0], y=p[1], z=p[2])
+            for i, p in enumerate(points)
+        ],
+        bonds=[(0, 1), (1, 2)],
+        warnings=[],
+    )
+    transported = rigid_atom_transport(reference, motion)
+    actual = np.array([[a.x, a.y, a.z] for a in transported.atoms])
+    np.testing.assert_allclose(actual, points @ rotation.T + shift, atol=1e-12, rtol=0)
+    if not moving:
+        np.testing.assert_array_equal(actual, points)
+    np.testing.assert_array_equal([[a.x, a.y, a.z] for a in reference.atoms], points)
+    assert transported.bonds == reference.bonds
+    for i, point in enumerate(points):
+        np.testing.assert_allclose(
+            transport_point(motion["h", i], point),
+            rotation @ point + shift,
+            atol=1e-12,
+            rtol=0,
+        )
+
+
+def test_nonuniform_site_motion_cannot_take_rigid_atom_shortcut():
+    manifest, source, orientations, names, particles = fixture()
+    final = particles.copy()
+    final[-1] += [0.0, 0.02, 0.0]
+    motion = paired_particle_motion(
+        manifest,
+        source,
+        orientations,
+        names,
+        final,
+        initial_particle_positions_nm=particles,
+    )
+    reference = Row(atoms=[Row(helix_id="h", bp_index=i) for i in range(3)])
+    assert rigid_atom_transport(reference, motion) is None
 
 
 @pytest.mark.parametrize(

@@ -237,7 +237,9 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
     control.  Presence-after-a-real-run (bridge-specific), NOT a dynamic co-movement
     measurement — the FAST mechanical-class pins carry the rigid-vs-flexible
     prediction; a 500-step Brownian co-motion correlation would be too noisy to
-    assert here."""
+    assert here. The short ds fixture already has stretched complement-to-bridge
+    bonds on one rigid bundle. It must retain that strain; this software check
+    does not require 500 steps to produce an admissible display frame."""
     from backend.core.mrdna_bridge import (
         ensure_wsl_cuda_libs,
         find_arbd,
@@ -249,6 +251,7 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
     ensure_wsl_cuda_libs()
 
     def _run(design, out):
+        from backend.core.mrdna_decoder import decode_mrdna_frame
         from backend.core.mrdna_manifest import (
             bind_manifest_to_mrdna_particles,
             build_mrdna_nucleotide_manifest,
@@ -274,8 +277,41 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
         manifest = build_mrdna_nucleotide_manifest(
             design, design_fingerprint=oxdna_design_fingerprint(design)
         )
-        bind_manifest_to_mrdna_particles(manifest, model).write(out)
-        return extract_mrdna_results(design, out)
+        manifest = bind_manifest_to_mrdna_particles(manifest, model)
+        manifest.write(out)
+        decoded = decode_mrdna_frame(
+            out, out / f"{_SIM_STEM}.psf", out / "output" / f"{_SIM_STEM}.dcd",
+            design=design,
+        )
+        quality = decoded["quality"]
+        assert quality["complete"] and not quality["missing_identities"]
+        assert not quality["pair_errors"]
+        assert np.isfinite([p["backbone_position"] for p in decoded["positions"]]).all()
+        if quality["usable"]:
+            return extract_mrdna_results(design, out)
+
+        # Only the already-strained ds bridge may trip the structural gate.
+        # Ordinary backbone errors, absent linkers and bad base pairing still
+        # fail this test. Refusal must remain enforced by the public extractor.
+        assert linker_type == "ds" and design.overhang_connections
+        source = _build_nt_arrays(design)[0] / 10
+        records = {r.identity.key(): r for r in manifest.records}
+        strained = set()
+        for key, record in records.items():
+            other = records.get(record.successor)
+            if other is None:
+                continue
+            bridge_boundary = (record.render.helix_id.startswith(_LNK)
+                               != other.render.helix_id.startswith(_LNK))
+            if bridge_boundary and np.linalg.norm(
+                source[record.model_nucleotide_index] - source[other.model_nucleotide_index]
+            ) > 1.2:
+                strained.add((key, record.successor))
+        assert quality["bond_errors"]
+        assert {(b["from"], b["to"]) for b in quality["bond_errors"]} <= strained
+        with pytest.raises(RuntimeError, match="decoded frame failed structural validation"):
+            extract_mrdna_results(design, out)
+        return decoded
 
     d, bridge = _link(linker_type, 6, attach)
     res_link = _run(d, tmp_path / "link")

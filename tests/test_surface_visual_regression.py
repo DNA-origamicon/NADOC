@@ -200,10 +200,10 @@ def _voltroncore() -> Design:
 
 
 # Baselines measured on this machine (uv.lock-pinned scipy/skimage; marching cubes is
-# deterministic). These July baselines used the legacy 1ZEW templates, before the
-# August promotion of measured templates. Keep that input explicit for the frozen
-# envelope oracle; the vectorized/exact and determinism tests exercise native
-# measured templates. No baseline or production geometry is changed here.
+# deterministic). The July baselines began with legacy 1ZEW templates; the
+# fixtures now use the accepted native measured placement. The 6hb/18hb values
+# were refreshed when that convention became mandatory, and Voltron's obsolete
+# area alone was refreshed with explicit approval on 2026-10-31.
 # Counts/faces get an 8% band, volume +
 # area a 5% band — loose enough for library micro-variation, tight enough that a real
 # envelope change (grid coarsen → −47% verts, radius inflate → +21% vol) trips them.
@@ -221,9 +221,11 @@ _PANEL = [
         marks=_slow,
         id="18hb_routed",
     ),
+    # Area-only refresh approved 2026-10-31: accepted native placement replaced
+    # the retired legacy convention; pinned input and all tolerances stay fixed.
     pytest.param(
         _voltroncore,
-        dict(verts=498015, faces=1016230, vol=6718.3, area=18077.7, cf_mean=0.29),
+        dict(verts=498015, faces=1016230, vol=6718.3, area=19044.137046, cf_mean=0.29),
         marks=_slow,
         id="VoltronCore",
     ),
