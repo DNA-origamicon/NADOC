@@ -15,45 +15,45 @@ Manual edits may stretch roots. Collisions of repositioned overhangs are the use
 including NP positioning before simulation. The 2 nm contact exemption covers only the host strand.
 This authorizes root-preservation, supersedes the earlier shortest-root candidate, and leaves unrelated molecular changes, phase/threshold/golden changes and simulations unauthorized.
 
-**Single next task: isolate the native linker-convention repair before further Direct qualification.**
-The old `_seed(cluster_b_translation=(6,3,2))` Apply stretched O3′–P from 0.136575 nm to
-1.773216/1.564670 nm. Automatic placement now records the original viewer/export lengths,
-fits a rigid duplex pose exactly, and refuses atomically when infeasible; parents stay fixed on
-Connect. Relax can use the existing parent joints/translation, then independently validates both
-native atom builders. Manual Move/Rotate remains unrestricted and collisions are advisory.
-No atom builder, phase, threshold or geometry golden changed. Finite-search refusal is not a
-mathematical proof of infeasibility; exact triangle/identical-endpoint bounds reject some cases.
+**Single next task: qualify a reachable native Extrude → Connect history with the isolated linker candidate.**
+Use legal native sites and emitted root atoms to choose a reachable pair; do not guess polarity,
+waive unreachable cases, or replace producer tests broadly with imported fixtures. Then check
+cold replay, driver changes and parent poses before presenting an approval-ready molecular repair.
+Production checkpoint `a940249d`: automatic Direct placement records original viewer/export root
+lengths, fits a rigid duplex pose and refuses atomically when infeasible. Connect keeps parents
+fixed; Relax uses existing parent joints/translation and independently checks both atom builders.
+Manual Move/Rotate stays unrestricted. Snapshot lengths have typed ownership, dependencies and
+namespace remapping. Root lookup includes direction for opposite ends on ONE host strand.
+Prior 88 focused passes and the imported app lifecycle remain qualified; app root delta ≤1.41e-12 nm.
+Binding-backed Relax still writes a legacy `cluster_op` warning row; its native cold-history gap remains.
 
-Implementation: `direct_root_placement.py`, `direct_root_relax.py`; ordinary equal/unequal Connect,
-bound toggle and driver changes call the shared placement. Saved root constraints participate in
-typed ownership, dependencies and namespace remapping. Relax implementation pins changed honestly.
-Fixed a real root-reader bug: both overhangs may occupy opposite directions at the same bp on ONE
-strand; atom lookup now includes direction. Its independent emitted-atom regression passes.
-Focused: 88 passes across root constraints (12), ownership (9), NP roots (9), ordinary Direct (12),
-Relax contracts (33), fresh-process Relax proof (3) and fitting scope (10). The Relax contract fixture
-now uses independently reachable native roots, cached once with detached copies per test. This
-qualifies that imported basis, not the still-failing native extrusion/connection producer recipes.
-App: reachable imported source passes Connect, Relax, Unapply/Reapply, undo/redo and reopen;
-Full inspected, zero page errors, maximum root delta 1.41e-12 nm. This is not cold-history proof:
-the binding-backed Relax still writes a legacy `cluster_op` row with a warning indicator.
+Last backend `just test-smart`: **FAST (fast suite only), 19,173 passed / 497 failed / 19 skipped /
+50 errors**, 382.83 s, 19,739 cases; guard wall 420 s. 508 repeated linker incompatibility diagnostics.
+No production backend change this turn; this is still the latest broad result, not a qualified exit.
+Prior timing triage: zero 5 s violators; no threshold/guard/classification change. FULL remains deferred.
+The native crossover bridge disappears on relocation (shared bp 0/0 → 0/7); original viewer/export
+roots 0.5272297663/0.5357297698 nm then have identical endpoint pairs, making rigid preservation impossible.
 
-Required final `just test-smart`: **FAST (fast suite only), 19,173 passed / 497 failed / 19 skipped /
-50 errors**, 382.83 s, 19,739 cases; guard wall 420 s. Initial run was 19,132/527/19/50 (378.59 s).
-Root lookup and typed snapshot defects are fixed. Final output has 508 repeated native viewer/export
-linker incompatibility diagnostics. This is a real construction limitation, not merely test debt.
-No production change followed final FAST; the 33+3 Relax fixture/proof passes followed it.
-Triage skill applied: zero 5 s violators, maximum 3.66 s, aggregate 1,334.5 worker-seconds (prior
-NP 1,148.0). No reclassification, timing-limit or guard changes; failed runs do not qualify performance.
-Evidence: `.development-artifacts/feature-history-focus/direct-root-repair/`; raw failures retained.
+Isolated `experiments/direct_linker_candidate.py` transports original O3′ and P/OP1/OP2/O5′ groups,
+anchored at C3′/C5′, immediately before native authored poses. It keeps the existing sugar/base
+placements; forward/reverse native sugars are NOT assumed identical. No normal builder imports it.
+`direct_linker_review.py` generates the complete atom/bond evidence; it accepts optional summary output.
+36 phase settings × both builders: max root delta **1.61e-15 nm**, adjacent-bond delta **1.48e-15 nm**.
+Four phases restore contacts already present before Connect; none of those pairs is new relative to
+that reference. The 270° inspectable example is C7(#239)–P(#320). All 22 reciprocal 2HB controls stay identical.
+51 focused checks pass (16.04 s): adjacent bonds, full phase sweep, native shared-host roots,
+manual stretching/fit recovery, saved-snapshot reference parity and unreachable refusal.
 
-`test_part_duplex_commands.source(rooted=True)` exemplifies the limitation: OH-B viewer/export roots
-are 0.5272297663/0.5357297698 nm before relocation, but final endpoint pairs become identical
-(crossover index 0/0 becomes 0/7; native bridge pass no longer runs). No rigid pose preserves both.
-The real native extrusion fixtures show the same issue. Explicit refusal is covered; do not waive
-these cases or broadly replace them with simpler fixtures. Prepare an **isolated** candidate that
-preserves prior linker geometry without transferring the break into adjacent bonds; record complete
-current/candidate atoms and defects in native context before molecular approval. No atom-builder
-change has been proposed or promoted yet. Independently unreachable parent gaps must still refuse.
+Help → geometry Review now has three Direct diagnostics: feasible imported fixture (400 atoms),
+native unreachable Extrude (10,560 atoms), and retained-contact control. Complete parent geometry,
+viewer/export models, exact defects, adjacent lengths/angles and construction steps are inspectable.
+These are preliminary diagnostics, **not approval-ready** or production adoption. The imported source
+retains eight pre-existing bond flags; the native producer example still has an unreachable root gap.
+Frontend broad: 9,490 passed / 1 skipped, one new-suite URL collection error; repaired focused run
+**14 passed**. App review **1 passed** (all cases/modes, zero errors/writes, unchanged open design,
+private scenes released); images inspected. Isolated `just smoke` **23 passed**. Lint/whitespace pass.
+Evidence: `.development-artifacts/feature-history-focus/direct-root-repair/linker-*`; review asset
+`frontend/src/ui/geometry_review_data/direct-linker.json.gz`, SHA256 `182dff7a…`. No phase/golden changes.
 
 ## Completed NP root repair
 
@@ -140,11 +140,11 @@ exact Cancel, one Apply/undo, stable identity, earliest-error feedback and failu
 
 ## Shared work and closeout
 
-Base HEAD: `413ac178`; preceding NP/diagnostic commit `37549296`, review UI `498fbc16`.
+Base HEAD: `a940249d`; preceding NP/diagnostic commit `37549296`, review UI `498fbc16`.
 Commit only explicit owned paths under operating-contract §7; no push or history rewrite.
 Pre-existing API/VR/simulation/strict-host/activity/test/memory-hygiene edits stay untouched.
 Mixed memory, implementation/conftest/manual-debt reconciliation files remain uncommitted.
 Direct root work is a checkpoint with outstanding regression qualification, not an FH-27 closure.
-Inspected browser captures/state dumps are pruned; compact measurements/logs remain. All three
-app scratch roots and owned pytest roots are absent; no owned services remain. Native review gate
-is clear. Ruff/whitespace pass; `main.js` LOC delta 0. The local checkpoint does not close FH-27.
+Inspected captures/intermediate bundles are pruned; prepared review evidence and compact logs remain.
+Owned review/smoke/pytest scratch is absent; no owned services remain. Native review gate is clear.
+`main.js` LOC delta 0. The local checkpoint does not close FH-27 or authorize candidate production use.

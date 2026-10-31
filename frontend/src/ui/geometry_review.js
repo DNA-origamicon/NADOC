@@ -46,7 +46,7 @@ export function initGeometryReview({
     try {
       if (!entry) throw new Error('No geometry review cases are available.')
       if (!loaded.has(entry.load)) loaded.set(entry.load, entry.load({ signal: controller.signal }))
-      const [rootBundle, renderer] = await Promise.all([loaded.get(entry.load), loadRenderer()])
+      const [rootBundle, renderer] = await Promise.all([loaded.get(entry.load), (entry.loadRenderer ?? loadRenderer)()])
       if (!modal.open || mine !== generation || disposed) return
       const bundle = entry.control ? rootBundle.controls[entry.control] : rootBundle
       body.replaceChildren()
