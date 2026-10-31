@@ -336,6 +336,8 @@ def _visit_references(value, references, reference):
         for field in ("driver_oh_id", "driven_oh_id"):
             reference("overhang", snapshot.value[field])
         reference("strand", snapshot.value["strand_id"])
+        for identity in snapshot.value.get("root_bond_lengths_nm", {}):
+            reference("overhang", identity)
         saved = {key for key, _ in snapshot.definitions()}
         for _, definition in snapshot.definitions():
             # Saved definitions own their historical references. External

@@ -34,14 +34,14 @@ def create_bound_binding(
 ) -> Design:
     """Materialize a DIRECT connection (root-to-root OR end-to-root) as a single
     non-consuming `OverhangBinding`, relocated on apply so the duplex renders
-    immediately and overhang B's embedded-strand bond is left stretched.
+    immediately while preserving both covalent root lengths.
 
     Unified path (2026-06-30, replaces the end-to-root binder splice): A is the
     driver (its helix HOSTS the duplex), B is the driven side (its tip domain is
     relocated onto A's helix, antiparallel — `compute_bind_topology`/`apply_bind_topology`).
     Neither overhang is consumed; both stay in `design.overhangs`. The bound flag is
-    set but NO cluster relax runs, so the cross-helix root↔tip bond is visibly
-    stretched until the user hits Relax.
+    set without moving the parent clusters. Unreachable root-preserving
+    placement refuses without publishing any topology or pose change.
     """
     from backend.core.binding_relax import apply_bind_topology, compute_bind_topology
 
@@ -86,47 +86,14 @@ def create_bound_binding(
     )
     topology = compute_bind_topology(d, binding, driver_side="a",
         forced_ligation_id=identifier("duplex-ligation", [duplex_id]) if identifier else None)
+    from backend.core.direct_root_placement import rooted_binding_topology, place_direct_roots
+
+    topology = rooted_binding_topology(d, topology)
     binding = binding.model_copy(update={"prior_driven_topology": topology.snapshot})
     d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
     d = apply_bind_topology(d, topology)
 
-    # Re-seat the relocated duplex like a linker bridge: ORIENTED along and CENTERED
-    # on the chord between its two embedded-staple connections (A's root junction and
-    # B's root junction), so both root bonds share the stretch symmetrically and are
-    # minimized. Persisted as the DRIVER's OverhangSpec.rotation + translation so the
-    # whole duplex (driver overhang + co-moving driven tip partner) transforms rigidly
-    # at geometry time. Zero both first so the placement is measured against the
-    # freshly-relocated (un-seated, identity) geometry, then store the result.
-    from backend.core.direct_relax import duplex_midpoint_placement
-
-    d = d.model_copy(
-        update={
-            "overhangs": [
-                o.model_copy(
-                    update={
-                        "rotation": [0.0, 0.0, 0.0, 1.0],
-                        "translation": [0.0, 0.0, 0.0],
-                    }
-                )
-                if o.id == a_id
-                else o
-                for o in d.overhangs
-            ]
-        }
-    )
-    placement = duplex_midpoint_placement(d, a_id, b_id)
-    if placement is not None:
-        rot, trans = placement
-        d = d.model_copy(
-            update={
-                "overhangs": [
-                    o.model_copy(update={"rotation": rot, "translation": trans})
-                    if o.id == a_id
-                    else o
-                    for o in d.overhangs
-                ]
-            }
-        )
+    d = place_direct_roots(d, a_id, topology.snapshot["root_bond_lengths_nm"])
     # Promote the just-placed pose onto a first-class child DUPLEX cluster (sidebar-listed,
     # gizmo-movable, drift-free) — geometry+axis neutral (proven on 2x2_OH_test).
     # [[overhang-duplex-cluster]] P1b.

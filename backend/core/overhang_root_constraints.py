@@ -51,13 +51,14 @@ def overhang_root_bond(design, overhang_id, *, fast_bridges=True):
         exclude_helix_ids={h.id for h in design.helices} - helices,
     )
 
-    def atom(helix, bp, name):
+    def atom(helix, bp, direction, name):
         hits = [
             a
             for a in model.atoms
             if a.strand_id == strand.id
             and a.helix_id == helix
             and a.bp_index == bp
+            and a.direction == direction.value
             and a.name == name
         ]
         if len(hits) != 1:
@@ -67,8 +68,8 @@ def overhang_root_bond(design, overhang_id, *, fast_bridges=True):
         a = hits[0]
         return a.serial, np.array([a.x, a.y, a.z])
 
-    mi, moving = atom(domain.helix_id, moving_bp, moving_name)
-    fi, fixed = atom(parent.helix_id, fixed_bp, fixed_name)
+    mi, moving = atom(domain.helix_id, moving_bp, domain.direction, moving_name)
+    fi, fixed = atom(parent.helix_id, fixed_bp, parent.direction, fixed_name)
     if (mi, fi) not in model.bonds and (fi, mi) not in model.bonds:
         raise ValueError("Overhang root atoms are not covalently bonded.")
     return RootBond(fixed, moving)
@@ -105,7 +106,9 @@ def root_preserving_rolls(swing, axis, pivot, bond, preferred):
     )
 
 
-def rotate_overhang_about(design, overhang_id, rotation, pivot):
+def rotate_overhang_about(
+    design, overhang_id, rotation, pivot, *, translation=None, materialize=True
+):
     """Compose an incremental world rotation about an explicit fixed point.
 
     Rebase the stored overlay translation as well as its quaternion; its native
@@ -148,6 +151,7 @@ def rotate_overhang_about(design, overhang_id, rotation, pivot):
     )
     translation = (
         rotation @ (base + np.asarray(spec.translation) - pivot) + pivot - base
+        + (np.asarray(translation) if translation is not None else 0.0)
     )
     out = out.copy_with(
         overhangs=[
@@ -162,6 +166,8 @@ def rotate_overhang_about(design, overhang_id, rotation, pivot):
             for o in out.overhangs
         ]
     )
+    if not materialize:
+        return out
     out, _ = materialize_duplex_cluster(
         out,
         overhang_id,

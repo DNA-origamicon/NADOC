@@ -179,7 +179,9 @@ def patch(design, binding_id, body):
         if target.driver_oh_id is not None:
             driver_side = "a" if target.driver_oh_id == target.overhang_a_id else "b"
         try:
-            topology = compute_bind_topology(design, target, driver_side=driver_side)
+            from backend.core.direct_root_placement import rooted_binding_topology
+
+            topology = rooted_binding_topology(design, compute_bind_topology(design, target, driver_side=driver_side))
         except HTTPException:
             raise
         except Exception as exc:
@@ -234,22 +236,15 @@ def patch(design, binding_id, body):
         # driver's bp range, antiparallel; driven helix is deleted. Unbind
         # restores the driven helix + the OH's domain from the snapshot.
         if topology is not None:
+            from backend.core.direct_root_placement import place_direct_roots
+
             nxt = apply_bind_topology(nxt, topology)
+            nxt = place_direct_roots(nxt, topology.driver_oh_id, topology.snapshot["root_bond_lengths_nm"])
         elif restore_snapshot:
             nxt = revert_bind_topology(nxt, restore_snapshot)
 
-        # NB: no automatic post-bind cluster relax. Binding does topology
-        # relocation ONLY; the cross-cluster OH→parent crossover may end
-        # up visibly stretched and the user closes it themselves via the
-        # right-click "Relax bond" menu. (Earlier iterations auto-rotated
-        # the joint on bind; reverted at user request 2026-05-14 so the
-        # visual stretch is preserved as a kinematic-intent marker.)
-        #
-        # locked_angle_deg is therefore left None for Phase-6 bindings
-        # unless an external caller provides it. _apply_driver_to_joint
-        # below will not collapse the joint window when locked_angle_deg
-        # is None (it only acts on the binding designated as joint
-        # driver via locked_angle_deg).
+        # Binding preserves covalent roots without moving parent clusters.
+        # Joint locking below remains metadata-only unless an explicit lock exists.
 
         # ── Snapshot prior_min/max on first claimant if this is the first
         #    bound binding for next_joint and the snapshot hasn't been taken.

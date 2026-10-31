@@ -15,7 +15,7 @@ The overlay→child conversion is a frame conjugation::
 
 where ``T_overlay_world`` is the driver's stored quaternion/translation applied about the
 POSED junction bead. Materializing at Apply time uses the same conversion (the placement
-`direct_relax.duplex_midpoint_placement` produces is a world overlay).
+`direct_root_placement` produces is a world overlay).
 
 DELETE-ON-COMPLETION: once this plan lands, the ``OverhangSpec.rotation``/``translation``
 overlay path in ``apply_overhang_rotation_if_needed`` + ``_apply_ovhg_rotations_to_axes``

@@ -1,13 +1,15 @@
 """Unified direct overhang connection (root-to-root + end-to-root, 2026-06-30).
 
 Both direct types now materialize as ONE non-consuming OverhangBinding, relocated
-on apply (duplex forms; driven tip↔root bond left stretched). Relax closes that
-bond to ~0.67 nm. See backend/core/direct_relax.py + crud._cv_create_bound_binding.
+on apply while preserving both covalent roots. Relax restores those lengths
+after manual movements, or refuses if parent kinematics cannot reach. See backend/core/direct_relax.py + crud._cv_create_bound_binding.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
@@ -36,6 +38,8 @@ from backend.core.models import (
     Vec3,
 )
 from backend.core.validator import validate_design
+from backend.core.overhang_root_constraints import overhang_root_bond
+from backend.core.direct_root_placement import capture_root_lengths
 
 _IDENTITY = [0.0, 0.0, 0.0, 1.0]
 _TARGET = 0.67
@@ -147,6 +151,40 @@ def _seed(*, same_body=False, cluster_b_translation=(5.0, 2.0, 1.0), joint=None)
     )
 
 
+def _reachable(*, same_body=False, joint=None):
+    from tests.test_direct_root_constraints import reachable_source
+
+    source = reachable_source()
+    if same_body:
+        from tests.test_direct_root_constraints import unplaced
+        from scipy.spatial.transform import Rotation
+
+        source = _seed(same_body=True)
+        rotation = Rotation.from_euler("y", 45., degrees=True).as_matrix()
+        for _ in range(4):
+            raw = unplaced(source)
+            a, b = overhang_root_bond(raw, "oh_a"), overhang_root_bond(raw, "oh_b")
+            radius = overhang_root_bond(source, "oh_b").length_nm
+            desired = rotation @ (b.moving - a.fixed) + a.fixed + [radius, 0., 0.]
+            delta = desired - b.fixed
+            if np.linalg.norm(delta) < 1e-9:
+                break
+            def shifted(point):
+                xyz = point.to_array() + delta
+                return Vec3(x=xyz[0], y=xyz[1], z=xyz[2])
+            source = source.copy_with(helices=[h.model_copy(update={
+                "axis_start": shifted(h.axis_start), "axis_end": shifted(h.axis_end)})
+                if h.id == "d_hb" else h for h in source.helices])
+        assert np.linalg.norm(delta) < 1e-9
+    return source.copy_with(cluster_joints=[joint] if joint else [])
+
+
+def _translate_parent(design, delta):
+    return design.copy_with(cluster_transforms=[c.model_copy(update={
+        "translation": (np.asarray(c.translation) + delta).tolist()})
+        if c.id == "cB" else c for c in design.cluster_transforms])
+
+
 def _tip_root_chord(design) -> float:
     strand, _i, _td, _rd, cb_bp, cr_bp = _find_driven_tip_and_root(design, "oh_b")
     tip_dom = strand.domains[_i]
@@ -158,7 +196,7 @@ def _tip_root_chord(design) -> float:
 
 
 def test_apply_direct_does_not_consume_and_relocates_root_to_root():
-    d = _seed()
+    d = _reachable()
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     # Neither overhang consumed.
     assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}
@@ -183,7 +221,7 @@ def test_connection_version_apply_undo_redo_is_atomic_for_binding_and_duplex():
     survived Undo even after the OverhangBinding was restored away.
     """
     design_state.close_session()
-    seeded = _seed()
+    seeded = _reachable()
     seeded = seeded.model_copy(update={
         "overhangs": [
             o.model_copy(update={
@@ -241,35 +279,14 @@ def _conn_beads(design, oh_id):
     return c, p
 
 
-def test_apply_direct_seats_duplex_on_midpoint_symmetric_and_aligned():
-    """NEW apply behavior (2026-07-01): the relocated duplex is re-seated like a linker
-    bridge — ORIENTED along and CENTERED on the chord between its two embedded-staple
-    connections — so the two root bonds share the stretch SYMMETRICALLY and the duplex
-    axis is aligned with that chord (both bonds minimized), instead of the old one-sided
-    placement (driver bond ~0.67, driven bond bearing the whole gap)."""
-    from backend.core.duplex_cluster import duplex_cluster_for
-
-    d = _seed(cluster_b_translation=(6.0, 3.0, 2.0))
-    d = _cv_create_bound_binding(d, "oh_a", "oh_b", "free_end", "root", "end-to-root")
-    # Pose now lives on the child DUPLEX cluster (not OverhangSpec) — non-trivial re-seat.
-    cl = duplex_cluster_for(d, "oh_a")
-    assert cl is not None and (
-        np.linalg.norm(cl.translation) > 0.5 or cl.rotation != _IDENTITY
-    )
-    assert (
-        next(o for o in d.overhangs if o.id == "oh_a").rotation == _IDENTITY
-    )  # cleared
-    c_a, p_a = _conn_beads(d, "oh_a")
-    c_b, p_b = _conn_beads(d, "oh_b")
-    # Symmetric split: both root bonds equal.
-    bond_a, bond_b = np.linalg.norm(c_a - p_a), np.linalg.norm(c_b - p_b)
-    assert abs(bond_a - bond_b) < 0.3, (bond_a, bond_b)
-    assert bond_a > 1.0  # a real, shared stretch
-    # Duplex connection axis aligned with the anchor chord (cos ≈ 1).
-    u = c_b - c_a
-    v = p_b - p_a
-    cos = float(np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v)))
-    assert cos > 0.98, cos
+def test_apply_direct_preserves_both_roots_without_moving_parent_parts():
+    source = _reachable()
+    targets = capture_root_lengths(source, ["oh_a", "oh_b"])
+    connected = _cv_create_bound_binding(source, "oh_a", "oh_b", "free_end", "root", "end-to-root")
+    for oid, values in targets.items():
+        assert capture_root_lengths(connected, targets)[oid] == pytest.approx(values, abs=1e-8)
+    for parent in source.cluster_transforms:
+        assert next(c for c in connected.cluster_transforms if c.id == parent.id) == parent
 
 
 def _ovhg_axis_endpoints(design, helix_id, ovhg_id):
@@ -291,7 +308,7 @@ def test_apply_direct_moves_the_overhang_helix_axis_with_the_duplex():
     """Issue-1 regression: the driver overhang-helix AXIS line follows the re-seated
     duplex (via OverhangSpec.translation in _apply_ovhg_rotations_to_axes) instead of
     staying at the pre-apply lattice location, and its beads stay glued to the axis."""
-    d = _seed(cluster_b_translation=(6.0, 3.0, 2.0))
+    d = _reachable()
     s0, e0 = _ovhg_axis_endpoints(d, "d_ha", "oh_a")
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     s1, e1 = _ovhg_axis_endpoints(d, "d_ha", "oh_a")
@@ -314,7 +331,7 @@ def test_unbind_removes_the_duplex_cluster():
     from backend.core.binding_relax import revert_bind_topology
     from backend.core.duplex_cluster import duplex_cluster_for
 
-    d = _seed(cluster_b_translation=(6.0, 3.0, 2.0))
+    d = _reachable()
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     cl = duplex_cluster_for(d, "oh_a")
     assert cl is not None and (
@@ -326,7 +343,7 @@ def test_unbind_removes_the_duplex_cluster():
 
 
 def test_apply_direct_end_to_root_also_relocates_not_consumes():
-    d = _seed()
+    d = _reachable()
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "free_end", "root", "end-to-root")
     assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}  # B not consumed
     assert d.overhang_bindings[0].connection_type == "end-to-root"
@@ -334,45 +351,33 @@ def test_apply_direct_end_to_root_also_relocates_not_consumes():
     assert d.forced_ligations == []
 
 
-def test_relax_direct_closes_tip_root_chord_with_joint():
-    joint = ClusterJoint(
-        id="jB",
-        cluster_id="cB",
-        name="Hinge",
-        local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
-        local_axis_direction=[0.0, 1.0, 0.0],
-        min_angle_deg=-180.0,
-        max_angle_deg=180.0,
-    )
-    d = _seed(cluster_b_translation=(5.3, 0.0, 0.0), joint=joint)
-    d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
-    minimum, maximum, span = _direct_hinge_reach(d, joint)
-    assert minimum < span + 2 * _TARGET < maximum
-    before = _tip_root_chord(d)
-    # Apply already SEATS the duplex at the oriented midpoint; the bridge-method relax
-    # rotates the joint to bring the two roots to the duplex's natural span, closing the
-    # residual tip↔root bond to one backbone step. (A modest gap the single revolute can
-    # reach; a very large gap only partially closes — the joint's reachability limit.)
-    assert before > 0.85  # still stretched
+def test_relax_direct_closes_covalent_roots_with_joint():
+    from backend.core.linker_relax import _composed_transform
+    from backend.core.models import _local_to_world_joint
+
+    joint = ClusterJoint(id="jB", cluster_id="cB", local_axis_origin=[0., 0., 6 * BDNA_RISE_PER_BP],
+                         local_axis_direction=[0., 1., 0.], min_angle_deg=-180., max_angle_deg=180.)
+    d = _cv_create_bound_binding(_reachable(joint=joint), "oh_a", "oh_b", "root", "root", "root-to-root")
+    targets = capture_root_lengths(d, ["oh_a", "oh_b"])
+    parent = next(c for c in d.cluster_transforms if c.id == "cB")
+    origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, parent)
+    q, t = _composed_transform(parent, np.asarray(origin), np.asarray(axis), np.deg2rad(120.))
+    d = d.copy_with(cluster_transforms=[c.model_copy(update={"rotation": q, "translation": t})
+        if c.id == parent.id else c for c in d.cluster_transforms])
+    assert overhang_root_bond(d, "oh_b").length_nm > targets["oh_b"]["viewer"] + .1
     updated, info = relax_direct_binding(d, "oh_a", "oh_b")
     assert info["mode"] == "joints"
-    after = _tip_root_chord(updated)
-    assert after < before and after < 0.8, (before, after)
-    # The duplex placement (re-seat + clash spin) now lives on the child DUPLEX cluster;
-    # both OverhangSpec poses stay identity (pose migrated onto the cluster).
-    from backend.core.duplex_cluster import duplex_cluster_for
-
-    cl = duplex_cluster_for(updated, "oh_a")
-    assert cl is not None and cl.rotation != _IDENTITY
+    for oid, values in targets.items():
+        assert capture_root_lengths(updated, targets)[oid] == pytest.approx(values, abs=1e-8)
     assert next(o for o in updated.overhangs if o.id == "oh_a").rotation == _IDENTITY
 
 
 def _direct_hinge_reach(design, joint):
     """Independent circle-distance bound using actual native root/duplex beads."""
-    from backend.core.direct_relax import _root_anchors
     from backend.core.models import _local_to_world_joint
 
-    pa, ca, pb, cb = _root_anchors(design, _geometry_for_design(design), "oh_a", "oh_b")
+    ra, rb = overhang_root_bond(design, "oh_a"), overhang_root_bond(design, "oh_b")
+    pa, ca, pb, cb = ra.fixed, ra.moving, rb.fixed, rb.moving
     cluster = next(c for c in design.cluster_transforms if c.id == joint.cluster_id)
     origin, axis = _local_to_world_joint(joint.local_axis_origin, joint.local_axis_direction, cluster)
     axis = np.asarray(axis) / np.linalg.norm(axis)
@@ -382,18 +387,18 @@ def _direct_hinge_reach(design, joint):
     return float(np.hypot(ra-rb, za-zb)), float(np.hypot(ra+rb, za-zb)), float(np.linalg.norm(ca-cb))
 
 
-def test_relax_direct_stops_at_analytic_reach_limit_with_native_beads():
-    """The former positive fixture is unreachable with accepted O5′ endpoints."""
+def test_relax_direct_refuses_beyond_analytic_reach_without_partial_motion():
     joint = ClusterJoint(id="jB", cluster_id="cB", local_axis_origin=[0, 0, 6*BDNA_RISE_PER_BP],
                          local_axis_direction=[0, 1, 0], min_angle_deg=-180, max_angle_deg=180)
-    design = _seed(cluster_b_translation=(6, 0, 0), joint=joint)
-    design = _cv_create_bound_binding(design, "oh_a", "oh_b", "root", "root", "root-to-root")
+    design = _cv_create_bound_binding(_reachable(joint=joint), "oh_a", "oh_b", "root", "root", "root-to-root")
+    targets = capture_root_lengths(design, ["oh_a", "oh_b"])
+    design = _translate_parent(design, [20., 0., 0.])
     minimum, _, span = _direct_hinge_reach(design, joint)
-    assert minimum > span+2*_TARGET
-    updated, info = relax_direct_binding(design, "oh_a", "oh_b")
-    np.testing.assert_allclose(info["final_root_chord_nm"], minimum, rtol=0, atol=1e-5)
-    np.testing.assert_allclose(_tip_root_chord(updated), (minimum-span)/2, rtol=0, atol=1e-5)
-    assert next(o for o in updated.overhangs if o.id == "oh_b").rotation == _IDENTITY
+    assert minimum > span + sum(value["viewer"] for value in targets.values())
+    before = design.model_dump_json()
+    with pytest.raises(HTTPException, match="preserving its covalent root bonds"):
+        relax_direct_binding(design, "oh_a", "oh_b")
+    assert design.model_dump_json() == before
 
 
 def test_relax_logs_cluster_op_not_overhang_rotation_for_cluster_backed():
@@ -412,7 +417,7 @@ def test_relax_logs_cluster_op_not_overhang_rotation_for_cluster_backed():
         min_angle_deg=-180.0,
         max_angle_deg=180.0,
     )
-    d = _seed(cluster_b_translation=(6.0, 0.0, 0.0), joint=joint)
+    d = _reachable(joint=joint)
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     cl0 = duplex_cluster_for(d, "oh_a")
     assert cl0 is not None
@@ -449,7 +454,7 @@ def test_validator_flags_improper_crossover():
     """validate_design flags a crossover whose halves sit at MISMATCHED bp (an
     invalid lattice crossover — must be a forced ligation), and passes a valid one.
     This is the guard against the relocation drawing a line to the wrong overhang end."""
-    d = _seed()
+    d = _reachable()
     good = Crossover(
         half_a=HalfCrossover(helix_id="d_ha", index=5, strand=Direction.FORWARD),
         half_b=HalfCrossover(helix_id="d_hb", index=5, strand=Direction.REVERSE),
@@ -462,14 +467,15 @@ def test_validator_flags_improper_crossover():
     assert _improper_msgs(d.model_copy(update={"crossovers": [bad]}))
 
 
-def test_relax_direct_no_joint_translates_to_target():
-    d = _seed(cluster_b_translation=(16.0, 8.0, 5.0))
-    d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
-    before = _tip_root_chord(d)
+def test_relax_direct_no_joint_translates_to_restore_both_roots():
+    d = _cv_create_bound_binding(_reachable(), "oh_a", "oh_b", "root", "root", "root-to-root")
+    targets = capture_root_lengths(d, ["oh_a", "oh_b"])
+    d = _translate_parent(d, [16., 8., 5.])
+    assert overhang_root_bond(d, "oh_b").length_nm > 2.
     updated, info = relax_direct_binding(d, "oh_a", "oh_b")
     assert info["mode"] == "translate"
-    after = _tip_root_chord(updated)
-    assert before > 2.0 and abs(after - _TARGET) < 0.05, (before, after)
+    for oid, values in targets.items():
+        assert capture_root_lengths(updated, targets)[oid] == pytest.approx(values, abs=1e-8)
 
 
 def test_unbind_then_rebind_roundtrips_same_body_unified_binding():
@@ -484,7 +490,7 @@ def test_unbind_then_rebind_roundtrips_same_body_unified_binding():
     from backend.api import state as design_state
     from backend.api.main import app
 
-    d = _seed(same_body=True)
+    d = _reachable(same_body=True)
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     bid = d.overhang_bindings[0].id
     design_state.set_design(d)

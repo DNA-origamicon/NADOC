@@ -423,6 +423,9 @@ def relocate_duplex(design: Design, duplex: Duplex, *, identity_seed: Optional[s
         target_end_override=driver_end.start_bp,
         forced_ligation_id=identifier("duplex-ligation", [duplex.id]) if identifier is not None else None,
     )
+    from backend.core.direct_root_placement import rooted_binding_topology, place_direct_roots
+
+    topo = rooted_binding_topology(design, topo)
     out = apply_bind_topology(design, topo)
     out = _transport_duplex_registers(design, out, driven_end.overhang_id)
     new_dux = [
@@ -433,41 +436,11 @@ def relocate_duplex(design: Design, duplex: Duplex, *, identity_seed: Optional[s
     ]
     out = out.model_copy(update={"duplexes": new_dux})
 
-    # Re-seat at the oriented midpoint + promote onto a child DUPLEX cluster — same as the
-    # equal-length binding path (`_cv_create_bound_binding`), so a different-length duplex is
-    # also a sidebar-listed, gizmo-movable, drift-free cluster. [[overhang-duplex-cluster]].
-    from backend.core.direct_relax import duplex_midpoint_placement
+    # Both roots retain their pre-bind lengths; only the paired duplex moves.
     from backend.core.duplex_cluster import materialize_duplex_cluster
 
     driver_oh = driver_end.overhang_id
-    out = out.model_copy(
-        update={
-            "overhangs": [
-                o.model_copy(
-                    update={
-                        "rotation": [0.0, 0.0, 0.0, 1.0],
-                        "translation": [0.0, 0.0, 0.0],
-                    }
-                )
-                if o.id == driver_oh
-                else o
-                for o in out.overhangs
-            ]
-        }
-    )
-    placement = duplex_midpoint_placement(out, driver_oh, driven_end.overhang_id)
-    if placement is not None:
-        rot, trans = placement
-        out = out.model_copy(
-            update={
-                "overhangs": [
-                    o.model_copy(update={"rotation": rot, "translation": trans})
-                    if o.id == driver_oh
-                    else o
-                    for o in out.overhangs
-                ]
-            }
-        )
+    out = place_direct_roots(out, driver_oh, topo.snapshot["root_bond_lengths_nm"])
     out, _cid = materialize_duplex_cluster(out, driver_oh,
         cluster_id=identifier("duplex-cluster", [duplex.id]) if identifier is not None else None)
     return out

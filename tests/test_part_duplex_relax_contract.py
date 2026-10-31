@@ -1,6 +1,7 @@
 """Pinned relaxation admission and isolation without running the optimizer."""
 
 from copy import deepcopy
+from functools import lru_cache
 
 import pytest
 from pydantic import ValidationError
@@ -9,20 +10,36 @@ from backend.api import part_duplex_commands as commands
 from backend.core import part_duplex_relax_contract as contract
 from backend.core.models import ClusterJoint, ClusterRigidTransform
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
-from tests.test_part_duplex_commands import SEED, connect_params, source
+from tests.test_part_duplex_commands import SEED, connect_params
+
+
+@lru_cache(maxsize=1)
+def _connected_basis():
+    from backend.core.part_scope_references import remap_design
+    from tests.test_direct_root_constraints import reachable_source
+
+    # The old separated crossover fixture could connect only by stretching its
+    # roots. Use the independently constructed, reachable native root fixture.
+    # Keep this numerical setup once; admission tests each receive a deep copy.
+    original = reachable_source()
+    original = original.copy_with(
+        helices=[h for h in original.helices if h.id in {"d_ha", "d_hb"}],
+        strands=[s for s in original.strands if s.id in {"d_sa", "d_sb"}])
+    original = remap_design(original, {
+        ("helix", "d_ha"): "a", ("helix", "d_hb"): "b",
+        ("strand", "d_sa"): "st-a", ("strand", "d_sb"): "st-b",
+        ("overhang", "oh_a"): "oh-a", ("overhang", "oh_b"): "oh-b",
+        ("cluster", "cA"): "parent-a", ("cluster", "cB"): "parent-b",
+    })
+    original = original.copy_with(cluster_transforms=[*original.cluster_transforms,
+        ClusterRigidTransform(id="unrelated", helix_ids=[])])
+    result = commands.build("duplex-connect", original, connect_params())
+    from backend.core.cluster_reconcile import reconcile_cluster_membership
+    return reconcile_cluster_membership(original, result)
 
 
 def connected(*, joints=True):
-    original = source(rooted=True)
-    original = original.copy_with(cluster_transforms=[
-        ClusterRigidTransform(id="parent-a", helix_ids=["a", "root-a"]),
-        ClusterRigidTransform(id="parent-b", helix_ids=["b", "root-b"]),
-        ClusterRigidTransform(id="unrelated", helix_ids=[]),
-    ])
-    result = commands.build("duplex-connect", original, connect_params())
-    # Match the ordinary recording postprocessor after relocation removes b.
-    from backend.core.cluster_reconcile import reconcile_cluster_membership
-    result = reconcile_cluster_membership(original, result)
+    result = _connected_basis().model_copy(deep=True)
     if joints:
         result = result.copy_with(cluster_joints=[
             ClusterJoint(id="joint-b", cluster_id="parent-b", min_angle_deg=-60, max_angle_deg=60),

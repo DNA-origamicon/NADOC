@@ -69,11 +69,13 @@ def test_extension_dependencies_keep_full_geometry(swept):
     ) == geometry.fitting_geometry(design)
 
 
-def test_standalone_midpoint_exits_before_geometry(swept, monkeypatch):
-    from backend.core.direct_relax import duplex_midpoint_placement
+def test_standalone_root_capture_exits_before_geometry(swept, monkeypatch):
+    from backend.core import atomistic
+    from backend.core.direct_root_placement import capture_root_lengths
 
     def unexpected(*args, **kwargs):
         pytest.fail("A standalone handle cannot be seated between two embedded roots")
 
     monkeypatch.setattr(geometry, "fitting_geometry", unexpected)
-    assert duplex_midpoint_placement(swept, "attachment", "missing") is None
+    monkeypatch.setattr(atomistic, "build_atomistic_model", unexpected)
+    assert capture_root_lengths(swept, ["attachment"]) == {}

@@ -395,10 +395,14 @@ def patch(design, params):
     _fresh(reverted.forced_ligations, ligation_id, "forced_ligation")
     topology = compute_bind_topology(reverted, binding,
         driver_side="a" if driver == binding.overhang_a_id else "b", forced_ligation_id=ligation_id)
+    from backend.core.direct_root_placement import rooted_binding_topology, place_direct_roots
+
+    topology = rooted_binding_topology(reverted, topology)
     updated = apply_bind_topology(reverted, topology)
     updated = updated.copy_with(overhang_bindings=[item.model_copy(update={
         "prior_driven_topology": topology.snapshot}) if item.id == binding.id else item
         for item in updated.overhang_bindings])
+    updated = place_direct_roots(updated, driver, topology.snapshot["root_bond_lengths_nm"])
     updated = apply_driver_to_joint(updated, binding.target_joint_id) if binding.target_joint_id else updated
     updated = _track_registers(before_relocation, updated, {driver, driven})
     for edge in updated.duplexes:

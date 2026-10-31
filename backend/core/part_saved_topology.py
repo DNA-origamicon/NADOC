@@ -6,6 +6,7 @@ owners and external references must still resolve. No geometry is recomputed.
 """
 
 from dataclasses import dataclass
+from math import isfinite
 
 from backend.core import models
 from backend.core.part_command_errors import ReferenceResolutionError
@@ -55,8 +56,19 @@ def snapshot_for(owner):
     value = owner.prior_driven_topology
     if not value:
         return None
-    if not isinstance(value, dict) or set(value) not in (_REQUIRED, _REQUIRED | {"forced_ligation"}):
+    if (not isinstance(value, dict) or not _REQUIRED <= value.keys()
+            or value.keys() - _REQUIRED - {"forced_ligation", "root_bond_lengths_nm"}):
         _unsupported("incomplete or unknown snapshot fields")
+    if "root_bond_lengths_nm" in value:
+        roots = value["root_bond_lengths_nm"]
+        if not isinstance(roots, dict) or len(roots) > MAX_SAVED_CROSSOVERS:
+            _unsupported("invalid covalent root constraints")
+        for identity, lengths in roots.items():
+            if (not isinstance(identity, str) or not identity or not isinstance(lengths, dict)
+                    or lengths.keys() != {"viewer", "export"}
+                    or any(type(length) not in (int, float) or not isfinite(length) or length < 0
+                           for length in lengths.values())):
+                _unsupported("invalid covalent root constraints")
     for field in ("driver_oh_id", "driven_oh_id", "strand_id", "prior_ovhg_helix_id"):
         if not isinstance(value[field], str) or not value[field]:
             _unsupported(f"invalid {field}")
@@ -100,6 +112,8 @@ def validate_owner(snapshot, live_records):
 
     current("overhang", value["driver_oh_id"])
     driven = current("overhang", value["driven_oh_id"])
+    for identity in value.get("root_bond_lengths_nm", {}):
+        current("overhang", identity)
     strand = current("strand", value["strand_id"])
     index = value["domain_index"]
     if (driven.strand_id != strand.id or index >= len(strand.domains)
@@ -118,6 +132,9 @@ def remap_snapshot(snapshot, current, historical, mapped_model):
     result = dict(value)
     for field in ("driver_oh_id", "driven_oh_id"):
         result[field] = current("overhang", value[field])
+    if "root_bond_lengths_nm" in value:
+        result["root_bond_lengths_nm"] = {current("overhang", identity): dict(lengths)
+            for identity, lengths in value["root_bond_lengths_nm"].items()}
     result["strand_id"] = current("strand", value["strand_id"])
     result["driven_helix"] = mapped_model(snapshot.helix, historical)
     result["prior_ovhg_helix_id"] = historical("helix", value["prior_ovhg_helix_id"])

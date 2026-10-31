@@ -18,7 +18,8 @@ MAX_SOURCE_NUCLEOTIDES = 50_000
 _ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
     "part_duplex_relax_contract", "part_numerical_runtime", "part_numerical_schema_compatibility",
-    "direct_relax", "duplex_cluster",
+    "direct_relax", "direct_root_relax", "direct_root_placement", "overhang_root_constraints", "duplex_cluster",
+    "atomistic", "binding_relax",
     "linker_relax", "bond_relax", "duplex", "constants", "geometry", "design_geometry",
     "deformation", "deformation_scope", "sweep_path", "native_full_placement",
     "native_slab_placement", "measured_atomistic", "measured_positioning", "nucleotide_landmarks",
@@ -103,8 +104,8 @@ def parse_command(params):
 
 
 def implementation_manifest():
-    return {"id": ENGINE_ID, "solver": "direct-binding-arc-midpoint-clash-v1",
-        "placement": "native-full-o5-v1", "source_policy": "native-dna-direct-duplex-v1",
+    return {"id": ENGINE_ID, "solver": "direct-binding-covalent-root-v2",
+        "placement": "native-covalent-root-viewer-export-v1", "source_policy": "native-dna-direct-duplex-v1",
         "files": {name: file_digest(_ROOT / name, error_type=DuplexRelaxContractError,
                                     label="duplex relaxation") for name in SOURCE_PATHS},
         "data": {name: file_digest(_ROOT / name, error_type=DuplexRelaxContractError,

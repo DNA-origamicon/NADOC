@@ -1,8 +1,7 @@
 # Feature-history stopping-point handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 4 (last production gates: October 28).
-The active goal and expanded-repair authorization supersede recurring one-task/stop-loss confirmation.
-The original **October 28, 2026 before 6 p.m. America/Denver deadline was missed**.
+Sessions since last gate flip or milestone close: 5 (last production gates: October 28).
+The active goal supersedes recurring stop-loss confirmation. The **October 28 before-6-p.m. America/Denver deadline was missed**.
 
 **Tools done: 4/4. CAD: 26/34 complete, 1 core exit (FH-27) and 7 parked milestones remain.**
 FH-18/25/26/28 stay closed. Move/Rotate, Fine Routing and the four tool gates stay qualified.
@@ -14,19 +13,47 @@ ISSUE-126 duplicate-slot refusal/publication/repair/undo remains closed. Do not 
 Automatic NADOC processes must preserve overhang-root bond lengths ahead of collision avoidance.
 Manual edits may stretch roots. Collisions of repositioned overhangs are the user's responsibility,
 including NP positioning before simulation. The 2 nm contact exemption covers only the host strand.
-This explicitly authorizes the root-preservation repair; the earlier shortest-root candidate is superseded.
-It does not authorize unrelated molecular changes, phase/threshold/golden changes or simulations.
+This authorizes root-preservation, supersedes the earlier shortest-root candidate, and leaves unrelated molecular changes, phase/threshold/golden changes and simulations unauthorized.
 
-**Single next task: finish this rule for ordinary Direct Connect and its Relax solver.**
-A read-only reproduction of the existing end-to-root fixture (`_seed(cluster_b_translation=(6,3,2))`
-then `_cv_create_bound_binding`) measures actual O3′–P roots, in both viewer/export builders:
-OH A **0.136575 → 1.773216 nm**; OH B **0.136575 → 1.564670 nm**. Source is unchanged.
-This is a confirmed violation, not merely an unaudited solver. `duplex_midpoint_placement` currently
-shares the stretch between the roots; old tests deliberately assert that behavior. Supersede it under
-this explicit user rule: preserve both roots or refuse atomically when placement is unreachable;
-retain manual Move/Rotate freedom. Audit Relax against the actual covalent endpoints as well.
-Evidence: `.development-artifacts/feature-history-focus/direct-root-scope.json` (scratch absent).
-Do not claim universal root preservation from the completed NP repair below.
+**Single next task: isolate the native linker-convention repair before further Direct qualification.**
+The old `_seed(cluster_b_translation=(6,3,2))` Apply stretched O3′–P from 0.136575 nm to
+1.773216/1.564670 nm. Automatic placement now records the original viewer/export lengths,
+fits a rigid duplex pose exactly, and refuses atomically when infeasible; parents stay fixed on
+Connect. Relax can use the existing parent joints/translation, then independently validates both
+native atom builders. Manual Move/Rotate remains unrestricted and collisions are advisory.
+No atom builder, phase, threshold or geometry golden changed. Finite-search refusal is not a
+mathematical proof of infeasibility; exact triangle/identical-endpoint bounds reject some cases.
+
+Implementation: `direct_root_placement.py`, `direct_root_relax.py`; ordinary equal/unequal Connect,
+bound toggle and driver changes call the shared placement. Saved root constraints participate in
+typed ownership, dependencies and namespace remapping. Relax implementation pins changed honestly.
+Fixed a real root-reader bug: both overhangs may occupy opposite directions at the same bp on ONE
+strand; atom lookup now includes direction. Its independent emitted-atom regression passes.
+Focused: 88 passes across root constraints (12), ownership (9), NP roots (9), ordinary Direct (12),
+Relax contracts (33), fresh-process Relax proof (3) and fitting scope (10). The Relax contract fixture
+now uses independently reachable native roots, cached once with detached copies per test. This
+qualifies that imported basis, not the still-failing native extrusion/connection producer recipes.
+App: reachable imported source passes Connect, Relax, Unapply/Reapply, undo/redo and reopen;
+Full inspected, zero page errors, maximum root delta 1.41e-12 nm. This is not cold-history proof:
+the binding-backed Relax still writes a legacy `cluster_op` row with a warning indicator.
+
+Required final `just test-smart`: **FAST (fast suite only), 19,173 passed / 497 failed / 19 skipped /
+50 errors**, 382.83 s, 19,739 cases; guard wall 420 s. Initial run was 19,132/527/19/50 (378.59 s).
+Root lookup and typed snapshot defects are fixed. Final output has 508 repeated native viewer/export
+linker incompatibility diagnostics. This is a real construction limitation, not merely test debt.
+No production change followed final FAST; the 33+3 Relax fixture/proof passes followed it.
+Triage skill applied: zero 5 s violators, maximum 3.66 s, aggregate 1,334.5 worker-seconds (prior
+NP 1,148.0). No reclassification, timing-limit or guard changes; failed runs do not qualify performance.
+Evidence: `.development-artifacts/feature-history-focus/direct-root-repair/`; raw failures retained.
+
+`test_part_duplex_commands.source(rooted=True)` exemplifies the limitation: OH-B viewer/export roots
+are 0.5272297663/0.5357297698 nm before relocation, but final endpoint pairs become identical
+(crossover index 0/0 becomes 0/7; native bridge pass no longer runs). No rigid pose preserves both.
+The real native extrusion fixtures show the same issue. Explicit refusal is covered; do not waive
+these cases or broadly replace them with simpler fixtures. Prepare an **isolated** candidate that
+preserves prior linker geometry without transferring the break into adjacent bonds; record complete
+current/candidate atoms and defects in native context before molecular approval. No atom-builder
+change has been proposed or promoted yet. Independently unreachable parent gaps must still refuse.
 
 ## Completed NP root repair
 
@@ -48,50 +75,36 @@ Final read-only check found a later saved workspace hash (`e2eb772d…`); counts
 and particle centers still match. Full coordinate equality was not requalified. Preserve this file;
 `workspace-current-observation.json` records the current state without replacing the original evidence.
 
-Focused passes: 9 root contracts, 10 attachment, 6 kinematics, 18 NP lifecycle and 9 review/platform.
-The 14-case generator matrix had 13 passes and one final gold-overlap refusal; advisory finalization
-repairs that exact six-connection/rebind case (33.55 s). Final platform/root/pivot check passes (40.24 s).
-Lint/whitespace passed; `main.js` unchanged. All owned browser/FAST/focused scratch and launchers absent.
+Prior NP focused matrices passed root, attachment, kinematics, lifecycle and review/platform checks.
+The six-connection/rebind gold-overlap case was repaired by advisory finalization; platform root/graft
+checks pass. Evidence and cleanup remain under `root-bond-repair/`; no frontend behavior changed.
 
-Required `just test-smart`: **FAST (fast suite only), 19,711 cases, 4 workers; 19,689 passed,
-19 skipped, 3 failed**, 315.52 s (339 s guard wall). Two unchanged square/honeycomb junction-balance
-1 pm oracles remain. The third was an incomplete NP `SimpleNamespace` test fixture, corrected to the
-real model; all 5 native NP placement tests then pass (2.72 s). No production change followed FAST.
-Raw broad result remains three failures. Native incident `20261030T213106-c3ff173d61e2` has retained
-root-cause review and explicit Codex acknowledgement; review gate clear.
-Exact deferral: “DEFERRED: this change would have needed the FULL suite, but no test-dedicated session
-is open, so only the fast suite ran. Parked in .nadoc-slow-pending.” No marker/budget changes.
-Timing triage: zero 5 s violators, maximum 4.17 s, aggregate 1,148.0 vs prior 1,224.6 worker-seconds;
-no reclassification or demonstrated shared-fixture slowdown. FAST scratch removed: 2,753,217,249 bytes.
+Previous NP-only FAST: 19,689 passed / 19 skipped / 3 failed, 315.52 s. Two retained
+square/honeycomb junction-balance oracles; the third NP stub fixture was corrected (5 focused pass).
+Native incident `20261030T213106-c3ff173d61e2` was reviewed/acknowledged; the gate was clear.
+Exact broad deferral remains: “DEFERRED: this change would have needed the FULL suite, but no
+test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.”
+No marker, budget, guard or classification changes. All prior owned scratch is absent.
 
 ## MRDNA diagnosis retained; production unchanged
 
-After Direct root repair, resume the isolated zero-step decoder investigation. Fresh production
-parameterized fine PSF/PDB for `Examples/2hb_xover_val.nadoc`, **zero ARBD/dynamics steps**:
-- Local mrDNA list reader seeds DNA at the two CG input sites' midpoint; O is 1.5 Å along frame x.
-  The old FORWARD-backbone claim is false for this bridge. CG input and native Full O5′ are distinct
-  conventions; their 0.349 nm mean separation alone is not a defect.
-- Legacy sigma=0 decoder reproduces the unchanged failing 0.691 nm oracle; it ignores O orientation.
-  Current manifest decoder mixes native O5′ pair centers with CG centers and applies an unmatched
-  90° frame conversion. Its zero-step displacement from native Full averages 1.204 nm.
-- Isolated matched-frame transport recovers CG sites to max 7.24e-6 nm and native Full reference
-  points to max 6.68e-6 nm. Seven focused tests pass (3.31 s): zero-motion preservation, independent
-  rigid motion/local twist, and explicit refusal of unsupported bindings. Ruff/whitespace pass.
-- Actual production MD-seed decoder (default sigma=1.5) gives atom displacement mean/max
-  **0.313880/0.562561 nm**; isolated candidate **0.000184/0.043411 nm**, 2,800 identical atom/bond
-  identities. Remaining largest differences are crossover linker atoms. Even exact CG input sent
-  through the existing override builder shifts linkers up to 0.008798 nm: minimizer sensitivity.
-- Current/candidate clashes 2→0, piercings 0→0, flagged bonds 6→12; candidate's 12 match the native
-  reference. These are unchanged detector verdicts, not a simulation-readiness claim.
-
-Code: `experiments/mrdna_frame_candidate.py`, `experiments/mrdna_zero_step_review.py` and focused tests.
-Evidence: `.development-artifacts/feature-history-focus/mrdna-decoder-review/` includes exact points,
-source/code hashes, all current/candidate/native atoms, four junction deltas and exact defects.
-`comparison.preliminary.json.gz` is **not approval-ready or registered in Help**. No production decoder,
-MD seed, oracle, phase or golden changed. Qualify nonzero atomistic transport and the full phase sweep,
-then prepare the in-app review with real full geometry and explicit construction steps before asking
-for molecular approval. ssDNA, coarse/interpolated sites and loop copies remain unsupported by the
-candidate; its point-transport tests do not qualify those or an atomistic trajectory decoder.
+Resume only after Direct root qualification. `Examples/2hb_xover_val.nadoc` was parameterized
+through fine PSF/PDB with **zero ARBD/dynamics steps**. DNA seeds use the CG pair midpoint;
+O lies 1.5 Å along frame x. The old FORWARD-backbone claim was false; the 0.349 nm separation
+between CG input and native Full O5′ conventions alone is not a defect. Legacy sigma=0 retains
+the failing 0.691 nm oracle. The manifest decoder mixes those origins with an unmatched 90°
+frame conversion (mean zero-step displacement 1.204 nm). No production decoder/seed changed.
+Isolated transport recovers CG sites to 7.24e-6 nm and native reference points to 6.68e-6 nm;
+7 tests pass (zero motion, independent rigid/twist motion, unsupported-binding refusal).
+Actual sigma=1.5 seed atom displacement mean/max: current 0.313880/0.562561 nm, candidate
+0.000184/0.043411 nm; 2,800 identical atom/bond identities. Residuals concentrate at linkers;
+even exact CG input shifts them up to 0.008798 nm through the override minimizer. Unchanged
+clash/piercing/bond verdicts are 2→0 / 0→0 / 6→12; candidate bonds match the native reference.
+Code: `experiments/mrdna_frame_candidate.py`, `mrdna_zero_step_review.py`. Evidence is under
+`mrdna-decoder-review/` in the focus folder. `comparison.preliminary.json.gz` is **not approval-ready
+or registered in Help**. Qualify nonzero atomistic transport and the full phase sweep, then present
+full native context and construction steps before molecular approval. ssDNA, coarse/interpolated
+sites and loop copies remain unsupported. Point tests do not qualify an atomistic trajectory decoder.
 
 ## Remaining FH-27 regression / integration debt
 
@@ -105,24 +118,20 @@ corner 13 vs 11 clashes, Voltron area 5.354% vs 5%, square/honeycomb junction ba
 FULL platform collision refusal and branch 7,230 vs 7,249 nt shortfall have since been repaired focused.
 No failure is waived and focused passes do not clear FULL.
 
-Prior expanded repairs retained: NAMD cancellation cleanup off event loop/reaping; bad-frame audit
-fixture conversion; generator retained-handle ordering; branch resequencing before candidate selection;
-lazy proof/display dispatch imports. Focused branch test passes (100.05 s), 243 cold-import/proof checks
-pass (120.15 s); worker readiness median 1.138→0.656 s. These do not prove broad-load drains resolved.
-Branch app inspection shows 7,249 nt, 12 connections, 134 feature rows, fixed four particle centers,
-residual ≤9.30e-14 nm, no errors. All owned scratch/launchers absent; `expanded-cleanup-final.json`.
-Previous full frontend: 9,490 passed / 1 skipped; Geometry Review app 1/1, smoke 23/23 and build/lint pass.
-No frontend behavior changed in the root or MRDNA diagnostic work.
+Prior expanded repairs: NAMD cancellation reaping, bad-frame audit fixture, retained-handle ordering,
+branch resequencing and lazy proof/display imports. Branch focused pass (100.05 s); 243 cold-import
+checks pass (120.15 s), readiness median 1.138→0.656 s. Broad-load drains remain unproven.
+Branch app: 7,249 nt, 12 connections, 134 rows, fixed four particles, residual ≤9.30e-14 nm, no errors;
+`expanded-cleanup-final.json` confirms scratch absence. Previous frontend: 9,490 passed / 1 skipped;
+Geometry Review app 1/1, smoke 23/23 and build/lint pass. No frontend behavior changed here.
 
 ## Review/history and scope boundaries
 
-Help → geometry Review retains the historical rejected attachment/shortest-root candidate and two
-unchanged controls. User requested full native workspace copies because that crop omitted gold/context.
-`Platform - Current.nadoc` / `Platform - Candidate.nadoc` are four-attachment captured import states,
-not completed nine-attachment designs or replayable candidate histories. Both rendered with all gold
-and full geometry. They were later user/app saved; do not restore earlier artifact hashes. The separate
-Root-preserving file above is the completed native generation. Historical evidence remains in
-`platform-bond-clearance-review/`, `full-geometry-workspace/` and `geometry-review-*`.
+Help → geometry Review retains the historical rejected attachment/shortest-root candidate and controls.
+`Platform - Current.nadoc` / `Platform - Candidate.nadoc` are full four-attachment captured import
+states, not completed nine-attachment designs or replayable candidate histories. Both were later
+user/app saved; preserve them. The separate Root-preserving file is the completed native generation.
+Earlier evidence: `platform-bond-clearance-review/`, `full-geometry-workspace/`, `geometry-review-*`.
 
 Clusters own geometry among grouping constructs; Staple Groups organize strands. Organization gates
 stay OFF. Seven asset/import milestones, PartGroup migration, arbitrary named-group motion/compiler
@@ -131,14 +140,11 @@ exact Cancel, one Apply/undo, stable identity, earliest-error feedback and failu
 
 ## Shared work and closeout
 
-Base HEAD before this closeout: `498fbc16` (in-app review). Prior overhaul/recovery repairs are committed;
-see Git history. Commit only explicit owned paths under operating-contract §7; no push or history rewrite.
-Pre-existing API/VR/simulation/strict-host/activity/test/memory-hygiene edits stay untouched. In particular,
-strict-HTTP assertions depend on pending sealed adapters; do not commit them without that implementation.
-Mixed memory files (project_mrdna_panel, project_nanoparticles, project_feature_log_overhaul) remain
-uncommitted; so do prior implementation/conftest/manual-debt reconciliation hunks. Do not stash/reset.
-This closeout also verifies the new diagnostic's scratch and empty focused-test workspace are absent;
-its duplicate temporary probe is removed, with the reproducible experiment and full evidence retained.
-`mrdna-decoder-review/cleanup-final.json` records absence. Memory lint: zero errors/warnings.
-The local session commit contains the NP repair, isolated MRDNA experiment/tests, these corrections
-and the handoff; inspect the latest `history:` commit for its hash. No push. FH-27 remains open.
+Base HEAD: `413ac178`; preceding NP/diagnostic commit `37549296`, review UI `498fbc16`.
+Commit only explicit owned paths under operating-contract §7; no push or history rewrite.
+Pre-existing API/VR/simulation/strict-host/activity/test/memory-hygiene edits stay untouched.
+Mixed memory, implementation/conftest/manual-debt reconciliation files remain uncommitted.
+Direct root work is a checkpoint with outstanding regression qualification, not an FH-27 closure.
+Inspected browser captures/state dumps are pruned; compact measurements/logs remain. All three
+app scratch roots and owned pytest roots are absent; no owned services remain. Native review gate
+is clear. Ruff/whitespace pass; `main.js` LOC delta 0. The local checkpoint does not close FH-27.

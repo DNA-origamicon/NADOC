@@ -166,6 +166,9 @@ def reapply_binding_driver(design: Design, binding_id: str) -> Design:
         reverted = revert_bind_topology(design, b.prior_driven_topology)
         b2 = next((x for x in reverted.overhang_bindings if x.id == binding_id), None)
         topo = compute_bind_topology(reverted, b2, driver_side=driver_side)
+        from backend.core.direct_root_placement import rooted_binding_topology, place_direct_roots
+
+        topo = rooted_binding_topology(reverted, topo)
         applied = apply_bind_topology(reverted, topo)
         out = applied.model_copy(
             update={
@@ -177,6 +180,7 @@ def reapply_binding_driver(design: Design, binding_id: str) -> Design:
                 ]
             }
         )
+        out = place_direct_roots(out, topo.driver_oh_id, topo.snapshot["root_bond_lengths_nm"])
         if b.target_joint_id:
             out = _apply_driver_to_joint(out, b.target_joint_id)
         return out
