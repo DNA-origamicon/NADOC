@@ -15,6 +15,8 @@ COATING_KIND = "streptavidin-coating"
 
 
 def _reservation(source, request):
+    if request.kind == "nanoparticle-biotin-dna":
+        return 1, 32
     if request.kind != COATING_KIND:
         return 1, 2000
     from backend.api.part_coating_append import CreateRequest, DeleteRequest, MAX_HISTORY_ROWS, parse_request
@@ -29,6 +31,16 @@ def _reservation(source, request):
 
 def _legacy_definition(current, request, header):
     inputs = dict(request.params)
+    if request.kind in {"nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax"}:
+        from datetime import datetime
+        from backend.api.part_np_fitting_commands import prepare_command
+        params = prepare_command(request.kind, current, inputs, history_seed=header["identity"],
+            created_at=datetime.fromisoformat(header["timestamp"]).timestamp())
+        return header["identity"], ("nanoparticle-patch" if request.kind == "nanoparticle-bound-move" else request.kind), "Nanoparticle fitting", params
+    if request.kind == "nanoparticle-biotin-dna":
+        from backend.api.part_biotin_append import prepare_command
+        params = prepare_command(current, inputs, history_seed=header["identity"])
+        return header["identity"], request.kind, "Biotinylated DNA", params
     if request.kind in {"photoproduct-create", "duplex-relax"}:
         inputs["history_seed"] = header["identity"]
     if request.kind == "duplex-relax":

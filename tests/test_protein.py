@@ -431,7 +431,10 @@ def _set_sequenced_overhang():
     assert response.status_code == 200, response.text
 
 
-def test_conjugate_creates_binder_and_attachment(_clean_state):
+@pytest.mark.parametrize("native", [False, True])
+def test_conjugate_creates_binder_and_attachment(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
     _set_sequenced_overhang()
     asset_id = _import_protein()
     strands_before = {s.id for s in design_state.get_design().strands}
@@ -452,13 +455,13 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
     assert process["operation_id"]
     assert process["outcome"] == "committed"
     assert process["total_ms"] >= 0
-    assert set(process["stages_ms"]) == {
+    assert set(process["stages_ms"]) == ({"resolve_inputs", "native_preparation", "commit"} if native else {
         "resolve_inputs",
         "build_binder",
         "resolve_geometry",
         "commit",
         "validate_element",
-    }
+    })
 
     d = design_state.get_design()
     # (1) the handle is a real overhang-binding domain
@@ -548,7 +551,10 @@ def test_conjugate_does_not_orphan_binder_when_source_is_already_attached(_clean
     assert [s.id for s in design_state.get_design().strands] == strands_before
 
 
-def test_conjugate_rejects_an_occupied_overhang_without_mutation(_clean_state):
+@pytest.mark.parametrize("native", [False, True])
+def test_conjugate_rejects_an_occupied_overhang_without_mutation(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
     _set_sequenced_overhang()
     first_asset = _import_protein()
     assert client.post(
@@ -562,9 +568,12 @@ def test_conjugate_rejects_an_occupied_overhang_without_mutation(_clean_state):
         json={"asset_id": second_asset, "overhang_id": "oh_5p"},
     )
     assert r.status_code == 422
-    assert "binder_cardinality" in r.json()["detail"]["element_validation"][
-        "failed_metrics"
-    ]
+    if native:
+        assert r.json()["detail"]["code"] == "invalid_selection"
+        assert r.json()["detail"]["references"] == [{"kind": "overhang", "identity": "oh_5p",
+            "parameter_path": ["overhang_id"]}]
+    else:
+        assert "binder_cardinality" in r.json()["detail"]["element_validation"]["failed_metrics"]
     assert design_state.get_design().model_dump(mode="json") == before
 
 
@@ -659,7 +668,10 @@ def test_conjugate_validation_exception_leaves_design_and_undo_history_untouched
         assert len(design_state._session().history) == history_len
 
 
-def test_conjugate_invalid_site_is_rejected_atomically_with_metrics(_clean_state):
+@pytest.mark.parametrize("native", [False, True])
+def test_conjugate_invalid_site_is_rejected_atomically_with_metrics(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
     _set_sequenced_overhang()
     asset_id = _import_protein()
     before = design_state.get_design().model_dump(mode="json")
@@ -675,7 +687,12 @@ def test_conjugate_invalid_site_is_rejected_atomically_with_metrics(_clean_state
     assert r.status_code == 422
     detail = r.json()["detail"]
     assert detail["process_metrics"]["outcome"] == "rejected_invalid"
-    assert "conjugation_atom_integrity" in detail["element_validation"]["failed_metrics"]
+    if native:
+        assert detail["code"] == "missing_reference"
+        assert detail["references"] == [{"kind": "protein_atom", "identity": f"{asset_id}:999999",
+            "parameter_path": ["conjugation_atom_serial"]}]
+    else:
+        assert "conjugation_atom_integrity" in detail["element_validation"]["failed_metrics"]
     assert design_state.get_design().model_dump(mode="json") == before
 
 

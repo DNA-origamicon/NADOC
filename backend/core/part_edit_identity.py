@@ -11,6 +11,10 @@ from backend.core.feature_identity import preserve_proof_identity as _preserve_b
 
 
 _PROTECTED = {
+    "nanoparticle-attach-overhang": ("_proof_version", "np_fitting_version", "engine", "history_seed", "version_id", "duplex_id", "created_at"),
+    "nanoparticle-bound-move": ("_proof_version", "np_fitting_version", "engine"),
+    "nanoparticle-connection-relax": ("_proof_version", "np_fitting_version", "engine"),
+    "nanoparticle-biotin-dna": ("_proof_version", "biotin_version", "action", "engine", "history_seed", "owned"),
     "placement-poses": ("_proof_version", "primary_cluster_id", "primary_authored_fields", "legacy_source"),
     # Conversion derives organizational outputs from this complete ordered
     # placement namespace. Pose values are intentionally not pinned here.
@@ -53,6 +57,8 @@ def preserve_proof_identity(previous, updated, *, kind=None):
         # inputs; malformed replacements still reach their strict parser.
         result = {**result, "group": {**result["group"], "id": previous["group"]["id"]}}
     keys = _PROTECTED.get(kind, ())
+    if kind == "nanoparticle-patch" and "np_fitting_version" in previous:
+        keys += ("_proof_version", "np_fitting_version", "engine")
     if kind == "overhang-bulk" and previous.get("connection_version_contract") in (1, 2):
         action = previous.get("action")
         if type(action) is str and action in {"connection-version-create", "connection-version-patch", "connection-version-delete"}:

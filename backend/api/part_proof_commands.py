@@ -49,7 +49,8 @@ PROOF_SNAPSHOT_KINDS = (
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
     | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | EXTENSION_KINDS
-    | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
+    | frozenset({"nanoparticle-attach-overhang", "nanoparticle-connection-relax",
+                 "nanoparticle-biotin-dna", "photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
                  "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve", "placement-poses"})
 )
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
@@ -176,6 +177,13 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind == "nanoparticle-biotin-dna":
+        from backend.api.part_biotin_commands import dependencies as biotin_dependencies
+        return biotin_dependencies(kind, params)
+    if (kind in {"nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax"}
+            or kind == "nanoparticle-patch" and "np_fitting_version" in params):
+        from backend.api.part_np_fitting_commands import dependencies as fitting_dependencies
+        return fitting_dependencies(kind, params)
     if kind == "overhang-bulk" and params.get("action") == CONNECTION_DISCONNECT_ACTION:
         from backend.api.part_connection_disconnect import dependency_contract
         return dependency_contract(params, topology=PART_TOPOLOGY)
@@ -540,6 +548,25 @@ def _execute_candidate(kind, design, params, *, expensive):
                                        code="long_job_required")
         from backend.api.part_duplex_commands import build
         updated = build(kind, design, params)
+    elif (kind in {"nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax"}
+            or kind == "nanoparticle-patch" and "np_fitting_version" in params):
+        from backend.api.part_np_fitting_commands import build, validate_inputs
+        if not expensive:
+            from backend.core.part_command_errors import CommandContractError
+            validate_inputs(kind, design, params)
+            raise CommandContractError("Nanoparticle fitting requires an explicit bounded evaluation job",
+                                       code="long_job_required")
+        updated = build(kind, design, params)
+    elif kind == "nanoparticle-biotin-dna":
+        from backend.api.part_biotin_commands import build, validate_inputs
+        from backend.core.part_input_sources import EmbeddedResolver
+        resolver = EmbeddedResolver(design.input_sources)
+        if not expensive:
+            from backend.core.part_command_errors import CommandContractError
+            validate_inputs(kind, design, params, resolver=resolver)
+            raise CommandContractError("Biotin attachment requires an explicit bounded evaluation job",
+                                       code="long_job_required")
+        updated = build(kind, design, params, resolver=resolver)
     elif kind == "nanoparticle-patch" and "coating_version" in params:
         from backend.api.part_streptavidin_commands import build, validate_inputs
         from backend.core.part_input_sources import EmbeddedResolver
@@ -662,7 +689,9 @@ def _execute_candidate(kind, design, params, *, expensive):
         cells = params.get("cells", [])
         if len(cells) > 512 or len(cells) * abs(params.get("length_bp", 0)) > 50_000:
             raise ProofBudgetExceeded("Bundle exceeds proof work budget")
-        updated = replay_snapshot(kind, design, params)
+        # Bundle construction creates a fresh Design. The declared source table
+        # belongs to the whole recipe, including imports in its later suffix.
+        updated = replay_snapshot(kind, design, params).copy_with(input_sources=dict(design.input_sources))
     else:
         updated = replay_minor(kind, design, params)
     lineage = advance_lineage(lineage, updated, trace=lineage_trace)

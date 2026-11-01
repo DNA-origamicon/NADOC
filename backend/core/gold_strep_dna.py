@@ -17,9 +17,9 @@ from backend.core.constants import BDNA_RISE_PER_BP, NM_TO_OXDNA
 from backend.core.geometry import nucleotide_positions_arrays
 
 
-def pocket_geometry(particle, chain, tetramer_index=0):
+def pocket_geometry(particle, chain, tetramer_index=0, *, template=None):
     protein = particle.coating.protein
-    template = streptavidin_asset("biotin_tether")
+    template = streptavidin_asset("biotin_tether") if template is None else template
     a = np.array(
         [
             [x.x, x.y, x.z]
@@ -108,7 +108,8 @@ def _directions(exit_axis, radial):
 
 
 def build_dna_set(
-    particle, sequence, chain="auto", linker_nm=2.0, dna_per_strep=1, design=None
+    particle, sequence, chain="auto", linker_nm=2.0, dna_per_strep=1, design=None,
+    *, template=None, identity_factory=None,
 ):
     """Place exactly the requested occupancy on every already-applied tetramer.
 
@@ -201,7 +202,7 @@ def build_dna_set(
                 continue
             if chain != "auto" and chain != site:
                 continue
-            anchor, exit_axis = pocket_geometry(particle, site, index)
+            anchor, exit_axis = pocket_geometry(particle, site, index, template=template)
             radial = (anchor - center) / np.linalg.norm(anchor - center)
             candidates.append(
                 (float(exit_axis @ radial), site, anchor, exit_axis, radial)
@@ -244,7 +245,8 @@ def build_dna_set(
             if chosen is None:
                 continue
             h, points = chosen
-            h.id = "__strep_dna__" + uuid.uuid4().hex
+            h.id = ("__strep_dna__" + uuid.uuid4().hex if identity_factory is None
+                    else identity_factory("helix", index, site))
             s = Strand(
                 domains=[
                     Domain(
@@ -258,6 +260,8 @@ def build_dna_set(
                 sequence=sequence,
                 name=f"5′ biotin–DNA · strep {index + 1} pocket {site}",
             )
+            if identity_factory is not None:
+                s.id = identity_factory("strand", index, site)
             record = BiotinDNA(
                 strand_id=s.id,
                 helix_id=h.id,

@@ -12,6 +12,7 @@ from time import monotonic, perf_counter
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
+from pydantic import BaseModel
 
 from backend.api import doc_context, state
 from backend.api.part_protein_commands import MAX_PROTEIN_ATOM_RECORDS, MAX_PROTEIN_SOURCE_BYTES
@@ -25,6 +26,7 @@ from backend.core.part_input_sources import (
 )
 from backend.core.part_overlay_commands import command_input
 from backend.core.part_recipe_publication import preserve_document_state
+from backend.core.part_repair_capture import _Copier
 from backend.core.part_verification_capture import CaptureLimit, admit, capture
 
 
@@ -33,6 +35,21 @@ _METADATA_NODES = 10_000
 _METADATA_BYTES = 256_000
 _PAYLOADS = ("design_snapshot_gz_b64", "post_state_gz_b64", "pre_state_gz_b64",
              "diff_added_b64", "diff_removed_b64", "diff_modified_b64")
+_DEFAULT_DOCUMENT = Design()
+_PHYSICAL_DEFAULTS = {name: getattr(_DEFAULT_DOCUMENT, name) for name, role in FIELD_ROLES.items() if role == "physical"}
+del _DEFAULT_DOCUMENT
+
+
+class _MetadataCopier(_Copier):
+    """Retain the existing metadata checks without creating a class per import."""
+
+    def clone(self, value, depth=0):
+        if isinstance(value, BaseModel) and (
+            value.__pydantic_extra__ is not None or value.__pydantic_private__ is not None
+            or value.__dict__.keys() != type(value).model_fields.keys()
+        ):
+            raise CaptureLimit("Protein import cannot classify private or extra retained metadata")
+        return super().clone(value, depth)
 
 
 @dataclass(frozen=True)
@@ -52,6 +69,9 @@ class ImportCapture:
     recovery_bytes: int
     metadata_nodes: int
     metadata_bytes: int
+    source_filename: str
+    placement: dict | None
+    publish_library: bool
 
 
 @dataclass(frozen=True)
@@ -63,6 +83,7 @@ class PreparedImport:
     stages_ms: dict
     response: dict
     asset_meta: dict
+    library_asset: object | None
 
 
 def source_eligibility(text, name):
@@ -98,27 +119,12 @@ def _retained_metadata(design, deadline):
     """
     if set(type(design).model_fields) != set(FIELD_ROLES):
         raise CaptureLimit("Protein import cannot classify this document schema")
-    baseline = Design()
     for name, role in FIELD_ROLES.items():
-        if role == "physical" and getattr(design, name) != getattr(baseline, name):
+        if role == "physical" and getattr(design, name) != _PHYSICAL_DEFAULTS[name]:
             raise CaptureLimit(f"Native free protein import initially requires default {name}")
-    from backend.core.part_repair_capture import _Copier
-    from pydantic import BaseModel
-
-    # Narrow reuse of the draft copier; promote the utility only after its two
-    # callers settle. Never drop hidden state from an admitted retained model.
-    class MetadataCopier(_Copier):
-        def clone(self, value, depth=0):
-            if isinstance(value, BaseModel) and (
-                value.__pydantic_extra__ is not None or value.__pydantic_private__ is not None
-                or value.__dict__.keys() != type(value).model_fields.keys()
-            ):
-                raise CaptureLimit("Protein import cannot classify private or extra retained metadata")
-            return super().clone(value, depth)
-
     values = {name: getattr(design, name) for name, role in FIELD_ROLES.items()
               if role in {"presentation", "repair_draft"}}
-    copier = MetadataCopier(_METADATA_NODES, _METADATA_BYTES, max(0, deadline - monotonic()))
+    copier = _MetadataCopier(_METADATA_NODES, _METADATA_BYTES, max(0, deadline - monotonic()))
     try:
         retained = copier.clone(values)
     except ValueError as error:
@@ -126,7 +132,8 @@ def _retained_metadata(design, deadline):
     return retained, _METADATA_NODES - copier.nodes, _METADATA_BYTES - copier.size
 
 
-def capture_import(text, name, exclude_dna, operation_id, expected_revision):
+def capture_import(text, name, exclude_dna, operation_id, expected_revision, *,
+                   source_filename=None, asset_id=None, placement=None, publish_library=True):
     """Return an owned input or a pre-native rootless compatibility reason."""
     state.require_compatibility_write("protein_import")
     if type(operation_id) is not str or not 1 <= len(operation_id) <= 256:
@@ -135,11 +142,14 @@ def capture_import(text, name, exclude_dna, operation_id, expected_revision):
         raise HTTPException(422, detail="Protein import revision must be a nonnegative integer")
     reason = source_eligibility(text, name)
     raw = text.encode("utf-8") if reason is None else None
+    from backend.core.part_capture_copy import allocate_atom_copies
+    atom_copies = allocate_atom_copies(3000) if reason is None else None
     with state._lock:
         session = state._session()
         source, revision = session.design, session.revision
         if expected_revision is not None and expected_revision != revision:
-            raise HTTPException(409, detail="Design changed while this import was being prepared.")
+            raise HTTPException(409, detail={"message": "Design changed while this import was being prepared.",
+                "expected_revision": expected_revision, "current_revision": revision})
         if reason:
             if source is None or source.recipe_root is None:
                 return None, reason
@@ -148,6 +158,8 @@ def capture_import(text, name, exclude_dna, operation_id, expected_revision):
         initial = create_empty_part("Untitled", "HONEYCOMB") if source is None else None
         current = source if source is not None else initial
         identities = _identity(current.id, operation_id)
+        if asset_id is not None:
+            identities["asset"] = asset_id
         state._assert_active_loadout_editable(current)
         try:
             deadline = monotonic() + 0.025
@@ -172,7 +184,7 @@ def capture_import(text, name, exclude_dna, operation_id, expected_revision):
                     raise CaptureLimit("Protein import retained recovery exceeds the existing 8 MB allowance")
             retained, metadata_nodes, metadata_bytes = _retained_metadata(current, deadline)
             isolated = capture(current, max_nodes=30_000 - metadata_nodes, max_bytes=2_000_000 - metadata_bytes,
-                               seconds=max(0, deadline - monotonic()), preserve_entry_types=True)
+                               seconds=max(0, deadline - monotonic()), preserve_entry_types=True, atom_copies=atom_copies)
             isolated = isolated.copy_with(**retained)
         except CaptureLimit as error:
             if source is not None and source.recipe_root is None:
@@ -181,7 +193,8 @@ def capture_import(text, name, exclude_dna, operation_id, expected_revision):
                                             "status": "unverified"}) from error
     return ImportCapture(session, doc_context.get_current_doc(), source, revision,
                          isolated, initial, operation_id, identities, raw, name, exclude_dna,
-                         datetime.now(timezone.utc).isoformat(), recovery_bytes, metadata_nodes, metadata_bytes), None
+                         datetime.now(timezone.utc).isoformat(), recovery_bytes, metadata_nodes, metadata_bytes,
+                         name if source_filename is None else source_filename, placement, publish_library), None
 
 
 def prepare_import(captured):
@@ -217,13 +230,17 @@ def prepare_import(captured):
             raise ProofBudgetExceeded("Protein import exceeds the portable source count allowance")
         table[descriptor.sha256] = embed(descriptor, captured.raw)
     current = current.copy_with(input_sources=table)
-    rows, times = [], {}
+    rows, times, element_report = [], {}, None
     budget = RecoveryBudget(MAX_RECOVERY_BYTES - captured.recovery_bytes)
 
     def append(role, kind, label, params):
-        nonlocal current
+        nonlocal current, element_report
         started = perf_counter()
-        updated = execute(kind, current, params)
+        if kind == "protein-conjugate":
+            from backend.api.part_protein_conjugation_commands import evaluate
+            updated, element_report = evaluate(kind, current, params)
+        else:
+            updated = execute(kind, current, params)
         times[role] = (perf_counter() - started) * 1000
         started = perf_counter()
         pre, pre_size = state.encode_design_snapshot(current)
@@ -239,12 +256,25 @@ def prepare_import(captured):
     base = {"_proof_version": 1, "protein_version": 1, "asset_id": captured.identities["asset"]}
     append("import", "protein-import", f"Import protein {captured.name or 'Protein'}", {
         **base, "importer_version": 1, "source": descriptor.model_dump(mode="json"),
-        "name": captured.name, "source_filename": captured.name, "exclude_dna": captured.exclude_dna})
+        "name": captured.name, "source_filename": captured.source_filename, "exclude_dna": captured.exclude_dna})
     asset = next(item for item in current.protein_assets if item.id == captured.identities["asset"])
-    append("placement", "protein-attach", f"Place protein {asset.name}", {
+    placement = captured.placement or {}
+    kind = placement.get("kind", "protein-attach")
+    params = {
         **base, "attachment_id": captured.identities["attachment"], "target": {"kind": "free"},
         "conjugation_atom_serial": asset.default_conjugation_atom_serial,
-        "handle_complement_bp": 0, "handle_spacer_nt": 0, "pose": None, "visible": True})
+        "handle_complement_bp": 0, "handle_spacer_nt": 0, "pose": None, "visible": True}
+    if kind == "protein-conjugate":
+        params = {**base, "attachment_id": captured.identities["attachment"], "conjugation_version": 1,
+            "conjugation_atom_serial": asset.default_conjugation_atom_serial,
+            "binder_strand_id": "ohbind_" + captured.identities["placement"],
+            "group_id": "conjugate-" + captured.identities["placement"], "operation_id": captured.operation_id}
+    params.update(placement.get("params", {}))
+    if kind == "protein-conjugate" and params.get("source_attachment_id") is not None:
+        params["attachment_id"] = params["source_attachment_id"]
+    if params["conjugation_atom_serial"] is None:
+        params["conjugation_atom_serial"] = asset.default_conjugation_atom_serial
+    append("placement", kind, f"Place protein {asset.name}", params)
     # This candidate is already private. Check the same authoring node/byte
     # allowance without making a second isolated graph or imposing a second
     # source-capture deadline. Source isolation above retains its own deadline.
@@ -253,11 +283,16 @@ def prepare_import(captured):
           preserve_entry_types=True)
     times["candidate_admission"] = (perf_counter() - started) * 1000
     validation = validate_design(current)
-    from backend.api.crud import _design_response
+    from backend.api.crud import _design_response, _design_response_with_geometry
     from backend.core.protein import protein_asset_meta
+    from backend.api.part_protein_library_sources import retain_source
 
     started = perf_counter()
-    response = _design_response(current, validation, normalize_legacy=False)
+    response = (_design_response_with_geometry(current, validation, normalize_legacy=False)
+                if kind == "protein-conjugate" else _design_response(current, validation, normalize_legacy=False))
+    if element_report is not None:
+        response.update(element_validation=element_report, binder_strand_id=params["binder_strand_id"],
+                        attachment_id=params["attachment_id"])
     if not doc_context.should_skip_geometry():
         # Both new rows are absent from the browser's recovery cache. Previous
         # rows remain slim; a native suffix never normalizes a legacy prefix.
@@ -265,8 +300,10 @@ def prepare_import(captured):
         response["design"]["feature_log"] = [new_rows.get(row["id"], row)
             for row in response["design"]["feature_log"]]
     meta = protein_asset_meta(asset)
+    library_asset = retain_source(asset, captured.raw, name=captured.name,
+        source_filename=captured.source_filename, exclude_dna=captured.exclude_dna) if captured.publish_library else None
     times["response"] = (perf_counter() - started) * 1000
-    return PreparedImport(current, tuple(rows), asset, validation, times, response, meta)
+    return PreparedImport(current, tuple(rows), asset, validation, times, response, meta, library_asset)
 
 
 def _store_library_asset_locked(asset):
@@ -303,7 +340,8 @@ def publish_import(captured, prepared):
             if captured.source is None:
                 session.design = captured.initial
             revision = publish_replacement(session, candidate)
-            _store_library_asset_locked(prepared.asset)
+            if prepared.library_asset is not None:
+                _store_library_asset_locked(prepared.library_asset)
             doc_context.set_request_feature_log_entry_id(prepared.rows[-1].id)
         except BaseException:
             session.design = captured.source
@@ -314,10 +352,11 @@ def publish_import(captured, prepared):
             session.revision = captured.revision
             doc_context.set_request_revision(request_revision)
             doc_context.set_request_feature_log_entry_id(request_entry)
-            if prior_library is None:
-                state._protein_library.pop(asset_id, None)
-            else:
-                state._protein_library[asset_id] = prior_library
+            if prepared.library_asset is not None:
+                if prior_library is None:
+                    state._protein_library.pop(asset_id, None)
+                else:
+                    state._protein_library[asset_id] = prior_library
             raise
     return candidate, prepared.validation, revision
 

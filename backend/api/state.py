@@ -330,6 +330,16 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
             raise HTTPException(422, detail={"code": "invalid_evaluation_input", "detail": str(error)}) from error
         request_digest = digest(definition)
 
+    # Empty scalar destinations carry no source values. Read only a bounded
+    # allocation hint, allocate outside the document lock, then capture the
+    # authoritative current source below with every existing guard and budget.
+    from backend.core.part_capture_copy import allocate_atom_copies
+    with _lock:
+        hint = _sessions.get(get_current_doc())
+        particles = hint.design.nanoparticles[:1] if hint and type(hint.design) is Design else ()
+        atom_count = sum(min(len(p.coating.protein.atoms), 4100) for p in particles if p.coating is not None)
+    atom_copies = allocate_atom_copies(atom_count) if atom_count else None
+
     with _lock:
         if expected_policy_generation is not None and (
                 type(expected_policy_generation) is not int
@@ -350,7 +360,8 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
             source, revision = s.design, s.revision
             doc_id, generation = get_current_doc(), configuration.generation
         else:
-            captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
+            captured = capture_for_evaluation(s.design, request=request, revision=s.revision,
+                **({'atom_copies': atom_copies} if atom_copies is not None else {}))
             result = (s.design, captured, s.revision)
             if include_admission:
                 from backend.api.part_publication_permit import admit_evaluation

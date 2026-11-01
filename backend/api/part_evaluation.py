@@ -19,7 +19,8 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation: Literal["verify", "append", "edit", "delete", "reorder", "suppress", "repair", "selection", "batch"]
-    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
+    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating", "nanoparticle-biotin-dna",
+                  "nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
                   "bundle-create", "extrude-segment", "extrude-continuation",
                   "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep", "deformation", "cluster_op", "placement-poses",
@@ -87,6 +88,16 @@ class EvaluationRequest(BaseModel):
                 if self.expected_revision is None:
                     raise ValueError("Coating append requires expected_revision")
                 parse_request(self.params)
+            if self.kind == "nanoparticle-biotin-dna":
+                from backend.api.part_biotin_append import parse_request
+                if self.expected_revision is None:
+                    raise ValueError("Biotin append requires expected_revision")
+                parse_request(self.params)
+            if self.kind in {"nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax"}:
+                from backend.api.part_np_fitting_commands import parse_inputs
+                if self.expected_revision is None:
+                    raise ValueError("Nanoparticle fitting requires expected_revision")
+                parse_inputs(self.kind, self.params)
         elif self.operation in {"edit", "delete"}:
             if self.index is None or self.kind is not None:
                 raise ValueError("Recipe edit/delete needs a feature index")

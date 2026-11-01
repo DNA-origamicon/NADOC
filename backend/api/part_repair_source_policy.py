@@ -27,6 +27,10 @@ def admit_descriptor(kind, params, parameter, source):
     elif kind == "nanoparticle-create" and "quantum_dot_version" in params and parameter == "source":
         from backend.api.part_quantum_dot_commands import MAX_CATALOG_BYTES
         limit, expected_format, media = MAX_CATALOG_BYTES, "quantum-dot-catalog", "application/json"
+    elif kind == "nanoparticle-biotin-dna" and params.get("action") == "create" and parameter in {"tether_source", "coating_source"}:
+        from backend.api.part_streptavidin_commands import MAX_PDB_BYTES, _pdb_descriptor
+        _pdb_descriptor(source)
+        return {"max_size_bytes": MAX_PDB_BYTES, "replacement_supported": False}
     elif kind == "nanoparticle-patch" and "coating_version" in params and params.get("action") == "set":
         if parameter == "pdb_source":
             from backend.api.part_streptavidin_commands import MAX_PDB_BYTES, _pdb_descriptor

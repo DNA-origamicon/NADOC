@@ -1,79 +1,74 @@
 # Feature-history campaign handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 0 (ordinary NP application gate ON November 1).
-The November 1 campaign superseded recurring stop-loss confirmation and authorized successive independent milestones within its deadline.
+Sessions since last gate flip or milestone close: 0 (ordinary protein import gate ON November 1).
+The user requested the next three independent milestones after the original 14:00 campaign; no new deadline was supplied.
 
-**Tools done: 4/4. CAD: 29/34 complete; FH-27 and 4 asset milestones remain.**
-FH-30, FH-34 and FH-35 close in this campaign. FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
+**Tools done: 4/4. CAD: 30/34 complete; FH-27/31/32/36 remain open.**
+FH-30/34/35 closed in the preceding campaign; FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
 
-## November 1 campaign
+## Current three-milestone scope — November 1
 
-User requested as many milestones as possible before **14:00 America/Denver (MST), 21:00 UTC today**,
-and answered **Advance independent milestones**. Completed scope and the remaining independent task are recorded below.
-Campaign implementation: FH-30 ordinary NP application/pending alternatives is enabled; FH-34/35 source imports are qualified.
-Next independent milestone: FH-33 original protein library bytes and source-capture qualification. The document-source
-precedence defect is fixed, but the ordinary protein import gate stays OFF and prior capture refusals remain evidence.
-No new host, queue, storage layer or scientific algorithm is authorized or needed.
-Old-file compatibility, experimental CPD and the Python-only corner optimizer remain outside repair scope.
-
-## Completed independent milestone — FH-34
-
-Ordinary File → Import scadnano now records original source bytes, importer/options, source-content identity,
-and `existing-importer-v1` loss policy in an Import feature. The original complete scientific pipeline is unchanged.
-The admitted square/honeycomb subset includes loops, insertions/deletions, extensions and ordinary NADOC exports;
-unsupported/larger imports retain explicitly unverified legacy behavior. Raw-source import also has a guarded one-undo route.
-Name edits preserve identities; changed source bytes deliberately invalidate downstream selections for explicit repair.
-See [the compact contract/evidence](cadnano_scadnano_input_plan.md#fh-34-scadnano-qualification--november-1-2026).
+Selected FH-33 original protein inputs/library placement, FH-31 fitting/bound motion/multi-anchor relaxation,
+and FH-32 coupled biotin create/remove. New explicit goal was not created: the prior deadline campaign was complete.
+FH-33 closes: ordinary free/library placement gate is ON after retained-state, desktop and required SMART passes.
+FH-31/32 have tested native numerical commands in the existing worker; both append rollout gates stay OFF.
+No molecular review was approved. Old-file compatibility, experimental CPD and Python-only corner optimization stay excluded.
+No new host, queue, storage layer or scientific algorithm was added. Organization/PartGroup gates remain OFF.
 Evidence root **C**: `.development-artifacts/feature-history-focus/`.
-`C/scadnano-smart-final-20261101`: **SMART FAST, 19895 passed /19 skipped**, 474.39 s; no per-test budget violations.
-`C/scadnano-frontend-20261101`: **9496 passed /1 skipped**, 795 files, 405.76 s.
-`C/scadnano-browser-initial-20261101`: **1 pass**, File Import/nick/history edit/proof/undo/redo/save/reopen, zero console errors.
-`C/scadnano-boundaries-20261101`: **30/30** imports, six boundary profiles; max capture 8.126 ms,
-HTTP 80.728 ms; six cold-worker proofs 1332.6–1457.4 ms. All temporary roots are verified absent.
-`C/scadnano-current-pins-final-20261101`: **2 pass /1 deselected**, current duplex/coating reproduction and stale-pin refusal;
-CPD is deselected. No authored numerical pins, geometry constants or oracles were refreshed.
 
-Explicit scientific marks now exclude CPD parameters whose display names previously escaped suffix-stripping selection.
-Selection controls passed 17 tests. Four genuine expensive connection HTTP lifecycle variants moved to slow/headless;
-their focused run passes all four (12.62 s). No budget increased. Aggregate FAST size remains existing suite debt.
-The first FAST had 5 failures: four nested-pytest wrapper configuration failures and one unreproduced extension receipt failure.
-Removed the wrapper's inherited parent `--basetemp`; retained all four incident reports and explicit harness-cause reviews.
-The unchanged placement gate self-tests pass 23/23 and the review gate is clear. Extension tests pass 23/23;
-the full rerun also passes. Improved its assertion to expose any future HTTP refusal. No production placement changed.
+## Protein source and placement qualification
 
-The expired broad window remains **October 31, 10:52:09–14:52:09 MDT**. Do not renew its marker.
-Current selector output (verbatim):
+See [FH-33 contract/evidence](protein_free_import_contract.md#fh-33-source-and-placement-qualification--november-1-2026).
+Library imports retain exact source/filter choices; placement copies the existing source envelope into the document,
+with import plus attachment/conjugation in one revision/undo. Replay has no library fallback or atom-to-PDB reconstruction.
+Both entry routes preserve original bytes; equal atoms with different source/filter inputs do not deduplicate.
+The source table survives native bundle reconstruction: a red regression and the real desktop edit both exposed its loss.
+`next3-protein-destinations-20261101`: **330/330** expected outcomes, eleven boundary/retained cases, eight cold proofs.
+Worst p95 route/capture-lock/publication-lock/light request: **294.452/15.280/4.056/24.047 ms**; max capture **23.984 ms**.
+Empty atom-copy destinations allocate before the lock and receive scalar source values under existing isolation/accounting.
+No GC policy, 25 ms capture, 30,000 nodes/2 MB, 8 MB recovery, scientific formulas or old numerical pins changed.
+`next3-protein-desktop-qualified-20261101`: **2 pass**, actual File and Tools menus, upstream edit, undo/redo,
+save/reopen, original-byte equality and cold proof; zero console errors. Observed display adoption **223/695 ms**.
+Library fixture uses the existing harness's unrelated-request stubs and paused software GPU raster.
+Earlier failed benchmarks, browser fixture/menu attempts and actual missing-source failure remain in C.
+
+## Two numerical candidates — rollout remains open
+
+[FH-31 contract](nanoparticle_connection_contract.md#fh-31-numerical-candidate--november-1-2026): exact bounded
+particle/graft/target/active-anchor selection, deterministic identities and numerical code/runtime provenance;
+unchanged fit, constrained movement and one-to-four-anchor solve. Solved poses remain outputs.
+[FH-32 contract](coating_input_plan.md#fh-32-biotin-candidate--november-1-2026): pinned original coating/tether PDB,
+sequence/pocket/linker/site intent and exact owned removal. Existing pocket/clearance math is unchanged.
+Explicit pin upgrades and exact source restoration use existing repair; ordinary edits cannot refresh pins.
+`next3-assets-final-focused-20261101`: **169 pass**, including native full-output parity, two/four anchors,
+cold-worker lifecycle/edits, exact ownership/bounds, actual capture/commit/undo/cancel/stale publication.
+`next3-numerical-repair-20261101`: **99 pass**; `next3-bundle-source-green-20261101`: **18 pass**, including new repair/source controls.
+Actual biotin deadline failures remain evidence. Bounded preallocated destinations in the existing coating capture
+preserve its 100 ms/100,000-node/4 MB profile; three later real job checks pass at **49.45–91.59 ms** capture.
+Worker correctness separately uses a test-only 1 s capture clock; this is never production qualification.
+Remaining FH-31/32: ordinary entry-point/editor integration, complete admitted connection removal/replacement,
+downstream diagnostics and repeated boundary/retained-history/display qualification. Neither milestone is closed.
+
+## Validation and next task
+
+`next3-smart-20261101`: first required FAST **19,994 pass /8 fail /19 skip**, 467.23 s; six protein route-contract failures and two wrapper Unix-socket path failures. No broad test session is open.
+Protein HTTP status/revision/metrics contracts are restored; typed native prevalidation retains exact reference diagnostics and legacy checks remain parametrized.
+The 5.03 s slow-guard offender was the socket startup timeout: owned reproduction at 112 bytes gives `AF_UNIX path too long`. Wrapper roots are shortened to `/tmp/n3-*`; no budgets/markers change.
+`next3-protein-http-regression-20261101`: 139 pass /one new assertion used the wrong missing-reference code; corrected. `next3-protein-pins-explicit-20261101`: **142 pass**, including current duplex/coating pins and retired-pin refusals.
+The prior pin invocation split its exclusion argument and was refused before collection; explicit duplex/coating nodes replace it. No CPD test ran.
+`next3-smart-final-20261101`: required **FAST 20,005 pass /19 skip**, 459.60 s pytest /467.74 s wrapper. Zero per-test violators; maximum 4.43 s. Full sweep stays deferred below.
+Slow-test skill review: aggregate runtime warning only; summed test time fell 1,728.0→1,702.3 s. Existing solver/replay families dominate; no new shared accidental delay identified. No reclassification or budget change.
+Next: FH-31 ordinary job/editor integration and complete connection removal/replacement after relaxed/multiple-anchor state; keep its gate OFF until app and repeated-boundary qualification pass.
+No frontend production code changed; final app exercise passes. Scoped Ruff (36 Python files), memory lint (zero errors/warnings) and `git diff --check` pass.
+All 26 completed wrapper roots and browser-owned workspace/cache/report/profile roots are verified absent; final FAST removed 2,754,042,855 scratch bytes.
+The prior campaign's required FAST/frontend/smoke outcomes remain in C and the linked milestone plans.
+The broad window expired **October 31, 10:52:09–14:52:09 MDT**. Do not renew its marker. Selector output (verbatim):
 ```
 DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 Only request `just test-session` when a broad/full sweep is actually needed.
 ```
-
-## Further completed milestones and regression — November 1
-
-FH-30: [NP contract/evidence](ordinary_np_application_route_plan.md#fh-30-qualification--november-1-2026).
-Exact active version/duplex selectors admit pending alternatives without changing live placement or ownership.
-`C/np-http-qualified-20261101`: 1,240 paired lifecycle steps, full authoring/response/geometry parity,
-four cold proofs; maximum combined native request 759.042 ms. GC observation cap/dropped events remain disclosed.
-Final small/large adopted-display maxima 552/728.7 ms; Cancel click-through-repaint 26 ms, no canonical requests.
-Earlier 319.4 ms included automation overhead; raw evidence remains. The timer’s hidden-dialog selector failure was corrected.
-History names/orientation, explicit failed descendants, one undo/revision, switches, delete and save/reopen pass.
-The applied-geometry screenshot was inspected; existing placement is preserved, with fitting still FH-31.
-FH-35: [DNA-PDB contract/evidence](asset_import_plan.md#fh-35-dna-pdb-qualification--november-1-2026).
-Original bytes/version/loss and stable source-content IDs reproduce the unchanged duplex converter; native-only claim is false.
-Original atoms remain separate transient display output. Forty imports across eight boundary profiles and eight cold proofs pass;
-max HTTP+geometry 123.833 ms, capture 1.987 ms. Actual File import/nick/name edit/undo/reopen/cold proof pass.
-`C/campaign-smart-final-20261101`: 19,962 passed /19 skipped, 473.83 s, no per-test violations; required frontend 9,498 passed /1 skipped across 795 files, 388.11 s; smoke 23 passed (2.6 min).
-Final boundary/interactive/pin checks: four browser checks pass across the final run and corrected lifecycle rerun; 40 paired HTTP steps/four cold proofs; current duplex/coating pins 2 pass /CPD deselected. All completed scratch roots and owned service processes are absent.
-The first gate-on SMART had one unsupported legacy shared-target delete failure; classification now excludes it before
-restoration. The next run exposed a generated branch's incidental 500 ms synchronous proof timeout; the test now checks
-exact redo authoring plus its existing poisoned-recovery cold worker, with the same two worker calls and unchanged budgets.
-`C/np-protein-regression-corrected-20261101`: 200 pass; `C/branch-proof-regression-corrected-20261101`: two pass.
-FH-33 partial: document embedded atoms now precede the shared library for preview/candidate/attachment resolution.
-Its six controls reproduce three old failures, then pass changed/deleted library, portable reopen and two-document isolation.
-This does not retain new library source bytes or qualify protein capture. Original failed qualification and OFF gate stay.
-Lint and memory hygiene pass; `main.js`, scientific kernels, numerical pins and the two molecular candidates are unchanged.
 
 ## Scientific constraints and prior FULL evidence
 
@@ -131,8 +126,8 @@ Phase-control helix namespaces preserve 210° on reopen. Generator: `experiments
 evidence `I/nadoc-review/`. Atom/bond feeds verified, max component rounding 0.000006704 nm; 12 views/four tour checks passed.
 Preserve `Platform - Root-preserving.nadoc` (9 attachments); its later user save is not requalified.
 
-Entry HEAD `9f401275`; baseline **203 dirty entries**, 202 recorded file hashes plus untracked `memory/details/`.
-Baseline snapshot: `C/campaign-20261101-baseline.json`. Only intentional campaign additions to `tests/conftest.py`
-and the milestone note in `memory/project_feature_log_overhaul.md` mix with baseline changes; stage only their owned hunks.
+Entry HEAD `06ec94bd`; baseline **203 dirty entries**, recorded in `C/next-three-20261101-baseline.json`.
+The task's new/previously-clean owned paths are inventoried in `C/next3-owned-paths.json`; all baseline hashes
+were unchanged before documentation updates. Stage only this task's added milestone note in the mixed memory file.
 Other API/VR/simulation/activity/memory-hygiene changes remain untouched and unstaged. `main.js` delta is zero.
 Commit explicit owned paths locally; no push, stash, reset, restore, amend, rebase or hook bypass.

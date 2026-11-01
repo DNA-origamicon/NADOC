@@ -136,6 +136,9 @@ def command_source_bindings(kind, params) -> tuple[tuple[str, InputSource], ...]
     This cheap declaration is shared by portability and explicit source audit;
     executor schemas still decide whether a command is admitted for proof.
     """
+    if (kind == "nanoparticle-biotin-dna" and params.get("_proof_version") == 1
+            and params.get("biotin_version") == 1 and params.get("action") == "create"):
+        return tuple((key, InputSource.model_validate(params[key])) for key in ("tether_source", "coating_source"))
     if (kind == "nanoparticle-patch" and params.get("_proof_version") == 1
             and "coating_version" in params and params.get("action") == "set"):
         return tuple((key, InputSource.model_validate(params[key]))

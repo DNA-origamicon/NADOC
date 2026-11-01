@@ -34,7 +34,12 @@ def _reject(code, detail, action=None):
 
 def _current_numerical_pins(kind, _params):
     # Invoked only by an explicit upgrade, inside the job's numerical worker.
-    if kind in {"photoproduct-create", "photoproduct-relax"}:
+    if kind == "nanoparticle-biotin-dna":
+        from backend.core.part_biotin_contract import contract_defaults
+    elif kind in {"nanoparticle-attach-overhang", "nanoparticle-connection-relax"} or (
+            kind == "nanoparticle-patch" and "np_fitting_version" in _params):
+        from backend.core.part_np_fitting_contract import contract_defaults
+    elif kind in {"photoproduct-create", "photoproduct-relax"}:
         from backend.core.part_cpd_contract import contract_defaults
     elif kind == "duplex-relax":
         from backend.core.part_duplex_relax_contract import contract_defaults
@@ -45,7 +50,21 @@ def _current_numerical_pins(kind, _params):
     return contract_defaults()
 
 
-def _numerical_parser(kind):
+def _numerical_parser(kind, previous=None):
+    if kind == "nanoparticle-biotin-dna":
+        from backend.api.part_biotin_commands import CreateRequest, parse_command
+
+        def parse_biotin(params):
+            command = parse_command(kind, params)
+            if not isinstance(command, CreateRequest):
+                raise CommandContractError("Only biotin creation has a numerical upgrade",
+                                           code="unsupported_numerical_upgrade")
+            return command
+        return parse_biotin
+    if kind in {"nanoparticle-attach-overhang", "nanoparticle-connection-relax"} or (
+            kind == "nanoparticle-patch" and "np_fitting_version" in (previous or {})):
+        from backend.api.part_np_fitting_commands import parse_command
+        return lambda params: parse_command(kind, params)
     if kind in {"photoproduct-create", "photoproduct-relax"}:
         from backend.core.part_cpd_contract import parse_command
         return lambda params: parse_command(kind, params)
@@ -67,12 +86,12 @@ def _numerical_parser(kind):
 
 
 def _upgrade(kind, previous, action, provider):
-    parse = _numerical_parser(kind)
+    parse = _numerical_parser(kind, previous)
     parse(previous)  # Old recognized schema/family, without validating old pins.
     check_numerical_expectations(previous, action)
     defaults = provider(kind, deepcopy(previous))
     allowed = {"engine", "template", "_proof_version", "conversion_version", "relaxation_version",
-               "coating_version", "importer_version"}
+               "coating_version", "importer_version", "np_fitting_version", "biotin_version"}
     if set(defaults) - allowed or "engine" not in defaults:
         raise ValueError("Numerical provider returned fields outside the pin contract")
     updated = {**previous, **deepcopy(defaults)}
@@ -81,7 +100,8 @@ def _upgrade(kind, previous, action, provider):
     # it does not migrate algorithms, command versions or template families.
     if previous["engine"]["id"] != updated["engine"]["id"]:
         raise ValueError("Numerical upgrade cannot change the engine family")
-    for key in ("_proof_version", "conversion_version", "relaxation_version", "coating_version", "importer_version"):
+    for key in ("_proof_version", "conversion_version", "relaxation_version", "coating_version", "importer_version",
+                "np_fitting_version", "biotin_version"):
         if previous.get(key) != updated.get(key):
             raise ValueError("Numerical upgrade cannot change command versions")
     if "template" in previous and any(previous["template"][key] != updated["template"][key]

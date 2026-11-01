@@ -112,7 +112,9 @@ def test_exact_original_source_one_parse_two_editable_rows_one_revision_undo_and
         assert row["design_snapshot_gz_b64"] and row["post_state_gz_b64"]
     assert state.revision() == payload["revision"] == revision + 1
     assert state.undo_depth() == depth + 1
-    assert state._protein_library[asset.id] == asset
+    from backend.api.part_protein_library_sources import document_asset, original_input
+    assert document_asset(state._protein_library[asset.id]) == asset
+    assert original_input(state._protein_library[asset.id])[1] == _SYNTH_PDB.encode()
     state.undo()
     assert state.get_or_404() == before
     state.redo()

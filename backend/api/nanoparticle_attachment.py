@@ -35,6 +35,7 @@ def attach_nanoparticle(
     angles=None,
     place_new_graft=False,
     pending_connections=(),
+    identity_inputs=None,
 ):
     from backend.api.routes_nanoparticles import (
         _set_np_version_applied,
@@ -127,6 +128,8 @@ def attach_nanoparticle(
     for selected, variant in candidates:
         try:
             version = NanoparticleConnectionVersion(
+                **({"id": identity_inputs["version_id"], "created_at": identity_inputs["created_at"]}
+                   if identity_inputs is not None else {}),
                 name="Attach to overhang",
                 nanoparticle_id=nanoparticle_id,
                 strand_id=selected,
@@ -144,7 +147,13 @@ def attach_nanoparticle(
                     version,
                 ]
             )
-            out = _set_np_version_applied(out, version.id, True)
+            if identity_inputs is None:
+                out = _set_np_version_applied(out, version.id, True)
+            else:
+                from backend.core.nanoparticle_connections import set_version_applied
+                out = set_version_applied(out, version.id, True,
+                    duplex_id=identity_inputs["duplex_id"], duplex_created_at=identity_inputs["created_at"],
+                    identity_seed=identity_inputs["history_seed"])
             root_bonds = {
                 v.overhang_id: overhang_root_bond(design, v.overhang_id)
                 for v in out.nanoparticle_connection_versions

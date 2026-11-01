@@ -36,10 +36,12 @@ Aggregate FH-27 regression acceptance remains open.
 November1: FH-30, FH-34 and FH-35 close: ordinary NP application/pending alternatives,
 scadnano source import and DNA-PDB conversion are qualified. The ordinary NP gate
 is ON; both imports retain original bytes and explicit loss/identity contracts.
-FH-33 now prefers document protein sources over the shared library, but original
-library bytes and capture qualification remain open and its import gate stays OFF.
-The user prioritized independent milestones until 2pm MST; molecular candidates
-remain isolated pending their separate reviews.
+The follow-on campaign closes FH-33: bounded ordinary protein import and original-source
+library placement are qualified, and the import gate is ON. See the
+[protein contract](../docs/audits/feature_history_20261014/protein_free_import_contract.md#fh-33-source-and-placement-qualification--november-1-2026).
+FH-31 fitting and FH-32 biotin have native worker/replay/repair support; their append
+gates stay OFF pending ordinary UI and repeated qualification. Molecular candidates
+remain isolated pending their separate reviews; the follow-on request has no new deadline.
 
 The [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
 owns progress counts, gate state, qualification evidence and the single next task.

@@ -8,7 +8,8 @@ command, or confer a certificate. Verification remains an explicit operation.
 def editing_capabilities(kinds):
     from backend.api.part_overhang_commands import ACTIONS
     from backend.api.part_aptamer_commands import NATIVE_ROUTE_ENABLED
-    from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED
+    from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED, BIOTIN_APPEND_ENABLED, NP_FITTING_APPEND_ENABLED
+    from backend.api.routes_design_interchange import NATIVE_FREE_IMPORT_ENABLED
     from backend.api.part_batch_evaluation import REGISTERED_BATCH_ENABLED
     from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
 
@@ -76,7 +77,10 @@ def editing_capabilities(kinds):
             "commit": "POST /api/design/features/evaluation/jobs/{job_id}/commit",
             "operations": ["verify", "append", "edit", "delete", "repair", "selection"],
             "append_kinds": ["photoproduct-create", "photoproduct-relax", "duplex-relax"]
-                + (["streptavidin-coating"] if COATING_APPEND_ENABLED else []),
+                + (["streptavidin-coating"] if COATING_APPEND_ENABLED else [])
+                + (["nanoparticle-biotin-dna"] if BIOTIN_APPEND_ENABLED else [])
+                + (["nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax"]
+                   if NP_FITTING_APPEND_ENABLED else []),
             "registered_batch_enabled": REGISTERED_BATCH_ENABLED,
             "time_budget_seconds": 180,
             "publication": "explicit revision-bound commit of the evaluated candidate",
@@ -96,7 +100,8 @@ def editing_capabilities(kinds):
                 "publication": "Explicit repair evaluation and commit; existing definitions are not silently migrated",
             },
             "limits": ["64 actions", "16 path tokens", "256 KB operation input", "10000 operation nodes"],
-            "numerical_upgrade_families": ["native CPD v1", "native duplex relaxation v1", "native streptavidin packing v1"],
+            "numerical_upgrade_families": ["native CPD v1", "native duplex relaxation v1", "native streptavidin packing v1",
+                                          "native nanoparticle fitting v1", "native biotin attachment v1"],
             "publication": "Explicit commit of a complete regenerated candidate; source state need not reproduce",
             "comparison": "Changed authored fields/counts and numerical provenance; on-demand visual preview pending",
             "drafts": "Bounded proposals persist with the part; explicit rebase preserves exact old-value expectations; saved status is not readiness",
@@ -177,6 +182,8 @@ def editing_capabilities(kinds):
             "kinds": ["protein-import", "protein-attach", "protein-attach-patch", "protein-attach-delete"],
             "import_endpoint": "POST /api/design/features/import/protein",
             "source": "Pinned PDB bytes embedded in the portable part; no library or network fallback",
+            "ordinary_import_enabled": NATIVE_FREE_IMPORT_ENABLED,
+            "library_placement": "Original library input transfers into the document with placement in one publication; missing original bytes cannot become a reproducible import",
             "limits": ["250 KB source", "1000 atom records", "4000 parsed bonds"],
             "placement_scope": "Free and part-overhang placements without owned binders",
             "provenance": "An imported source is reproduced_import even when the recipe starts empty",
@@ -264,6 +271,8 @@ def editing_capabilities(kinds):
             "photoproduct-create:convert": "Explicit native-source contract with pinned template and numerical engine",
             "photoproduct-relax": "Existing native CPD with pinned template and numerical engine",
             "duplex-relax": "Existing bound native DNA duplex with explicit joint/cluster selections and numerical engine",
+            "nanoparticle-fitting": "Existing fit, bound motion and one-to-four anchor relaxation; explicit selections and numerical pins; append rollout disabled pending qualification",
+            "nanoparticle-biotin-dna": "Pinned original coating/tether source and exact create/remove ownership; append rollout disabled pending qualification",
         },
         "unverified_methods": {
             "legacy photoproduct-create:convert": "Receipts without an explicit native source and engine pins remain unverified",

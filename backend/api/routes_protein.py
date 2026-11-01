@@ -29,7 +29,7 @@ from typing import List, Literal, Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 
@@ -56,8 +56,8 @@ router = APIRouter()
 
 class ProteinImportRequest(BaseModel):
     content: str  # raw PDB file text sent by the browser
-    name: str = ""  # display name (defaults to filename)
-    source_filename: str = ""
+    name: str = Field(default="", max_length=1024)  # display name (defaults to filename)
+    source_filename: str = Field(default="", max_length=1024)
 
 
 @router.post("/design/protein/import", status_code=201)
@@ -70,6 +70,11 @@ def import_protein(body: ProteinImportRequest) -> dict:
     list — fetch atoms via ``GET /design/protein/atomistic``).
     """
     from backend.core.protein import parse_protein_pdb
+    from backend.api.part_protein_library_sources import retain_source
+    from backend.core.part_input_sources import MAX_SOURCE_BYTES
+
+    if len(body.content) > MAX_SOURCE_BYTES or len(body.content.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise HTTPException(413, detail="Protein library source exceeds the portable input byte limit")
 
     try:
         asset = parse_protein_pdb(
@@ -83,6 +88,8 @@ def import_protein(body: ProteinImportRequest) -> dict:
         raise HTTPException(
             400, detail="No protein atoms found in PDB (only water/ions/DNA?)."
         )
+    asset = retain_source(asset, body.content.encode("utf-8"), name=body.name,
+        source_filename=body.source_filename, exclude_dna=False)
     design_state.add_protein_asset(asset)
     return protein_asset_meta(asset)
 
@@ -457,6 +464,10 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
     from backend.core.protein import reverse_complement
 
     design = design_state.get_or_404()
+    from backend.api.part_protein_library_placement import place_library_asset
+    imported = place_library_asset(body, kind="protein-attach")
+    if imported is not None:
+        return imported
     if (any(asset.id == body.asset_id for asset in design.protein_assets)
             and not any(domain.binds_overhang_id == body.overhang_id
                         for strand in design.strands for domain in strand.domains)):
@@ -586,6 +597,10 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
         raise HTTPException(
             409, detail=f"Conjugation operation {body.operation_id} was already committed."
         )
+    from backend.api.part_protein_library_placement import place_library_asset
+    imported = place_library_asset(body, kind="protein-conjugate", operation_id=operation_id)
+    if imported is not None:
+        return imported
     if _native_conjugation_eligible(design, body):
         return _record_native_conjugation(body, operation_id, started)
 

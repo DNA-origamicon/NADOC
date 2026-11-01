@@ -30,7 +30,20 @@ def scalar_atom_charge(value):
     return len(_ATOM_FIELDS), size
 
 
-def seed_scalar_atom_copy(value, memo):
+def allocate_atom_copies(count):
+    """Allocate bounded empty destinations before acquiring a live source lock.
+
+    These carry no source values or authority. A caller owns this one-use list;
+    capture fills each shell only after the normal exact scalar-shape check.
+    No collection is forced, disabled or reconfigured.
+    """
+    if type(count) is not int or not 0 <= count <= 10_000:
+        raise ValueError("Atom copy allocation requires a bounded count")
+    return [ProteinAtom.model_construct(serial=0, name="", element="", res_name="",
+        chain_id="", res_seq=0, x=0., y=0., z=0.) for _ in range(count)]
+
+
+def seed_scalar_atom_copy(value, memo, atom_copies=None):
     """Copy the exact scalar-only shape; return its field node/byte charge.
 
     Every value is immutable, while model_copy makes independent __dict__ and
@@ -42,7 +55,13 @@ def seed_scalar_atom_copy(value, memo):
     charge = scalar_atom_charge(value)
     if charge is None:
         return
-    copied = value.model_copy(deep=False)
+    if atom_copies:
+        copied = atom_copies.pop()
+        copied.__dict__.update(value.__dict__)
+        copied.__pydantic_fields_set__.intersection_update(value.__pydantic_fields_set__)
+        copied.__pydantic_fields_set__.update(value.__pydantic_fields_set__)
+    else:
+        copied = value.model_copy(deep=False)
     # deepcopy also memoizes the model's field dict. Preserve aliases from
     # metadata or another atom to that dict, not just aliases to the atom.
     fields = memo.setdefault(id(value.__dict__), copied.__dict__)

@@ -625,3 +625,14 @@ defaults beyond the admitted sparse-envelope budget. Canonical persisted-form
 admission fixes this; the three failing boundary cases now pass. The aborted
 run is retained in `coating_jobs_draft_boundary_failure_p4.json`; no measurements
 from it are represented as a completed qualification. Limits remain unchanged.
+
+## FH-32 biotin candidate — November 1, 2026
+
+**`BIOTIN_APPEND_ENABLED=False`**; the new create/remove command is registered in the existing worker, while ordinary coating/biotin UI rollout and FH-32 completion remain open.
+Creation pins complete original 1STP coating/tether descriptors, site count, sequence, occupancy, pocket, linker and identity seed; removal selects exact owned strand/helix/site/chain records. No sampled axes, optimized coordinates, library lookup or display-cache warming is a replay input.
+The unchanged pocket search receives optional explicit template/identity inputs. V1 admits one 5–100 nm coated gold particle, one to four sites, 2–32 bases and 1–10 nm linker; rigid bounded poses and exact owned extensions prevent unbounded work/foreign deletion. Other DNA/coupled consumers refuse.
+The existing 4 MB/100,000-node/100 ms coating capture profile remains unchanged. Live job allocation now prepares bounded empty scalar atom destinations before its source lock; the current guarded source is still copied and charged under the lock. No GC policy change or retry occurs.
+C=`.development-artifacts/feature-history-focus/`: `next3-assets-final-focused-20261101` **169 pass** includes full native authoring parity for both coating modes, poisoned-recovery worker create/edit/remove/cold replay, malformed-source/ownership/pose refusal and real commit/undo/cancel/stale behavior.
+Initial `next3-asset-workers-20261101` and `next3-real-asset-jobs-receipt-20261101` retain actual capture-deadline failures. Worker correctness separately uses the existing test-only 1 s clock; production qualification never inherits it.
+`next3-real-asset-jobs-destinations-20261101`: three actual biotin captures **49.45–91.59 ms**, total lifecycle checks **1.97–2.14 s**. These observations do not qualify repeated boundary/retained-history rollout. Explicit numerical upgrades and restoration of the exact declared PDB use existing repair mechanisms.
+Remaining: ordinary coating/biotin controls through the existing job lifecycle, downstream removal/edit diagnostics and repeated admitted-boundary/display qualification. Source/site-count changes refuse missing selections; no geometry candidate or old authored pin is silently approved.

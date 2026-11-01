@@ -12,7 +12,7 @@ from backend.core.part_history_contract import FIELD_ROLES
 
 
 def visit_inputs(design, *, max_nodes, max_bytes, seconds, preserve_entry_types,
-                 copy_inputs, retain_owned=False):
+                 copy_inputs, retain_owned=False, atom_copies=None):
     """One accounting path for copying, admission or private ownership transfer.
 
     A missing deadline is allowed only for resource admission of private input.
@@ -31,7 +31,8 @@ def visit_inputs(design, *, max_nodes, max_bytes, seconds, preserve_entry_types,
     budget = GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes, seconds=seconds, clock=monotonic)
 
     def charge(value, copy_memo=None, *, scalar_atoms=False):
-        budget.charge(value, copy_memo, scalar_atoms=scalar_atoms, copy_scalar_atoms=copy_inputs)
+        budget.charge(value, copy_memo, scalar_atoms=scalar_atoms, copy_scalar_atoms=copy_inputs,
+                      atom_copies=atom_copies)
 
     def retain(value, memo=None):
         return deepcopy(value, memo) if copy_inputs else value

@@ -19,9 +19,9 @@ router = APIRouter()
 
 MAX_PDB_INPUT_BYTES = 50 * 1024 * 1024
 MAX_PROTEIN_ATOMS = 250_000
-# Experimental ordinary native import remains unavailable until retained-state
-# capture/publication qualification passes. No request or environment override.
-NATIVE_FREE_IMPORT_ENABLED = False
+# Ordinary bounded free/library placement uses original source inputs.
+# Retained capture/publication qualification is in protein_free_import_contract.md.
+NATIVE_FREE_IMPORT_ENABLED = True
 
 
 class FilePathRequest(BaseModel):
@@ -271,6 +271,13 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
             stages_ms["parse_protein"] = (time.perf_counter() - stage_started) * 1000.0
         stage_started = time.perf_counter()
         fingerprint = await asyncio.to_thread(protein_asset_fingerprint, asset)
+        from backend.api.part_protein_library_sources import retain_source, same_original_input
+        if body.protein_placement == "library":
+            try:
+                asset = retain_source(asset, content.encode("utf-8"), name=name,
+                    source_filename=name, exclude_dna=exclude_dna)
+            except ValueError as error:
+                raise HTTPException(422, detail=f"Protein library input cannot be retained: {error}") from error
         active = design_state.get_design()
         known_assets = [*design_state.list_protein_assets()]
         if active is not None:
@@ -288,6 +295,10 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
             None,
         )
         duplicate_detected = existing_asset is not None
+        # Equal atoms do not identify the uploaded file: REMARK records,
+        # filtering choices and original serial/bond input remain provenance.
+        if body.protein_placement == "library":
+            existing_asset = next((known for known in known_assets if same_original_input(known, asset)), None)
         deduplicated = existing_asset is not None and body.protein_placement == "library"
         if deduplicated:
             asset = existing_asset

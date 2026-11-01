@@ -23,7 +23,7 @@ class GraphBudget:
         self.deadline = clock() + seconds if seconds is not None else None
 
     def charge(self, value, copy_memo=None, *, scalar_atoms=False,
-               copy_scalar_atoms=False, validate=None, reject_cycles=False, on_alias=None):
+               copy_scalar_atoms=False, validate=None, reject_cycles=False, on_alias=None, atom_copies=None):
         from backend.core.part_capture_copy import scalar_atom_charge, seed_scalar_atom_copy
 
         remaining, deadline, clock = self.remaining, self.deadline, self.clock
@@ -78,7 +78,8 @@ class GraphBudget:
                 if kind not in (dict, list, tuple) and isinstance(item, BaseModel):
                     children = item.__dict__.values()
                     if scalar_atoms:
-                        scalar_charge = (seed_scalar_atom_copy(item, copy_memo) if copy_scalar_atoms
+                        scalar_charge = ((seed_scalar_atom_copy(item, copy_memo, atom_copies)
+                                          if atom_copies is not None else seed_scalar_atom_copy(item, copy_memo)) if copy_scalar_atoms
                                          else scalar_atom_charge(item))
                         if scalar_charge is not None:
                             nodes, size = scalar_charge
