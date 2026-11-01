@@ -26,6 +26,7 @@ from backend.api.part_aptamer_commands import KINDS as APTAMER_KINDS
 from backend.api.part_element_copy_commands import KINDS as ELEMENT_COPY_KINDS
 from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
 from backend.api.part_scadnano_commands import KINDS as SCADNANO_KINDS
+from backend.api.part_dna_pdb_commands import KINDS as DNA_PDB_KINDS
 from backend.api.part_nanoparticle_connection_commands import KINDS as NP_CONNECTION_KINDS
 from backend.api.part_connection_version_commands import is_pending_action
 from backend.api.part_connection_application_commands import ACTION as CONNECTION_APPLY_ACTION
@@ -43,7 +44,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
 PROOF_SNAPSHOT_KINDS = (
-    GROUP_ORGANIZATION_KINDS | NP_CONNECTION_KINDS | CADNANO_KINDS | SCADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
+    GROUP_ORGANIZATION_KINDS | NP_CONNECTION_KINDS | CADNANO_KINDS | SCADNANO_KINDS | DNA_PDB_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
     | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
@@ -217,6 +218,9 @@ def dependencies(kind, params):
         if kind != "nanoparticle-connection-version-create":
             reads.add(version)
         writes = {PART_TOPOLOGY, version}
+        if "nanoparticle_pending_context_version" in params:
+            reads.update({Resource("nanoparticle_connection_version", command.active_version_id),
+                          Resource("duplex", command.active_duplex_id)})
         if "nanoparticle_application_version" in params:
             reads.add(Resource("overhang", command.handle_overhang_id))
             if command.prior_duplex_id is not None:
@@ -251,8 +255,10 @@ def dependencies(kind, params):
             reads.update(Resource(resource, identity) for identity in sources)
             writes.update(Resource(resource, identity) for identity in outputs)
         return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
-    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS | APTAMER_KINDS | CADNANO_KINDS | SCADNANO_KINDS:
-        if kind in SCADNANO_KINDS:
+    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS | APTAMER_KINDS | CADNANO_KINDS | SCADNANO_KINDS | DNA_PDB_KINDS:
+        if kind in DNA_PDB_KINDS:
+            from backend.api.part_dna_pdb_commands import resources
+        elif kind in SCADNANO_KINDS:
             from backend.api.part_scadnano_commands import resources
         elif kind in CADNANO_KINDS:
             from backend.api.part_cadnano_commands import resources
@@ -502,6 +508,10 @@ def _execute_candidate(kind, design, params, *, expensive):
         updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
     elif kind in SCADNANO_KINDS:
         from backend.api.part_scadnano_commands import build
+        from backend.core.part_input_sources import EmbeddedResolver
+        updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
+    elif kind in DNA_PDB_KINDS:
+        from backend.api.part_dna_pdb_commands import build
         from backend.core.part_input_sources import EmbeddedResolver
         updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
     elif kind in APTAMER_KINDS:

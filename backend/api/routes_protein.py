@@ -391,14 +391,17 @@ def repair_protein_duplicate(body: ProteinDuplicateRepairRequest) -> dict:
 
 
 def _resolve_protein_asset(asset_id: str):
-    """Find a protein asset in the session library, then the active design."""
-    asset = design_state.get_protein_asset(asset_id)
-    if asset is not None:
-        return asset
+    """Resolve the active document's saved source before the shared library.
+
+    Atom previews, candidate queries and attachment operations must agree with
+    scene rendering. Replacing a library entry cannot replace embedded atoms.
+    """
     design = design_state.get_design()
     if design is not None:
-        return next((a for a in design.protein_assets if a.id == asset_id), None)
-    return None
+        asset = next((a for a in design.protein_assets if a.id == asset_id), None)
+        if asset is not None:
+            return asset
+    return design_state.get_protein_asset(asset_id)
 
 
 def _native_placement_eligible(design: Design, attachment) -> bool:

@@ -21,9 +21,19 @@ CORE_REPAIR_FIXTURES = {'repair-core-bend', 'repair-core-twist', 'repair-core-cl
                        'repair-core-cluster_op', 'repair-core-nucleotide-transform', 'repair-core-routing',
                        'repair-core-cascade'}
 FIXTURES.update(CORE_REPAIR_FIXTURES)
+FIXTURES.update({"connection-np-small", "connection-np-large"})
 
 
 def fixture(kind):
+    if kind in {"connection-np-small", "connection-np-large"}:
+        from scripts.benchmark_np_application_route import fixture as np_fixture
+        from backend.api.part_recipe_edit import regenerate
+        source = np_fixture(6, 2, 0) if kind.endswith("small") else np_fixture(16, 16, 16)
+        # Ordinary UI starts before the first candidate; all owners and topology
+        # still come from the same authentic native recipe as HTTP qualification.
+        if kind.endswith("small"):
+            source = regenerate(source, source.feature_log[:5], lambda: None)
+        return source.copy_with(name="__e2e__" + kind)
     if kind in CORE_REPAIR_FIXTURES:
         from tests.test_part_core_repair import core_fixture, changed
         if kind == 'repair-core-cascade':

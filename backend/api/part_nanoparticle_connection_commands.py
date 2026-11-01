@@ -69,6 +69,9 @@ class DeleteRequest(_Input):
 
 
 def parse_command(kind, params):
+    if "nanoparticle_pending_context_version" in params:
+        from backend.api.part_np_pending_context_commands import parse_command as parse_context
+        return parse_context(kind, params)
     if "nanoparticle_application_version" in params:
         from backend.api.part_np_application_commands import parse_command as parse_application
         return parse_application(kind, params)
@@ -248,6 +251,9 @@ def validate_pending_selection(design, particle_id, identities, prepared, select
 
 
 def build(kind, design, params):
+    if "nanoparticle_pending_context_version" in params:
+        from backend.api.part_np_pending_context_commands import build as build_context
+        return build_context(kind, design, params)
     if "nanoparticle_application_version" in params:
         from backend.api.part_np_application_commands import build as build_application
         return build_application(kind, design, params)
@@ -370,6 +376,13 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
                 version = versions[0] if versions else None
             else:
                 version = next((item for item in source.nanoparticle_connection_versions if item.id == version_id), None)
+            if (allow_application and choices.get("applied") is not True
+                    and (version is None or _pending(version))
+                    and any(item.nanoparticle_id == particle_id and item.applied
+                            for item in source.nanoparticle_connection_versions)):
+                from backend.api.part_np_pending_context_commands import try_record_locked
+                return try_record_locked(kind, particle_id, choices, session=session, source=source,
+                                         version_id=version_id, version=version)
             if allow_application and (
                     (kind == "nanoparticle-connection-version-create" and choices.get("applied") is True)
                     or (kind == "nanoparticle-connection-version-patch" and choices.get("applied") is not None)

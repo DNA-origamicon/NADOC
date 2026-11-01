@@ -6436,7 +6436,8 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
         return response
 
     from backend.api.part_recipe_edit import supports_recipe_edit, change_recipe
-    if (getattr(entry, "op_kind", None) == "overhang-bulk" and
+    if (getattr(entry, "op_kind", None) in {"overhang-bulk", "nanoparticle-connection-version-create",
+            "nanoparticle-connection-version-patch"} and
             any(value is not None for value in (body.expected_design_id, body.expected_revision, body.expected_feature_id))):
         if not supports_recipe_edit(design, entry):
             raise HTTPException(409, detail="Return to a complete native recipe before editing connection inputs.")

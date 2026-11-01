@@ -24,8 +24,8 @@ from backend.core.quantum_dots import (
 
 router = APIRouter()
 
-# Enable only after ordinary HTTP/geometry, lifecycle and resource qualification.
-OWNED_NP_APPLICATION_ENABLED = False
+# Bounded ordinary lifecycle; unsupported ownership retains compatibility dispatch.
+OWNED_NP_APPLICATION_ENABLED = True
 
 
 class StreptavidinRequest(BaseModel):

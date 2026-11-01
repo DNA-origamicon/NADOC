@@ -72,3 +72,30 @@ it('closes on document reset and ignores a late response', async () => {
   release({}); await tick()
   expect(document.querySelector('[role=dialog]')).toBeNull()
 })
+
+it('exposes native nanoparticle names and creation choices without active/output selectors', () => {
+  const feature = { feature_type: 'snapshot', op_kind: 'nanoparticle-connection-version-create',
+    params: { _proof_version: 1, nanoparticle_connection_version: 1, nanoparticle_pending_context_version: 1,
+      name: 'Alternative', direct_variant: 'end-to-root', active_version_id: 'active', active_duplex_id: 'duplex', version_id: 'new' } }
+  expect(connectionFeatureFields(feature).map(field => field.key)).toEqual(['name', 'direct_variant'])
+  expect(connectionFeatureFields({ ...feature, op_kind: 'nanoparticle-connection-version-patch' }).map(field => field.key)).toEqual(['name'])
+  for (const changes of [{ nanoparticle_connection_version: 2 }, { nanoparticle_pending_context_version: 2 },
+    { nanoparticle_application_version: 2 }, { _generated_scope: {} }]) {
+    expect(connectionFeatureFields({ ...feature, params: { ...feature.params, ...changes } })).toEqual([])
+  }
+  expect(connectionFeatureFields({ ...feature, op_kind: 'nanoparticle-connection-version-delete' })).toEqual([])
+})
+
+it('edits a nanoparticle name through the guarded historical-input route', async () => {
+  const d = setup()
+  d.feature.op_kind = 'nanoparticle-connection-version-patch'
+  d.feature.params = { _proof_version: 1, nanoparticle_connection_version: 1, nanoparticle_application_version: 1,
+    name: 'Active', prior_duplex_id: 'duplex', version_id: 'version' }
+  const pending = d.open()
+  expect(document.querySelector('[role=dialog]').textContent).toContain('Edit Nanoparticle Connection')
+  document.getElementById('_edit-connection-name').value = 'Chosen'
+  button('Save').click()
+  expect(await pending).toEqual({ name: 'Chosen' })
+  expect(d.api.editFeatureInputs).toHaveBeenCalledExactlyOnceWith(0, { name: 'Chosen' }, d.context, 'connect')
+  expect(d.feature.params.name).toBe('Active')
+})

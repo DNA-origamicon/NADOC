@@ -16,10 +16,11 @@ _PROTECTED = {
     # placement namespace. Pose values are intentionally not pinned here.
     "group-organize": ("expected_placement_ids",),
     "nanoparticle-connection-version-create": ("version_id", "nanoparticle_connection_version",
-        "nanoparticle_application_version", "duplex_id", "duplex_created_at"),
+        "nanoparticle_application_version", "nanoparticle_pending_context_version", "duplex_id", "duplex_created_at"),
     "nanoparticle-connection-version-patch": ("nanoparticle_connection_version",
-        "nanoparticle_application_version", "duplex_id", "duplex_created_at"),
-    "nanoparticle-connection-version-delete": ("nanoparticle_connection_version", "nanoparticle_application_version"),
+        "nanoparticle_application_version", "nanoparticle_pending_context_version", "duplex_id", "duplex_created_at"),
+    "nanoparticle-connection-version-delete": ("nanoparticle_connection_version", "nanoparticle_application_version",
+        "nanoparticle_pending_context_version"),
 }
 
 

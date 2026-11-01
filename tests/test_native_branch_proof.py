@@ -12,6 +12,7 @@ from backend.api.part_proof_commands import execute
 from backend.api.part_history_verification import verify_current_part
 from backend.api.part_verification_worker import VerificationWorker
 from backend.core.models import Design
+from backend.core.part_history_proof import AUTHORING_FIELDS
 from backend.core.part_verification_capture import capture
 from backend.core.two_np_generator import GeneratorSettings
 from tests.test_part_branch_commands import plan
@@ -67,11 +68,15 @@ def test_generated_branch_cold_replay_edit_and_undo(constructed):
     seed_state = state.decode_design_snapshot(updated.feature_log[1].post_state_gz_b64)
     assert all(h.length_bp == 273 for h in seed_state.helices
                if h.id not in {v.id for v in constructed.helices})
-    assert_cold_proof()
+    expected = updated.model_dump(mode="json", include=AUTHORING_FIELDS)
     state.undo()
     assert state.get_or_404().helices == before.helices
     state.redo()
-    assert verify_current_part()["status"] == "verified"
+    assert state.get_or_404().model_dump(mode="json", include=AUTHORING_FIELDS) == expected
+    # A generated recipe uses the existing worker, not the synchronous route's
+    # 500 ms interactive allowance. Prove the exact edited/redo authoring state
+    # independently with poisoned recovery, keeping two cold workers total.
+    assert_cold_proof()
 
 
 def test_deleting_sparse_seed_reports_missing_route_targets_and_preserves_independent_part(constructed):

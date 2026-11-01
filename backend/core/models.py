@@ -1954,6 +1954,7 @@ SnapshotOpKind = Literal[
     "aptamer-import",
     "cadnano-import",
     "scadnano-import",
+    "dna-pdb-import",
     "bundle-create",
     "cluster-paste",
     "element-paste",

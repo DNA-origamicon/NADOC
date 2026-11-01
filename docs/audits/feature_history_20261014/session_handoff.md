@@ -1,18 +1,18 @@
 # Feature-history campaign handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 12 (last explicit production gate flip: October 28).
-The active November 1 goal supersedes recurring stop-loss confirmation and authorizes successive independent milestones.
+Sessions since last gate flip or milestone close: 0 (ordinary NP application gate ON November 1).
+The November 1 campaign superseded recurring stop-loss confirmation and authorized successive independent milestones within its deadline.
 
-**Tools done: 4/4. CAD: 27/34 complete; FH-27 and 6 asset milestones remain.**
-FH-34 now closes. FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
+**Tools done: 4/4. CAD: 29/34 complete; FH-27 and 4 asset milestones remain.**
+FH-30, FH-34 and FH-35 close in this campaign. FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
 
-## Active campaign — November 1, 2026
+## November 1 campaign
 
 User requested as many milestones as possible before **14:00 America/Denver (MST), 21:00 UTC today**,
-and answered **Advance independent milestones**. Keep working until that deadline, then record the stopping point.
-Next task: FH-30 ordinary NP application/pending alternatives, HTTP plus geometry qualification and app rollout.
-The existing application gate remains false. New pending-context commands/tests and HTTP benchmark are drafted,
-but remain unwired/unqualified at this checkpoint. Do not claim FH-30 complete yet.
+and answered **Advance independent milestones**. Completed scope and the remaining independent task are recorded below.
+Campaign implementation: FH-30 ordinary NP application/pending alternatives is enabled; FH-34/35 source imports are qualified.
+Next independent milestone: FH-33 original protein library bytes and source-capture qualification. The document-source
+precedence defect is fixed, but the ordinary protein import gate stays OFF and prior capture refusals remain evidence.
 No new host, queue, storage layer or scientific algorithm is authorized or needed.
 Old-file compatibility, experimental CPD and the Python-only corner optimizer remain outside repair scope.
 
@@ -49,6 +49,31 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 Only request `just test-session` when a broad/full sweep is actually needed.
 ```
+
+## Further completed milestones and regression — November 1
+
+FH-30: [NP contract/evidence](ordinary_np_application_route_plan.md#fh-30-qualification--november-1-2026).
+Exact active version/duplex selectors admit pending alternatives without changing live placement or ownership.
+`C/np-http-qualified-20261101`: 1,240 paired lifecycle steps, full authoring/response/geometry parity,
+four cold proofs; maximum combined native request 759.042 ms. GC observation cap/dropped events remain disclosed.
+Final small/large adopted-display maxima 552/728.7 ms; Cancel click-through-repaint 26 ms, no canonical requests.
+Earlier 319.4 ms included automation overhead; raw evidence remains. The timer’s hidden-dialog selector failure was corrected.
+History names/orientation, explicit failed descendants, one undo/revision, switches, delete and save/reopen pass.
+The applied-geometry screenshot was inspected; existing placement is preserved, with fitting still FH-31.
+FH-35: [DNA-PDB contract/evidence](asset_import_plan.md#fh-35-dna-pdb-qualification--november-1-2026).
+Original bytes/version/loss and stable source-content IDs reproduce the unchanged duplex converter; native-only claim is false.
+Original atoms remain separate transient display output. Forty imports across eight boundary profiles and eight cold proofs pass;
+max HTTP+geometry 123.833 ms, capture 1.987 ms. Actual File import/nick/name edit/undo/reopen/cold proof pass.
+`C/campaign-smart-final-20261101`: 19,962 passed /19 skipped, 473.83 s, no per-test violations; required frontend 9,498 passed /1 skipped across 795 files, 388.11 s; smoke 23 passed (2.6 min).
+Final boundary/interactive/pin checks: four browser checks pass across the final run and corrected lifecycle rerun; 40 paired HTTP steps/four cold proofs; current duplex/coating pins 2 pass /CPD deselected. All completed scratch roots and owned service processes are absent.
+The first gate-on SMART had one unsupported legacy shared-target delete failure; classification now excludes it before
+restoration. The next run exposed a generated branch's incidental 500 ms synchronous proof timeout; the test now checks
+exact redo authoring plus its existing poisoned-recovery cold worker, with the same two worker calls and unchanged budgets.
+`C/np-protein-regression-corrected-20261101`: 200 pass; `C/branch-proof-regression-corrected-20261101`: two pass.
+FH-33 partial: document embedded atoms now precede the shared library for preview/candidate/attachment resolution.
+Its six controls reproduce three old failures, then pass changed/deleted library, portable reopen and two-document isolation.
+This does not retain new library source bytes or qualify protein capture. Original failed qualification and OFF gate stay.
+Lint and memory hygiene pass; `main.js`, scientific kernels, numerical pins and the two molecular candidates are unchanged.
 
 ## Scientific constraints and prior FULL evidence
 

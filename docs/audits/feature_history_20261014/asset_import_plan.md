@@ -278,3 +278,16 @@ precedents for source availability, version pinning and repairable input
 selection. NADOC's content-addressed storage layout and imported/native status
 rules above are architectural recommendations, not claims about Onshape's
 internal implementation. [FeatureScript imports](https://cad.onshape.com/FsDoc/imports.html).
+
+## FH-35 DNA-PDB qualification — November 1, 2026
+
+Ordinary File → Import DNA PDB now records original UTF-8 bytes, importer/conversion version 1, canonical history seed, nullable name override, `source-content-v1` identities and `existing-duplex-projection-v1` loss. Provenance is `reproduced_import`, never native-only construction.
+The existing full duplex converter and all molecular calculations are unchanged. Stable IDs follow sorted source duplex order; changing source bytes invalidates identities, while a name edit preserves downstream selections. Atom serial/reference order is normalized without changing coordinates or bonds.
+Original atomistic coordinates remain the existing transient display output; the authored result is the converter’s duplex projection. Portable original bytes reproduce both. Save/reopen does not newly promise persistence of the transient atom cache.
+Admission is 200,000 bytes, 2,000 atom records, 128 DNA residues, eight DNA chains, 3,000 records, 256 characters per record and 8,000 declared bonds. Multiple models, alternate locations, insertion codes, ambiguous atom identities and nonfinite coordinates require separate conversion choices.
+Unsupported sources and existing-helix merges retain explicitly unverified compatibility behavior. Once bounded native preparation starts, errors never trigger a legacy retry. Direct/automatic imports retain existing file-navigation publication and reset-undo semantics; no new atomic host is claimed.
+Original bytes, source repair declarations, capabilities and the Import history label are wired into existing infrastructure. Non-DNA/unpaired/insufficient residues retain the existing converter’s documented loss and warnings.
+Evidence **C** is `.development-artifacts/feature-history-focus/`. `dna-focused-final-20261101`: **43 pass**, complete converter/atom/bond parity, source bounds, poisoned recovery, cold worker, upstream name edit plus nick, missing/corrupt evidence, changed geometry, exact identity invalidation, real direct/auto HTTP and prepublication faults/cancellation.
+`dna-boundaries-20261101`: **40/40 imports across eight boundary profiles**, including 48 bp/1,968 atoms. Maximum import-plus-geometry 123.833 ms; capture ≤1.987 ms. All eight cold proofs pass in 1.492–1.610 s. Synthetic boundary records qualify work limits, not molecular realism.
+`np-dna-browser-corrected-20261101`: actual File/PDB modal import, downstream nick, historical name edit, undo/redo, save/reopen, exact original bytes and cold proof pass with zero DNA-import console errors.
+FH-35 closes. Required SMART FAST, complete frontend, smoke, final lint and current duplex/coating pin checks pass; exact results are in the current handoff. All completed private source files, test saves, browser/cache/report roots are verified absent; protein/mixed import gates and scientific pins are unchanged.

@@ -36,7 +36,7 @@ family('Part', 'assembly-add-instance assembly-delete-instance assembly-duplicat
 family('Gear', 'assembly-create-gear assembly-delete-gear')
 family('Belt', 'assembly-create-belt assembly-delete-belt assembly-create-belt-rider assembly-delete-belt-rider')
 family('Overhang Connection', 'assembly-overhang-bind assembly-overhang-bind-patch assembly-overhang-unbind assembly-overhang-connection-add assembly-overhang-connection-patch assembly-overhang-connection-delete assembly-overhang-connection-relax')
-family('Import', 'aptamer-import cadnano-import scadnano-import protein-import')
+family('Import', 'aptamer-import cadnano-import scadnano-import dna-pdb-import protein-import')
 family('Protein Attachment', 'protein-attach protein-attach-patch protein-attach-delete protein-conjugate')
 family('Nanoparticle', 'nanoparticle-biotin-dna nanoparticle-create nanoparticle-patch nanoparticle-delete nanoparticle-conjugate nanoparticle-conjugation-delete nanoparticle-strand-bind nanoparticle-connection-version-create nanoparticle-connection-version-patch nanoparticle-connection-version-delete nanoparticle-connection-relax nanoparticle-attach-overhang')
 family('Photoproduct', 'photoproduct-create photoproduct-relax photoproduct-delete')

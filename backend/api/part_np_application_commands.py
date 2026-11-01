@@ -424,6 +424,24 @@ def _prepare_source(design):
     return pending._prepare_source(design)
 
 
+def _classify_legacy_shared_target(design, particle_id, target_id):
+    """Legacy direct-binding metadata has no native ownership/restoration edge.
+
+    Classify only an unrelated particle's legacy use of this target, before
+    restoration. Native versioned consumers still reach exact dependency checks;
+    selected-owner defects remain typed errors, never compatibility retries.
+    """
+    declared = {(item.nanoparticle_id, item.strand_id, item.overhang_id)
+                for item in design.nanoparticle_connection_versions}
+    for owner in design.nanoparticle_conjugations:
+        if owner.nanoparticle_id == particle_id:
+            continue
+        if any(record.bound_overhang_id == target_id
+               and (owner.nanoparticle_id, record.strand_id, target_id) not in declared
+               for record in owner.surface_strands):
+            _unsupported("A legacy direct binding on another particle shares the selected target")
+
+
 def _select_inputs(design, inputs, prepared):
     """Inspect structural ownership without allocating outputs or restoring.
 
@@ -453,7 +471,8 @@ def _select_inputs(design, inputs, prepared):
     handles = [item for item in owner.surface_strands if item.strand_id == strand.id]
     if len(handles) != 1 or handles[0].overhang_id != endpoint.id:
         pending._fail("Application auxiliary endpoint disagrees with its selected handle", "overhang", endpoint.id, "handle_overhang_id")
-    if len(design.nanoparticle_connection_versions) > MAX_VERSIONS:
+    count = len(design.nanoparticle_connection_versions)
+    if count > MAX_VERSIONS or (creating and count == MAX_VERSIONS):
         _unsupported("Native nanoparticle application exceeds its version allowance")
     current = None
     if not creating:
@@ -469,6 +488,7 @@ def _select_inputs(design, inputs, prepared):
     variant = inputs.direct_variant if creating else current.direct_variant
     attaches = pending._validate_endpoint(index, owner, strand, target, variant,
         pending._target_backings(design, {target.id}).get(target.id, ()), version=current)
+    _classify_legacy_shared_target(design, particle.id, target.id)
     relevant = ([current] if current is not None else []) + ([index[("nanoparticle_connection_version", identity)]
         for identity in inputs.conflict_version_ids] if applying else [])
     active = [item for item in design.nanoparticle_connection_versions if item.nanoparticle_id == particle.id and item.applied]

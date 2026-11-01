@@ -50,6 +50,20 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
 
     existing = design_state.get_design() if body.merge else None
 
+    history_exclusion = "Merging DNA PDB into existing helices is outside the reproducible conversion contract"
+    if not (existing and existing.helices):
+        from backend.api.part_dna_pdb_import_recording import prepare_ordinary
+        try:
+            prepared, history_exclusion = prepare_ordinary(body.content)
+        except ValueError as exc:
+            raise HTTPException(400, detail=f"PDB import failed: {exc}") from exc
+        if prepared is not None:
+            design, pdb_atomistic, response = prepared
+            design_state.load_design(design)
+            design_state.set_pdb_atomistic(pdb_atomistic)
+            response["revision"] = design_state.revision()
+            return response
+
     try:
         if existing and existing.helices:
             design, pdb_atomistic, import_warnings = merge_pdb_into_design(
@@ -68,6 +82,7 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
     report = validate_design(design)
     # New lineage — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
+    resp["import_history"] = {"status": "unverified", "reason": history_exclusion}
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
@@ -315,6 +330,27 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
 
     # DNA only → design import.
     existing = design_state.get_design()
+    history_exclusion = "Merging DNA PDB into existing helices is outside the reproducible conversion contract"
+    if not (existing and existing.helices):
+        from backend.api.part_dna_pdb_import_recording import prepare_ordinary
+        stage_started = time.perf_counter()
+        try:
+            prepared, history_exclusion = await asyncio.to_thread(prepare_ordinary, content)
+        except ValueError as exc:
+            raise HTTPException(400, detail=f"DNA PDB import failed: {exc}") from exc
+        stages_ms["parse_dna"] = (time.perf_counter() - stage_started) * 1000.0
+        if prepared is not None:
+            await _reject_disconnected_import(request, operation_id, started, stages_ms)
+            design, pdb_atomistic, response = prepared
+            stage_started = time.perf_counter()
+            design_state.load_design(design)
+            design_state.set_pdb_atomistic(pdb_atomistic)
+            response["revision"] = design_state.revision()
+            resp.update(response)
+            resp["imported"]["dna"] = True
+            stages_ms["commit"] = (time.perf_counter() - stage_started) * 1000.0
+            resp["process_metrics"] = _import_process_metrics(operation_id, started, stages_ms, "imported")
+            return resp
     try:
         stage_started = time.perf_counter()
         if existing and existing.helices:
@@ -336,6 +372,7 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
     report = validate_design(design)
     # New lineage — nothing in the client's cache matches this design's history.
     resp.update(_design_response(design, report, full_feature_log=True))
+    resp["import_history"] = {"status": "unverified", "reason": history_exclusion}
     resp["imported"]["dna"] = True
     if w:
         resp["import_warnings"] = w

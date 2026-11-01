@@ -119,6 +119,30 @@ def test_applied_surface_carrier_matches_live_domain_and_auxiliary_endpoint(pend
     assert unbound.find_strand(record.strand_id).domains[0].helix_id == before_carrier
 
 
+def test_legacy_shared_binding_exits_native_selection_before_restoration(pending, monkeypatch):
+    from backend.api import part_np_application_commands as application
+
+    before, expected = unrelated_binding(pending)
+    before = applied(before)
+    token = doc_context.set_current_doc(str(uuid4()))
+    try:
+        state.set_design(before)
+        monkeypatch.setattr(application, "_restoration",
+                            lambda *_a: pytest.fail("Legacy source reached native restoration inspection"))
+        monkeypatch.setattr(application, "_materialize",
+                            lambda *_a: pytest.fail("Legacy source reached native materialization"))
+        revision = state.revision()
+        routes.delete_np_connection_version("gold", "candidate", expected_revision=revision)
+        result = state.get_or_404()
+        assert next(item for item in result.nanoparticle_conjugations if item.id == expected.id) == expected
+        assert not result.nanoparticle_connection_versions
+        assert result.feature_log[-1].params.get("nanoparticle_application_version") is None
+        assert state.revision() == revision + 1
+    finally:
+        state.close_session()
+        doc_context.reset_current_doc(token)
+
+
 def test_planner_explicitly_skips_bound_handle_when_carrier_metadata_is_coherent(pending):
     result = applied(pending)
     record = handle(result)

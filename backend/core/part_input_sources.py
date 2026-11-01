@@ -140,7 +140,7 @@ def command_source_bindings(kind, params) -> tuple[tuple[str, InputSource], ...]
             and "coating_version" in params and params.get("action") == "set"):
         return tuple((key, InputSource.model_validate(params[key]))
                      for key in ("pdb_source", "coverage_source") if params.get(key) is not None)
-    source_bearing = kind in {"protein-import", "aptamer-import", "cadnano-import", "scadnano-import"} or (
+    source_bearing = kind in {"protein-import", "aptamer-import", "cadnano-import", "scadnano-import", "dna-pdb-import"} or (
         kind == "nanoparticle-create" and "quantum_dot_version" in params)
     if (not source_bearing or params.get("_proof_version") != 1 or "source" not in params):
         return ()

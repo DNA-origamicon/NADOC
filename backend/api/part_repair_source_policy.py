@@ -21,6 +21,9 @@ def admit_descriptor(kind, params, parameter, source):
     elif kind == "scadnano-import" and parameter == "source":
         from backend.core.part_scadnano_source import MAX_SOURCE_BYTES
         limit, expected_format, media = MAX_SOURCE_BYTES, "scadnano", "application/json"
+    elif kind == "dna-pdb-import" and parameter == "source":
+        from backend.core.part_dna_pdb_source import MAX_SOURCE_BYTES
+        limit, expected_format, media = MAX_SOURCE_BYTES, "dna-pdb", "chemical/x-pdb"
     elif kind == "nanoparticle-create" and "quantum_dot_version" in params and parameter == "source":
         from backend.api.part_quantum_dot_commands import MAX_CATALOG_BYTES
         limit, expected_format, media = MAX_CATALOG_BYTES, "quantum-dot-catalog", "application/json"

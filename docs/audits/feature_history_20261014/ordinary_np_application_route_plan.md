@@ -1,13 +1,13 @@
 # Ordinary nanoparticle application: private route migration
 
-Correctness checkpoint, 2026-10-15. The ordinary application recording adapter
-is implemented behind `routes_nanoparticles.OWNED_NP_APPLICATION_ENABLED = False`.
-The bounded lifecycle passes focused route and independent input-replay checks.
-HTTP/geometry performance and desktop qualification remain open; ordinary
-application behavior still uses the existing path. The audit and next benchmark
-proposal below are retained as implementation context.
-Scientific helpers, numerical pins, command schemas and global budgets stay
-unchanged. See the [contract and official CAD references](nanoparticle_connection_contract.md).
+November 1 campaign: the ordinary application recording adapter is enabled by
+`routes_nanoparticles.OWNED_NP_APPLICATION_ENABLED = True`. Applied lifecycle,
+pending alternatives, complete HTTP/geometry parity, cold replay and the actual
+desktop workflow and required regression checks are qualified below. FH-30 closes.
+The October 15 audit and proposed matrix remain historical implementation context.
+Scientific helpers, numerical pins and global budgets are unchanged. The new
+pending-context schema records its exact active owner without changing placement.
+See the [contract and official CAD references](nanoparticle_connection_contract.md).
 
 ## Scope and existing seams
 
@@ -19,12 +19,18 @@ admitted bases, one active connection per selected particle, and closed native
 live/restoration ownership. These are eligibility ceilings, not measured latency
 guarantees. No coordinates, sampled placement or saved topology become inputs.
 
-Pending alternatives while another version on the particle remains applied need
-a separate metadata-ownership contract. Coated/QD/biotin attachment, shortening,
+Pending alternatives beside one applied version use `nanoparticle_pending_context_version: 1`
+and exact active-version/duplex selectors. Existing restoration validates radial
+ownership privately; publication changes only selected pending-version metadata,
+preserving every live geometry field and the active version itself. Creation
+reserves its output within the existing 128-version ceiling. Coated/QD/biotin attachment, shortening,
 legacy direct binding, bound motion/resize, collective relaxation, generated
 multi-anchor construction, assemblies and the shared-host scientific defect are
 outside this migration. Unsupported compatibility remains explicitly unverified;
 a native suffix does not certify an old or broken prefix.
+An unrelated particle's legacy direct-binding metadata sharing the selected target
+has no versioned ownership contract and is excluded before native restoration;
+declared native consumers retain their exact dependency checks.
 
 | Current seam | Narrow change |
 | --- | --- |
@@ -173,7 +179,7 @@ resources remain. VR qualification is explicitly deferred by the user to a
 capable machine. App qualification remains pending; these backend results do not
 establish browser or desktop behavior.
 
-## Proposed next benchmark matrix — unexecuted
+## Historical proposed benchmark matrix — October 15
 
 Benchmark authoring and execution are deferred to the next resumed session.
 The proposed memory-only script is `scripts/benchmark_np_application_route.py`;
@@ -199,7 +205,7 @@ probes; report their capacities/drops and clean every owned document in `finally
 This is a proposed diagnostic matrix, not latency qualification or rollout evidence.
 
 
-## Implemented stopping checkpoint — October 15
+## Historical stopping checkpoint — October 15
 
 The dispatcher retains the sole document lock and calls the new cohesive
 `part_np_application_recording.py` host after checking revision/editability.
@@ -235,3 +241,17 @@ assemblies and VR remain deferred. See
 runs, selector/lint debt and artifact cleanup. This is the saved nanoparticle stopping
 point. Subsequent user direction prioritizes core geometry; the predeclared
 HTTP/geometry benchmark is parked until that higher-priority work is complete.
+
+## FH-30 qualification — November 1, 2026
+
+Evidence **C** is `.development-artifacts/feature-history-focus/`; old October reports remain historical.
+`np-http-qualified-20261101`: 31 pairs × four 6/16-cell, 1/16-handle profiles × ten lifecycle actions; **1,240 exact native/legacy paired steps**, including complete response and following geometry. Largest history starts with 16 authentic rows.
+Native combined HTTP/geometry maxima are 740.749/584.487/592.632/759.042 ms; light-request maximum 518.573 ms versus legacy 539.133 ms. Four final cold proofs pass in 2.199–2.432 s. Natural GC was observed without changes; its 100,000-event observation cap dropped 14,080 events, so no complete GC attribution is claimed.
+`np-browser-initial-20261101`: small/large adopted display maxima **399.9/816.9 ms** across nine actions each (540/1,548 nt); lightweight maxima 261.1/290.6 ms. Both cold proofs pass.
+`np-dna-browser-corrected-20261101`: ordinary NP lifecycle and visible applied geometry pass; inspected image shows DNA, gold, applied handle, native rows and Unapply. Existing placement is preserved; fitting remains FH-31.
+History Cancel preserves the exact checkpoint (26 ms click-through-repaint, zero canonical requests); the earlier 319.4 ms included automation overhead and remains recorded. No production latency optimization is claimed; invalid orientation refuses with an earliest error and blocked descendants, corrected edit succeeds, and save/reopen, switch, delete, undo/redo and cold replay pass.
+The first browser run exposed a missing complete-geometry response after a successful historical NP edit. The existing guarded recipe-edit response now supplies it; the 24-case pending-context suite includes actual HTTP one-undo/revision and stale-edit checks. Its earlier visual test timeout was a harness review pause; the scoped visual timeout is 90 s only when explicitly enabled.
+The historical editor reuses the existing connection modal for names and creation orientation; contract markers/output identities remain protected. Both chemical orientations and the retained-version ceiling are covered; the frontend editor’s eight cases pass.
+The first gate-on SMART run found one unsupported legacy shared-target delete regression (19,954 other passes). Structural classification now retains that compatibility route before restoration; no post-selection fallback or molecular kernel changes. The correction and protein document-source controls pass 200 focused cases; all original assertions remain.
+`campaign-browser-final-20261101`: DNA import plus small/large NP adoption pass (552/728.7 ms); the new Cancel timer selected a hidden dialog. Binding it to the clicked visible button fixes that harness failure; `campaign-np-lifecycle-final-20261101` passes the complete lifecycle and exact Cancel.
+`campaign-np-parity-final-20261101`: all 40 final-code paired steps and four cold proofs pass; required SMART FAST, frontend, smoke and lint also pass (exact results in the current handoff). All finished benchmark/browser scratch, profiles, caches and test saves are verified absent; `main.js` is unchanged.

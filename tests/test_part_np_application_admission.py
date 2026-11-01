@@ -7,7 +7,7 @@ from backend.core import design_geometry
 from backend.core.models import Direction, LoopSkip
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from tests.test_part_np_application_commands import application_params
-from tests.test_part_pending_np_connections import CREATE, native_prefix as native_prefix
+from tests.test_part_pending_np_connections import CREATE, native_prefix as native_prefix, pending_model
 
 
 def test_aggregate_loop_descriptor_bound_refuses_before_traversing_next_list(native_prefix):
@@ -52,3 +52,22 @@ def test_target_cannot_share_selected_radial_carrier_even_in_opposite_direction(
     assert error.value.code == "invalid_selection"
     assert any(item["parameter_path"] == ["handle_overhang_id"] for item in error.value.references)
     assert source.model_dump_json() == original
+
+
+@pytest.mark.parametrize("count", [127, 128])
+def test_creation_reserves_the_output_version_within_the_existing_limit(native_prefix, monkeypatch, count):
+    source = native_prefix.copy_with(nanoparticle_connection_versions=[
+        pending_model(native_prefix, version_id=f"retained-{index}") for index in range(count)])
+    values = application_params(source)
+    before = source.model_dump_json()
+    if count == commands.MAX_VERSIONS:
+        monkeypatch.setattr(commands, "_materialize",
+            lambda *_args: pytest.fail("An over-limit output reached native materialization"))
+        with pytest.raises(CommandContractError) as error:
+            commands.build(CREATE, source, values)
+        assert error.value.code == "unsupported_np_application_source"
+    else:
+        result = commands.build(CREATE, source, values)
+        assert len(result.nanoparticle_connection_versions) == commands.MAX_VERSIONS
+        assert sum(version.applied for version in result.nanoparticle_connection_versions) == 1
+    assert source.model_dump_json() == before

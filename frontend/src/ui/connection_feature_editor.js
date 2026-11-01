@@ -16,7 +16,19 @@ const FIELDS = [
 ]
 
 export function connectionFeatureFields(entry) {
-  if (entry?.feature_type !== 'snapshot' || entry.op_kind !== 'overhang-bulk' || entry.params?._proof_version !== 1) return []
+  if (entry?.feature_type !== 'snapshot' || entry.params?._proof_version !== 1) return []
+  if (entry.op_kind?.startsWith('nanoparticle-connection-version-')) {
+    const params = entry.params
+    if (params.nanoparticle_connection_version !== 1 || params._generated_scope || params._generator
+      || (Object.hasOwn(params, 'nanoparticle_application_version') && params.nanoparticle_application_version !== 1)
+      || (Object.hasOwn(params, 'nanoparticle_pending_context_version') && params.nanoparticle_pending_context_version !== 1)) return []
+    if (!['nanoparticle-connection-version-create', 'nanoparticle-connection-version-patch'].includes(entry.op_kind)) return []
+    const fields = [{ key: 'name', label: 'Name', type: 'text' }]
+    if (entry.op_kind === 'nanoparticle-connection-version-create')
+      fields.push({ key: 'direct_variant', label: 'Connection type', type: 'select', options: ['end-to-root', 'root-to-root'] })
+    return fields.filter(field => Object.hasOwn(params, field.key))
+  }
+  if (entry.op_kind !== 'overhang-bulk') return []
   const params = entry.params, action = params.action
   if (!['connection-version-create', 'connection-version-connect-direct', 'connection-version-connect-linker', 'connection-version-patch'].includes(action)) return []
   if (params._generated_scope || params._generator) return []
@@ -37,7 +49,7 @@ export function createConnectionEditAction({ api, store }) {
     const context = api.captureFeatureEditContext(), feedback = createFeatureHistoryFeedback(store)
     const patch = entry.params.action === 'connection-version-patch'
     try {
-      return await editFeature({ title: 'Edit Connection', opKind: 'connection',
+      return await editFeature({ title: entry.op_kind.startsWith('nanoparticle-') ? 'Edit Nanoparticle Connection' : 'Edit Connection', opKind: 'connection',
         currentParams: patch ? entry.params.patch : entry.params, schema: connectionFeatureFields(entry),
         isCurrent: () => api.isFeatureEditContextCurrent(context),
         onSave: async values => {
