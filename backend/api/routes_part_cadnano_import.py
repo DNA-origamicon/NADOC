@@ -1,4 +1,4 @@
-"""Pinned caDNAno import into a fresh empty part; legacy upload stays separate."""
+"""Pinned lattice-source imports through the existing fresh-part publication boundary."""
 
 from datetime import datetime, timezone
 from typing import Annotated
@@ -42,18 +42,18 @@ class ReplacementQuery(BaseModel):
         return value
 
 
-def _current(query):
+def _current(query, *, format_name="caDNAno"):
     source, revision = state.get_design_with_revision()
     if source is None:
         raise HTTPException(404, detail={"code": "active_part_required",
-            "detail": "Create a fresh empty part or tab before importing a pinned caDNAno source."})
+            "detail": f"Create a fresh empty part or tab before importing a pinned {format_name} source."})
     if source.id != query.expected_design_id or revision != query.expected_revision:
         raise HTTPException(409, detail={"code": "stale_import_target",
             "detail": "The active part changed before this replacement could be prepared.",
             "expected_design_id": query.expected_design_id, "actual_design_id": source.id,
             "expected_revision": query.expected_revision, "actual_revision": revision})
     try:
-        commands._empty_input(source)
+        commands._empty_input(source, format_name=format_name)
         if len(source.recipe_root.initial_name) > 1_024:
             raise ValueError("Empty part name exceeds the bounded import host contract")
         baseline = create_empty_part(source.recipe_root.initial_name, source.recipe_root.lattice_type)
@@ -70,7 +70,7 @@ def _current(query):
             raise ValueError("Part retains source, presentation, physical or repair draft state")
     except ValueError as error:
         raise HTTPException(422, detail={"code": "fresh_empty_part_required",
-            "detail": "Create a fresh empty part or tab for pinned caDNAno import. The existing upload route supports ordinary document replacement."}) from error
+            "detail": f"Create a fresh empty part or tab for pinned {format_name} import. The existing upload route supports ordinary document replacement."}) from error
     return source
 
 
@@ -79,9 +79,9 @@ def _transport_error(detail, *, status=413):
                                        "detail": detail})
 
 
-async def _read_source(request):
+async def _read_source(request, *, format_name="caDNAno"):
     if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
-        _transport_error("Send the original caDNAno JSON bytes as application/json.", status=415)
+        _transport_error(f"Send the original {format_name} JSON bytes as application/json.", status=415)
     if request.headers.get("content-encoding", "identity").lower() != "identity":
         _transport_error("Compressed source request bodies are unsupported.", status=415)
     lengths = request.headers.getlist("content-length")
@@ -92,33 +92,44 @@ async def _read_source(request):
         if not length.isascii() or not length.isdecimal() or len(length) > 19:
             _transport_error("Content-Length must be a nonnegative decimal integer.", status=400)
         if int(length) > MAX_SOURCE_BYTES:
-            _transport_error("Pinned caDNAno source exceeds 100,000 bytes.")
+            _transport_error(f"Pinned {format_name} source exceeds 100,000 bytes.")
     output = bytearray()
     async for chunk in request.stream():
         # Check before retaining/copying another chunk. ASGI transport buffers
         # are server-owned; the application never eagerly reads an entire body.
         if len(chunk) > MAX_SOURCE_BYTES - len(output):
-            _transport_error("Pinned caDNAno source exceeds 100,000 bytes.")
+            _transport_error(f"Pinned {format_name} source exceeds 100,000 bytes.")
         output.extend(chunk)
     return bytes(output)
 
 
-def _prepare(raw, name_override):
+def _prepare(raw, name_override, *, kind="cadnano-import"):
     """Private complete lineage and response; no active document is modified."""
-    source = describe(raw, format="cadnano-v2", media_type="application/json")
-    initial = create_empty_part(name_override if name_override is not None else "Imported caDNAno", "HONEYCOMB")
+    if kind == "scadnano-import":
+        from backend.api import part_scadnano_commands as selected_commands
+        source_format, format_name = "scadnano", "scadnano"
+    elif kind == "cadnano-import":
+        selected_commands = commands
+        source_format, format_name = "cadnano-v2", "caDNAno"
+    else:
+        raise ValueError("Unsupported lattice import kind")
+    source = describe(raw, format=source_format, media_type="application/json")
+    initial = create_empty_part(name_override if name_override is not None else f"Imported {format_name}", "HONEYCOMB")
     initial = initial.copy_with(input_sources={source.sha256: embed(source, raw)})
     params = {"_proof_version": 1, "lattice_import_version": 1, "importer_version": 1,
         "source": source.model_dump(mode="json"), "history_seed": str(uuid4()),
         "identity_policy": "source-content-v1", "name_override": name_override}
+    if kind == "scadnano-import":
+        params["loss_policy"] = "existing-importer-v1"
     budget = RecoveryBudget()
     pre, pre_size = state.encode_design_snapshot(initial)
     budget.charge(pre)
-    candidate, warnings = commands.evaluate("cadnano-import", initial, params,
-                                            resolver=EmbeddedResolver(initial.input_sources))
+    evaluated = selected_commands.evaluate(kind, initial, params,
+        resolver=EmbeddedResolver(initial.input_sources), **({"include_debug": True} if kind == "scadnano-import" else {}))
+    candidate, warnings = evaluated[:2]
     post, post_size = state.encode_design_snapshot(candidate)
     budget.charge(post)
-    entry = SnapshotLogEntry(op_kind="cadnano-import", label=f"Import caDNAno · {candidate.metadata.name}",
+    entry = SnapshotLogEntry(op_kind=kind, label=f"Import {format_name} · {candidate.metadata.name}",
         timestamp=datetime.now(timezone.utc).isoformat(), params=params,
         design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
         post_state_gz_b64=post, post_state_size_bytes=post_size)
@@ -129,6 +140,10 @@ def _prepare(raw, name_override):
     response = _design_response(candidate, report, full_feature_log=True)
     if warnings:
         response["import_warnings"] = warnings
+    if kind == "scadnano-import":
+        response["debug"] = evaluated[2]
+        response["import_history"] = {"status": "reproduced_import", "native_editable": False,
+                                      "loss_policy": "existing-importer-v1"}
     return candidate, response
 
 
@@ -146,12 +161,27 @@ async def import_cadnano(request: Request, query: Annotated[ReplacementQuery, Qu
     that small fresh part. The legacy /design/import/cadnano endpoint remains
     available for ordinary nonempty document replacement.
     """
+    return await _import(request, query)
+
+
+@router.post("/design/features/import/scadnano", status_code=201,
+    openapi_extra={"requestBody": {"required": True, "content": {"application/json": {
+        "schema": {"type": "object", "required": ["helices", "strands"]},
+        "description": "Original UTF-8 scadnano JSON, at most 100,000 bytes."}}}})
+async def import_scadnano(request: Request, query: Annotated[ReplacementQuery, Query()]):
+    """Pinned source import with explicit existing-importer loss policy and one undo."""
+    return await _import(request, query, kind="scadnano-import")
+
+
+async def _import(request, query, *, kind="cadnano-import"):
+    format_name = "scadnano" if kind == "scadnano-import" else "caDNAno"
     if any(len(request.query_params.getlist(key)) > 1 for key in ReplacementQuery.model_fields):
         _transport_error("Import query fields must not be repeated.", status=422)
-    source = _current(query)
-    raw = await _read_source(request)
+    source = _current(query, format_name=format_name)
+    raw = await _read_source(request, format_name=format_name)
     try:
-        candidate, response = await run_in_threadpool(_prepare, raw, query.name_override)
+        candidate, response = await run_in_threadpool(_prepare, raw, query.name_override, **(
+            {"kind": kind} if kind != "cadnano-import" else {}))
     except CommandContractError as error:
         raise HTTPException(413 if error.code == "source_limit" else 422,
                             detail={"status": error.status, **error.as_issue()}) from error
@@ -159,7 +189,7 @@ async def import_cadnano(request: Request, query: Annotated[ReplacementQuery, Qu
         raise HTTPException(413, detail={"status": "unverified", "code": "command_limit",
                                         "detail": str(error)}) from error
     except ValueError as error:
-        raise HTTPException(422, detail={"status": "failed", "code": "invalid_cadnano_input",
+        raise HTTPException(422, detail={"status": "failed", "code": f"invalid_{kind.removesuffix('-import')}_input",
                                         "detail": str(error)}) from error
     if await request.is_disconnected():
         raise HTTPException(499, detail="Import cancelled before publication.")

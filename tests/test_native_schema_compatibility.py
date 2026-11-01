@@ -90,7 +90,11 @@ def _cold(source, request, *, family):
             pytest.fail("Native schema-compatibility worker leaked its transport buffer")
 
 
-@pytest.mark.parametrize("family", ["duplex", "coating", "cpd"])
+@pytest.mark.parametrize("family", [
+    "duplex", "coating",
+    pytest.param("cpd", marks=pytest.mark.scientific(
+        reason="Experimental CPD work: explicitly requested sessions only")),
+])
 def test_spawned_current_pins_reproduce_and_retired_schema_pins_refuse(family, monkeypatch):
     from backend.core.part_group_model import GroupOrganization, PartGroup
 

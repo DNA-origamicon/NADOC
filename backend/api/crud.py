@@ -1992,56 +1992,7 @@ def center_design() -> dict:
     return _design_response(centered, validate_design(centered))
 
 
-def _backfill_overhang_sequences(design: Design) -> Design:
-    """After autodetect_all_overhangs, populate OverhangSpec.sequence from strand.sequence.
-
-    scadnano designs often carry pre-assigned sequences on all domains, including
-    those that become overhangs after import.  autodetect_all_overhangs creates
-    OverhangSpec objects with sequence=None.  This function walks each sequenced
-    strand in 5'→3' domain order, extracts the substring corresponding to each
-    overhang domain (accounting for skip positions), and stores it on the matching
-    OverhangSpec so the sequence survives future assign_staple_sequences calls.
-
-    Strands without a sequence, and overhangs whose OverhangSpec already has a
-    sequence set, are left unchanged.
-    """
-    overhang_by_id: dict[str, object] = {o.id: o for o in design.overhangs}
-    if not overhang_by_id:
-        return design
-
-    # Build per-helix skip sets once.
-    helix_skips: dict[str, set] = {
-        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
-        for h in design.helices
-    }
-
-    updated_overhangs = list(design.overhangs)
-    ovhg_index = {o.id: i for i, o in enumerate(updated_overhangs)}
-
-    for strand in design.strands:
-        if strand.sequence is None:
-            continue
-        seq = strand.sequence
-        pos = 0
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            skips = helix_skips.get(domain.helix_id, set())
-            n = (hi - lo + 1) - sum(1 for bp in skips if lo <= bp <= hi)
-            if n <= 0:
-                continue
-            if domain.overhang_id is not None:
-                spec_idx = ovhg_index.get(domain.overhang_id)
-                if spec_idx is not None:
-                    spec = updated_overhangs[spec_idx]
-                    if spec.sequence is None:
-                        updated_overhangs[spec_idx] = spec.model_copy(
-                            update={"sequence": seq[pos : pos + n]}
-                        )
-            pos += n
-
-    return design.copy_with(overhangs=updated_overhangs)
-
+from backend.core.lattice_import_normalization import _backfill_overhang_sequences  # noqa: E402
 
 @router.post("/design/import/scadnano", status_code=200)
 def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
@@ -2054,7 +2005,18 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     from backend.core.scadnano import import_scadnano
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
+    from backend.api.part_scadnano_import_recording import prepare_ordinary
     import json as _json
+
+    try:
+        prepared, history_exclusion = prepare_ordinary(body.content, body.name)
+    except ValueError as exc:
+        raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
+    if prepared is not None:
+        design, response = prepared
+        design_state.load_design(design)
+        response["revision"] = design_state.revision()
+        return response
 
     try:
         data = _json.loads(body.content)
@@ -2092,6 +2054,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
+    resp["import_history"] = {"status": "unverified", "reason": history_exclusion}
     if import_warnings:
         resp["import_warnings"] = import_warnings
     resp["debug"] = {

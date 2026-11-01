@@ -66,7 +66,7 @@ not a requirement to continue U-number accounting or repeat completed acceptance
 
 ### Parked milestones still included in the estimate
 
-Resume after the core-priority exits, preserving scientific authorization rules.
+The November 1 user campaign authorizes independent asset milestones while the remaining molecular reviews stay isolated. Preserve scientific authorization rules.
 Ordinary DNA connections belong to FH-25, not the parked nanoparticle bucket.
 
 | ID | Status | Fixed remaining exit |
@@ -75,7 +75,7 @@ Ordinary DNA connections belong to FH-25, not the parked nanoparticle bucket.
 | FH-31 | Parked | NP fitting, bound motion and multi-anchor relaxation: explicit inputs, numerical provenance and complete admitted lifecycle. |
 | FH-32 | Parked | Coupled biotin attachment lifecycle: pinned tether/coating sources and complete create/remove contracts. |
 | FH-33 | Parked | Protein import/library placement rollout: original bytes, portability and qualified source capture; explicit measured exclusions remain honest. |
-| FH-34 | Parked | scadnano import: complete source/options/identity/loss contract and independent regeneration. |
+| FH-34 | Done · November1,2026 | Bounded ordinary scadnano import pins original bytes, converter/options/loss policy and stable source identities; source replacement invalidates dependent references explicitly. Full-pipeline parity, independent cold replay, historical name edits, undo/reopen and File-menu lifecycle pass. [Contract and qualification](cadnano_scadnano_input_plan.md#fh-34-scadnano-qualification--november-1-2026). Larger or unsupported inputs remain explicitly unverified. |
 | FH-35 | Parked | DNA-PDB import: complete source/conversion/identity/loss contract and independent regeneration. |
 | FH-36 | Parked | Generated asset composition: ordinary commands through final connections, cold replay and upstream edits. |
 
@@ -83,8 +83,8 @@ Ordinary DNA connections belong to FH-25, not the parked nanoparticle bucket.
 
 FH-13 (implemented strict policy), FH-29 (automation release), FH-37 (oxDNA
 provenance) and FH-38 (NAMD/atomistic provenance) are parked outside the count.
-Seven parked asset milestones FH-30–FH-36 remain in the CAD total, but are not
-prerequisites for the five core exits.
+Asset milestones FH-30–FH-36 remain in the CAD total; their current status is recorded above.
+They are independent of the remaining molecular review decisions.
 
 ### Historical accounting and implementation evidence
 

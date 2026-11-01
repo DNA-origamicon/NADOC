@@ -271,7 +271,11 @@ def transform_worker_roundtrip(source, monkeypatch, timings, *, identity, cluste
     return applied
 
 
-@pytest.mark.parametrize("factory", [native_cpd_prefix, native_duplex_prefix], ids=["cpd", "duplex"])
+@pytest.mark.parametrize("factory", [
+    pytest.param(native_cpd_prefix, id="cpd", marks=pytest.mark.scientific(
+        reason="Experimental CPD work: explicitly requested sessions only")),
+    pytest.param(native_duplex_prefix, id="duplex"),
+])
 def test_numerical_source_is_a_complete_native_recipe_before_any_solver(factory):
     source, _ = factory()
     assert source.recipe_root.kind == "empty" and source.recipe_root.source_json is None

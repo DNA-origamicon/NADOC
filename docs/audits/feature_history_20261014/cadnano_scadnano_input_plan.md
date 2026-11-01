@@ -290,3 +290,17 @@ The scadnano project's own Python library explicitly exists to generate editable
 scadnano files from scripts. NADOC therefore cannot treat a scadnano extension or
 successful parser result as evidence that an LLM used NADOC native commands.
 [Official scadnano Python documentation](https://scadnano-python-package.readthedocs.io/en/latest/)
+
+## FH-34 scadnano qualification — November 1, 2026
+
+The ordinary File → Import scadnano flow now records one pinned-source Import feature within the admitted v1 subset; larger/unsupported sources retain explicitly unverified legacy import.
+Inputs retain original UTF-8 bytes, importer/lattice versions, UUID namespace, explicit name override and `existing-importer-v1` loss policy. Source-byte changes invalidate output identities; name-only edits preserve them.
+The unchanged complete importer/overhang/backfill/recenter/cluster/integrity pipeline owns geometry and warnings. Square/honeycomb topology, loopouts, extensions, insertions/deletions and ordinary NADOC exports are covered; experimental chemistry and multiple-module clustering remain excluded.
+Admission: 100 KB, 32 helices, 2048 span/helix, 8192 total span, 16384 declared bases, 128 strands, 512 conservative domains, 65536 domain/modification comparisons. No global capture or worker budget changed.
+The shared guarded raw-source endpoint adds one undo; ordinary file navigation preserves its existing fresh-lineage behavior. Native preparation failures never retry legacy or publish a partial import.
+Evidence root: `.development-artifacts/feature-history-focus/`; command/source, route and cold-proof tests cover exact full-authoring/geometry parity, process determinism, corrupted/missing sources, dependent refusal, recovery poisoning and atomic failure.
+`scadnano-boundaries-20261101`: 30/30 ordinary imports across six boundary profiles, capture max 8.126 ms, HTTP max 80.728 ms, six cold workers 1332.6–1457.4 ms, every result `reproduced_import`; scratch absent.
+`scadnano-browser-initial-20261101`: 1 app lifecycle pass (15.2 s), File Import → downstream nick → historical name edit → proof → undo/redo → save/reopen; zero console errors, isolated scratch absent.
+`scadnano-smart-final-20261101`: SMART FAST, 19895 passed /19 skipped, 474.39 s; zero per-test budget violations. FULL debt remains deferred because its user-opened session expired.
+The initial harness-only nested-pytest failures have retained incident reports and explicit reviews; the unchanged gate self-tests pass, and the review gate is clear. Four expensive connection lifecycle variants remain covered through focused validation.
+`scadnano-frontend-20261101`: 9496 passed /1 skipped; `scadnano-current-pins-final-20261101`: duplex/coating 2 passed, CPD deselected. FH-34 closes for this explicit admitted subset; source/recovery portability and dependent refusal are qualified.

@@ -101,7 +101,9 @@ def test_2d_response_skips_native_geometry(client, organized, monkeypatch):
 @pytest.mark.parametrize("action", ["update", "batch", "empty_upsert", "empty_delete"])
 def test_accepted_noop_has_explicit_receipt_and_does_not_add_history(client, organized, action):
     http, headers = client
-    created = http.post(PATH, headers=headers, json=payload(organized)).json()
+    response = http.post(PATH, headers=headers, json=payload(organized))
+    assert response.status_code == 201, response.text
+    created = response.json()
     assert created["no_op"] is False
     saved = before(organized)
     revision = organized.revision

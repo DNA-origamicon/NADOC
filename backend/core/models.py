@@ -1953,6 +1953,7 @@ SnapshotOpKind = Literal[
     "extrude-frame",
     "aptamer-import",
     "cadnano-import",
+    "scadnano-import",
     "bundle-create",
     "cluster-paste",
     "element-paste",

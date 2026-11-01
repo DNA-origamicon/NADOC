@@ -189,7 +189,8 @@ def _ready(ack, operation, lane):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("family,gesture", [
-    pytest.param("cpd", "free", marks=pytest.mark.atomistic),
+    pytest.param("cpd", "free", marks=[pytest.mark.atomistic, pytest.mark.scientific(
+        reason="Experimental CPD work: explicitly requested sessions only")]),
     pytest.param("duplex", "duplex-root", marks=pytest.mark.headless),
     pytest.param("duplex", "duplex-taut", marks=pytest.mark.headless),
     pytest.param("duplex", "joint", marks=pytest.mark.headless),

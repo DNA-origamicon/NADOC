@@ -176,6 +176,8 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("part_path_commands", ("headless",)),
     ("part_joined_path_commands", ("headless",)),
     ("part_connectivity_commands", ("headless",)),
+    ("connection_recipe_recording", ("headless",)),
+    ("part_connection", ("headless",)),
     ("part_section_commands", ("headless",)),
     ("curved_branches", ("headless",)),
     ("branch_optimizer", ("headless",)),

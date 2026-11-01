@@ -53,3 +53,54 @@ def _recenter_design(design: "Design") -> "Design":
             "cluster_transforms": new_clusters,
         }
     )
+
+
+def _backfill_overhang_sequences(design: Design) -> Design:
+    """After autodetect_all_overhangs, populate OverhangSpec.sequence from strand.sequence.
+
+    scadnano designs often carry pre-assigned sequences on all domains, including
+    those that become overhangs after import.  autodetect_all_overhangs creates
+    OverhangSpec objects with sequence=None.  This function walks each sequenced
+    strand in 5'→3' domain order, extracts the substring corresponding to each
+    overhang domain (accounting for skip positions), and stores it on the matching
+    OverhangSpec so the sequence survives future assign_staple_sequences calls.
+
+    Strands without a sequence, and overhangs whose OverhangSpec already has a
+    sequence set, are left unchanged.
+    """
+    overhang_by_id: dict[str, object] = {o.id: o for o in design.overhangs}
+    if not overhang_by_id:
+        return design
+
+    # Build per-helix skip sets once.
+    helix_skips: dict[str, set] = {
+        h.id: {ls.bp_index for ls in h.loop_skips if ls.delta == -1}
+        for h in design.helices
+    }
+
+    updated_overhangs = list(design.overhangs)
+    ovhg_index = {o.id: i for i, o in enumerate(updated_overhangs)}
+
+    for strand in design.strands:
+        if strand.sequence is None:
+            continue
+        seq = strand.sequence
+        pos = 0
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            skips = helix_skips.get(domain.helix_id, set())
+            n = (hi - lo + 1) - sum(1 for bp in skips if lo <= bp <= hi)
+            if n <= 0:
+                continue
+            if domain.overhang_id is not None:
+                spec_idx = ovhg_index.get(domain.overhang_id)
+                if spec_idx is not None:
+                    spec = updated_overhangs[spec_idx]
+                    if spec.sequence is None:
+                        updated_overhangs[spec_idx] = spec.model_copy(
+                            update={"sequence": seq[pos : pos + n]}
+                        )
+            pos += n
+
+    return design.copy_with(overhangs=updated_overhangs)

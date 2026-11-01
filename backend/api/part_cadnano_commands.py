@@ -53,18 +53,18 @@ def resources(kind, params):
     return {"sources": (command.source,), "imports": True}
 
 
-def _empty_input(design):
+def _empty_input(design, *, format_name="caDNAno"):
     root = design.recipe_root
     if (root is None or root.kind != "empty" or root.version != 1
             or root.source_json is not None or root.source_sha256 is not None
             or design.feature_log or design.feature_log_cursor != -1 or design.feature_log_sub_cursor is not None):
-        raise ReferenceResolutionError("caDNAno import requires an explicit empty recipe input",
+        raise ReferenceResolutionError(f"{format_name} import requires an explicit empty recipe input",
             code="invalid_selection", references=[{"kind": "recipe_root", "identity": "empty",
                                                      "parameter_path": []}])
     empty = create_empty_part(root.initial_name, root.lattice_type)
     nonempty = sorted(field for field in AUTHORING_FIELDS if getattr(design, field) != getattr(empty, field))
     if nonempty:
-        raise ReferenceResolutionError(f"caDNAno import cannot replace existing authored fields: {', '.join(nonempty)}",
+        raise ReferenceResolutionError(f"{format_name} import cannot replace existing authored fields: {', '.join(nonempty)}",
             code="invalid_selection", references=[{"kind": "recipe_root", "identity": "empty",
                                                      "parameter_path": []}])
 
@@ -110,7 +110,7 @@ def _pipeline(data, command):
     return imported, warnings
 
 
-def identity_mapping(imported, command):
+def identity_mapping(imported, command, *, source_format="cadnano", output_fields=_OUTPUT_FIELDS):
     """Map typed output identities after all legacy choices have been made.
 
     A new source digest deliberately invalidates every output identity. It does
@@ -119,21 +119,22 @@ def identity_mapping(imported, command):
     from backend.core.models import Design, NADOC_SUBDOMAIN_NS
     from backend.core.part_scope_references import identity_index
 
+    format_name = "caDNAno" if source_format == "cadnano" else "scadnano"
     empty = Design()
-    unexpected = sorted(field for field in AUTHORING_FIELDS - _OUTPUT_FIELDS
+    unexpected = sorted(field for field in AUTHORING_FIELDS - output_fields
                         if getattr(imported, field) != getattr(empty, field))
     if unexpected or any(helix.native_residues for helix in imported.helices):
-        raise SourceContractError("caDNAno importer produced fields outside its topology-only contract",
+        raise SourceContractError(f"{format_name} importer produced fields outside its topology-only contract",
                                   source=command.source, code="unsupported_source")
     records, _ = identity_index(imported)
-    namespace = uuid5(UUID(command.history_seed), f"nadoc:cadnano:v1:{command.source.sha256}")
+    namespace = uuid5(UUID(command.history_seed), f"nadoc:{source_format}:v1:{command.source.sha256}")
     allocate = identity_factory(namespace)
     mapping, used_keys = {}, set()
 
     def assign(kind, old, key):
         encoded = json.dumps(key, sort_keys=True, separators=(",", ":"))
         if (kind, encoded) in used_keys:
-            raise SourceContractError("caDNAno output has ambiguous identity ownership",
+            raise SourceContractError(f"{format_name} output has ambiguous identity ownership",
                                       source=command.source, code="unsupported_source")
         used_keys.add((kind, encoded))
         mapping[kind, old] = allocate(kind, [encoded])
@@ -155,24 +156,26 @@ def identity_mapping(imported, command):
         end = next((end for end in ("5p", "3p")
                     if overhang.id == f"ovhg_inline_{overhang.strand_id}_{end}"), None)
         if end is None:
-            raise SourceContractError("caDNAno import has an unsupported overhang identity convention",
+            raise SourceContractError(f"{format_name} import has an unsupported overhang identity convention",
                                       source=command.source, code="unsupported_source")
         mapped = f"ovhg_inline_{mapping['strand', overhang.strand_id]}_{end}"
         mapping["overhang", overhang.id] = mapped
         if len(overhang.sub_domains) != 1:
-            raise SourceContractError("caDNAno import has an unexpected subdomain partition",
+            raise SourceContractError(f"{format_name} import has an unexpected subdomain partition",
                                       source=command.source, code="unsupported_source")
         mapping["sub_domain", overhang.sub_domains[0].id] = str(uuid5(NADOC_SUBDOMAIN_NS, f"{mapped}:whole"))
+    for extension in imported.extensions:
+        assign("extension", extension.id, [extension.strand_id, extension.end])
     for cluster in imported.cluster_transforms:
         family = ("default" if cluster.is_default else "scaffold" if cluster.name.startswith("Scaffold Cluster ")
                   else "geometry" if cluster.name.startswith("Geometry Cluster ") else None)
         if family is None:
-            raise SourceContractError("caDNAno import has an unexpected placement cluster family",
+            raise SourceContractError(f"{format_name} import has an unexpected placement cluster family",
                                       source=command.source, code="unsupported_source")
         assign("cluster", cluster.id, [family, sorted(cluster.helix_ids),
             sorted((ref.strand_id, ref.domain_index) for ref in cluster.domain_ids)])
     if mapping.keys() != records.keys():
-        raise SourceContractError("caDNAno output contains unclassified identities",
+        raise SourceContractError(f"{format_name} output contains unclassified identities",
                                   source=command.source, code="unsupported_source")
     return mapping
 

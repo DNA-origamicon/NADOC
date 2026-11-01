@@ -25,7 +25,7 @@ def _fail(source, detail, *, limit=False):
                               code="source_limit" if limit else "unsupported_source")
 
 
-def _json(text, source):
+def _json(text, source, *, format_name="caDNAno"):
     # JSON's normal parser may allocate deeply nested containers before a
     # post-parse schema can reject them. This scan only bounds nesting; stdlib
     # remains the syntax/parser authority, including escaping and UTF-8 text.
@@ -43,32 +43,32 @@ def _json(text, source):
         elif char in "[{":
             depth += 1
             if depth > MAX_JSON_DEPTH:
-                _fail(source, "caDNAno JSON nesting exceeds the import contract", limit=True)
+                _fail(source, f"{format_name} JSON nesting exceeds the import contract", limit=True)
         elif char in "]}":
             depth -= 1
 
     def integer(value):
         if len(value.lstrip("-")) > 10:
-            _fail(source, "caDNAno integer exceeds the import work contract", limit=True)
+            _fail(source, f"{format_name} integer exceeds the import work contract", limit=True)
         result = int(value)
         if abs(result) > 2_147_483_647:
-            _fail(source, "caDNAno integer exceeds the import work contract", limit=True)
+            _fail(source, f"{format_name} integer exceeds the import work contract", limit=True)
         return result
 
     def floating(value):
         result = float(value)
         if not math.isfinite(result):
-            _fail(source, "caDNAno source numbers must be finite")
+            _fail(source, f"{format_name} source numbers must be finite")
         return result
 
     def constant(_value):
-        _fail(source, "caDNAno source numbers must be finite")
+        _fail(source, f"{format_name} source numbers must be finite")
 
     def object_pairs(pairs):
         result = {}
         for key, value in pairs:
             if key in result:
-                _fail(source, "caDNAno source contains duplicate JSON fields")
+                _fail(source, f"{format_name} source contains duplicate JSON fields")
             result[key] = value
         return result
 
@@ -76,7 +76,7 @@ def _json(text, source):
         return json.loads(text, parse_int=integer, parse_float=floating,
                           parse_constant=constant, object_pairs_hook=object_pairs)
     except json.JSONDecodeError as exc:
-        _fail(source, f"Invalid caDNAno JSON: {exc.msg}")
+        _fail(source, f"Invalid {format_name} JSON: {exc.msg}")
 
 
 def parse_source(raw, source):

@@ -572,6 +572,9 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # November 1 FAST: nine HTTP mutations, history edit, and independent proofs
+    # take 5.31–5.49 s. Keep lightweight connection refusal tests in FAST.
+    "test_http_lifecycle_and_metadata_history_edit",
     # October 28 FULL: real native packing/upgrade and multiple independent
     # worker replays (26.76s/6.09s/5.59s); lightweight refusal tests stay fast.
     "test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
@@ -1099,6 +1102,7 @@ def _slow_area_for(module: str) -> str:
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
         "test_native_join_proof", "test_native_connectivity_proof", "test_part_repair_evaluation", "test_part_immutable_creation",
+        "test_connection_recipe_recording",
         "test_native_schema_compatibility", "test_part_immutable_geometry_append",
         "test_part_strict_deformation_preview_http", "test_part_immutable_preview_apply",
         "test_part_immutable_deformation", "test_part_immutable_geometry_recovery",

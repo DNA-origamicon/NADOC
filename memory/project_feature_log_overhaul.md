@@ -33,6 +33,10 @@ FH-28 retained ordinary creation/recovery/publication is also qualified, includi
 autosave/disk restoration, post-restore editing and bounded repeated sessions.
 Aggregate FH-27 regression acceptance remains open.
 
+November1: FH-34 closes for bounded ordinary scadnano source import, independent
+regeneration and dependency refusal. The user prioritizes independent milestones
+until 2pm MST; molecular candidates remain isolated pending their separate reviews.
+
 The [current handoff](../docs/audits/feature_history_20261014/session_handoff.md)
 owns progress counts, gate state, qualification evidence and the single next task.
 Its current state supersedes the older S53/S54 queue, C8-open claims,
