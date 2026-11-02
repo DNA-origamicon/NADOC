@@ -34,6 +34,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
+from backend.api import clash_progress
 from backend.core.flexible_display import flexible_segment_atomistic_frame_overrides
 from backend.core.models import RepresentationSegment
 
@@ -70,6 +71,23 @@ class ExtraBaseSampleAuditRequest(BaseModel):
 def _flexible_display_override(design):
     override = flexible_segment_atomistic_frame_overrides(design)
     return override or None
+
+
+def _display_atomistic_model(design):
+    """One coordinate authority for the atomistic view and its defect overlay."""
+    from backend.core.atomistic import build_atomistic_model, merge_models
+
+    override = _flexible_display_override(design)
+    pdb_model = design_state.get_pdb_atomistic()
+    if pdb_model is not None:
+        pdb_helices = {a.helix_id for a in pdb_model.atoms}
+        if not ({h.id for h in design.helices} - pdb_helices):
+            return pdb_model
+        template = build_atomistic_model(design, exclude_helix_ids=pdb_helices,
+            nuc_frame_override=override, fast_bridges=True, measured_positioning=True)
+        return merge_models(pdb_model, template)
+    return build_atomistic_model(design, nuc_frame_override=override,
+        fast_bridges=True, measured_positioning=True)
 
 
 @router.get("/design/atomistic")
@@ -110,15 +128,9 @@ def get_atomistic(
     would silently mix two frames.
     """
     measured_positioning = measured_display_placement(measured_positioning)
-    from backend.core.atomistic import (
-        build_atomistic_model,
-        atomistic_to_json,
-        merge_models,
-    )
+    from backend.core.atomistic import atomistic_to_json
 
     design = design_state.get_or_404()
-    nuc_frame_override = _flexible_display_override(design)
-
     pdb_model = design_state.get_pdb_atomistic()
 
     if seed_lattice_nm is not None:
@@ -144,31 +156,7 @@ def get_atomistic(
         out["lattice_nm"] = resolved
         return out
 
-    if pdb_model is not None:
-        pdb_helix_ids = {a.helix_id for a in pdb_model.atoms}
-        all_helix_ids = {h.id for h in design.helices}
-        template_helix_ids = all_helix_ids - pdb_helix_ids
-
-        if not template_helix_ids:
-            return atomistic_to_json(pdb_model)
-
-        template_model = build_atomistic_model(
-            design,
-            exclude_helix_ids=pdb_helix_ids,
-            nuc_frame_override=nuc_frame_override,
-            fast_bridges=True,  # display renderer: cheap interpolated linkers (6× faster on large designs)
-            measured_positioning=measured_positioning,
-        )
-        return atomistic_to_json(merge_models(pdb_model, template_model))
-
-    return atomistic_to_json(
-        build_atomistic_model(
-            design,
-            nuc_frame_override=nuc_frame_override,
-            fast_bridges=True,  # display renderer: cheap interpolated linkers (6× faster on large designs)
-            measured_positioning=measured_positioning,
-        )
-    )
+    return atomistic_to_json(_display_atomistic_model(design))
 
 
 @router.get("/design/molecular-placement-audit")
@@ -252,6 +240,8 @@ def get_extra_base_sample_audit(request: ExtraBaseSampleAuditRequest) -> dict:
 def get_clashes(
     threshold_nm: float = 0.65,
     designed_margin_nm: float = 2.0,
+    include_piercings: bool = False,
+    progress_id: clash_progress.ProgressId = None,
 ) -> dict:
     """
     Return the design-layer steric-clash report for the active design.
@@ -272,17 +262,32 @@ def get_clashes(
       count: int,
       threshold_nm: float,
       designed_margin_nm: float,
+      piercing: {count, hits, nucleotides, truncated, limit},  # when requested
     }
+
+    ``include_piercings`` adds the existing bond-through-ring detector over the
+    atomistic display model. Counts remain separate; no seed export or repair runs.
     """
     from backend.core.clash import clash_report
 
-    design = design_state.get_or_404()
-    report = clash_report(
-        design,
-        threshold_nm=threshold_nm,
-        designed_margin_nm=designed_margin_nm,
-    )
-    return report.to_dict()
+    with clash_progress.tracking(progress_id) as update:
+        design = design_state.get_or_404()
+        report = clash_report(
+            design,
+            threshold_nm=threshold_nm,
+            designed_margin_nm=designed_margin_nm,
+        )
+        result = report.to_dict()
+        if include_piercings:
+            from backend.core.piercing_display import display_piercings
+            update('Preparing atoms')
+            model = _display_atomistic_model(design)
+            result['piercing'] = display_piercings(model, progress=lambda done, total:
+                update('Checking bonds', done, total))
+        return result
+
+
+router.include_router(clash_progress.router)
 
 
 @router.get("/design/surface")

@@ -1630,8 +1630,8 @@ async function main() {
   // and show the selected one, so switching tabs swaps the halo instead of mixing two
   // engines' anchors.  Never fired during construction → no TDZ on the consts below.
   const anchorGlow = initAnchorGlow({ designRenderer, store, atomisticRenderer })
-  // Steric-clash overlay (the "clash" view-tool button) — owns its on/off + red
-  // glow + count badge; re-fetches GET /design/clashes on posed-geometry change.
+  // Clash / ring-piercing overlay — red glows, cyan diamonds and separate counts.
+  // Re-fetches the read-only report when the design geometry changes.
   const clashOverlay = initClashOverlay({ store, designRenderer })
   const _anchorsByEngine = {}   // engine key → that card's last highlighted anchor set
   const _refreshAnchorGlow = () => {

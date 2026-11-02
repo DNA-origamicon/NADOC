@@ -1062,3 +1062,5 @@ without source mutation. Native4, compound31 and constraint16 regressions pass.
 [x] Changed residue poses now use the existing full native display response,
 refreshing site frames and inserted-base geometry rather than applying a cluster
 or compact-position delta. Host6/render-diff22 and actual browser1 pass.
+
+- 2026-11-02 — ISSUE-166 [x]: precomputed ring triangles and bounded vectorized tests reduce the terminal-linker scan from 31.76 s to 0.43 s with identical reports. Checks over 1 s show a spinner and measured bond percentage; stale work cancels and clears progress. Focused 55 backend / 27 frontend pass; SMART FAST 19,964 passed / 19 skipped (FULL deferred), frontend 9,545 passed / one skipped, isolated smoke 23 passed. Actual app progress/cancellation and screenshots verified; owned workspaces and screenshots removed. `main.js` delta0. Evidence: `.development-artifacts/piercing-performance-20261102/`.

@@ -20,6 +20,7 @@ import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseInstan
 import { buildCrossoverExtraPlacements, crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
+import { createPiercingMarkers } from './piercing_markers.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 import { hasOrganization } from './part_group_display.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
@@ -96,6 +97,7 @@ export function initDesignRenderer(scene, storeRef) {
   // Steric-clash highlight: bright red, marks backbone beads that collide once the
   // design is posed (clash_overlay drives it). Named so gesture e2e can detect it.
   const _clashGlowLayer     = createGlowLayer(scene, 0xff2b2b, 5.6, 'clashGlow')
+  const _piercingMarkers = createPiercingMarkers(scene)
   // Surface capture-strand emphasis: a bright additive halo (brightens any strand colour)
   // when the "Highlight strands" toggle is on. The strands ALWAYS render; this only emphasises.
   const _captureGlowLayer   = createGlowLayer(scene, 0xffffff, 4.4, 'captureGlow')
@@ -587,6 +589,7 @@ export function initDesignRenderer(scene, storeRef) {
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
     _clashGlowLayer.clear()     // caller (clash_overlay) re-applies after a rebuild
+    _piercingMarkers.clear()
     _captureGlowLayer.clear()   // re-applied below via _applyCaptureGlow after the build
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
@@ -1406,6 +1409,9 @@ export function initDesignRenderer(scene, storeRef) {
     clearClashHighlight()      { _clashGlowLayer.clear() },
     /** Active clash glow-sprite count (e2e uses it to confirm the clash toggle rendered). */
     clashGlowCount()           { return _clashGlowLayer.count() },
+    setPiercingHighlight(entries) { _piercingMarkers.setEntries(entries) },
+    clearPiercingHighlight() { _piercingMarkers.clear() },
+    piercingMarkerCount() { return _piercingMarkers.count() },
 
     /**
      * Show emission-color glows for fluorophore beads.
@@ -1432,6 +1438,7 @@ export function initDesignRenderer(scene, storeRef) {
       _undefinedGlowLayer.refresh()
       _anchorGlowLayer.refresh()
       _clashGlowLayer.refresh()
+      _piercingMarkers.refresh()
       _captureGlowLayer.refresh()
       _previewGlowLayer.refresh()
       _fluoroGlowLayer.refresh()
@@ -2185,6 +2192,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     dispose() {
+      _piercingMarkers.dispose()
       _clusterSelection.dispose()
       if (_frozenRoot) { scene.remove(_frozenRoot); _frozenRoot = null }
       if (_helixCtrl?.root) scene.remove(_helixCtrl.root)

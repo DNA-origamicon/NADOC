@@ -465,7 +465,7 @@
       font: var(--text-xs) var(--font-data);
       color: var(--color-text-muted);
     }
-    /* Steric-clash count badge (mirrors length-heatmap-legend placement). */
+    /* Design geometry diagnostics: distinct colors and shapes for each finding. */
     #clash-legend {
       display: none;
       position: absolute;
@@ -473,16 +473,26 @@
       bottom: 16px;
       padding: 5px 10px;
       background: rgba(13,17,23,0.88);
-      border: 1px solid #dc2626;
+      border: 1px solid #484f58;
       border-radius: 4px;
       font: var(--text-xs) var(--font-ui);
-      color: #ff6b6b;
+      color: #c9d1d9;
       pointer-events: none;
       z-index: 5;
       white-space: nowrap;
     }
     #clash-legend.visible { display: block; }
-    #clash-legend.none    { border-color: #16a34a; color: #4ade80; }
+    #clash-legend.none    { border-color: #16a34a; }
+    #clash-legend .cl-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; }
+    #clash-legend .cl-clash { color: #ff6b6b; }
+    #clash-legend .cl-piercing { color: #38d9ef; }
+    #clash-legend small { display: block; color: #b1bac4; font-size: 10px; margin: 3px 0; }
+    #clash-legend-status:empty { display: none; }
+    #piercing-check-progress { display: inline-flex; align-items: center; gap: 5px; }
+    #piercing-check-progress[hidden] { display: none; }
+    .piercing-check-spinner { width: 10px; height: 10px; border: 2px solid #38d9ef44; border-top-color: #38d9ef; border-radius: 50%; animation: piercing-check-spin .8s linear infinite; }
+    @keyframes piercing-check-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .piercing-check-spinner { animation: none; } }
     #clash-legend .cl-dot {
       display: inline-block;
       width: 8px; height: 8px;
@@ -490,6 +500,10 @@
       background: currentColor;
       margin-right: 6px;
       vertical-align: middle;
+    }
+    #clash-legend .cl-diamond {
+      display: inline-block; width: 8px; height: 8px;
+      border: 1.5px solid currentColor; transform: rotate(45deg); margin-right: 6px;
     }
     /* ── Canvas area (the actual 3D render target) ────────────────────── */
     #canvas-area {
@@ -7606,7 +7620,7 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><text x="5.5" y="7.5" font-size="5.5" font-weight="bold" font-family="sans-serif" fill="currentColor" text-anchor="middle">A</text><line x1="10" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="3" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="13" y1="7" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/></svg>
               <span class="sf-label-text">ovhg</span>
             </button>
-            <button class="sf-btn vt-btn" data-vt="clashes" title="Highlight steric clashes — backbone collisions from folded clusters / deformations">
+            <button class="sf-btn vt-btn" data-vt="clashes" title="Highlight backbone clashes and bonds piercing nucleotide rings">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="2" x2="8" y2="5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="13" y1="2" x2="8" y2="5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="5.5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="6.6" y1="4.1" x2="9.4" y2="6.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="9.4" y1="4.1" x2="6.6" y2="6.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
               <span class="sf-label-text">clash</span>
             </button>
@@ -7718,7 +7732,14 @@
             </div>
           </div>
 
-          <div id="clash-legend"><span class="cl-dot"></span><span id="clash-legend-text">0 clashes</span></div>
+          <div id="clash-legend" role="status" aria-label="Clashes and piercings">
+            <div class="cl-row cl-clash"><span class="cl-dot" aria-hidden="true"></span><span id="clash-legend-text">Clashes —</span></div>
+            <small>Clash: backbone overlap caused by a fold or deformation</small>
+            <div class="cl-row cl-piercing"><span class="cl-diamond" aria-hidden="true"></span><span id="piercing-legend-text">Piercings —</span><span id="piercing-check-progress" hidden aria-label="Piercing check progress"><span class="piercing-check-spinner" aria-hidden="true"></span><span id="piercing-check-percent">0%</span></span></div>
+            <small>Piercing: a bond passes through a nucleotide ring</small>
+            <small>Design geometry · markers show involved bases</small>
+            <small id="clash-legend-status"></small>
+          </div>
 
           <!-- Library screen — shown on startup and when no session is active -->
           <div id="welcome-screen">

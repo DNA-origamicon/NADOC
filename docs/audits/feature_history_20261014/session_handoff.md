@@ -6,6 +6,57 @@ The user requested the next three independent milestones after the original 14:0
 **Tools done: 4/4. CAD: 30/34 complete; FH-27/31/32/36 remain open.**
 FH-30/34/35 closed in the preceding campaign; FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
 
+## November 2 — piercing visualizer and performance
+
+**Piercing performance follow-up (ISSUE-166):** precomputed ring triangles and
+bounded vectorized intersection batches preserve the existing criteria and exact
+reports. Terminal-linker warm benchmark: scan **31.76 → 0.43 s**, combined check
+**32.25 → 0.86 s**; 208,000-atom platform **4.40 s**. Checks exceeding one second
+show a spinner and measured bond-check percentage beside the piercing count.
+Preparation remains 0%; cancellation and completion clear the indicator and
+document-scoped progress record. Actual app: Full terminal/corner findings unchanged;
+large platform in Cylinders showed the spinner at 1.03 s, advanced through
+15/32/44/59/76/94/99%, completed at 7.57 s, and passed toggle-off cancellation.
+All three screenshots inspected then removed; all three disposable app roots
+removed, source-file hashes unchanged. Evidence:
+`.development-artifacts/piercing-performance-20261102/`. No molecular repair or
+polymerization conversion change is included; ISSUE-163/164 remain deferred.
+Qualification: **55 focused backend / 27 focused frontend**;
+**SMART FAST 19,964 passed / 19 skipped** (428.60 s; FULL deferred by the same
+selector message below); **frontend 802 files, 9,545 passed / one skipped**
+(383.99 s). Aggregate timing triage found zero per-test violations, maximum
+3.93 s, summed 1,582.3 s versus prior 1,596.1 s; no budget/classification changed.
+Isolated **`just smoke`: 23 passed** (2.6 min), cleanup verified absent.
+Lint and memory hygiene pass. `main.js` LOC delta: 0.
+
+**Clash visualizer follow-up (ISSUE-165):** the clash toggle now includes the
+existing ring-piercing detector over atomistic **display** coordinates. Red halos
+identify backbone clashes; cyan wireframe diamonds identify bases participating
+in a pierced bond/ring. The legend separates counts and definitions, shows pending
+or unavailable checks, and labels capped results. Source geometry is unchanged.
+The actual retained terminal-linker app check reports zero clashes / one piercing,
+marking `Extension - 0[-5›3]` and `Extension - 0[-5›2]` on S37. The corner fixture
+reports six clashes / one piercing. Full and atomistic pixels, representation
+switching, off cleanup, and shared-view serialization are qualified. Focused tests:
+55 frontend / five backend passed. Evidence: `.development-artifacts/clash-piercing-20261102/`.
+Complete qualification: **FAST 19,954 passed / 19 skipped** (432.80 s);
+**frontend 801 files, 9,538 passed / one skipped** (369.40 s); isolated
+**`just smoke`: 23 passed** (2.5 min). Lint and memory hygiene pass. The aggregate
+FAST timing warning was reviewed with `triage-slow-tests`: zero per-test violations,
+maximum 3.88 s, summed 1,596.1 s versus prior 1,617.6 s. No new shared accidental
+delay identified; no budget or classification changed. `main.js` LOC delta: 0.
+Selector output (verbatim):
+```
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+Both isolated app roots and their processes were removed; source hashes unchanged.
+Five reviewed screenshots (1,773,667 bytes) were pruned after visual inspection;
+compact results and reusable exercise scripts remain in the evidence directory.
+Production conversion (ISSUE-163) and long-extension repair (ISSUE-164) stay deferred.
+
 ## Current three-milestone scope — November 1
 
 Selected FH-33 original protein inputs/library placement, FH-31 fitting/bound motion/multi-anchor relaxation,

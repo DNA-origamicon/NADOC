@@ -33,6 +33,13 @@ export function mountSharedViewTools(parent) {
       const clashes = doc.createElement('div'); clashes.className = 'shared-clash-legend'
       clashes.textContent = value.clashCount == null ? 'Clash report pending' : `${value.clashCount} ${value.clashCount === 1 ? 'clash' : 'clashes'}`
       root.append(clashes)
+      if (Object.hasOwn(value, 'piercingCount')) {
+        const piercing = doc.createElement('div'); piercing.className = 'shared-piercing-legend'
+        piercing.textContent = value.piercingCount == null ? '◇ Piercing check unavailable' : `◇ ${value.piercingCount}${value.piercingTruncated ? '+' : ''} ${value.piercingCount === 1 && !value.piercingTruncated ? 'piercing' : 'piercings'}`
+        const key = doc.createElement('div')
+        key.textContent = 'Red glow: backbone clash · Cyan diamond: ring piercing'
+        root.append(piercing, key)
+      }
     }
   }, dispose() { root.remove() } }
 }

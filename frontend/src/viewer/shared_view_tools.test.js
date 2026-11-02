@@ -7,6 +7,23 @@ import { prepareScene, loadPreparedScene } from './prepared_scene.js'
 import { initLoopSkipHighlight } from '../scene/loop_skip_highlight.js'
 afterEach(() => { document.body.innerHTML = '' })
 const camera = { position: [0, 0, 10], target: [0, 0, 0], up: [0, 1, 0], fov: 55, orbitMode: 'orbit' }
+it('shares the piercing count, limit and cyan wireframe markers', async () => {
+  const { createPiercingMarkers } = await import('../scene/piercing_markers.js')
+  document.body.innerHTML = '<button class="vt-btn active" data-vt="clashes"></button><div id="clash-legend" class="visible"><span id="clash-legend-text">0 clashes</span><span id="piercing-legend-text">200+ piercings</span></div>'
+  const value = captureViewTools(document)
+  expect(value.piercingCount).toBe(200); expect(value.piercingTruncated).toBe(true)
+  validateViewTools(value)
+  const ui = mountSharedViewTools(document.body); ui.update(value)
+  expect(document.querySelector('.shared-piercing-legend').textContent).toBe('◇ 200+ piercings')
+  expect(() => validateViewTools({ ...value, piercingCount: -1 })).toThrow()
+  const scene = new THREE.Scene(), markers = createPiercingMarkers(scene)
+  markers.setEntries([{ pos: new THREE.Vector3(1, 2, 3) }])
+  const guest = await loadPreparedScene(prepareScene({ scene, camera, view: { viewTools: value } }))
+  const mesh = guest.scene.getObjectByName('piercingMarkers')
+  expect(mesh.count).toBe(1); expect(mesh.material.wireframe).toBe(true)
+  expect(mesh.material.color.getHex()).toBe(0x38d9ef)
+  guest.dispose(); markers.dispose(); ui.dispose()
+})
 it('captures toggle state and legends and detects count-only changes for live sharing', () => {
   document.body.innerHTML = '<button class="vt-btn active" data-vt="lengthHeatmap"></button><button class="vt-btn active" data-vt="clashes"></button><div id="clash-legend" class="visible"><span id="clash-legend-text">2 clashes</span></div>'
   const scene = new THREE.Scene(), first = captureViewTools(document)

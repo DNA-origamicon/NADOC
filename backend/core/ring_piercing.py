@@ -137,61 +137,16 @@ def segment_pierces_ring(p0, p1, ring_pos) -> tuple[bool, float]:
     return True, float(t[ok][0])
 
 
-def _scan(positions, bonds, rings, *, max_report: int, search_nm: float = SEARCH_NM):
-    """Core loop: every bond against every ring whose centroid is close enough.
-
-    ``rings`` is a list of ``(label, kind, serials)``.  Bonds sharing an atom with a
-    ring are skipped — that covers the ring's own bonds and the glycosidic bond.
-    """
-    if not bonds or not rings:
-        return []
-    ring_serials = [set(s) for _, _, s in rings]
-    ring_centres = _np.array([positions[list(s)].mean(axis=0) for _, _, s in rings])
-
-    bond_arr = _np.asarray(bonds, dtype=int)
-    mids = 0.5 * (positions[bond_arr[:, 0]] + positions[bond_arr[:, 1]])
-
-    try:  # O(n log n) when scipy is there
-        from scipy.spatial import cKDTree  # noqa: PLC0415
-
-        tree = cKDTree(ring_centres)
-        neighbours = tree.query_ball_point(mids, r=search_nm)
-    except Exception:  # pragma: no cover - fallback
-        neighbours = [
-            _np.where(_np.linalg.norm(ring_centres - m, axis=1) < search_nm)[0]
-            for m in mids
-        ]
-
-    hits: list[dict] = []
-    for bi, near in enumerate(neighbours):
-        i, j = int(bond_arr[bi, 0]), int(bond_arr[bi, 1])
-        for ri in near:
-            if i in ring_serials[ri] or j in ring_serials[ri]:
-                continue
-            label, kind, serials = rings[ri]
-            hit, t = segment_pierces_ring(
-                positions[i], positions[j], positions[list(serials)]
-            )
-            if not hit:
-                continue
-            if len(hits) >= max_report:
-                return hits
-            hits.append(
-                {
-                    "bond_serials": [i, j],
-                    "ring_serials": list(serials),
-                    "ring_kind": kind,
-                    "ring": label,
-                    "t": round(t, 3),
-                    "bond_len_nm": round(
-                        float(_np.linalg.norm(positions[i] - positions[j])), 4
-                    ),
-                }
-            )
-    return hits
+def _scan(positions, bonds, rings, *, max_report: int, search_nm: float = SEARCH_NM,
+          progress=None, cancelled=None):
+    """Same intersection/exclusion rules, evaluated in bounded vectorized batches."""
+    from backend.core.ring_piercing_scan import scan
+    return scan(positions, bonds, rings, max_report=max_report, search_nm=search_nm,
+                progress=progress, cancelled=cancelled)
 
 
-def model_piercings(model, *, positions=None, max_report: int = 200) -> list[dict]:
+def model_piercings(model, *, positions=None, max_report: int = 200,
+                    progress=None, cancelled=None) -> list[dict]:
     """Every bond in an ``AtomisticModel`` that threads a nucleotide ring.
 
     ``positions`` (an ``(n_atoms, 3)`` array in the model's own atom order) overrides
@@ -227,7 +182,7 @@ def model_piercings(model, *, positions=None, max_report: int = 200) -> list[dic
         if not atoms[i].name.startswith("H") and not atoms[j].name.startswith("H")
     ]
 
-    hits = _scan(pos, bonds, rings, max_report=max_report)
+    hits = _scan(pos, bonds, rings, max_report=max_report, progress=progress, cancelled=cancelled)
     for h in hits:
         i, j = h["bond_serials"]
         h["bond"] = (

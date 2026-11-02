@@ -7,6 +7,7 @@ import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 import { withGenerationProgress } from './generation_progress.js'
+import { withClashProgress } from './clash_progress.js'
 import { createDocumentRequestScope } from './document_request_scope.js'
 import { initAssemblyInstanceDesignCache } from './assembly_instance_design_cache.js'
 import { recordAssemblyResponse } from './assembly_response_authority.js'
@@ -4202,13 +4203,16 @@ export async function getGeometryBatch(positions, { signal, suppressBusy = false
 }
 
 /**
- * Fetch the design-layer steric-clash report over the POSED geometry.
+ * Fetch posed backbone clashes and atomistic display ring piercings.
  * Read-only; never mutates the design.
  * @returns {Promise<{clashes: object[], count: number, threshold_nm: number,
- *                     designed_margin_nm: number} | null>}
+ *                     designed_margin_nm: number, piercing: object} | null>}
  */
-export async function getClashes() {
-  return _request('GET', '/design/clashes')
+export async function getClashes({ signal, onProgress } = {}) {
+  const docId = getDocId()
+  return withClashProgress(docHeadersFor(docId), (id, checkSignal) =>
+    _request('GET', `/design/clashes?include_piercings=true${id ? `&progress_id=${id}` : ''}`,
+      undefined, { signal: checkSignal, docId, suppressBusy: true }), onProgress, { signal })
 }
 
 /**
