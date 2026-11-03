@@ -13,9 +13,11 @@ On-disk size accounting for designs and their simulation data (added 2026-06-24)
   (stat-only walk, ~ms even for 27 GB), `sim_bytes_by_source_path` (groups
   MD+oxDNA job bytes by the job's `design_source_path`, reusing the [[job-archive]]
   / job_cleanup linkage), `jobs_for_source_path`, `assemblies_referencing`.
-- `GET /api/library/files` now adds `sim_bytes` + `disk_bytes` per part → welcome
-  screen `library_panel.js` shows a "Size" column (sortable; sim-carrying designs
-  highlighted amber, tooltip splits file vs sim).
+- `GET /api/library/files` returns file metadata; `/library/disk-usage` separately
+  enriches simulation sizes. The welcome screen shows the combined "Size" column.
+  The November 2 listing optimization uses `workspace_listing.py` to avoid
+  repeated path processing and omit document-free validation result folders,
+  retaining validation parts at any depth. See `docs/welcome_library_performance.md`.
 - `GET /api/design/about?path=…` (in routes_assembly_workspace.py) aggregates total
   bases, strands/helices, loadouts + features-per-loadout, MD+oxDNA jobs with sizes,
   and assemblies using the part. Topology from the live active design, else loaded

@@ -37,6 +37,23 @@ that are irrelevant to the design-file tree.
 The pruned root names must stay aligned with `frontend/src/ui/sim_folders.js`.
 Names ending in `_jobs` are also pruned by convention.
 
+## Validation results (2026-11-02)
+
+The metadata walker uses `os.scandir` and checks root exclusions once instead of
+repeatedly constructing and relativizing paths for every nested entry. Under the
+top-level `validation` directory it discovers `.nadoc` / `.nass` files at any
+depth, but only stats and returns folders that are ancestors of those documents.
+Result-only folders are omitted; ordinary empty user folders remain visible.
+No files are moved, rewritten, or deleted, and every refresh discovers additions
+and removals without a stale listing cache.
+
+On the current workspace this reduced the response from 3,624 entries to 222,
+preserving all 204 parts/assemblies (including the three validation parts).
+Standalone listing time fell from 0.69–0.70 s to 0.10–0.11 s. Live request timing
+remained variable; this does not establish the cause or resolution of the
+reported 20-second quick-open/close stall. Regression coverage is in
+`tests/test_workspace_listing.py`.
+
 ## Running simulation location
 
 While the welcome screen is visible, `ui/library_panel.js` polls

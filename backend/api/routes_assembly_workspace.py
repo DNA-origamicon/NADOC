@@ -250,61 +250,10 @@ def _schedule_workspace_identity_audit() -> None:
 
 
 def _workspace_entries() -> list[dict]:
-    """List user-visible workspace metadata without walking engine job trees."""
-    entries: list[dict] = []
-    workspace = _asm._WORKSPACE_DIR
-    for root, dirs, files in os.walk(workspace):
-        root_path = Path(root)
-        rel_root = root_path.relative_to(workspace)
-        dirs[:] = sorted(
-            d
-            for d in dirs
-            if not _ws.is_internal_workspace_path(rel_root / d)
-        )
+    """List library metadata while keeping validation result trees compact."""
+    from backend.core.workspace_listing import list_workspace_entries
 
-        for dirname in dirs:
-            p = root_path / dirname
-            rel = str(p.relative_to(workspace))
-            try:
-                stat = p.stat()
-            except OSError:
-                continue
-            entries.append(
-                {
-                    "name": dirname,
-                    "path": rel,
-                    "type": "folder",
-                    "mtime_iso": _dt.fromtimestamp(
-                        stat.st_mtime, tz=_tz.utc
-                    ).isoformat(),
-                    "size_bytes": 0,
-                }
-            )
-
-        for filename in files:
-            if filename.startswith((".", "__")):
-                continue
-            p = root_path / filename
-            if p.suffix not in (".nadoc", ".nass"):
-                continue
-            try:
-                stat = p.stat()
-            except OSError:
-                continue
-            rel = str(p.relative_to(workspace))
-            entries.append(
-                {
-                    "name": p.stem,
-                    "path": rel,
-                    "type": "assembly" if p.suffix == ".nass" else "part",
-                    "mtime_iso": _dt.fromtimestamp(
-                        stat.st_mtime, tz=_tz.utc
-                    ).isoformat(),
-                    "size_bytes": stat.st_size,
-                }
-            )
-    entries.sort(key=lambda e: e["mtime_iso"], reverse=True)
-    return entries
+    return list_workspace_entries(_asm._WORKSPACE_DIR)
 
 
 def _reconcile_nadoc_file(
