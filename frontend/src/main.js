@@ -6133,14 +6133,24 @@ async function main() {
 
   // ── Reference geometry show/hide (translucent backdrop strands) ───────────────
   // The cadnano-editor window has its own independent toggle (separate store).
-  document.getElementById('menu-view-reference')?.addEventListener('click', () => {
-    const show = store.getState().showReferenceGeometry !== false  // default shown
-    store.setState({ showReferenceGeometry: !show })
-    _setMenuToggle('menu-view-reference', !show)  // pill ON when reference is shown
+  const _referenceViewButton = document.getElementById('menu-view-reference')
+  const _hasReferenceGeometry = state =>
+    (state.currentDesign?.strands ?? []).some(strand => strand.is_reference)
+  function _syncReferenceViewButton(state) {
+    const available = _hasReferenceGeometry(state)
+    if (_referenceViewButton) _referenceViewButton.disabled = !available
+    _setMenuToggle('menu-view-reference', available && state.showReferenceGeometry !== false)
+  }
+  _referenceViewButton?.addEventListener('click', () => {
+    const state = store.getState()
+    if (!_hasReferenceGeometry(state)) return
+    store.setState({ showReferenceGeometry: state.showReferenceGeometry === false })
   })
+  _syncReferenceViewButton(store.getState())
   store.subscribe((newState, prevState) => {
-    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
-      _setMenuToggle('menu-view-reference', newState.showReferenceGeometry !== false)
+    if (newState.currentDesign !== prevState.currentDesign ||
+        newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
+      _syncReferenceViewButton(newState)
     }
   })
 
