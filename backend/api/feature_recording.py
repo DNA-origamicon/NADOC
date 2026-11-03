@@ -88,7 +88,7 @@ def record_feature(session, op_kind, label, params, fn):
     with _transaction(session, state) as before:
         pre, pre_size = state.encode_design_snapshot(before)
         _run(session, before, fn, state,
-             retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join"},
+             retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join", "relax-origami"},
              command=(op_kind, params))
         from backend.api.part_proof_commands import PROOF_SNAPSHOT_KINDS
         if op_kind in PROOF_SNAPSHOT_KINDS:

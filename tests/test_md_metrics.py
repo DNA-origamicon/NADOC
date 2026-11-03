@@ -348,9 +348,14 @@ def test_job_scalar_series_uses_simulated_ns_and_appends_segments(tmp_path):
 def test_md_metrics_compute_includes_energy_and_pressure_result_blocks(
     tmp_path, monkeypatch
 ):
+    from contextlib import nullcontext
     from backend.api import routes_md_metrics as route
     from backend.api import skip_twist_tuning
-    from backend.core import md_trajectory
+    from backend.core import md_trajectory, memory_budget
+
+    # All trajectory work below is mocked. Do not wait on real host reservations
+    # owned by other parallel tests; admission itself has dedicated coverage.
+    monkeypatch.setattr(memory_budget, "exclusive_analysis", lambda **_kw: nullcontext())
 
     job = SimpleNamespace(job_id="j1")
     inputs = ("psf", "ref", [("prod", "production", "prod.dcd")], object())

@@ -1836,10 +1836,12 @@ def import_design(body: DesignImportRequest) -> dict:
 
 
 class CadnanoImportRequest(BaseModel):
+    relax_origami: bool = False
     content: str  # raw caDNAno v2 JSON string sent by the browser
 
 
 class ScadnanoImportRequest(BaseModel):
+    relax_origami: bool = False
     content: str  # raw scadnano JSON string sent by the browser
     name: Optional[str] = (
         None  # filename (without extension) from the browser — overrides embedded name
@@ -1875,10 +1877,16 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
         require_import_integrity(design)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
+    from backend.core.import_relaxation import relax_imported_design
+    design, relaxation = relax_imported_design(design, enabled=body.relax_origami)
+    if relaxation and relaxation["status"] == "skipped":
+        import_warnings.append("Automatic relaxation skipped: " + relaxation["message"])
     report = validate_design(design)
     design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
+    if relaxation is not None:
+        resp["relaxation"] = relaxation
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
@@ -2066,10 +2074,16 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         require_import_integrity(design)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
+    from backend.core.import_relaxation import relax_imported_design
+    design, relaxation = relax_imported_design(design, enabled=body.relax_origami)
+    if relaxation and relaxation["status"] == "skipped":
+        import_warnings.append("Automatic relaxation skipped: " + relaxation["message"])
     report = validate_design(design)
     design_state.load_design(design)
     # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
     resp = _design_response(design, report, full_feature_log=True)
+    if relaxation is not None:
+        resp["relaxation"] = relaxation
     if import_warnings:
         resp["import_warnings"] = import_warnings
     resp["debug"] = {

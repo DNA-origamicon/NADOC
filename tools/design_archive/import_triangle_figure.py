@@ -111,6 +111,16 @@ def derive(pdf, output):
         print(json.dumps({k:provenance[k] for k in ('occupied_sites','max_bp_fit_residual','rejected_paths')},indent=2))
 
 
-if __name__=='__main__':
-    import sys
-    derive(Path(sys.argv[1]),Path(sys.argv[2]))
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('pdf', type=Path)
+    parser.add_argument('output', type=Path)
+    parser.add_argument('--relax', action='store_true', help='Fit the registered draft as rigid bodies with clash prevention')
+    args = parser.parse_args()
+    derive(args.pdf, args.output)
+    if args.relax:
+        from tools.design_archive.relax_image_import import write_relaxed_image_import
+        report = write_relaxed_image_import(json.loads((args.output / 'registered.cadnano.json').read_text()), args.output)
+        print(json.dumps(report, indent=2))

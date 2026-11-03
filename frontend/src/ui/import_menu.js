@@ -17,6 +17,7 @@
  * Extracted verbatim from main.js's `// ── Import helpers` … `// ── Import PDB`
  * block.
  */
+import { chooseOrigamiImportOptions, importRelaxationMessage } from './import_origami_options.js'
 import { showToast } from './toast.js'
 import { openFileBrowser } from './file_browser.js'
 import { openImportAptamerModal } from './import_aptamer_modal.js'
@@ -74,20 +75,26 @@ export function initImportMenu(deps) {
     const file = await new Promise(r => { input.onchange = () => r(input.files?.[0] ?? null); input.click() })
     if (!file) return
     const content = await file.text()
+    const options = await chooseOrigamiImportOptions()
+    if (!options) return
     resetForNewDesign()
-    const result = await api.importCadnanoDesign(content)
+    const result = await api.importCadnanoDesign(content, options)
     if (!result) {
       showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
       if (!store.getState().assemblyActive) showWelcome()
       return
     }
+    if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
     if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
     showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
     api.addRecentFile(file.name, content, 'cadnano')
     renderRecentMenu()
 
     const design = store.getState().currentDesign
-    const { clusters, overhangs } = importedClusterOverhangExtras(design)
+    const extras = importedClusterOverhangExtras(design)
+    // Successful relaxation depends on these poses; omitting them would undo it.
+    const clusters = result.relaxation?.status === 'applied' ? [] : extras.clusters
+    const overhangs = extras.overhangs
     const suggestedName = sanitizeImportName(design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, ''))
 
     hideWelcome()
@@ -124,20 +131,26 @@ export function initImportMenu(deps) {
     if (!file) return
     const content = await file.text()
     const baseName = file.name.replace(/\.sc$/i, '')
+    const options = await chooseOrigamiImportOptions()
+    if (!options) return
     resetForNewDesign()
-    const result = await api.importScadnanoDesign(content, baseName)
+    const result = await api.importScadnanoDesign(content, baseName, options)
     if (!result) {
       showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
       if (!store.getState().assemblyActive) showWelcome()
       return
     }
+    if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
     if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
     showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
     api.addRecentFile(file.name, content, 'scadnano')
     renderRecentMenu()
 
     const design = store.getState().currentDesign
-    const { clusters, overhangs } = importedClusterOverhangExtras(design)
+    const extras = importedClusterOverhangExtras(design)
+    // Successful relaxation depends on these poses; omitting them would undo it.
+    const clusters = result.relaxation?.status === 'applied' ? [] : extras.clusters
+    const overhangs = extras.overhangs
     const suggestedName = sanitizeImportName(design?.metadata?.name ?? baseName)
 
     hideWelcome()
@@ -176,13 +189,16 @@ export function initImportMenu(deps) {
       const file = input.files?.[0]
       if (!file) return
       const content = await file.text()
+      const options = await chooseOrigamiImportOptions()
+      if (!options) return
       resetForNewDesign()
-      const result = await api.importCadnanoDesign(content)
+      const result = await api.importCadnanoDesign(content, options)
       if (!result) {
         showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
         if (!store.getState().assemblyActive) showWelcome()
         return
       }
+      if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
       if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
       showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
       api.addRecentFile(file.name, content, 'cadnano')
@@ -209,13 +225,16 @@ export function initImportMenu(deps) {
       if (!file) return
       const content = await file.text()
       const baseName = file.name.replace(/\.sc$/i, '')
+      const options = await chooseOrigamiImportOptions()
+      if (!options) return
       resetForNewDesign()
-      const result = await api.importScadnanoDesign(content, baseName)
+      const result = await api.importScadnanoDesign(content, baseName, options)
       if (!result) {
         showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
         if (!store.getState().assemblyActive) showWelcome()
         return
       }
+      if (importRelaxationMessage(result.relaxation)) showToast(importRelaxationMessage(result.relaxation), 8000)
       if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
       showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
       api.addRecentFile(file.name, content, 'scadnano')

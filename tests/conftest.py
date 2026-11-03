@@ -569,6 +569,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Two cold Python processes and detached-worker survival (5.36 s); no live Alpine.
+    "test_transfer_keeps_running_after_api_process_is_killed",
     # Actual pinned CPD conversion/relaxation and independent spawned replay.
     "test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
     # Native routing + Join search / independent cold replay are intentional
@@ -1029,7 +1031,7 @@ def _slow_area_for(module: str) -> str:
         or "measured_positioning" in module
     ):
         return "atomistic"
-    if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
+    if module.startswith("test_md") or "openmm" in module or "benchmark" in module or module == "test_alpine_worker":
         return "md"
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",

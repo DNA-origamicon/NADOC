@@ -1997,6 +1997,7 @@ SnapshotOpKind = Literal[
     "flexible-segment-mark",
     "flexible-segment-unmark",
     "flexible-relax",
+    "relax-origami",
     "linker-add",
     "linker-patch",
     "linker-delete",

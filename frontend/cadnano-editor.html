@@ -1615,9 +1615,12 @@
           <span style="color:#6e7681;font-size:11px"> — 8 064 nt</span>
         </span>
       </label>
-      <hr style="border:none;border-top:1px solid #30363d;margin:4px 0 12px">
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Custom sequence <span style="color:#484f58">(overrides selection above)</span></div>
-      <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="radio" name="asc-scaffold" value="custom"> Custom
+    </label>
+    <div id="asc-custom-panel" hidden>
+      <p style="font-size:var(--text-xs);color:var(--color-text-muted)">Paste bases 5′→3′. Only A, T, G, C are accepted; lowercase, spaces, and line breaks are normalized.</p>
+      <textarea id="asc-custom-seq" aria-label="Custom scaffold sequence" placeholder="Paste ATGC sequence…" spellcheck="false" autocomplete="off"
         style="width:100%;height:72px;background:#0d1117;border:1px solid #30363d;border-radius:4px;
                color:#c9d1d9;font-family:monospace;font-size:11px;padding:6px;resize:vertical;
                box-sizing:border-box;outline:none"></textarea>
@@ -1626,6 +1629,8 @@
         <div style="flex:1"></div>
         <div id="asc-custom-char-count" style="font-size:var(--text-xs);color:#484f58">0 nt</div>
       </div>
+    </div>
+
       <div id="asc-warning" style="display:none;background:#2d1b00;border:1px solid #d29922;border-radius:4px;padding:8px 10px;margin-bottom:14px;font-size:11px;color:#d29922"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button id="asc-cancel" style="padding:6px 14px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;cursor:pointer">Cancel</button>

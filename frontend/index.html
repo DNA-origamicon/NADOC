@@ -3424,10 +3424,12 @@
       </span>
     </label>
 
-    <!-- Custom sequence input (overrides preset selection when non-empty) -->
-    <hr style="border:none;border-top:1px solid var(--color-border-default);margin:4px 0 12px">
-    <div class="input-group__label" style="margin-bottom:6px">Custom sequence <span style="color:var(--color-text-dim)">(overrides selection above)</span></div>
-    <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+      <input type="radio" name="asc-scaffold" value="custom"> Custom
+    </label>
+    <div id="asc-custom-panel" hidden>
+      <p style="font-size:var(--text-xs);color:var(--color-text-muted)">Paste bases 5′→3′. Only A, T, G, C are accepted; lowercase, spaces, and line breaks are normalized.</p>
+      <textarea id="asc-custom-seq" aria-label="Custom scaffold sequence" placeholder="Paste ATGC sequence…" spellcheck="false" autocomplete="off"
       style="width:100%;height:72px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);
              color:var(--color-text-primary);font-family:var(--font-data);font-size:var(--text-xs);padding:6px;resize:vertical;
              box-sizing:border-box"></textarea>
@@ -3435,6 +3437,8 @@
       <div id="asc-custom-error" style="display:none;color:var(--color-danger);font-size:var(--text-xs)"></div>
       <div style="flex:1"></div>
       <div id="asc-custom-char-count" style="font-size:var(--text-xs);color:var(--color-text-dim)">0 nt</div>
+    </div>
+
     </div>
 
     <!-- Inline warning (shown when scaffold > chosen sequence) -->
@@ -4264,6 +4268,8 @@
           <button class="dropdown-item" id="menu-help-about-file">About this file…</button>
           <div class="submenu-item" id="menu-help-experimental">Experimental <span class="icon icon--xs" style="margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
+              <button class="dropdown-item" id="menu-help-all-origami-repo">All Origami Repo</button>
+              <button class="dropdown-item" id="menu-help-relax-origami">Relax Origami</button>
               <button class="dropdown-item" id="menu-help-nanobase-inventory">Nanobase publication inventory…</button>
               <button class="dropdown-item" id="menu-help-image-evaluation">Image evaluation…</button>
               <button class="dropdown-item" id="menu-help-generate-design">Generate design…</button>

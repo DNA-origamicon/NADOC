@@ -186,6 +186,7 @@ import { overhangsToSegments, editOverridesForSegments, editOverridesForProteins
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initVisibilityController } from './scene/visibility_controller.js'
 import { initExportMenu }          from './ui/export_menu.js'
+import { importRecentDesign } from './ui/import_recent_design.js'
 import { initImportMenu }          from './ui/import_menu.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
 import { initAssemblyOverhangListPanel } from './ui/assembly_overhang_list_panel.js'
@@ -2752,17 +2753,12 @@ async function main() {
       el.appendChild(nameSpan)
       el.appendChild(typeSpan)
       el.addEventListener('click', async () => {
-        _setFileName(entry.name)
-        _resetForNewDesign()
         const type = entry.type ?? 'nadoc'
-        let result
-        if (type === 'cadnano') {
-          result = await api.importCadnanoDesign(entry.content)
-        } else if (type === 'scadnano') {
-          result = await api.importScadnanoDesign(entry.content)
-        } else {
-          result = await api.importDesign(entry.content)
-        }
+        const result = await importRecentDesign(entry, { api, beforeImport: () => {
+          _setFileName(entry.name)
+          _resetForNewDesign()
+        } })
+        if (result?.cancelled) return
         if (!result) {
           showToast('Failed to reload recent file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
           _setFileName(null)
@@ -6805,6 +6801,15 @@ async function main() {
   document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
     const { showAboutFileModal } = await import('./ui/about_file_modal.js')
     showAboutFileModal({ api, path: _workspacePath })
+  })
+
+  document.getElementById('menu-help-all-origami-repo')?.addEventListener('click', () => {
+    window.open('/api/all-origami-repo/structure_map.html', '_blank', 'noopener,noreferrer')
+  })
+
+  document.getElementById('menu-help-relax-origami')?.addEventListener('click', async () => {
+    const { showRelaxOrigami } = await import('./ui/relax_origami.js')
+    showRelaxOrigami({ api })
   })
 
   document.getElementById('menu-help-nanobase-inventory')?.addEventListener('click', async () => {

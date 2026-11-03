@@ -9,6 +9,7 @@
  * right-click "Assign Scaffold for strand…" path (main.js calls
  * `openModal(strandId)`).
  */
+import { scaffoldSequenceChoice, updateScaffoldCustomInput, wireScaffoldCustomInput, validateScaffoldSequenceChoice } from './scaffold_custom_input.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { showToast } from './toast.js'
@@ -32,12 +33,10 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
 
   function _ascUpdateWarning() {
     if (!_ascBody) return
-    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
     const warnEl      = _ascBody.querySelector('#asc-warning')
     if (!warnEl) return
-    const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
-    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const text = ascWarningText({
+    const { customRaw, scaffoldName } = scaffoldSequenceChoice(_ascBody)
+    const text = scaffoldName === 'custom' && !customRaw ? null : ascWarningText({
       customRaw, totalNt: _ascTotalNt, scaffoldName, scaffoldLen: SCAFFOLD_LENGTHS[scaffoldName] ?? 0,
     })
     if (text) { warnEl.textContent = text; warnEl.style.display = 'block' }
@@ -68,22 +67,7 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
       onClose: () => { _ascTargetStrandId = null },
     })
 
-    // Wire field events once.
-    _ascBody.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _ascUpdateWarning))
-    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
-    customSeqEl?.addEventListener('input', () => {
-      const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
-      const charCountEl = _ascBody.querySelector('#asc-custom-char-count')
-      const customErrEl = _ascBody.querySelector('#asc-custom-error')
-      if (charCountEl) charCountEl.textContent = `${raw.length} nt`
-      const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
-      if (bad.length > 0) {
-        if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
-      } else {
-        if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
-      }
-      _ascUpdateWarning()
-    })
+    wireScaffoldCustomInput(_ascBody, _ascUpdateWarning)
     // Enter on the custom textarea is intentionally a newline; Enter elsewhere
     // commits via the modal's keydown handling.
     _ascBody.addEventListener('keydown', (e) => {
@@ -96,13 +80,10 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
 
   async function _onAscApplyClicked() {
     if (!_ascBody) return
-    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const customRaw    = (_ascBody.querySelector('#asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
-    const customErrEl  = _ascBody.querySelector('#asc-custom-error')
+    const choice = validateScaffoldSequenceChoice(_ascBody)
+    if (!choice) return
+    const { scaffoldName, customRaw } = choice
     const targetStrandId = _ascTargetStrandId
-
-    // Block if custom sequence has invalid characters
-    if (customRaw && customErrEl?.textContent) return
 
     _ascModalCtrl.close()
     _ascTargetStrandId = null   // clear targeting after use
@@ -148,6 +129,7 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
 
     lengthEl.textContent = `Scaffold length: ${totalNt} nt`
     _ascTotalNt = totalNt   // remembered for the apply path's warning + 'N' fill
+    updateScaffoldCustomInput(_ascBody)
     _ascUpdateWarning()
     _ascModalCtrl.open()
   }
