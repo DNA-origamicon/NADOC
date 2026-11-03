@@ -38,3 +38,10 @@ Regression coverage includes backend continuation, loader, and routing checks;
 frontend cone-versus-arc checks; and `frontend/e2e/sweep_scaffold.spec.js`, which
 recreates the 6→10 example through the public API, runs both routing modes from
 the menu, and checks the topology and rendered bonds before and after reload.
+
+Seamed and matched end turns require at least 3 bp clearance from staple domains
+on both helices. The router checks the final crossover position after applying
+its existing bow convention and skips crowded sites in the outward search.
+Matched far ends retain a common repeat translation; the translation advances
+when necessary to keep the final left-side sites clear. Existing local extension
+limits and rejection of occupied scaffold extensions still apply.

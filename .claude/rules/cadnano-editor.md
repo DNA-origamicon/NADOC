@@ -195,6 +195,26 @@ duplicate — `main.js:2070` `key.slice(3)` — was replaced with `parseForcedLi
 
 ## Geometry / layout
 
+**2026-11-03 continued rows:** `pathview/continued_rows.js` groups attached Sweep
+segments with their source helices for display only. Live Sweep feature attachment
+metadata keeps rows stable across nicks; certified longitudinal strand connections
+provide the fallback for older histories. Equal local cells without an attachment
+do not merge. `rowMap` contains every real helix ID; `rowBands` contains unique
+visible rows with their member IDs. Point picking resolves the member by bp,
+lasso visits all members, gutter reordering moves the complete row, and paint
+ranges dispatch to the addressed segments through normal recorded commands.
+The slice view shares the source-row labels. Keep real helix/frame IDs in edit
+requests and crossover-neighbor lookup; do not flatten the design for display.
+Regression coverage: `continued_rows.test.js` and `cadnano_crossover_frames.spec.js`.
+
+**2026-11-03 crossover indicators:** neighbor lookup in `pathview.js` uses
+`pathview/crossover_cells.js` to key cells by lattice frame plus row/column.
+Sweep segments reuse source cell coordinates in a separate frame; a row/column-only
+map silently substitutes the wrong segment and hides both staple and Shift-hover
+scaffold indicators when coverage does not overlap. Preserve frame identity when
+changing this lookup. `cadnano_crossover_frames.spec.js` exercises actual indicator
+clicks in both frames through the public placement command.
+
 World-space px. The **drawing grid lives in `pathview/layout.js`** (extracted 2026-07-31, TD-03 —
 a zero-import leaf so the 3D app's Domain Designer fork can share it without pulling this 4977-LOC
 module into the main bundle). `pathview.js` imports them at the top; the rest stay local.

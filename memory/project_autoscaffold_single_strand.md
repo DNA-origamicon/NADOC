@@ -7,6 +7,18 @@ metadata:
   originSessionId: e8eafa48-297e-4c65-8397-7de37a254477
 ---
 
+## End-turn staple clearance — 2026-11-03
+
+Seamed/matched candidate selection checks the final normalized crossover site on
+both helices against `MIN_SSDNA_MARGIN`. A near candidate that moves too close
+when normalized to bow-right is skipped for the next outward legal site. Far-end
+translation reserves clearance after the existing left-partner adjustment and
+advances the common repeat period if a pair is still obstructed. Local/bounded
+searches likewise filter by staple clearance within their existing end windows.
+Crossover tables, nick rules, continuation bounds and transaction guards remain
+unchanged. Regression: `tests/test_scaffold_end_clearance.py` (recorded same-cell
+extrusion/Sweep, independent replay, and far-face alignment cases).
+
 ## Continued helices — 2026-10-08
 
 User-confirmed contract: Sweep from a blunt end preserves the existing duplex

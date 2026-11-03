@@ -1,4 +1,5 @@
 import { createLatticeFramePicker, helicesInFrame, framePlane } from './lattice_frame_picker.js'
+import { continuedHelixLabels } from './pathview/continued_rows.js'
 
 /**
  * Sliceview — SVG lattice grid for helix activation/deactivation.
@@ -414,7 +415,7 @@ export function initSliceview(svgEl, containerEl, { onAddHelix, onRemoveHelix })
     const active = _activeMap()
 
     // Helix display label — use h.label when set (e.g. scadnano index), else positional index.
-    const helixIdx = new Map((_design?.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
+    const helixIdx = continuedHelixLabels(_design)
 
     // Grid extent
     const activeCells = [...active.values()].map(v => v.cell)

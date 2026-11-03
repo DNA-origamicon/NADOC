@@ -62,6 +62,12 @@ before trusting any older doc or script that names it.*
 [tests/test_scaffold_invariants.py:53](tests/test_scaffold_invariants.py#L53) (it lives in the
 test, not in the module).
 
+End-turn selection checks the **final bow-normalized site** against the staple
+clearance invariant on both helices, skipping crowded candidates outward. Matched
+far turns advance the common repeat translation when required; local extension
+windows and existing crossover/nick conventions remain enforced. Regression:
+`tests/test_scaffold_end_clearance.py` and `frontend/e2e/autoscaffold_clearance.spec.js`.
+
 ### Other scaffold/sequence routes
 | Method | Path | File | Effect |
 |--------|------|------|--------|

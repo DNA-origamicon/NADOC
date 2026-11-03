@@ -1377,3 +1377,18 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   change an upstream endpoint length across equal/unequal branches and back; verify
   suffix regeneration, undo/reload, and honest independent ISSUE-143 errors. Native
   dependency migration is not molecular validity. No automatic migration on load.
+
+### MV-55 — Cadnano crossover frame fix — user review requested (2026-11-03, ISSUE-167)
+Open `test.nadoc` in the cadnano editor, zoom in until crossover indicators are visible,
+and inspect staple indicators plus Shift-hover scaffold indicators in both the original
+and swept sections. User explicitly requested this review before autoscaffold work resumes.
+Automated placement/undo/redo/reload checks are tracked under ISSUE-167; visual acceptance
+belongs to the user. No autoscaffold changes are included.
+
+### MV-56 — Extrude/Sweep continuous cadnano rows — user review (2026-11-03, ISSUE-168)
+Refresh the editor for `test.nadoc`: ten rows should span bp 0–231, with the Sweep
+continuing at bp 56 on the same tracks. Review numbering, the join, crossover
+indicators and picking in each section. The design remains separate feature/segment
+records internally. Automated checks exercise shared rows and real editing gestures;
+user visual acceptance remains pending. The user authorized resuming autoscaffold
+work on November 3; it is no longer blocked on this review.

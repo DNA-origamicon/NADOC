@@ -27,6 +27,7 @@ from backend.core.constants import (
     SQ_CROSSOVER_PERIOD,
 )
 from backend.core.crossover_positions import crossover_neighbor, validate_crossover
+from backend.core.scaffold_invariants import MIN_SSDNA_MARGIN, _staple_clearance, _staple_coverage
 from backend.core.models import (
     Crossover,
     Design,
@@ -622,6 +623,13 @@ def _auto_scaffold_seamed_impl(
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
     period = HC_CROSSOVER_PERIOD if is_hc else SQ_CROSSOVER_PERIOD
     bow_right = _HC_SCAF_BOW_RIGHT if is_hc else _SQ_SCAF_BOW_RIGHT
+    staple_coverage = _staple_coverage(design)
+
+    def clear_turn(bp, ha, hb):
+        return all(
+            _staple_clearance(bp, staple_coverage.get(hid, [])) >= MIN_SSDNA_MARGIN
+            for hid in (ha, hb)
+        )
 
     # ── Build coverage and adjacency ─────────────────────────────────────────
     protected_scaffold_ids = _forced_scaffold_strand_ids(design)
@@ -838,36 +846,28 @@ def _auto_scaffold_seamed_impl(
             ]
 
         for face_a, face_b, face in turn_items:
-            near_floor = face if bounded_ends else face - 3
-            xover_bp = next(
-                (
-                    bp
-                    for bp in range(near_floor, face - period - 1, -1)
-                    if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
-                ),
-                None,
-            )
+            near_floor = face if bounded_ends else face - MIN_SSDNA_MARGIN
+            xover_bp = None
+            for bp in range(near_floor, face - period - 1, -1):
+                if _scaf_nb(current, rowA, colA, bp) != tuple(hB.grid_pos):
+                    continue
+                # Apply the existing bow convention BEFORE checking clearance.
+                # Normalization can move a floor-aligned site one bp inward.
+                if (
+                    matched_ends
+                    and bp % period not in bow_right
+                    and (bp + 1) % period in bow_right
+                    and _scaf_nb(current, rowA, colA, bp + 1) == tuple(hB.grid_pos)
+                ):
+                    bp += 1
+                if clear_turn(bp, hA_id, hB_id):
+                    xover_bp = bp
+                    break
             if xover_bp is None:
                 result.warnings.append(
-                    f"[NearEnds] No xover found for {hA_id}↔{hB_id} near lo={face}"
+                    f"[NearEnds] No clear xover found for {hA_id}↔{hB_id} near lo={face}"
                 )
                 continue
-            # Matched-ends: land every near turn on its BOW-RIGHT site so all three
-            # honeycomb bond directions are bow-consistent.  Each bond's legal xover
-            # sites come in adjacent bow pairs (bow-left at bp, bow-right at bp+1);
-            # the descending search from face-3 can land on the bow-LEFT member when
-            # the pair straddles the floor (the vertical/row-differing bond does this),
-            # putting that copy's seam crossover on the wrong strand of the junction.
-            # Snapping to the adjacent bow-right site (when legal) makes the far-end
-            # translate + bow-right −1 normalisation treat every pair uniformly, so the
-            # far face is a single clean period translate of the near face.
-            if (
-                matched_ends
-                and (xover_bp % period) not in bow_right
-                and ((xover_bp + 1) % period) in bow_right
-                and _scaf_nb(current, rowA, colA, xover_bp + 1) == tuple(hB.grid_pos)
-            ):
-                xover_bp += 1
             near_specs.append(
                 {
                     "hA_id": hA_id,
@@ -972,7 +972,15 @@ def _auto_scaffold_seamed_impl(
         all_hi = [iv["hi"] for ivs in coverage.values() for iv in ivs]
         if all_near and all_hi:
             min_near, max_hi = min(all_near), max(all_hi)
-            P = math.ceil((max_hi - min_near + 1) / period) * period
+            # Far bow normalization subtracts one bp. Reserve clearance
+            # before rounding so all pairs keep the SAME repeat translation.
+            P = math.ceil((max_hi - min_near + MIN_SSDNA_MARGIN + 1) / period) * period
+            while any(
+                not clear_turn(bp + P - (1 if (bp + P) % period in bow_right else 0), ha, hb)
+                for (ha, hb), bps in near_xover_by_pair.items()
+                for bp in bps
+            ):
+                P += period
         else:
             result.warnings.append(
                 "[MatchedEnds] No near-end crossovers to mirror; far ends unmatched."
@@ -1038,6 +1046,7 @@ def _auto_scaffold_seamed_impl(
                             bp
                             for bp in range(hi + 3, hi + period + 1)
                             if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                            and clear_turn(bp - 1 if bp % period in bow_right else bp, ha_id, hb_id)
                         ),
                         None,
                     )
@@ -1049,12 +1058,13 @@ def _auto_scaffold_seamed_impl(
                 if xover_bp is not None and (xover_bp % period) in bow_right:
                     xover_bp -= 1
             else:
-                far_floor = hi if bounded_ends else hi + 3
+                far_floor = hi if bounded_ends else hi + MIN_SSDNA_MARGIN
                 xover_bp = next(
                     (
                         bp
                         for bp in range(far_floor, hi + period + 1)
                         if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                        and clear_turn(bp, ha_id, hb_id)
                     ),
                     None,
                 )

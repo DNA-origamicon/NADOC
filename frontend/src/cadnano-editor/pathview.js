@@ -1,4 +1,6 @@
 import { quadruplexMarkers } from '../shared/aptamer.js'
+import { crossoverCellKey } from './pathview/crossover_cells.js'
+import { buildContinuedRows, helixAtRowBp, reorderContinuedRows, rowPaintRanges } from './pathview/continued_rows.js'
 /**
  * Pathview — Canvas 2D strand editor, cadnano2-style.
  *
@@ -22,8 +24,7 @@ import { quadruplexMarkers } from '../shared/aptamer.js'
 // HERE dragged this whole 4977-LOC module into the main-app bundle (TD-14).
 import {
   GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
-  CELL_H, PAIR_Y, ROW_H, GROUP_GAP,
-  connectedCellGroups,
+  CELL_H, PAIR_Y, ROW_H,
 } from './pathview/layout.js'
 
 const EXTEND_BPS = 56
@@ -381,6 +382,7 @@ export function initPathview(canvasEl, containerEl, {
   let _hdMarkers = []
   let _hdPlaced = []
   let _rowMap  = new Map()   // helix.id → { fwdY, revY, scaffoldFwd, cell, idx }
+  let _rowByHelix = new Map() // every segment ID → its shared visible row
   let _rowBands = []         // sorted [{lo, hi, hid, info}] for pointer row lookup
   let _helixById = new Map() // helix.id → helix; rebuilt in _rebuildLayout. O(1) lookups
                              // in the hot crossover-draw loops (was O(helices) _helices.find).
@@ -438,7 +440,7 @@ export function initPathview(canvasEl, containerEl, {
   function _hitTestLoopSkip(wx, wy) {
     if (!_design?.helices?.length) return null
     _ensureLoopSkipIndex()
-    const helixId = _helixAtWY(wy)
+    const helixId = _helixAtWY(wy, _xToBp(wx))
     const info = helixId && _rowMap.get(helixId)
     const markers = helixId && _loopSkipsByHelixBp.get(helixId)
     if (!info || !markers) return null
@@ -621,7 +623,7 @@ export function initPathview(canvasEl, containerEl, {
     const band = _rowBands[found]
     return band && band.lo <= wy ? band : null
   }
-  function _helixAtWY(wy) { return _rowAtWY(wy)?.hid ?? null }
+  function _helixAtWY(wy, bp) { return helixAtRowBp(_rowAtWY(wy), bp) }
 
   function _c2w(cx, cy) {
     return { wx: (cx - _panX) / _zoom, wy: (cy - _panY) / _zoom }
@@ -751,7 +753,7 @@ export function initPathview(canvasEl, containerEl, {
   /** Helix ID whose gutter circle contains screen point (sx, sy), or null. */
   function _helixAtGutter(sx, sy) {
     if (sx > GUTTER || sy < RULER_H) return null
-    for (const [hid, info] of _rowMap) {
+    for (const { hid, info } of _rowBands) {
       if (Math.hypot(sx - GUTTER / 2, sy - _gutterCircleSY(info)) <= LABEL_R) return hid
     }
     return null
@@ -761,7 +763,7 @@ export function initPathview(canvasEl, containerEl, {
    *  = the number of helix rows whose circle centre sits above the cursor. */
   function _gapIndexFromScreenY(sy) {
     let idx = 0
-    for (const [, info] of _rowMap) {
+    for (const { info } of _rowBands) {
       if (sy > _gutterCircleSY(info)) idx++
     }
     return idx
@@ -771,17 +773,7 @@ export function initPathview(canvasEl, containerEl, {
    *  selected gutter circles as one contiguous block at display gap `gapIdx`.
    *  Returns null for a no-op (empty selection or dropped onto itself). */
   function _computeReorderedHelixIds(gapIdx) {
-    const display = [..._rowMap.keys()]                      // display (post-reverse) order
-    const sel  = display.filter(id => _selectedHelices.has(id))
-    if (sel.length === 0) return null
-    const rest = display.filter(id => !_selectedHelices.has(id))
-    // Translate the display gap into an index within `rest` (count unselected rows above).
-    let insertAt = 0
-    for (let i = 0; i < gapIdx; i++) if (!_selectedHelices.has(display[i])) insertAt++
-    const newDisplay = [...rest.slice(0, insertAt), ...sel, ...rest.slice(insertAt)]
-    if (newDisplay.every((id, i) => id === display[i])) return null   // dropped onto itself
-    // _rowMap/display is post-reverse; design.helices is native (pre-reverse) order.
-    return _nativeOrientation ? newDisplay : [...newDisplay].reverse()
+    return reorderContinuedRows(_rowBands, _selectedHelices, gapIdx, _nativeOrientation)
   }
 
   // ── Slice position helper ─────────────────────────────────────────────────────
@@ -795,9 +787,6 @@ export function initPathview(canvasEl, containerEl, {
   function _rebuildLayout() {
     _layoutRevision++
     _helices = sortedHelices(_design)
-    // Stable label index per helix — based on native (top-to-bottom) order so that
-    // gutter labels reflect the helix's identity, not its current display position.
-    const nativeIdx = new Map(_helices.map((h, i) => [h.id, i]))
     // When not in native (cadnano) orientation, reverse the vertical helix order
     // so that the pathview matches the slice view's Y-up arrangement.
     if (!_nativeOrientation) _helices.reverse()
@@ -806,30 +795,14 @@ export function initPathview(canvasEl, containerEl, {
     _helixById = new Map(_helices.map(h => [h.id, h]))   // O(1) id→helix for hot draw loops
     const isHC = _design?.lattice_type === 'HONEYCOMB'
 
-    // Compute cells for each helix
-    const cells = _helices.map(h => helixCell(h, isHC))
-
-    const groupOf = connectedCellGroups(cells)
-
-    let fwdY = RULER_H + TOP_PAD
-    for (let i = 0; i < _helices.length; i++) {
-      // Insert a gap when the group changes
-      if (i > 0 && groupOf[i] !== groupOf[i - 1]) fwdY += GROUP_GAP
-      const h    = _helices[i]
-      const cell = cells[i]
-      _rowMap.set(h.id, {
-        fwdY, revY: fwdY + PAIR_Y,
-        scaffoldFwd: helixIsForward(h, isHC, cell),
-        cell, idx: nativeIdx.get(h.id),
-        label: h.label ?? null,
-      })
-      fwdY += ROW_H
-    }
-    const rowHalf = ROW_H / 2
-    _rowBands = [..._rowMap].map(([hid, info]) => {
-      const midY = (info.fwdY + info.revY) / 2
-      return { lo: midY - rowHalf, hi: midY + rowHalf, hid, info }
+    const layout = buildContinuedRows(_design, {
+      cellOf: h => helixCell(h, isHC),
+      forwardOf: (h, cell) => helixIsForward(h, isHC, cell),
+      nativeOrientation: _nativeOrientation,
     })
+    _rowMap = layout.rowMap
+    _rowBands = layout.rows
+    _rowByHelix = new Map(_rowBands.flatMap(row => row.hids.map(id => [id, row])))
     _totalBp = _helices.length === 0 ? 0
       : Math.max(..._helices.map(h => h.bp_start + h.length_bp))
     _minBp   = _helices.length === 0 ? 0
@@ -851,7 +824,7 @@ export function initPathview(canvasEl, containerEl, {
     const worldRight = _bpToX(_totalBp + EXTEND_BPS)
     const cW         = worldRight - worldLeft
     // Use actual bottom of last row (accounts for group gaps)
-    const lastInfo = _rowMap.get(_helices[_helices.length - 1].id)
+    const lastInfo = _rowBands.at(-1)?.info
     const cH = (lastInfo ? lastInfo.revY + CELL_H / 2 : RULER_H + TOP_PAD) + 20
     _zoom = Math.max(MIN_ZOOM, Math.min(1, W / cW, H / cH))
     const leftMargin = Math.max(0, (W - cW * _zoom) / 2)
@@ -884,11 +857,12 @@ export function initPathview(canvasEl, containerEl, {
     const HIT = PAIR_Y / 2
     const row = _rowAtWY(wy)
     if (!row) return null
-    const { hid, info } = row
+    const { info } = row
     const dF = Math.abs(wy - info.fwdY)
     const dR = Math.abs(wy - info.revY)
     if (dF > HIT && dR > HIT) return null
     const bp = _xToBp(wx)
+    const hid = helixAtRowBp(row, bp)
     const direction = dF <= dR ? 'FORWARD' : 'REVERSE'
     const entry = _firstTrackEntryAtBp(hid, direction, bp)
     if (!entry) return null
@@ -939,8 +913,8 @@ export function initPathview(canvasEl, containerEl, {
     const leftCell = (lx0 - GUTTER) / BP_W
     const rightCell = (lx1 - GUTTER) / BP_W
     for (let ri = rowStart; ri < _rowBands.length && _rowBands[ri].lo < ly1; ri++) {
-      const { hid: helixId, info } = _rowBands[ri]
-      for (const [direction, y] of [['FORWARD', info.fwdY], ['REVERSE', info.revY]]) {
+      const { hids, info } = _rowBands[ri]
+      for (const helixId of hids) for (const [direction, y] of [['FORWARD', info.fwdY], ['REVERSE', info.revY]]) {
         if (y + CELL_H / 2 <= ly0 || y - CELL_H / 2 >= ly1) continue
         for (const entry of _trackEntriesOverlappingCells(
           helixId, direction, leftCell, rightCell)) {
@@ -1347,7 +1321,7 @@ export function initPathview(canvasEl, containerEl, {
 
     const half = CELL_H / 2
 
-    for (const [, info] of _rowMap) {
+    for (const { info } of _rowBands) {
       const { fwdY, revY } = info
       const topY = fwdY - half
       const botY = revY + half
@@ -2960,7 +2934,7 @@ export function initPathview(canvasEl, containerEl, {
     const period = isHC ? HC_XOVER_PERIOD : SQ_XOVER_PERIOD
     const cellMap = new Map()
     for (const [hid, info] of _rowMap) {
-      cellMap.set(`${info.cell.row}_${info.cell.col}`, { hid, info })
+      cellMap.set(crossoverCellKey(_helixById.get(hid), info.cell.row, info.cell.col), { hid, info })
     }
     const sitesByHelix = new Map()
     for (const [hid, info] of _rowMap) {
@@ -2971,7 +2945,7 @@ export function initPathview(canvasEl, containerEl, {
           [scaffold, _xoverNeighborCellScaffold],
         ]) {
           const cell = neighborFn(info.cell.row, info.cell.col, residue, isHC)
-          const target = cell && cellMap.get(`${cell[0]}_${cell[1]}`)
+          const target = cell && cellMap.get(crossoverCellKey(_helixById.get(hid), cell[0], cell[1]))
           if (target) sites.push({ residue, target })
         }
       }
@@ -3054,14 +3028,15 @@ export function initPathview(canvasEl, containerEl, {
     // These are the helices that could receive a scaffold crossover from the
     // hovered helix at any bp — we show sprites on both sides.
     const _scafNeighborHids = new Set()
-    if (_shiftHeld && _hoverHelixId != null) {
-      const hInfo = _rowMap.get(_hoverHelixId)
-      const hHelix = hInfo && _helixById.get(_hoverHelixId)
+    const hoveredIds = new Set(_rowByHelix.get(_hoverHelixId)?.hids ?? [])
+    if (_shiftHeld) for (const hoveredId of hoveredIds) {
+      const hInfo = _rowMap.get(hoveredId)
+      const hHelix = hInfo && _helixById.get(hoveredId)
       if (hInfo && hHelix) {
-        const hMinBp = minDomainBpByHelix.get(_hoverHelixId) ?? hHelix.bp_start
+        const hMinBp = minDomainBpByHelix.get(hoveredId) ?? hHelix.bp_start
         const hBpStart = Math.max(bpL, hMinBp)
         const hBpEnd   = Math.min(bpR, hHelix.bp_start + hHelix.length_bp - 1)
-        for (const site of sitesByHelix.get(_hoverHelixId)?.scaffold ?? []) {
+        for (const site of sitesByHelix.get(hoveredId)?.scaffold ?? []) {
           if (_firstBpWithResidue(hBpStart, site.residue, period) <= hBpEnd) {
             _scafNeighborHids.add(site.target.hid)
           }
@@ -3092,7 +3067,7 @@ export function initPathview(canvasEl, containerEl, {
         }
       }
       if (_shiftHeld && _hoverHelixId != null &&
-          (hid === _hoverHelixId || _scafNeighborHids.has(hid))) {
+          (hoveredIds.has(hid) || _scafNeighborHids.has(hid))) {
         for (const site of sites?.scaffold ?? []) {
           for (let bp = _firstBpWithResidue(bpStart, site.residue, period);
                bp <= bpEnd; bp += period) {
@@ -3139,7 +3114,7 @@ export function initPathview(canvasEl, containerEl, {
         // Only show for the hovered helix and its crossover neighbor to avoid
         // overwhelming the view on large designs.
         if (_shiftHeld && _hoverHelixId != null &&
-            (hid === _hoverHelixId || _scafNeighborHids.has(hid))) {
+            (hoveredIds.has(hid) || _scafNeighborHids.has(hid))) {
               const scafA = scaffoldFwd ? 'FORWARD' : 'REVERSE'
               const scafB = scaffoldFwd ? 'REVERSE' : 'FORWARD'
               const scafReq = bp + _xoverBowDir(bp, true)
@@ -3900,7 +3875,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.save()
     // Clip circles below the frozen ruler band so they don't bleed into it.
     ctx.beginPath(); ctx.rect(0, RULER_H, GUTTER, H - RULER_H); ctx.clip()
-    for (const [hid, info] of _rowMap) {
+    for (const { hid, info } of _rowBands) {
       const cy      = (info.fwdY + info.revY) / 2
       const screenY = cy * _zoom + _panY
       if (screenY + LABEL_R < RULER_H || screenY - LABEL_R > H) continue
@@ -3945,7 +3920,7 @@ export function initPathview(canvasEl, containerEl, {
   // a red insertion arrow at the gap the cursor is nearest.
   function _drawHelixDragGhost() {
     if (!_helixDragActive) return
-    const rows = [..._rowMap.values()]
+    const rows = _rowBands.map(row => row.info)
     const n    = rows.length
     if (n === 0) return
 
@@ -4243,11 +4218,15 @@ export function initPathview(canvasEl, containerEl, {
     if (_activeTool === 'select' && e.offsetX < GUTTER && e.offsetY >= RULER_H) {
       const hid = _helixAtGutter(e.offsetX, e.offsetY)
       if (hid) {
+        const rowIds = _rowByHelix.get(hid).hids
         if (e.ctrlKey || e.metaKey) {
-          if (_selectedHelices.has(hid)) _selectedHelices.delete(hid)
-          else _selectedHelices.add(hid)
+          const selected = _selectedHelices.has(hid)
+          for (const id of rowIds) {
+            if (selected) _selectedHelices.delete(id)
+            else _selectedHelices.add(id)
+          }
         } else if (!_selectedHelices.has(hid)) {
-          _selectedHelices = new Set([hid])
+          _selectedHelices = new Set(rowIds)
         }
         // Arm a reorder drag (commits in pointerup only if it crosses the threshold).
         if (_selectedHelices.has(hid)) {
@@ -4640,14 +4619,16 @@ export function initPathview(canvasEl, containerEl, {
 
       // Default pencil: paint scaffold/staple domain
       const HIT = PAIR_Y / 2
-      for (const [hid, info] of _rowMap) {
+      for (const row of _rowBands) {
+        const { info } = row
+        const bp = _xToBp(wx) - _ghostShiftBp
+        const hid = helixAtRowBp(row, bp)
         const dF = Math.abs(wy - info.fwdY)
         const dR = Math.abs(wy - info.revY)
         if (dF > HIT && dR > HIT) continue
         const isFwdTrack = dF <= dR
         const direction  = isFwdTrack ? 'FORWARD' : 'REVERSE'
         const isScaffold = isFwdTrack === info.scaffoldFwd && !_helixById.get(hid)?.native_residues?.length
-        const bp = _xToBp(wx) - _ghostShiftBp   // REAL bp when painting through a mirror
         _painting        = true
         _paintAnchor     = bp
         _paintLo         = bp
@@ -4797,9 +4778,9 @@ export function initPathview(canvasEl, containerEl, {
     }
     // Track which helix the cursor is over (for scaffold sprite filtering)
     {
-      const { wy } = _c2w(e.offsetX, e.offsetY)
+      const { wx, wy } = _screenToRealWorld(e.offsetX, e.offsetY)
       const prev = _hoverHelixId
-      _hoverHelixId = _helixAtWY(wy)
+      _hoverHelixId = _helixAtWY(wy, _xToBp(wx))
       if (_shiftHeld && _hoverHelixId !== prev) _scheduleDraw()
     }
     // Cursor + hover
@@ -5061,11 +5042,11 @@ export function initPathview(canvasEl, containerEl, {
     if (_painting && e.button === 0) {
       _painting = false
       if (_paintH && _paintLo <= _paintHi) {
-        if (_paintIsScaffold) {
-          onPaintScaffold(_paintH.id, _paintLo, _paintHi)
-        } else {
-          onPaintStaple(_paintH.id, _paintDirection, _paintLo, _paintHi)
-        }
+        const ranges = rowPaintRanges(_rowByHelix.get(_paintH.id), _paintLo, _paintHi)
+        const direction = _paintDirection
+        const paint = _paintIsScaffold ? onPaintScaffold : (id, lo, hi) => onPaintStaple(id, direction, lo, hi)
+        // Each addressed segment uses its ordinary recorded paint command.
+        ranges.reduce((done, range) => done.then(() => paint(range.helixId, range.lo, range.hi)), Promise.resolve())
       }
       _paintH = null; _draw()
     }
