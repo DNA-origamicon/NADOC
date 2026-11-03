@@ -20,7 +20,7 @@ export function faceClearances(dimensions, center, bounds) {
   ])
 }
 
-export function initBoxSolvent({api,store,root=document}={}) {
+export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
   const host=root.querySelector('#md-box-solvent-body')
   if(!host)return null
   const inputs=Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,host.querySelector(`#md-box-${k}`)]))
@@ -42,13 +42,19 @@ export function initBoxSolvent({api,store,root=document}={}) {
   }
   function openWarnings(event){event.stopPropagation();host.style.display='';root.querySelector('#md-box-solvent-arrow')?.classList.remove('is-collapsed');warningPanel?.scrollIntoView?.({block:'nearest'});if(stale)schedule?.()}
   warningIcon?.addEventListener('click',openWarnings)
-  let preview=null,version=0,timer=null,saveTimer=null,designId=store?.getState()?.currentDesign?.id,disposed=false
+  const sourceLabel=document.createElement('p');sourceLabel.id='md-box-source';host.prepend(sourceLabel)
+  let selectedJob=null, draftJob=null, selectedPreparation=null, selectedContext=null, jobMeta=null
+  const pendingDraftSettings=new Map()
+  let preview=null,version=0,timer=null,designId=store?.getState()?.currentDesign?.id,disposed=false
   let pairActive=false,unpairedSizes=null
+  const listeners=new Set()
+  let committed=null
   let writes=Promise.resolve(),geometry=store?.getState()?.currentGeometry
   const isPair=()=>!!root.querySelector('#md-two-electrodes-enable')?.checked
   const isCharged=()=>!!root.querySelector('#md-screening-enable')?.checked
   const read=()=>Object.fromEntries(Object.entries(inputs).map(([k,el])=>[k,el.value]))
   function settings(){
+    if(selectedJob && selectedPreparation)return {...selectedPreparation}
     const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation'?'rotation':'bbox',salt_mode:raw.salt,box_size_nm:null,
       ion_conc_mM:raw.salt==='screening'?0:Number(raw.na),mg_conc_mM:raw.salt==='screening'?12.5:Number(raw.mg)}
     for(const input of Object.values(inputs))if(!input.disabled && (!input.checkValidity() || !input.value.trim()))throw Error('Correct the Box and solvent settings.')
@@ -84,12 +90,19 @@ export function initBoxSolvent({api,store,root=document}={}) {
           na:p.ion_conc_mM,mg:p.mg_conc_mM,numbers:solventNumbers(solvent,p.ion_conc_mM,p.mg_conc_mM),
           temperature:isCharged() || isPair()?Number(inputs.temperature.value):300,
           temperatureLabel:isCharged() || isPair()?'K':'K target · protocol-controlled',estimated:true}
+        if(selectedJob){
+          detail={...detail,solute:null,padding:null,estimated:false,source:'Prepared initial box',
+            jobName:selectedJob.design_name,na:null,mg:null,temperature:null,
+            numbers:jobMeta?.ready?{na:jobMeta.species?.NA,mg:jobMeta.species?.MG,cl:jobMeta.species?.CL}:null}
+        }
       }
     }catch{}
     window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail}))
   }
   function paint(){
-    const pair=isPair(),explicit=inputs.sizing.value==='explicit'
+    sourceLabel.textContent=selectedJob?`Saved job: ${selectedJob.design_name || 'NAMD'} · ${new Date(selectedJob.created_at*1000).toLocaleString()} — initial prepared box`:draftJob?`Draft job: ${draftJob.design_name || 'NAMD'} — preparation preview`:'New preparation preview — not a saved job'
+    const help=root.querySelector('#md-box-sizing-help');if(help)help.hidden=!!selectedJob
+    const pair=!selectedJob && isPair(),explicit=inputs.sizing.value==='explicit'
     if(pair && !pairActive)unpairedSizes=['x','y','z'].map(k=>inputs[k].value)
     if(!pair && pairActive && unpairedSizes)for(const [i,k] of ['x','y','z'].entries())inputs[k].value=unpairedSizes[i]
     pairActive=pair
@@ -99,12 +112,13 @@ export function initBoxSolvent({api,store,root=document}={}) {
     inputs.temperature.disabled=!(isCharged() || pair)
     if(inputs.temperature.disabled)inputs.temperature.value=300
     inputs.temperature.title=inputs.temperature.disabled?'Ordinary DNA relaxation targets 300 K; stage temperatures remain controlled by the protocol.':'Target temperature for the surface control.'
-    boundary.textContent=pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
-    if(preview && (pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
+    boundary.textContent=selectedJob?'Saved periodic cell; dimensions shown are before pressure equilibration.':pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
+    if(selectedJob)for(const input of Object.values(inputs))input.disabled=true
+    if(preview && (selectedJob || pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
     const clearance=host.querySelector('#md-box-clearance')
     if(clearance){
-      const gaps=preview && faceClearances(preview.solvent_nm || preview.selected_nm || preview.calculated_nm,preview.center_nm,preview.solute_bounds_nm)
-      clearance.textContent=gaps?`Water clearance to faces (nm): ${gaps.map((pair,i)=>`${'XYZ'[i]}− ${pair[0].toFixed(2)} / ${'XYZ'[i]}+ ${pair[1].toFixed(2)}`).join(' · ')}`:'Water clearance to faces: unavailable until the structure and box are calculated.'
+      const gaps=!selectedJob && preview && faceClearances(preview.solvent_nm || preview.selected_nm || preview.calculated_nm,preview.center_nm,preview.solute_bounds_nm)
+      clearance.textContent=selectedJob?'Initial package box; pressure equilibration changes its dimensions. Face clearances require the matching simulation coordinates.':gaps?`Water clearance to faces (nm): ${gaps.map((pair,i)=>`${'XYZ'[i]}− ${pair[0].toFixed(2)} / ${'XYZ'[i]}+ ${pair[1].toFixed(2)}`).join(' · ')}`:'Water clearance to faces: unavailable until the structure and box are calculated.'
     }
     paintFeedback();emit()
   }
@@ -113,6 +127,20 @@ export function initBoxSolvent({api,store,root=document}={}) {
     preview=null;loading=true;calculationWarning='';status.textContent='Calculating box dimensions and solvent details…';paint()
     try{
       const p=settings()
+      if(selectedJob){
+        const job=selectedJob
+        const result=await api.getMdSolventMeta(job.job_id)
+        if(current!==version || disposed)return
+        if(!result?.box_nm?.every(v=>Number.isFinite(v) && v>0) || result.box_nm.length!==3)throw Error('Saved box dimensions unavailable for this job. No default box is substituted.')
+        jobMeta=result;preview={selected_nm:[...result.box_nm],boundary:'periodic'}
+        const electrode=selectedContext?.two_electrodes
+        if(electrode){
+          const axis={x:0,y:1,z:2}[electrode.normal]
+          if(axis!=null){preview.boundary='slab';preview.normal_axis=axis;preview.solvent_nm=[...result.box_nm];preview.solvent_nm[axis]=electrode.gap_nm}
+        }
+        status.textContent=`${job.design_name || 'Selected job'} · ${new Date(job.created_at*1000).toLocaleString()} — prepared initial box from saved package. ${result.ready?`Actual ions: Mg ${result.species?.MG ?? 0}, Cl ${result.species?.CL ?? 0}, Na ${result.species?.NA ?? 0}.`:'Ion counts unavailable.'} Open New job to configure a new preparation.`
+        return
+      }
       if(isPair())preview=pairBox()
       else {
         const result=await api.fetchProtocolBoxPreview({protocol:'mgh',...surfaceContext(),...p})
@@ -121,9 +149,9 @@ export function initBoxSolvent({api,store,root=document}={}) {
         preview=result.box_preview
       }
       calculationWarning=(preview.sizing_notes || []).filter(Boolean).join(' ')
-      status.textContent=isPair()?'Cell dimensions follow Two-electrode settings; salt and temperature are setup intent until qualification.':'Ion counts are approximate bulk-salt counts; preparation accounts for excluded volume and neutralizing ions.'
+      status.textContent=isPair()?'Cell dimensions follow Two-electrode settings; salt and temperature are setup intent until qualification.':'New preparation preview — not a saved simulation box. Ion counts estimate added salt; preparation also adds neutralizing ions.'
     }catch(e){if(current===version){calculationWarning=e.message;status.textContent='Box calculation could not finish. Review the warning above.'}}
-    if(current===version && !disposed){loading=false;paint()}
+    finally{if(current===version && !disposed){loading=false;paint()}}
   }
   // The estimate only feeds this section's numbers and the optional "View details"
   // overlay (job preparation recomputes the box on the server). It asks the backend to
@@ -138,20 +166,55 @@ export function initBoxSolvent({api,store,root=document}={}) {
     stale=false;loading=true;status.textContent='Calculating box dimensions and solvent details…';paintFeedback();emit();timer=setTimeout(calculate,250)
   }
   function save(){
-    clearTimeout(saveTimer)
-    const id=designId,values=read()
-    saveTimer=setTimeout(()=>{if(!id || id!==designId || disposed)return;writes=writes.then(async()=>{if(id===designId && !disposed){const saved=await api.updateMetadata?.({namd_box_solvent:values},{skipGeometry:true});if(!saved)throw Error('Metadata update failed')}}).catch(e=>{status.textContent=`Could not save preparation settings: ${e.message}`})},400)
+    const id=designId,values=read(),job=draftJob
+    if(job){
+      const entry={...settings()}
+      pendingDraftSettings.set(job.job_id,entry)
+      // A selected draft owns these values. Document defaults are only for NEW jobs.
+      writes=writes.then(async()=>{
+        const saved=await saveDraftSettings(job,entry)
+        if(!saved)throw Error('Job settings update failed')
+        if(pendingDraftSettings.get(job.job_id)===entry)pendingDraftSettings.delete(job.job_id)
+        if(draftJob?.job_id===job.job_id)draftJob=saved
+      }).catch(e=>{if(draftJob?.job_id===job.job_id){committed=null;calculationWarning=`Could not save job settings: ${e.message}`;paintFeedback()}})
+      return
+    }
+    if(!id || disposed)return
+    writes=writes.then(async()=>{
+      if(id!==designId || disposed)return
+      const saved=await api.updateMetadata?.({namd_box_solvent:values},{skipGeometry:true})
+      if(!saved)throw Error('Metadata update failed')
+    }).catch(e=>{status.textContent=`Could not save preparation settings: ${e.message}`})
   }
   function change(event){
     if(event.target===view || event.target===periodic){if((view.checked || periodic?.checked) && stale)schedule();else emit();return}
+    if(event.target===inputs.padding && event.type==='input')return
+    if(event.target===inputs.padding && inputs.sizing.value==='auto' && Number(inputs.padding.value)!==DEFAULTS.padding)inputs.sizing.value='bbox'
     if(event.target===inputs.sizing && inputs.sizing.value==='auto')inputs.padding.value=DEFAULTS.padding
-    if(host.contains(event.target)){if(event.target===inputs.salt && inputs.salt.value==='screening'){inputs.na.value=0;inputs.mg.value=12.5}paint();schedule();save()}
+    if(host.contains(event.target)){
+      // A saved setup preset can dispatch input events even on disabled controls.
+      // That is a new preparation intent, never an edit to the selected package.
+      if(selectedJob){selectedJob=null;selectedPreparation=null;jobMeta=null;for(const input of Object.values(inputs))input.disabled=false}
+      try{settings()}catch(error){calculationWarning=error.message;paintFeedback();return}
+      const signature=JSON.stringify({settings:settings(),sizing:inputs.sizing.value})
+      if(signature===committed)return
+      committed=signature
+      if(event.target===inputs.salt && inputs.salt.value==='screening'){inputs.na.value=0;inputs.mg.value=12.5}paint();schedule();save();for(const listener of listeners)listener()}
     else if(event.target?.closest?.('#md-surface-body')){paint();schedule()}
   }
+  function commit(event){
+    if(event.target!==inputs.padding || inputs.padding.disabled)return
+    if(event.type==='keydown'){if(event.key!=='Enter')return;event.preventDefault();event.stopPropagation()}
+    change(event)
+  }
+  root.addEventListener('focusout',commit);root.addEventListener('keydown',commit)
   root.addEventListener('input',change);root.addEventListener('change',change)
   const header=root.querySelector('#md-box-solvent-toggle')
   header?.addEventListener('click',()=>{const open=host.style.display==='none';host.style.display=open?'':'none';root.querySelector('#md-box-solvent-arrow')?.classList.toggle('is-collapsed',!open);if(open && stale)schedule()})
   function restore(p={}){
+    committed=null
+    selectedJob=null;draftJob=null;selectedPreparation=null;jobMeta=null
+    for(const input of Object.values(inputs))input.disabled=false
     const values={...DEFAULTS,padding:p.padding_nm ?? DEFAULTS.padding,sizing:p.box_size_nm?.every(v=>v!=null)?'explicit':p.box_mode || DEFAULTS.sizing,
       salt:p.salt_mode || DEFAULTS.salt,na:p.ion_conc_mM ?? DEFAULTS.na,mg:p.mg_conc_mM ?? DEFAULTS.mg,temperature:p.graphene_temperature_K ?? DEFAULTS.temperature}
     if(p.box_size_nm)for(const [i,k] of ['x','y','z'].entries())values[k]=p.box_size_nm[i] ?? DEFAULTS[k]
@@ -159,16 +222,36 @@ export function initBoxSolvent({api,store,root=document}={}) {
     paint();schedule()
   }
   function restoreDocument(){
+    selectedJob=null;draftJob=null;selectedPreparation=null;jobMeta=null
+    for(const input of Object.values(inputs))input.disabled=false
     jobWarnings=[];dismissed.clear()
     const saved=store?.getState()?.currentDesign?.metadata?.namd_box_solvent || DEFAULTS
     for(const k of Object.keys(DEFAULTS))inputs[k].value=saved[k] ?? DEFAULTS[k]
+    paint()
+    try{committed=JSON.stringify({settings:settings(),sizing:inputs.sizing.value})}catch{committed=null}
     view.checked=false;if(periodic)periodic.checked=false;paint();schedule()
   }
-  const unsub=store?.subscribe(()=>{const state=store.getState(),id=state?.currentDesign?.id;if(id!==designId){designId=id;geometry=state.currentGeometry;clearTimeout(saveTimer);restoreDocument()}else if(state.currentGeometry!==geometry){geometry=state.currentGeometry;schedule()}})
+  const unsub=store?.subscribe(()=>{const state=store.getState(),id=state?.currentDesign?.id;if(id!==designId){designId=id;geometry=state.currentGeometry;restoreDocument()}else if(state.currentGeometry!==geometry){geometry=state.currentGeometry;if(!selectedJob)schedule()}})
   restoreDocument()
-  return {keys:PREPARATION_KEYS,payload(){const p=settings();if(isPair())p.box_size_nm=pairBox().calculated_nm;return p},
+  return {subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener)},keys:PREPARATION_KEYS,payload(){const p=settings();if(!selectedJob && isPair())p.box_size_nm=pairBox().calculated_nm;return p},
     setJobWarnings(warnings){jobWarnings=warnings || [];paintFeedback()},
-    restore,refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${inputs.sizing.value==='explicit'?['x','y','z'].map(k=>inputs[k].value).join(' × ')+' nm':`automatic ${settings().box_mode==='rotation'?'rotation-safe':'bounding-box'} fit; final dimensions set during preparation`}; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
-    acceptPreview(value){if(value && inputs.sizing.value!=='explicit' && !isPair()){preview={...preview,...value,center_nm:preview?.center_nm || value.center_nm,solute_bounds_nm:preview?.solute_bounds_nm || value.solute_bounds_nm};paint()}},
-    dispose(){disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);clearTimeout(saveTimer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
+    restore,
+    selectJob(job,prep={}){
+      restore({...prep,...pendingDraftSettings.get(job?.job_id)})
+      if(!job)return
+      if(job.status==='draft'){
+        draftJob=job
+        paint()
+        return
+      }
+      selectedPreparation=settings();selectedJob=job;selectedContext=prep;jobMeta=null
+      if(prep.padding_nm==null)inputs.padding.value=''
+      for(const k of ['x','y','z'])inputs[k].value=''
+      schedule()
+    },
+    clearJob(){if(selectedJob || draftJob)restoreDocument()},
+    beginPreparation(){if(selectedJob || draftJob)restoreDocument()},
+    refresh:schedule,summary:()=>isPair()?'Box and solvent: dimensions linked to Two-electrode settings.':`Box and solvent: ${inputs.sizing.value==='explicit'?['x','y','z'].map(k=>inputs[k].value).join(' × ')+' nm':`automatic ${settings().box_mode==='rotation'?'rotation-safe':'bounding-box'} fit; final dimensions set during preparation`}; NaCl ${settings().ion_conc_mM} mM; MgCl₂ ${settings().mg_conc_mM} mM. Edit in the sidebar.`,
+    acceptPreview(value){if(!selectedJob && value && inputs.sizing.value!=='explicit' && !isPair()){preview={...preview,...value,center_nm:preview?.center_nm || value.center_nm,solute_bounds_nm:preview?.solute_bounds_nm || value.solute_bounds_nm};paint()}},
+    dispose(){listeners.clear();root.removeEventListener('focusout',commit);root.removeEventListener('keydown',commit);sourceLabel.remove();disposed=true;loading=false;paintFeedback();warningIcon?.removeEventListener('click',openWarnings);version++;clearTimeout(timer);unsub?.();root.removeEventListener('input',change);root.removeEventListener('change',change);window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:false}}))}}
 }

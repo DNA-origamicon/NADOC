@@ -1,0 +1,138 @@
+{
+  "schema": "nadoc.experimental-cpd-simulation.v1",
+  "qualification": "provisional numerical MVP; not physically validated or generally released",
+  "products": [
+    {
+      "id": "tt-cpd-cis-anti-i",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-anti-I",
+      "assets": {
+        "topology": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/patch.rtf",
+          "sha256": "b7c8232519f099f9274dbeb236ab219a383cf08029f3bdf3ae1cc1925f506976",
+          "patch_name": "XCPD"
+        },
+        "parameters": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/overlay.prm",
+          "sha256": "8217b9408ad8a8d39946ae0ded6d58e56a7f6d94f5bcf479c8ad03babc1dbf6f"
+        },
+        "topology_audit_spec": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/topology_audit.json",
+          "sha256": "824182b404e6a631335a2bdcd07af7c33b0ff4f9dd5664c5d3cca633a9bb91aa"
+        },
+        "qualification": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/qualification.json",
+          "sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722"
+        },
+        "chemical_definition": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/chemical_definition.json",
+          "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+        },
+        "transfer_records": {
+          "path": "mvp_cpds/tt-cpd-cis-anti-i/transfer_records.json",
+          "sha256": "fe2da848b631871690037751660cf3bea85913784aa275353da1b3074ae55170"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-cis-syn",
+      "product": "TT-CPD",
+      "stereochemistry": "cis-syn",
+      "assets": {
+        "topology": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/patch.rtf",
+          "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+          "patch_name": "XCPD"
+        },
+        "parameters": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/overlay.prm",
+          "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae"
+        },
+        "topology_audit_spec": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/topology_audit.json",
+          "sha256": "5dc7e5d7a994b5abcd31833aa969722dfbcbacd4b1c00f4e39dcbf7452cbf28b"
+        },
+        "qualification": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/qualification.json",
+          "sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee"
+        },
+        "chemical_definition": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/chemical_definition.json",
+          "sha256": "8a33d8bba587a6c9baf9aa574959d3f29ead86fa16ec31c1d05b60c147b95ea0"
+        },
+        "transfer_records": {
+          "path": "mvp_cpds/tt-cpd-cis-syn/transfer_records.json",
+          "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-i",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-syn-I",
+      "assets": {
+        "topology": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/patch.rtf",
+          "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+          "patch_name": "XCPD"
+        },
+        "parameters": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/overlay.prm",
+          "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae"
+        },
+        "topology_audit_spec": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/topology_audit.json",
+          "sha256": "8d30345c0a07762755a81368ecff969db05e383dc74d9622aacb56685c1a4987"
+        },
+        "qualification": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/qualification.json",
+          "sha256": "a8d078855b7a5c34a4039c548a018b6cb839a0c8f0b687196cfc46bfe0a5932a"
+        },
+        "chemical_definition": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/chemical_definition.json",
+          "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+        },
+        "transfer_records": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-i/transfer_records.json",
+          "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab"
+        }
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-ii",
+      "product": "TT-CPD",
+      "stereochemistry": "trans-syn-II",
+      "assets": {
+        "topology": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/patch.rtf",
+          "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727",
+          "patch_name": "XCPD"
+        },
+        "parameters": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/overlay.prm",
+          "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae"
+        },
+        "topology_audit_spec": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/topology_audit.json",
+          "sha256": "93054371d3e2906b97eb36959587adbe7cd2dc3774846d83e3b1e20a04925a21"
+        },
+        "qualification": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/qualification.json",
+          "sha256": "c7c335bb64af45d16198ef0406626ddc2bd1369294ec4bc806af239e64007a89"
+        },
+        "chemical_definition": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/chemical_definition.json",
+          "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+        },
+        "transfer_records": {
+          "path": "mvp_cpds/tt-cpd-trans-syn-ii/transfer_records.json",
+          "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab"
+        }
+      }
+    }
+  ],
+  "cgenff_parent": {
+    "source_path": "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/par_all36_cgenff.prm",
+    "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183"
+  }
+}

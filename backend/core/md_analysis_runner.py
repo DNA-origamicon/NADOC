@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import multiprocessing
 import os
 import pickle
@@ -34,10 +35,14 @@ _CTX = multiprocessing.get_context("spawn")
 
 # (job_id, kind) -> (Process, result_path)
 _active: dict[tuple[str, str], tuple[multiprocessing.process.BaseProcess, Path]] = {}
+_pending: dict[tuple[str, str], threading.Event] = {}
 _lock = threading.Lock()
 
 DEFAULT_TIMEOUT_S = 180.0
 _PLAYBACK = {"md_composite_trajectory_bin", "md_frames_atomistic_bin", "md_atomistic_model_bin"}
+_BULK = {'md_flex_analysis','md_rmsf','md_rmsf_atomistic','md_rmsf_surface',
+         'md_occupancy','md_photoproduct_likelihood'}
+_INTERACTIVE = {'md_frames_solvent','md_atomistic_model','md_frames_atomistic'}
 
 
 def _target(
@@ -106,12 +111,15 @@ def cancel(job_id: str, kind: Optional[str] = None) -> int:
     when ``kind`` is None (view toggled off / job deselected). Returns how many were
     killed. Safe to call when nothing is running."""
     with _lock:
+        waiting = [k for k in _pending if k[0] == job_id and (kind is None or k[1] == kind)]
+        for key in waiting:
+            _pending.pop(key).set()
         keys = [k for k in _active if k[0] == job_id and (kind is None or k[1] == kind)]
         victims = [(k, _active.pop(k)) for k in keys]
     for _key, (proc, result_path) in victims:
         _kill(proc)
         Path(result_path).unlink(missing_ok=True)
-    return len(victims)
+    return len(victims) + len(waiting)
 
 
 async def run_analysis(
@@ -123,6 +131,47 @@ async def run_analysis(
     *,
     timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> Any:
+    """Queue bulk analysis behind local simulations; keep playback available.
+
+    Waiting consumes no worker and does not spend the execution timeout. Pending
+    requests remain cancellable/supersedable just like running workers.
+    """
+    cancel(job_id,kind)
+    if qualname not in _BULK | _PLAYBACK | _INTERACTIVE:
+        return await _run_analysis_admitted(job_id,kind,module,qualname,args,timeout_s=timeout_s)
+    from backend.core.memory_budget import analysis_activity_lease,WorkloadBusy,trajectory_activity
+    key=(job_id,kind);cancelled=threading.Event();lease=analysis_activity_lease();acquired=False
+    with _lock:_pending[key]=cancelled
+    notified=False
+    try:
+        while qualname in _BULK:
+            if cancelled.is_set():raise asyncio.CancelledError()
+            try:
+                lease.__enter__();acquired=True;break
+            except WorkloadBusy as exc:
+                if not notified and qualname=='md_flex_analysis':
+                    path=Path(args[2]);temporary=path.with_suffix('.tmp')
+                    temporary.write_text(json.dumps(dict(phase=str(exc),done=0,total=0,updated_at=time.time())))
+                    temporary.replace(path);notified=True
+                await asyncio.sleep(.1)
+        async with trajectory_activity('bulk' if qualname in _BULK else 'playback',cancel=cancelled):
+            if cancelled.is_set():raise asyncio.CancelledError()
+            if qualname in _BULK:
+                from backend.core.md_playback_workers import close
+                close()
+            with _lock:
+                if _pending.get(key) is cancelled:_pending.pop(key)
+            return await _run_analysis_admitted(job_id,kind,module,qualname,args,timeout_s=timeout_s)
+    finally:
+        with _lock:
+            if _pending.get(key) is cancelled:_pending.pop(key)
+        if acquired:lease.__exit__(None,None,None)
+
+
+async def _run_analysis_admitted(
+    job_id: str, kind: str, module: str, qualname: str, args: tuple,
+    *, timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> Any:
     """Run ``module.qualname(*args)`` in a killable subprocess and return its result.
 
     Supersedes any in-flight analysis for the same ``(job_id, kind)``.  Raises
@@ -130,8 +179,6 @@ async def run_analysis(
     disconnects or :func:`cancel` is called, and ``TimeoutError`` past
     ``timeout_s`` — in every exit path the subprocess group is killed.
     """
-    cancel(job_id, kind)  # supersede the previous view request
-
     fd, result_name = tempfile.mkstemp(suffix=".pkl", prefix="md_analysis_")
     os.close(fd)
     result_path = Path(result_name)
@@ -153,6 +200,9 @@ async def run_analysis(
 
     deadline = time.monotonic() + timeout_s
     try:
+        from backend.core.memory_budget import current_trajectory_activity
+        activity=current_trajectory_activity()
+        if activity is not None:activity.bind_child(proc.pid)
         if connection is not None:
             connection.send((result_name, module, qualname, args, timeout_s))
         while proc.is_alive() and not (connection is not None and connection.poll()):

@@ -660,11 +660,11 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
   const prepping = { job_id: 'j1', status: 'preparing', execution_target: 'alpine' }
   const ready = { job_id: 'j1', status: 'queued', execution_target: 'alpine' }
 
-  it('while the package is being built → a disabled, spinning Preparing…', () => {
+  it('while the Alpine package is built, keeps Submit disabled', () => {
     // NOT "■ Stop Run" (what the generic isActive branch gave it): the local phase of an
     // Alpine job exists only to produce a package, and its outcome is a submit.
     const rc = mdRunControl(prepping, connected)
-    expect(rc).toMatchObject({ action: 'preparing', label: 'Preparing…', disabled: true, spinner: true })
+    expect(rc).toMatchObject({ action: 'submit', label: '☁ Submit to Alpine', disabled: true, spinner: true })
   })
 
   it('once prepared → ☁ Submit to Alpine', () => {
@@ -694,9 +694,9 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     expect(rc.title).toMatch(/cluster/i)
   })
 
-  it('while the package uploads → Submitting…, disabled, so it cannot be sent twice', () => {
+  it('while the package uploads, keeps Submit disabled so it cannot be sent twice', () => {
     const rc = mdRunControl(ready, { ...connected, submitting: true })
-    expect(rc).toMatchObject({ label: 'Submitting…', disabled: true, spinner: true })
+    expect(rc).toMatchObject({ label: '☁ Submit to Alpine', disabled: true, spinner: true })
   })
 
   it('a SUBMITTED cluster job still stops (scancel), it does not offer submit again', () => {
@@ -710,6 +710,8 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     expect(mdRunControl(downloading, connected)).toMatchObject({
       action: 'preparing', label: 'Downloading results…', disabled: true, spinner: true,
     })
+    expect(mdRunControl({ ...downloading, download_status: { state: 'queued' } }, connected))
+      .toMatchObject({ label: 'Waiting to download…', disabled: true, spinner: false })
     expect(mdRunControl({ ...downloading, download_status: { state: 'processing' } }, connected))
       .toMatchObject({ label: 'Processing results…', disabled: true, spinner: true })
   })
@@ -726,9 +728,9 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     })
   })
 
-  it('a LOCAL job preparing is untouched — it still stops', () => {
+  it('a LOCAL job preparing stays disabled until ready', () => {
     expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
-      .toMatchObject({ action: 'stop', label: '■ Pause run' })
+      .toMatchObject({ action: 'preparing', disabled: true, spinner: true })
   })
 })
 
@@ -1382,7 +1384,6 @@ describe('mdQueueWaitLabel', () => {
 // collapsed-ensemble summary, the CG-seed / Alpine post-label badges, the ⧗
 // remote-queued symbol override (with the live-refresh dataset), the "Fix" VRAM-OOM
 // row action, and the out-of-date ⚠.
-import { mdJobRowCtx } from './md_jobs_panel.js'
 import { buildJobListModel, buildJobRowModel } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 
@@ -1533,6 +1534,29 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
+  it('persists draft box edits and reselects the saved values without a list refresh', async () => {
+    const {readFileSync}=await import('node:fs')
+    const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+    for(const id of ['md-box-solvent-toggle','md-box-solvent-body'])document.body.append(source.getElementById(id))
+    const job={job_id:'draft-box',design_name:'Gerling',status:'draft',created_at:1,
+      prep_params:{padding_nm:6,box_mode:'bbox',threads:7}}
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    mdApi.updateMdDraftPreparation.mockImplementation(async(id,changes)=>({...job,prep_params:{...job.prep_params,...changes}}))
+    const panel=initMdJobsPanel()
+    await panel.selectJob(job.job_id)
+    const input=$('md-box-padding');input.value='3.5'
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))
+    await flushMicro()
+    expect(mdApi.updateMdDraftPreparation).toHaveBeenCalledWith(job.job_id,expect.objectContaining({padding_nm:3.5}))
+    expect(mdApi.updateMdDraftPreparation.mock.calls[0][1]).not.toHaveProperty('threads')
+    expect(mdApi.updateMetadata).not.toHaveBeenCalled()
+    panel.deselectJob()
+    await panel.selectJob(job.job_id)
+    expect(input.value).toBe('3.5')
+    expect($('md-box-view-details').checked).toBe(false)
+  })
+
   it('starts OPEN regardless of markup/persisted collapse; the heading click is a no-op', async () => {
     // Seed a stale "collapsed" preference + collapsed markup — a non-collapsible
     // section must ignore both and force itself open.
@@ -1557,6 +1581,52 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect($('md-jobs-adv-toggle')).toBeNull()
     expect($('md-jobs-adv-body')).toBeNull()
     expect($('md-jobs-new-btn')).not.toBeNull()
+  })
+
+  it('blocks queued Alpine deletion with a popup when disconnected', async () => {
+    clearDom()
+    mountIds({ 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div' })
+    const job = { job_id: 'A', execution_target: 'alpine', status: 'queued', created_at: 1 }
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    mdApi.getClusterStatus.mockResolvedValue({ state: 'disconnected' })
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const panel = initMdJobsPanel()
+    await flushMicro()
+    await panel.selectJob('A')
+    expect(await panel.deleteSelected()).toBe(false)
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining('Connect to Alpine'))
+    alert.mockRestore()
+  })
+
+  it('keeps the real Alpine button gray and disabled across preparation/upload polling', async () => {
+    clearDom()
+    mountIds({ 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div', 'md-jobs-run-btn': 'button' })
+    let job = { job_id: 'A', execution_target: 'alpine', status: 'preparing', created_at: 1, design_source_path: '/w/alpine.nadoc' }
+    mdApi.listMdJobs.mockImplementation(async () => [{ ...job }])
+    mdApi.getMdJob.mockImplementation(async () => ({ ...job }))
+    const panel = initMdJobsPanel({ getClusterState: () => 'connected', getWorkspacePath: () => '/w/alpine.nadoc' })
+    await flushMicro()
+    await panel.selectJob('A')
+    const button = $('md-jobs-run-btn')
+    for (const phase of ['preparing', 'preflight', 'upload', 'sbatch']) {
+      job = { ...job, status: phase === 'preparing' ? 'preparing' : 'queued',
+        remote_submit_progress: phase === 'preparing' ? null : { phase, fraction: .5 } }
+      await panel.refresh()
+      await flushMicro()
+      expect(button.textContent).toBe('☁ Submit to Alpine')
+      expect(button.disabled).toBe(true)
+      expect(button.style.background).toBe('rgb(33, 38, 45)')
+      expect(button.style.cursor).toBe('not-allowed')
+      button.click()
+      expect(mdApi.startMdJob).not.toHaveBeenCalled()
+    }
+    job = { ...job, status: 'running', slurm_job_id: '42', remote_submit_progress: null }
+    await panel.refresh()
+    await flushMicro()
+    expect(button.dataset.runAction).toBe('stop')
   })
 
   it('selecting a job selects its Local, Alpine, or RunPod cluster-card pane', async () => {
@@ -2815,4 +2885,69 @@ it('inherits build settings through partial child controls and uses the prepared
  expect(mdInheritedPrepParams(child,[child])).toMatchObject({graphene_nanopore:true,graphene_pore_diameter_nm:4})
  parent.parent_job_id='child'
  expect(mdInheritedPrepParams(child,[parent,child]).graphene_pore_diameter_nm).toBe(4)
+})
+
+describe('MD starting structure selection', () => {
+  const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve() }
+  afterEach(() => { clearDom(); vi.useRealTimers() })
+  it('replaces the previous job with the selected unrun input, then follows real output', async () => {
+    vi.useFakeTimers(); vi.clearAllMocks(); clearDom(); localStorage.clear()
+    mountIds({
+      'tab-content-dynamics': 'div', 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div',
+      'md-jobs-display-toggle': 'input', 'md-jobs-display-status': 'div',
+    })
+    const jobs = ['parent', 'child'].map(job_id => ({ job_id, status: 'queued',
+      design_name: 'D', design_source_path: '/w/D.nadoc', created_at: 1, segments: [] }))
+    jobs.push({ ...jobs[1], job_id: 'seeded', status: 'draft', seed_oxdna_job_id: 'ox-source' })
+    mdApi.getOxdnaJob.mockResolvedValue({ run_config: {} })
+    mdApi.listMdJobs.mockResolvedValue(jobs)
+    mdApi.getMdJob.mockImplementation(async id => jobs.find(j => j.job_id === id))
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({ ready: false })
+    mdApi.getMdDisplayMeta.mockImplementation(async id => id === 'parent'
+      ? { ready: true, config_path: '/parent.json', trajectory_path: '/parent.dcd' }
+      : { ready: false, starting_structure_config: '/child-start.json' })
+    const display = { displayLatest: vi.fn(), stopDisplayKeepWarm: vi.fn(),
+      prewarmLatest: vi.fn(), stopPrewarm: vi.fn() }
+    let finishSeed
+    const oxdna = { displayJob: vi.fn(() => new Promise(resolve => { finishSeed = resolve })), stopAndRestore: vi.fn() }
+    const panel = initMdJobsPanel({ mdDisplayController: display, getOxdnaDisplay: () => oxdna,
+      getWorkspacePath: () => '/w/D.nadoc' })
+    await flush(); panel.selectJob('parent'); await flush()
+    const toggle = document.getElementById('md-jobs-display-toggle')
+    toggle.checked = true; toggle.dispatchEvent(new Event('change')); await flush()
+    expect(display.displayLatest).toHaveBeenCalledWith('/parent.json', expect.objectContaining({ jobId: 'parent' }))
+    panel.selectJob('child'); await flush()
+    expect(display.stopDisplayKeepWarm).toHaveBeenCalled()
+    expect(display.displayLatest).toHaveBeenLastCalledWith('/child-start.json', {
+      forceReload: true, live: false, jobId: 'child',
+    })
+    expect(document.getElementById('md-jobs-display-status').textContent).toContain('Starting structure')
+    mdApi.getMdDisplayMeta.mockResolvedValue({ ready: true, config_path: '/child.json', trajectory_path: '/child.dcd' })
+    await vi.advanceTimersByTimeAsync(16000); await flush()
+    expect(display.displayLatest).toHaveBeenLastCalledWith('/child.json', expect.objectContaining({ jobId: 'child', forceReload: true }))
+    mdApi.getMdDisplayMeta.mockImplementation(async id => id === 'seeded' ? { ready: false }
+      : { ready: true, config_path: '/child.json', trajectory_path: '/child.dcd' })
+    panel.selectJob('seeded'); await flush()
+    expect(oxdna.displayJob).toHaveBeenCalledWith('ox-source', true)
+    panel.selectJob('child'); await flush()
+    expect(oxdna.stopAndRestore).toHaveBeenCalled()
+    finishSeed({ ok: true, n: 10 }); await flush()
+    expect(document.getElementById('md-jobs-display-status').textContent).not.toContain('Inherited oxDNA-seed')
+    toggle.checked = false; toggle.dispatchEvent(new Event('change'))
+  })
+})
+
+describe('Alpine persisted submission phases', () => {
+  it.each(['preparing', 'queued', 'running'])(
+    'keeps Submit disabled for %s upload records without a browser request flag', status => {
+      const job = { status, execution_target: 'alpine', remote_submit_progress: { phase: 'upload', fraction: .4 } }
+      expect(mdRunControl(job, { clusterState: 'connected' })).toMatchObject({
+        action: 'submit', label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      })
+    })
+  it('keeps the submission guard ahead of draft and sequence gates', () => {
+    expect(mdRunControl({ status: 'draft', execution_target: 'alpine', awaiting_sequence: true },
+      { submitting: true })).toMatchObject({ action: 'submit', disabled: true, label: '☁ Submit to Alpine' })
+  })
 })

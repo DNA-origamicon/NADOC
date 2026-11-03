@@ -97,7 +97,9 @@ from backend.api.routes_exp import router as exp_router
 from backend.api.routes_blade import router as blade_router
 from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
+from backend.api.routes_md_thinning import router as md_thinning_router
 from backend.api.routes_md_plan import router as md_plan_router
+from backend.api.routes_md_runtime import router as md_runtime_router
 from backend.api.routes_md_queue import router as md_queue_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_lammps import router as lammps_router
@@ -110,6 +112,7 @@ from backend.api.routes_vr import router as vr_router
 from backend.api.routes_vr_tours import router as vr_tours_router, shutdown_tours
 from backend.api.routes_vr_scene import router as vr_scene_router
 from backend.api.vr_ligation import router as vr_ligation_router
+from backend.api.vr_clipboard import router as vr_clipboard_router
 from backend.api.vr_join import router as vr_join_router
 from backend.api.vr_view_tools import router as vr_view_tools_router
 from backend.api.vr_references import router as vr_references_router
@@ -170,9 +173,9 @@ async def _md_supervisor_loop() -> None:
         try:
             from backend.core.md_executor import resume_local_processing_jobs
 
-            finalized = await resume_local_processing_jobs(_WORKSPACE_DIR)
+            finalized = await resume_local_processing_jobs(_WORKSPACE_DIR, defer_processing=True)
             if finalized:
-                logger.info("MD supervisor finalized downloaded jobs: %s", ", ".join(finalized))
+                logger.info("MD supervisor scheduled downloaded jobs for finalization: %s", ", ".join(finalized))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -387,6 +390,14 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+from backend.core.memory_budget import MemoryBudgetExceeded
+
+
+@app.exception_handler(MemoryBudgetExceeded)
+async def _memory_budget_error_handler(request, exc):
+    return ORJSONResponse(status_code=409,
+                         content={'detail': str(exc), 'code': 'memory_budget_exceeded'})
+
 
 @app.exception_handler(CpdCapabilityError)
 async def _cpd_capability_error_handler(request, exc):
@@ -460,6 +471,7 @@ app.include_router(vr_router, prefix="/api")
 app.include_router(vr_tours_router, prefix="/api")
 app.include_router(vr_scene_router, prefix="/api")
 app.include_router(vr_ligation_router, prefix="/api")
+app.include_router(vr_clipboard_router, prefix="/api")
 app.include_router(vr_join_router, prefix="/api")
 app.include_router(vr_view_tools_router, prefix="/api")
 app.include_router(vr_share_router, prefix="/api")
@@ -501,7 +513,9 @@ app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(md_router, prefix="/api")
 app.include_router(md_metrics_router, prefix="/api")
+app.include_router(md_thinning_router, prefix="/api")
 app.include_router(md_plan_router, prefix="/api")
+app.include_router(md_runtime_router, prefix="/api")
 app.include_router(md_queue_router, prefix="/api")
 app.include_router(oxdna_router, prefix="/api")
 app.include_router(peg_setup_router, prefix="/api")
@@ -535,6 +549,8 @@ app.include_router(nanoparticle_attachment_router, prefix="/api")
 from backend.api.routes_history_conversion import router as history_conversion_router
 app.include_router(history_conversion_router, prefix="/api")
 app.include_router(project_collaboration_router, prefix="/api")
+from backend.api.routes_image_evaluation import router as image_evaluation_router
+app.include_router(image_evaluation_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
 
 

@@ -1,0 +1,309 @@
+{
+  "job_id": "edb512c46112",
+  "start_wc_fraction": 0.9285714285714286,
+  "end_wc_fraction": 0.9285714285714286,
+  "wc_pairs": [
+    {
+      "a": "D001:THY28",
+      "b": "D002:ADE31",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:ADE1",
+      "b": "D002:THY23",
+      "start_ok": true,
+      "end_ok": false
+    },
+    {
+      "a": "D001:THY19",
+      "b": "D002:ADE40",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY17",
+      "b": "D002:ADE42",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:ADE13",
+      "b": "D002:THY5",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:THY4",
+      "b": "D002:ADE47",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY26",
+      "b": "D002:ADE33",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:ADE5",
+      "b": "D002:THY46",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:ADE29",
+      "b": "D002:THY30",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:THY9",
+      "b": "D002:ADE9",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY2",
+      "b": "D002:ADE22",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY13",
+      "b": "D002:ADE11",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY11",
+      "b": "D002:ADE13",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:THY12",
+      "b": "D002:ADE6",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:ADE3",
+      "b": "D002:THY48",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:THY4",
+      "b": "D002:ADE20",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA3",
+      "b": "D002:CYT21",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:GUA11",
+      "b": "D002:CYT7",
+      "start_ok": false,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA14",
+      "b": "D002:CYT10",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:CYT2",
+      "b": "D002:GUA49",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:CYT15",
+      "b": "D002:GUA3",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:CYT6",
+      "b": "D002:GUA45",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:CYT24",
+      "b": "D002:GUA35",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:GUA14",
+      "b": "D002:CYT4",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA7",
+      "b": "D002:CYT17",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D000:GUA10",
+      "b": "D002:CYT8",
+      "start_ok": false,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA8",
+      "b": "D002:CYT16",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:CYT21",
+      "b": "D002:GUA38",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA5",
+      "b": "D002:CYT19",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA10",
+      "b": "D002:CYT14",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA12",
+      "b": "D002:CYT12",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA22",
+      "b": "D002:CYT37",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA20",
+      "b": "D002:CYT39",
+      "start_ok": false,
+      "end_ok": true
+    },
+    {
+      "a": "D000:GUA1",
+      "b": "D002:CYT50",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA25",
+      "b": "D002:CYT34",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA16",
+      "b": "D002:CYT43",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:CYT6",
+      "b": "D002:GUA18",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA27",
+      "b": "D002:CYT32",
+      "start_ok": true,
+      "end_ok": false
+    },
+    {
+      "a": "D001:CYT9",
+      "b": "D002:GUA15",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA23",
+      "b": "D002:CYT36",
+      "start_ok": true,
+      "end_ok": true
+    },
+    {
+      "a": "D001:GUA18",
+      "b": "D002:CYT41",
+      "start_ok": true,
+      "end_ok": false
+    },
+    {
+      "a": "D000:GUA7",
+      "b": "D002:CYT44",
+      "start_ok": true,
+      "end_ok": true
+    }
+  ],
+  "largest_aligned_residue_displacements": [
+    {
+      "residue": "D002:ADE52",
+      "displacement_A": 21.455941980664154
+    },
+    {
+      "residue": "D002:THY23",
+      "displacement_A": 20.979393871505753
+    },
+    {
+      "residue": "D002:ADE2",
+      "displacement_A": 20.257526651914
+    },
+    {
+      "residue": "D001:ADE1",
+      "displacement_A": 18.507497394756065
+    },
+    {
+      "residue": "D000:CYT15",
+      "displacement_A": 18.42295717201307
+    },
+    {
+      "residue": "D002:ADE1",
+      "displacement_A": 18.049481409260856
+    },
+    {
+      "residue": "D002:ADE22",
+      "displacement_A": 17.421024122716048
+    },
+    {
+      "residue": "D002:ADE24",
+      "displacement_A": 16.80818040520161
+    },
+    {
+      "residue": "D001:THY2",
+      "displacement_A": 16.227651394171268
+    },
+    {
+      "residue": "D002:GUA3",
+      "displacement_A": 16.05450148796971
+    },
+    {
+      "residue": "D002:CYT21",
+      "displacement_A": 14.684552187177315
+    },
+    {
+      "residue": "D001:GUA3",
+      "displacement_A": 14.33210171132108
+    }
+  ]
+}

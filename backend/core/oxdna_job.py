@@ -74,6 +74,7 @@ class OxdnaJob:
     stages: list[OxdnaStageStatus] = field(default_factory=list)
     current_stage_idx: int = 0
     error: Optional[str] = None
+    pid: Optional[int] = None  # detached orchestration worker (verified via runtime lease)
     oxdna_pid: Optional[int] = None
     device: str = "0"  # CUDA device index
     backend: str = "CUDA"  # "CPU" | "CUDA"
@@ -185,6 +186,9 @@ class OxdnaJob:
             from backend.core.job_archive import cache_job_metadata
 
             cache_job_metadata(workspace_dir, "oxdna_jobs", self.job_id, data)
+        from backend.core.trajectory_precompute import schedule
+
+        schedule(self, workspace_dir, "oxdna")
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "OxdnaJob":
@@ -255,6 +259,10 @@ class OxdnaJob:
                 result.append(cls.load(jid, workspace_dir))
             except Exception:
                 pass
+        from backend.core.trajectory_precompute import schedule
+
+        for job in result:
+            schedule(job, workspace_dir, "oxdna")
         return result
 
     def to_dict(self) -> dict:

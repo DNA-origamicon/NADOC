@@ -1,0 +1,26 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-anti-v2-service/completion_wake_ack.json",
+    "sha256": "27d687e9c261abec5d5ad74cc384859afdd1574e0f438347d80cb3312702cb58"
+  },
+  "audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-anti-v2/completion_audit.json",
+    "sha256": "a5af16ab1bae049cfce5487e08a3e0247f6fc924a2601496d78abb8f1c657bfe"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-control-v2/launch_receipt.json",
+    "sha256": "b1ba1ccb85ad84e725c4ab96d3ed632a688d7bdc371a51d34b9b1b7aba38fd6a"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-control-v2/handoff.json",
+    "sha256": "4f414d41b608d838ec548a3320516f9a9eb32406e6fa3cb01be491a3ab043195"
+  },
+  "performance": {
+    "native_seconds": 2960.081785,
+    "worker_seconds": 3027.773518,
+    "native_ns_per_day": 29.188383
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

@@ -27,6 +27,9 @@ import { assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLe
 import { openConnectionForPair } from './overhang_connections_panel.js'
 import { runOverhangGen } from './overhang_gen.js'
 import { relatedStrandIds as canonicalRelatedStrandIds } from '../scene/selection_model.js'
+import { buildHairpinDimerIndex, formatHairpinDimerTooltip, hairpinDimerIconEl,
+  hairpinDimerLevel, overhangNameResolver } from './hairpin_dimer_report.js'
+import { openHairpinDimerWindow } from './hairpin_dimer_window.js'
 
 // Inline chain-link glyph for the per-row "open this overhang's connection" icon.
 const _LINK_SVG =
@@ -161,6 +164,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       _collapsed = !_collapsed
       _applyCollapse()
       if (!_collapsed) _rebuildPanel(store.getState().currentDesign)
+      if (!_collapsed) _scrollToSelection()
     })
   }
 
@@ -169,10 +173,14 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
 
   // strand_id → array of row elements (one overhang may share a strand)
   let _rowsByStrandId = {}
+  let _rowsByOverhangId = new Map()
+  let _warningHosts = new Map()
 
   function _rebuildPanel(design) {
     const overhangs = sortOverhangsForDisplay(liveOverhangs(design))
     _rowsByStrandId = {}
+    _rowsByOverhangId = new Map()
+    _warningHosts = new Map()
     if (_collapsed) return
 
     list.innerHTML = ''
@@ -199,6 +207,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
                           'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
       row.dataset.strandId = ovhg.strand_id
       row.dataset.overhangId = ovhg.id
+      _rowsByOverhangId.set(ovhg.id, row)
       row.style.cursor = 'pointer'
 
       // Row click selects this overhang (so the Strand Animation section can
@@ -219,6 +228,12 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       nameInput.value       = ovhg.label ?? ''
       nameInput.title       = ovhg.id
       nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
+      const nameWrap = document.createElement('div')
+      nameWrap.style.cssText = 'display:flex;align-items:center;gap:4px;min-width:0'
+      const warningHost = document.createElement('span')
+      warningHost.className = 'overhang-structure-warning'
+      _warningHosts.set(ovhg.id, warningHost)
+      nameWrap.append(warningHost, nameInput)
 
       // Show the ASSEMBLED sequence (sub-domain overrides → parent → N), not just
       // the top-level field — so a split / per-sub-domain-sequenced overhang shows
@@ -257,6 +272,12 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
         const pair = connectionPairForOverhang(design0, ovhg.id)
         const partnerId = pair ? (pair.a === ovhg.id ? pair.b : pair.a) : null
         try {
+          if (overhangHasSequenceOverride(design0?.overhangs?.find(o => o.id === ovhg.id))) {
+            // The generator preserves locked sub-domain bases. RC writes in
+            // the paired flow cannot overwrite those overrides.
+            await api.generateOverhangRandomSequence(ovhg.id)
+            return
+          }
           await runOverhangGen(ovhg.id, partnerId, {
             api: {
               generateOverhangRandomSequence: api.generateOverhangRandomSequence,
@@ -272,16 +293,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
         }
       })
 
-      function _syncGenBtn() {
-        const v = seqInput.value.trim()
-        const connected = !!connectionPairForOverhang(store.getState().currentDesign, ovhg.id)
-        // Hide Gen for per-sub-domain overhangs (it would clobber the top-level
-        // field). Otherwise show it when unsequenced OR when connected — so the
-        // pair/RC/override choice is reachable even after a sequence is set.
-        genBtn.style.display = (!perSubDomain && ((!v || /^n+$/i.test(v)) || connected)) ? '' : 'none'
-      }
-      _syncGenBtn()
-      seqInput.addEventListener('input', _syncGenBtn)
+      if (perSubDomain) genBtn.title = 'Generate a new sequence while preserving locked sub-domain bases'
 
       const saveBtn = document.createElement('button')
       saveBtn.textContent   = 'Set'
@@ -324,7 +336,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
         linkWrap.appendChild(linkBtn)
       }
 
-      row.appendChild(nameInput)
+      row.appendChild(nameWrap)
       row.appendChild(seqInput)
       row.appendChild(genBtn)
       row.appendChild(saveBtn)
@@ -342,6 +354,70 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
 
     // Apply highlight for whatever is currently selected
     _updateHighlight()
+    _updateWarnings()
+  }
+
+  function _updateWarnings() {
+    const { currentDesign: design, hairpinDimerReport: report } = store.getState()
+    const index = buildHairpinDimerIndex(report, design)
+    const byOverhang = new Map()
+    for (const check of index.flagged) {
+      for (const id of check.overhang_ids ?? []) {
+        if (!byOverhang.has(id)) byOverhang.set(id, [])
+        byOverhang.get(id).push(check)
+      }
+    }
+    const nameOf = overhangNameResolver(design)
+    for (const [id, host] of _warningHosts) {
+      host.replaceChildren()
+      const checks = byOverhang.get(id)
+      if (!checks?.length) continue
+      host.appendChild(hairpinDimerIconEl(formatHairpinDimerTooltip(checks, {
+        nameOf, threshold: report.threshold_c, severe: report.severe_threshold_c,
+      }), document, () => openHairpinDimerWindow({
+        checks, title: nameOf(id), nameOf, conditions: report.conditions,
+        threshold: report.threshold_c, severe: report.severe_threshold_c,
+      }), hairpinDimerLevel(checks, report.severe_threshold_c)))
+    }
+  }
+
+  function _selectedOverhangToReveal() {
+    const state = store.getState()
+    const overhangs = sortOverhangsForDisplay(liveOverhangs(state.currentDesign))
+    const items = state.selection?.items ?? []
+    // Prefer the primary/newest pick. An explicit overhang must win over a
+    // different overhang on the same staple.
+    const refs = [state.selection?.primary, ...items.slice().reverse()].filter(Boolean)
+    for (const ref of refs) {
+      if (ref.kind === 'overhang') {
+        if (overhangs.some(o => o.id === ref.id)) return ref.id
+        continue
+      }
+      const strands = selectedStrandIds({ ...state, selection: { ...state.selection, items: [ref], primary: ref } })
+      const match = overhangs.find(o => strands.has(o.strand_id))
+      if (match) return match.id
+    }
+    return null
+  }
+
+  function _scrollToSelection() {
+    const id = _selectedOverhangToReveal()
+    if (!id) return
+    if (_collapsed) {
+      _collapsed = false
+      _applyCollapse()
+      _rebuildPanel(store.getState().currentDesign)
+    }
+    const row = _rowsByOverhangId.get(id)
+    if (!row) return
+    // Scroll only the list, without moving the outer sidebar or stealing focus
+    // from the scene/input. Keep already-visible rows in place.
+    const bounds = list.getBoundingClientRect()
+    const target = row.getBoundingClientRect()
+    const top = bounds.top + list.clientTop
+    const bottom = top + list.clientHeight
+    if (target.top < top) list.scrollTop += target.top - top
+    else if (target.bottom > bottom) list.scrollTop += target.bottom - bottom
   }
 
   function _updateHighlight() {
@@ -358,8 +434,12 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign !== prevState.currentDesign) {
       _rebuildPanel(newState.currentDesign)
-    } else if (newState.selection !== prevState.selection) {
+    } else if (newState.hairpinDimerReport !== prevState.hairpinDimerReport) {
+      _updateWarnings()
+    }
+    if (newState.selection !== prevState.selection) {
       _updateHighlight()
+      _scrollToSelection()
     }
   })
 

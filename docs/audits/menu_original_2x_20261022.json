@@ -1,0 +1,13 @@
+{
+  "restored": "Original control sizes, shapes, spacing, pagination and panel bounds; 60 mm layout removed.",
+  "selected_job_scale_multiplier": 2,
+  "animation_ms": 220,
+  "observed_scales": [
+    0.45,
+    0.9
+  ],
+  "view_order": "Desktop markup and VR adapter verified: NAMD ends with photoproduct, occupancy; oxDNA ends with occupancy. All associated options and status nodes move with their view.",
+  "validation": "12 frontend tests and 4 native tests passed; native mirror and submitted-eye capture reviewed.",
+  "evidence": ".development-artifacts/menu-original-2x",
+  "limitations": "Original layout also restores its preexisting ALL FRAMES / range-wheel overlap. No physical through-lens review."
+}

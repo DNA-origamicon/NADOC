@@ -849,7 +849,7 @@ class TestUniverseCacheHelpers:
         assert ws._cache_get_universe("k0") is us[0]  # also LRU-touches k0
         ws._cache_put_universe("k2", us[2])  # cap=2 → evict LRU (k1)
         assert ws._cache_get_universe("k1") is None
-        assert us[1].closed is True  # evicted handle was closed
+        assert us[1].closed is False  # an active caller still owns this reader
         assert ws._cache_get_universe("k0") is us[0]
         assert ws._cache_get_universe("k2") is us[2]
         self._reset_cache()

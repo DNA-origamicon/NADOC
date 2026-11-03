@@ -1,0 +1,98 @@
+{
+  "animation_duration_ms": 220,
+  "easing": "smoothstep",
+  "scale_multiplier": 1.3,
+  "performance": {
+    "baseline": {
+      "observed_app_fps": 89.52698192996985,
+      "frames": 1296,
+      "intermediate_scale_observations": 0,
+      "timing_windows": [
+        {
+          "scene_p95_ms": 0.60107,
+          "input_p95_ms": 0.553751,
+          "loop_p95_ms": 3.83516
+        },
+        {
+          "scene_p95_ms": 0.465295,
+          "input_p95_ms": 0.48944,
+          "loop_p95_ms": 3.83333
+        },
+        {
+          "scene_p95_ms": 0.430059,
+          "input_p95_ms": 0.445838,
+          "loop_p95_ms": 3.82172
+        },
+        {
+          "scene_p95_ms": 0.552799,
+          "input_p95_ms": 0.496975,
+          "loop_p95_ms": 3.82259
+        }
+      ],
+      "artifacts": ".development-artifacts/menu-animation-baseline"
+    },
+    "tween": {
+      "observed_app_fps": 89.52746207494464,
+      "frames": 1296,
+      "intermediate_scale_observations": 456,
+      "timing_windows": [
+        {
+          "scene_p95_ms": 0.57955,
+          "input_p95_ms": 0.514297,
+          "loop_p95_ms": 3.81952
+        },
+        {
+          "scene_p95_ms": 0.429708,
+          "input_p95_ms": 0.46827,
+          "loop_p95_ms": 3.80754
+        },
+        {
+          "scene_p95_ms": 0.477647,
+          "input_p95_ms": 0.494268,
+          "loop_p95_ms": 3.82834
+        },
+        {
+          "scene_p95_ms": 0.572086,
+          "input_p95_ms": 0.531769,
+          "loop_p95_ms": 3.84741
+        }
+      ],
+      "artifacts": ".development-artifacts/menu-animation-tween"
+    }
+  },
+  "method": "Sequential before/after native OpenXR runs, identical synthetic menu metadata and empty scene; 24 alternating transitions 600 ms apart. Captures outside measured interval. Exclude first/last 240-frame timing windows to avoid startup/capture contamination. Live frame sampling and existing tracing enabled equally.",
+  "verdict": "No meaningful application FPS or CPU scene-render regression observed. Same draw calls and geometry; shared placement transform only.",
+  "limitations": "Short isolated UI benchmark, not a heavy molecular-scene or compositor/through-lens guarantee. Existing control overlap remains.",
+  "tests": [
+    "native sidebar grips",
+    "native sidebar unit",
+    "simulation panel animation midpoint, reversal, manual resize, clamps, and ray routing"
+  ],
+  "sizing_recommendation": {
+    "criterion": "99% empirical acquisition with both highest-error profiles, same seeded trials across native isolated rectangles",
+    "multiplier_vs_original_at_ray_distance_m": {
+      "0.3": 5,
+      "0.6": 7,
+      "0.9": 8.5
+    },
+    "default_decision": "Retain 1.3x default: 5x would make whole panel about 3.6 m wide. Reflow/enlarge controls for accessibility instead.",
+    "details": "docs/audits/simulation_target_scaling_refined_20261022.json"
+  },
+  "visual_evidence": {
+    "jobs": {
+      "directory": ".development-artifacts/menu-animation-visual/jobs",
+      "scale": 0.45,
+      "submitted": true
+    },
+    "intermediate": {
+      "directory": ".development-artifacts/menu-animation-visual/intermediate",
+      "scale": 0.489015,
+      "submitted": true
+    },
+    "selected": {
+      "directory": ".development-artifacts/menu-animation-visual/selected",
+      "scale": 0.585,
+      "submitted": true
+    }
+  }
+}

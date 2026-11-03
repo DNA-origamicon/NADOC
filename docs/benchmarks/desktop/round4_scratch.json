@@ -1,0 +1,26 @@
+{
+  "cleanup": "complete",
+  "paths": [
+    {
+      "path": "/media/jojo/Archive/nr6-jf40eh_b",
+      "files_removed": 1,
+      "bytes_removed": 0,
+      "process_references": [],
+      "exists_after": false
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round2/placement-gate-browser",
+      "files_removed": 3,
+      "bytes_removed": 34846088,
+      "process_references": [],
+      "exists_after": false
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round2/module-duplication-pixel-diagnostic",
+      "files_removed": 3,
+      "bytes_removed": 35165728,
+      "process_references": [],
+      "exists_after": false
+    }
+  ]
+}

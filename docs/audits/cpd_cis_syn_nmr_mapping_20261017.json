@@ -1,0 +1,32 @@
+{
+  "status": "1TTD backbone mapping verified; physical comparison still unregistered",
+  "evidence": {
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/map_1ttd_backbone.py": "435976fca5f161f228904f6dc36d9033b7f8facf146e3bd53c500c08b4393532",
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/check_1ttd_mapping.py": "2ca43657579efc24ee4a654dcb6974589fa60ac0ce5d3d4f9e6a395db7e4d86e",
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/1ttd_backbone_mapping_audit.json": "354d331d02916bda637e33644d632104154c4e1ef9a61d6752159b552fcc4526",
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/experimental-reference-review-v1/1ttd_mapping_independent_check.json": "4f488b9738247b67d5c3f8d3291ed9676275178fb2e3a3f46562dbbe52e81d87"
+  },
+  "resolved_dihedrals": 22,
+  "canonical_sugar_centers": [
+    72,
+    72
+  ],
+  "independent_angle_max_difference_degrees": 7.118588217736033e-05,
+  "lesion_adjacent_epsilon_degrees": -72.36826601112998,
+  "source_bounds_degrees": [
+    -100,
+    -70
+  ],
+  "other_source_intervals_outside_count": 10,
+  "maximum_circular_interval_deviation_degrees": 2.609702792814801,
+  "remaining": [
+    "External cis-syn assignment pending user account return",
+    "Source salt conditions and experimental coupling/forward-model uncertainty not resolved",
+    "Non-hydrogen-bond distance records not all proven measured; methyl and hydrogen mappings remain pending",
+    "No registered source-matched simulation or physical-effect criterion"
+  ],
+  "decision": "Do not launch MD or fit from deposited interval alone. Numerical scope remains as previously recorded.",
+  "prior_goal_turn": "progress: primary deposition recovered and parsed",
+  "this_goal_turn": "progress: connectivity-based backbone mapping and independent coordinate audit completed",
+  "native_seconds_used": 2947.3957649814856
+}

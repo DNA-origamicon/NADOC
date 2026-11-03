@@ -1,0 +1,31 @@
+{
+  "job": "9ce00dc96be7",
+  "benchmark_scope": "Isolated backend NTRJ eight-frame page, align=False; not end-to-end browser or heavy-representation timing",
+  "before": {
+    "seconds": 14.4429,
+    "peak_rss_mb": 357.289
+  },
+  "after_cold": {
+    "seconds": 12.4513,
+    "peak_rss_mb": 365.094
+  },
+  "after_next_page": {
+    "seconds": 2.8423,
+    "peak_rss_mb": 365.094
+  },
+  "profile": "Protein source setup accounted for 19.4 of 25.9 profiled seconds before caching",
+  "observed_background_rss_mb": 10270,
+  "changes": [
+    "Exact coordinate pages: first 8, subsequent 16; old pages evicted",
+    "Browser coordinate cache and heavy cache each capped at 256 MiB or lower on low-memory devices",
+    "128 MiB per coordinate response limit, checked before allocation when declared size is available",
+    "Server reconstruction admission uses estimated scratch/output memory and aggregate in-flight reservations, capped at 1 GiB or 25% available RAM",
+    "Background workers capped at 2 GiB virtual memory or 25% available RAM, with low-memory deferral",
+    "Bounded protein-source cache, byte-offset trajectory index, bounded dictionary caches, exact sparse heavy-frame reads"
+  ],
+  "data_changed": false,
+  "validation": {
+    "backend_passed": 359,
+    "frontend_passed": 246
+  }
+}

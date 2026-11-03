@@ -162,7 +162,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       })
     }
     for (const conjugation of design?.nanoparticle_conjugations ?? []) {
-      const particle = particlesById.get(conjugation.nanoparticle_id); if (!particle) continue
+      const particle = particlesById.get(conjugation.nanoparticle_id); if (!particle?.visible) continue
       const matrix = poseMatrix(particle), radius = particle.diameter_nm / 2
       for (const record of conjugation.surface_strands ?? []) {
         const dir = new THREE.Vector3(...record.site_local)
@@ -265,7 +265,8 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     highlighted = id
     const particles = store.getState().currentDesign?.nanoparticles ?? []
     refreshAppearance()
-    if (id && meshes.has(id)) {
+    const moveActive = !!store.getState().translateRotateActive
+    if (id && meshes.has(id) && moveActive) {
       if (reanchor || gizmo.getAttachmentId() !== id) gizmo.attach(
         id, scene, camera, canvas, centroid(id), movementConstraints.get(id) ?? null,
       )
@@ -284,7 +285,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
         ? 'Drag the nanoparticle joint. The handle duplex swings rigidly between two ball joints.'
         : 'Drag the nanoparticle gizmo. Press T or R to change mode.'
     } else if (gizmo.isAttached()) gizmo.cancel()
-    if (!id) {
+    if (!id || !meshes.has(id) || !moveActive) {
       if (moveRotatePanel?.getProteinController?.() === gizmo) {
         moveRotatePanel.setProteinController(null)
       }
@@ -345,6 +346,10 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     if (isDot) add('Streptavidin coating…', () => openStreptavidinDialog(particle))
     if (!isDot) add('Attach to overhang', () => attachToOverhang?.(id), !!particle?.coating)
     if (!isDot) add('Conjugate Manager…', () => openConjugateManager?.(id))
+    add('Hide', async () => {
+      await patchNanoparticle(id, { visible: false })
+      selectionController.clear()
+    })
     add('Delete', () => deleteNanoparticle(id))
     document.body.appendChild(menu)
     onOutside = event => {
@@ -362,7 +367,8 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     // Persisted metadata and identical geometry responses must retain the PDB
     // prototype and compiled materials. Actual placement/topology edits rebuild.
     if (nanoparticleRenderInputsChanged(next, prev)) rebuild()
-    else if (next.selection !== prev.selection) syncSelection()
+    else if (next.selection !== prev.selection
+        || next.translateRotateActive !== prev.translateRotateActive) syncSelection()
   })
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && primaryRefOfKind(store.getState(), 'nanoparticle')) {
@@ -393,6 +399,11 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   rebuild()
   return {
     root, meshes, gizmo, rebuild, connectorRoot, linkerAtomRoot,
+    async unhideAll() {
+      const hidden = (store.getState().currentDesign?.nanoparticles ?? []).filter(p => !p.visible)
+      // Each response replaces the design in the store; preserve request order.
+      for (const particle of hidden) await patchNanoparticle(particle.id, { visible: true })
+    },
     renderExternalGeometry(design, geometry) {
       externalView = { currentDesign: design, currentGeometry: geometry }
       rebuild()

@@ -1,0 +1,327 @@
+{
+  "51": {
+    "page": 18,
+    "figure": "Supplementary Fig. 28, dumbbell 1 (left)",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12414",
+    "pdf_sha256": "382d43cd1c6d43a4af256260c2a6781f4226efb102330be88cfd0c522e0ef395",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "52": {
+    "page": 18,
+    "figure": "Supplementary Fig. 28, dumbbell 2 (right)",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12414",
+    "pdf_sha256": "382d43cd1c6d43a4af256260c2a6781f4226efb102330be88cfd0c522e0ef395",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "53": {
+    "page": 20,
+    "figure": "Supplementary Fig. 30, ring 1",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12414",
+    "pdf_sha256": "382d43cd1c6d43a4af256260c2a6781f4226efb102330be88cfd0c522e0ef395",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "54": {
+    "page": 21,
+    "figure": "Supplementary Fig. 31, ring 2",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12414",
+    "pdf_sha256": "382d43cd1c6d43a4af256260c2a6781f4226efb102330be88cfd0c522e0ef395",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "29": {
+    "page": 19,
+    "figure": "Supplementary Fig. 24a, pin pore",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12787",
+    "pdf_sha256": "2dfd793c0b5bd16f166533e0620b81d401d9de14f16dd4473e10193b84d5afa0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "16": {
+    "page": 21,
+    "figure": "Supplementary Fig. 24c, T pore",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12787",
+    "pdf_sha256": "2dfd793c0b5bd16f166533e0620b81d401d9de14f16dd4473e10193b84d5afa0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "35": {
+    "page": 21,
+    "figure": "Supplementary Fig. 24c, T pore",
+    "kind": "cadnano",
+    "doi": "10.1038/ncomms12787",
+    "pdf_sha256": "2dfd793c0b5bd16f166533e0620b81d401d9de14f16dd4473e10193b84d5afa0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "26": {
+    "page": 4,
+    "figure": "Supplementary Fig. 4a, 20 nm grid",
+    "kind": "cadnano",
+    "doi": "10.1038/nmeth.3804",
+    "pdf_sha256": "257abd3e18c926c619408e491aecbe117b98aa26c4adef24a32c869275ad0ad1",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "20": {
+    "page": 13,
+    "figure": "Fig. S1-4, 60 nm ring",
+    "kind": "cadnano",
+    "doi": "10.1038/nchem.2472",
+    "pdf_sha256": "5fe0e5810124ecb5a8aa78e2a50590dbb24afe6bd191f48f3424f5d3966faf47",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "132": {
+    "page": 33,
+    "figure": "Fig. 23, square tile design",
+    "kind": "cadnano",
+    "doi": "10.1038/nature24655",
+    "pdf_sha256": "b65e532d789c5137cb2d75e29fe4c88c8946b6f9144bd5361caa52b4496dbaf0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "19": {
+    "page": 14,
+    "figure": "Fig. S1, NanoDyn routing",
+    "kind": "cadnano",
+    "doi": "10.1021/acsnano.6b07097",
+    "pdf_sha256": "5017873dd0946787eebb7021ce9c95d67adf3b48d8880dbd36380dc902348533",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "247": {
+    "page": 30,
+    "figure": "Fig. S21, triangle routing",
+    "kind": "cadnano",
+    "doi": "10.1021/acsnano.4c04515",
+    "pdf_sha256": "c0d929af7e0ad0594a6c03d6e79e24906a6f265251a245550337797798b4a1cd",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "256": {
+    "page": 3,
+    "figure": "Supplementary Fig. 1, Narcissus",
+    "kind": "cadnano",
+    "doi": "10.1038/s41565-024-01738-7",
+    "pdf_sha256": "7b50b833f0db982c9421c67db1b13a27315b40f0ae4e25ebc7c39c7beabf219b",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "257": {
+    "page": 4,
+    "figure": "Supplementary Fig. 2, Echo",
+    "kind": "cadnano",
+    "doi": "10.1038/s41565-024-01738-7",
+    "pdf_sha256": "7b50b833f0db982c9421c67db1b13a27315b40f0ae4e25ebc7c39c7beabf219b",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "18": {
+    "page": 15,
+    "figure": "Supplementary Fig. 2, positioning apparatus",
+    "kind": "cadnano",
+    "doi": "10.1038/nnano.2015.240",
+    "pdf_sha256": "299de323602901161c4fa3f22aae653a989c6c57ad1476cb2f65da24f4990bb0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "67": {
+    "page": 57,
+    "figure": "Supplementary Fig. 40, gripper",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram.",
+    "doi": "10.1038/s41563-021-00978-5",
+    "pdf_sha256": "5204046533663e54dcf308cd1d511e3dae550feb1d333efe272294ff4bddccc6",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "69": {
+    "page": 100,
+    "figure": "Supplementary Fig. 82, MagicDNA logo",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram.",
+    "doi": "10.1038/s41563-021-00978-5",
+    "pdf_sha256": "5204046533663e54dcf308cd1d511e3dae550feb1d333efe272294ff4bddccc6",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "70": {
+    "page": 105,
+    "figure": "Supplementary Fig. 85, airplane",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram.",
+    "doi": "10.1038/s41563-021-00978-5",
+    "pdf_sha256": "5204046533663e54dcf308cd1d511e3dae550feb1d333efe272294ff4bddccc6",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "147": {
+    "page": 4,
+    "figure": "Fig. S1, T-shape",
+    "kind": "other",
+    "note": "The panel labelled caDNAno is the bundle cross-section, not a strand-routing map.",
+    "doi": "10.1021/acs.nanolett.2c02424",
+    "pdf_sha256": "04f61a4acca3fa75e2657ed8ea9ccdbc1ae2483552b43e04a820de50cd8c32e0",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "27": {
+    "page": 4,
+    "figure": "Supporting Fig. 1C, caDNAno workflow example",
+    "kind": "partial",
+    "note": "A routing screenshot is accessible, but its correspondence to this deposited truss is unresolved.",
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "pdf_sha256": "d7224581e946b60d2f219b29d946acb94802c90641c91e349de1cc9ed2e13b4c",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "28": {
+    "page": 4,
+    "figure": "Supporting Fig. 1C, caDNAno workflow example",
+    "kind": "partial",
+    "note": "A routing screenshot is accessible, but its correspondence to this deposited truss is unresolved.",
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "pdf_sha256": "d7224581e946b60d2f219b29d946acb94802c90641c91e349de1cc9ed2e13b4c",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "242": {
+    "page": 7,
+    "figure": "Fig. S3, Hilbert",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram. Link downloads the Europe PMC supplement archive; PDF member: sciadv.adi0697_sm.pdf.",
+    "doi": "10.1126/sciadv.adi0697",
+    "pdf_sha256": "9b939b12d5d8228fb31e9616b46a9bbeb945a41ea86420dd720d8fb78351581e",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "243": {
+    "page": 23,
+    "figure": "Fig. S19, G-clef",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram. Link downloads the Europe PMC supplement archive; PDF member: sciadv.adi0697_sm.pdf.",
+    "doi": "10.1126/sciadv.adi0697",
+    "pdf_sha256": "9b939b12d5d8228fb31e9616b46a9bbeb945a41ea86420dd720d8fb78351581e",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "241": {
+    "page": 27,
+    "figure": "Fig. S22, nucleosome-like spring",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram. Link downloads the Europe PMC supplement archive; PDF member: sciadv.adi0697_sm.pdf.",
+    "doi": "10.1126/sciadv.adi0697",
+    "pdf_sha256": "9b939b12d5d8228fb31e9616b46a9bbeb945a41ea86420dd720d8fb78351581e",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "240": {
+    "page": 36,
+    "figure": "Fig. S31, Trifolium",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram. Link downloads the Europe PMC supplement archive; PDF member: sciadv.adi0697_sm.pdf.",
+    "doi": "10.1126/sciadv.adi0697",
+    "pdf_sha256": "9b939b12d5d8228fb31e9616b46a9bbeb945a41ea86420dd720d8fb78351581e",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "311": {
+    "page": 3,
+    "figure": "Supplementary Fig. 1, seed-S",
+    "kind": "cadnano",
+    "note": "Seed-S routing visually inspected. The deposit contains several seed/SST combinations; each variant still needs pairing.",
+    "doi": "10.1038/s41565-025-01976-3",
+    "pdf_sha256": "a12f68477822c5db834d5f5a6d80568e545dae7ec5fa8583ec2de9e964be5562",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "233": {
+    "page": 3,
+    "figure": "Supplementary Fig. 1, origami blueprint",
+    "kind": "cadnano",
+    "doi": "10.1038/s41565-024-01676-4",
+    "pdf_sha256": "8595fb30d1891bf4a438a46048d207ad2e3988a4c9b0ec5f68c3d49a844197d5",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "270": {
+    "page": 2,
+    "figure": "Fig. S1, caDNAno triangle design",
+    "kind": "cadnano",
+    "note": "Journal-version diagram inspected; deposited arXiv-era interface variants remain unpaired.",
+    "doi": "10.1038/s41467-025-66195-9",
+    "pdf_sha256": "adee93e39a619c96e8163e57a682f13d5003528a7d27f1dd814b8d411e7bc3c9",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "55": {
+    "page": 44,
+    "figure": "Supplementary Figs. 42\u201343, snub-cube scaffold path and base counts",
+    "kind": "other",
+    "note": "Planar scaffold-path and base-count schematics, not a complete caDNAno staple-routing map.",
+    "doi": "10.1038/nnano.2015.162",
+    "pdf_sha256": "c85a053e32d7795053748c4d11eb27abaf3c365c9dc6f7108e127c31f6da1b83",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "10": {
+    "page": 37,
+    "figure": "Fig. S22, unmodified channel",
+    "kind": "cadnano",
+    "note": "Accessible Nanobase-hosted copy of the published supplement; not independently checksum-matched to the publisher copy. Channel variants M1/M2 are on subsequent pages.",
+    "doi": "10.1126/science.1225624",
+    "pdf_sha256": "6e661294fae308ea34c3bc472294563fe02e90e5be792eef2c90961d6d295a19",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "11": {
+    "page": 15,
+    "figure": "Fig. S12, mushroom-shaped channel example",
+    "kind": "partial",
+    "note": "Nanobase-hosted supplement contains a caDNAno cap/stem example, but correspondence to the deposited nanopore is unresolved.",
+    "doi": "10.1021/nl304147f",
+    "pdf_sha256": "ff46126e8b00fcb65b80e5936a04c558762f228620311434ffa7f2e25b5bcd00",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "68": {
+    "page": 93,
+    "figure": "Supplementary Fig. 75, tweezer\u2013arm",
+    "kind": "other",
+    "note": "MagicDNA 3D routing and connectivity panels; not a complete planar caDNAno diagram.",
+    "doi": "10.1038/s41563-021-00978-5",
+    "pdf_sha256": "5204046533663e54dcf308cd1d511e3dae550feb1d333efe272294ff4bddccc6",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "263": {
+    "page": 7,
+    "figure": "Fig. S2, moDON configurations 1 and 2",
+    "kind": "cadnano",
+    "note": "Journal-version routing variants inspected; four uploaded native JSON files could not be parsed. Training pairing remains unresolved.",
+    "doi": "10.1038/s41467-025-56846-2",
+    "pdf_sha256": "f15f07cb5e8ef23791df00d2c5ac8746a6de6fddadefcdbd7500eec88a1a5973",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  },
+  "196": {
+    "page": 1,
+    "pdf_index": 3,
+    "figure": "Supplementary Dataset S2, panel a",
+    "kind": "cadnano",
+    "note": "Complete nanoengine caDNAno map; hinge variants are on PDF page 2. Uploaded variant equivalence is unverified.",
+    "doi": "10.1038/s41565-023-01516-x",
+    "pdf_sha256": "dae20e281294ffa19d8d39931b6b1f1ba5b422bfb43a2ac365d10ab938f33b09",
+    "reviewed_at": "2026-10-27",
+    "review_method": "Assistant visual inspection of rendered PDF page"
+  }
+}

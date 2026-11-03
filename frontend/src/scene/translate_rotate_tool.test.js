@@ -235,6 +235,20 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     expect(resolveSelectionClusterId({ kind: 'cluster', id: 'same' }, design)).toBe('same')
   })
 
+  it('keeps the explicitly activated attachment controller and commits before deactivation', async () => {
+    let attached = false
+    const proteinGizmo = { isAttached: () => attached, commit: vi.fn(async () => {}), detach: vi.fn(() => { attached = false }) }
+    const { deps, store } = makeDeps({ proteinGizmo })
+    store.subscribe(state => { if (state.translateRotateActive) attached = true })
+    const tool = initTranslateRotateTool(deps)
+    await tool.activate()
+    expect(deps.moveRotatePanel.setSessionMode).toHaveBeenLastCalledWith('protein')
+    await tool.confirm()
+    expect(proteinGizmo.commit).toHaveBeenCalledOnce()
+    expect(proteinGizmo.detach).toHaveBeenCalledOnce()
+    expect(store.getState().translateRotateActive).toBe(false)
+  })
+
   it('routes Apply, Cancel, and Reset to an attached protein session', () => {
     const proteinGizmo = {
       isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),
@@ -745,7 +759,7 @@ describe('initTranslateRotateTool — rotateJoint + misc', () => {
 })
 
 describe('decideSelectionAction (selection→tool bridge)', () => {
-  const PARTS = { assemblyActive: false, cadnanoActive: false, unfoldActive: false }
+  const PARTS = { assemblyActive: false, unfoldActive: false }
   const cluster = id => ({ kind: 'cluster', id })
 
   it('does not open the tool when a cluster is selected', () => {
@@ -757,7 +771,6 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
   it('does NOT open in assembly / cadnano / unfold modes', () => {
     for (const mode of [
       { ...PARTS, assemblyActive: true },
-      { ...PARTS, cadnanoActive: true },
       { ...PARTS, unfoldActive: true },
     ]) {
       expect(decideSelectionAction({

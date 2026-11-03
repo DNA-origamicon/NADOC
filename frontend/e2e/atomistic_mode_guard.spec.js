@@ -1,6 +1,6 @@
 /**
- * Atomistic-mode guard — unfold and cadnano views are not allowed while an
- * atomistic representation (VDW / Ball-and-Stick) is active. Toggling either
+ * Atomistic-mode guard — unfold view is not allowed while an
+ * atomistic representation (VDW / Ball-and-Stick) is active. Toggling unfold
  * should be blocked with an explanatory toast (and must NOT activate the view).
  */
 
@@ -57,12 +57,12 @@ async function enableAtomisticVdw(page) {
 }
 
 test.describe('Atomistic mode guard', () => {
-  test('unfold + cadnano are blocked with a toast while atomistic is active', async ({ page }) => {
+  test('unfold is blocked with a toast while atomistic is active', async ({ page }) => {
     await page.goto('/')
     await buildScaffoldedPart(page, 'atom-guard')
     await enableAtomisticVdw(page)
 
-    // Use the keyboard shortcuts ([U]/[K]) — robust vs. re-opening the menu.
+    // Use the keyboard shortcuts ([U]) — robust vs. re-opening the menu.
     // Click the canvas first so focus is off any input (shortcuts are
     // blockedInInput) and any open menu is dismissed.
     await page.locator('#canvas').click({ position: { x: 600, y: 350 } })
@@ -72,8 +72,5 @@ test.describe('Atomistic mode guard', () => {
     await expect(page.locator('.toast', { hasText: 'Unfold view is not available in atomistic' })).toBeVisible()
     expect(await page.locator('#mode-indicator').textContent()).not.toContain('UNFOLD')
 
-    // Cadnano → blocked + toast.
-    await page.keyboard.press('k')
-    await expect(page.locator('.toast', { hasText: 'Cadnano view is not available in atomistic' })).toBeVisible()
   })
 })

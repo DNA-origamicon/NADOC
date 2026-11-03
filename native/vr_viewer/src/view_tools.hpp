@@ -4,6 +4,7 @@
 #include <vector>
 #include <future>
 #include <chrono>
+#include <memory>
 
 // Included after GL helpers: one native stereo display stream plus the exact
 // desktop-icon tablet. No desktop window capture or emulated mouse input.
@@ -13,7 +14,8 @@ class VRViewTools {
     struct Sprite {glm::vec3 p;glm::vec2 size;glm::vec4 color;glm::vec4 uv;glm::vec2 center;};
     struct Instance {glm::mat4 matrix;glm::vec4 color;};
     static_assert(sizeof(glm::mat4)==64 && sizeof(Instance)==80 && offsetof(Instance,color)==64,"Grouped texture view requires exact matrix+color wire layout");
-    struct Batch {std::vector<V> vertices,groupedVertices;std::vector<Instance> instances;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0;nadoc_vr::view_groups::Plan groupPlan;};
+    static_assert(sizeof(V)==48 && offsetof(V,p)==0 && offsetof(V,color)==12 && offsetof(V,uv)==28 && offsetof(V,normal)==36,"Exact indexing requires the complete padding-free wire vertex");
+    struct Batch {bool annotation=false;std::vector<nadoc_vr::view_compact::Vertex> compactGroup;std::vector<V> vertices,groupedVertices,indexedVertices,indexedGroupVertices;std::vector<uint32_t> indices,indexedGroupIndices;std::vector<Instance> instances;GLsync spareInstanceFence=nullptr;GLuint spareInstanceBuffer=0;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0,indexedVertexBuffer=0,indexBuffer=0,indexedGroupVertexBuffer=0,indexedGroupIndexBuffer=0;nadoc_vr::view_groups::Plan groupPlan;nadoc_vr::view_indexed::Plan indexPlan;nadoc_vr::view_indexed::GroupPlan indexedGroupPlan;uint32_t indexUploadGlError=0,indexedGroupUploadGlError=0;};
     std::vector<Batch> batches;
     bool open=false,waiting=false;
     uint32_t version=0,flags=256,acknowledged=0;
@@ -31,25 +33,42 @@ class VRViewTools {
     glm::vec3 position{};glm::quat orientation{1,0,0,0};
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
     static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
-    GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
+    GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0,panelTexture=0;unsigned frames=0;
     std::optional<nadoc_vr::BoundsSummary> cachedSceneBounds;
     bool opaqueRequested=false;
     nadoc_vr::view_opaque::Eligibility opaqueEligibility;
     GLuint legacyProgram=0,opaqueProgram=0,groupedLegacyProgram=0,groupedOpaqueProgram=0;
+    bool compactRequested=true;
+    bool indexedRequested=false,indexedGroupsRequested=false;const char* indexedSelectionSource="default";const char* indexedGroupsSelectionSource="default";uint64_t indexedBatchDraws=0,indexedShadowBatchDraws=0,indexedGroupBatchDraws=0,indexedGroupLogicalInstances=0,indexedGroupHardwareInstances=0;
     bool groupsRequested=false;nadoc_vr::view_groups::Limits groupLimits;
     const char* opaqueSelectionSource="default";const char* groupsSelectionSource="default";
     const char* opaqueProgramReason="disabled";const char* groupsProgramReason="disabled";
     bool groupsAvailable()const{return nadoc_vr::view_programs::groupsAvailable(groupsRequested,legacyProgram,opaqueProgram,groupedLegacyProgram,groupedOpaqueProgram);}
     uint64_t groupedBatchDraws=0,legacyBatchDraws=0,groupedLogicalInstances=0,groupedHardwareInstances=0;
+    std::string indexedMeshesJson()const {
+        size_t eligible=0,grouped=0,cpuBytes=0,gpuBytes=0;std::string entries="[";
+        for(size_t i=0;i<batches.size();++i){const auto& b=batches[i];const bool active=indexedRequested && b.indexPlan.eligible && b.indexedVertexBuffer && b.indexBuffer;
+            const bool group=active && indexedGroupsRequested && groupsAvailable() && b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer && b.instanceTexture;
+            eligible+=active;grouped+=group;cpuBytes+=b.indexPlan.derivedBytes+b.indexedGroupPlan.derivedBytes+b.compactGroup.capacity()*sizeof(nadoc_vr::view_compact::Vertex);
+            gpuBytes+=b.indexedVertices.size()*sizeof(V)+b.indices.size()*sizeof(uint32_t)+b.indexedGroupVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex))+b.indexedGroupIndices.size()*sizeof(uint32_t);
+            if(i)entries+=",";
+            entries+="{\"compact_vertices\":"+std::string(!b.compactGroup.empty()?"true":"false")+",\"active\":"+std::string(active?"true":"false")+",\"reason\":\""+b.indexPlan.reason+"\",\"original_vertices\":"+std::to_string(b.vertices.size())+",\"unique_vertices\":"+std::to_string(b.indexPlan.uniqueVertices)+",\"index_count\":"+std::to_string(b.indexPlan.indexCount)+",\"instances\":"+std::to_string(b.instances.size())+",\"upload_gl_error\":"+std::to_string(b.indexUploadGlError)+
+                ",\"grouped_active\":"+(group?"true":"false")+",\"grouped_reason\":\""+b.indexedGroupPlan.reason+"\",\"grouped_vertices\":"+std::to_string(b.indexedGroupVertices.size())+",\"grouped_indices\":"+std::to_string(b.indexedGroupIndices.size())+",\"grouped_upload_gl_error\":"+std::to_string(b.indexedGroupUploadGlError)+"}";}
+        entries+="]";
+        return "{\"requested\":"+std::string(indexedRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+indexedSelectionSource+"\",\"active_batches\":"+std::to_string(eligible)+
+            ",\"grouping_requested\":"+(indexedGroupsRequested?"true":"false")+",\"grouping_default_enabled\":true,\"grouping_selection_source\":\""+indexedGroupsSelectionSource+"\",\"group_size\":8,\"grouped_active_batches\":"+std::to_string(grouped)+
+            ",\"derived_cpu_bytes\":"+std::to_string(cpuBytes)+",\"derived_gpu_bytes\":"+std::to_string(gpuBytes)+",\"cpu_budget_bytes\":"+std::to_string(nadoc_vr::view_indexed::maxDerivedBytes+nadoc_vr::view_compact::maxBytes)+",\"indexed_batch_draws\":"+std::to_string(indexedBatchDraws)+",\"indexed_shadow_batch_draws\":"+std::to_string(indexedShadowBatchDraws)+
+            ",\"grouped_batch_draws\":"+std::to_string(indexedGroupBatchDraws)+",\"grouped_logical_instances\":"+std::to_string(indexedGroupLogicalInstances)+",\"grouped_hardware_instances\":"+std::to_string(indexedGroupHardwareInstances)+",\"batches\":"+entries+",\"equivalence\":\"byte-exact attributes and original batch/instance/triangle order; unchanged normal arithmetic\"}";
+    }
     std::string instanceGroupsJson()const {
-        size_t eligible=0,bytes=0;for(const auto& b:batches){eligible+=b.groupPlan.eligible;bytes+=b.groupedVertices.size()*sizeof(V);}
+        size_t eligible=0,bytes=0,gpuBytes=0;for(const auto& b:batches){eligible+=b.groupPlan.eligible;bytes+=b.groupedVertices.size()*sizeof(V);gpuBytes+=b.groupedVertices.size()*(b.compactGroup.empty()?sizeof(V):sizeof(nadoc_vr::view_compact::Vertex));}
         std::string reasons="[";for(size_t i=0;i<batches.size();++i){if(i)reasons+=",";reasons+='"';reasons+=batches[i].groupPlan.reason;reasons+='"';}reasons+="]";
         return "{\"requested\":"+std::string(groupsRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+groupsSelectionSource+"\",\"program_available\":"+(groupsAvailable()?"true":"false")+",\"program_reason\":\""+groupsProgramReason+"\",\"group_size\":8,\"eligible_batches\":"+std::to_string(eligible)+
             ",\"total_batches\":"+std::to_string(batches.size())+",\"texture_texel_limit\":"+std::to_string(groupLimits.textureTexels)+
-            ",\"expanded_cpu_bytes\":"+std::to_string(bytes)+",\"expanded_gpu_bytes\":"+std::to_string(bytes)+
+            ",\"expanded_cpu_bytes\":"+std::to_string(bytes)+",\"expanded_gpu_bytes\":"+std::to_string(gpuBytes)+
             ",\"grouped_batch_draws\":"+std::to_string(groupedBatchDraws)+",\"legacy_batch_draws\":"+std::to_string(legacyBatchDraws)+
             ",\"grouped_logical_instances\":"+std::to_string(groupedLogicalInstances)+",\"grouped_hardware_instances\":"+std::to_string(groupedHardwareInstances)+
-            ",\"batch_eligibility_reasons\":"+reasons+",\"primitive_order\":\"original batch then instance then triangle\",\"shadow_batches\":\"legacy\"}";
+            ",\"batch_eligibility_reasons\":"+reasons+",\"primitive_order\":\"original batch then instance then triangle\",\"shadow_batches\":\"legacy shader; eligible large meshes indexed\",\"indexed_meshes\":"+indexedMeshesJson()+"}";
     }
     uint64_t opaqueSceneCalls=0,legacyColorSceneCalls=0,ineligibleColorSceneCalls=0,unavailableProgramColorSceneCalls=0,legacyShadowSceneCalls=0;
     bool lastColorOpaque=false;
@@ -68,8 +87,13 @@ class VRViewTools {
     bool inspectionLayout() const {return overrideScene() && !(flags&256);}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
+        compactRequested=nadoc_vr::view_compact::requestedFromEnvironment();
         opaqueRequested=nadoc_vr::view_opaque::requestedFromEnvironment();
         groupsRequested=nadoc_vr::view_groups::requestedFromEnvironment();
+        indexedRequested=nadoc_vr::view_indexed::requestedFromEnvironment();
+        indexedGroupsRequested=nadoc_vr::view_indexed::groupsRequestedFromEnvironment();
+        indexedGroupsSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_GROUPED_INDEXED_MESHES"));
+        indexedSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_INDEXED_VIEW_MESHES"));
         opaqueSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_OPAQUE_VIEW_SHADER"));
         groupsSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_GROUPED_VIEW_INSTANCES"));
         if(groupsRequested){GLint texels=0,vertexSamplers=0,units=0;glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE,&texels);glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,&vertexSamplers);glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&units);groupLimits={uint64_t(std::max(0,texels)),vertexSamplers>0,units>int(nadoc_vr::view_groups::textureUnit)};}
@@ -104,8 +128,8 @@ class VRViewTools {
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     }
-    void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
-    void shutdown(){cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(legacyProgram)glDeleteProgram(legacyProgram);if(opaqueProgram)glDeleteProgram(opaqueProgram);if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);program=legacyProgram=opaqueProgram=groupedLegacyProgram=groupedOpaqueProgram=0;}
+    void clearBatches(){for(auto& b:batches){if(b.spareInstanceFence)glDeleteSync(b.spareInstanceFence);if(b.spareInstanceBuffer)glDeleteBuffers(1,&b.spareInstanceBuffer);if(b.indexedGroupVertexBuffer)glDeleteBuffers(1,&b.indexedGroupVertexBuffer);if(b.indexedGroupIndexBuffer)glDeleteBuffers(1,&b.indexedGroupIndexBuffer);if(b.indexedVertexBuffer)glDeleteBuffers(1,&b.indexedVertexBuffer);if(b.indexBuffer)glDeleteBuffers(1,&b.indexBuffer);if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
+    void shutdown(){glDeleteTextures(1,&panelTexture);panelTexture=0;cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(legacyProgram)glDeleteProgram(legacyProgram);if(opaqueProgram)glDeleteProgram(opaqueProgram);if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);program=legacyProgram=opaqueProgram=groupedLegacyProgram=groupedOpaqueProgram=0;}
     void close() {
         open=false;hover={-1,-1};closeHover={};
         placement.openDocked(placement.position(),placement.orientation());
@@ -161,11 +185,11 @@ class VRViewTools {
         }
     }
 #include "view_tools_stream.inc"
-    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1),bool opaqueScene=false){
+    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1),bool opaqueScene=false,GLuint textureOverride=0){
         if(data.empty()||!version)return;
         program=opaqueScene?opaqueProgram:legacyProgram;glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
         glUniform1i(glGetUniformLocation(program,"instanced"),0);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&worldModel[0][0]);
-        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
+        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,textureOverride?textureOverride:texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
         glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
         glBindVertexArray(vao);
         const GLuint buffer=&data==&triangles?triangleVbo:&data==&lines?lineVbo:vbo;
@@ -181,7 +205,15 @@ class VRViewTools {
         for(int i:{0,1,2,2,1,3})out.push_back({p[i],color,u[i]});
     }
     void renderPanel(const glm::mat4& vp){if(!open)return;std::vector<V> v;
-        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,768.F/2048,768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES,true);
+        quad(v,{{world({0,0}),world({0,1}),world({1,0}),world({1,1})}},{0,0,panelTexture?1.F:768.F/2048,panelTexture?1.F:768.F/2048},{1,1,1,1});draw(vp,v,GL_TRIANGLES,true,glm::mat4(1),false,panelTexture);
+        if(waiting && requested>=0 && requested<int(keys.size())) {
+            // Native pending feedback appears on the click frame, before upload.
+            const auto c=cell(requested);const float y=c.y+44.F/768;
+            std::vector<V> pending;
+            quad(pending,{{world({c.x-170.F/768,y}),world({c.x-170.F/768,y+4.F/768}),world({c.x+170.F/768,y}),world({c.x+170.F/768,y+4.F/768})}},{-1,-1,-1,-1},{1,.7F,.1F,1});
+            for(auto& vertex:pending)vertex.p+=orientation*glm::vec3(0,0,.001F);
+            draw(vp,pending,GL_TRIANGLES);
+        }
         std::vector<V> border;
         for(int i:hover)if(i>=0){const auto c=cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
@@ -209,31 +241,66 @@ class VRViewTools {
             glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
             glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
             glBindVertexArray(vao);
-            bool boundGrouped=false;
+            for(int annotationPass=0;annotationPass<2;++annotationPass) {
+            if(annotationPass && shadow)break;
+            if(annotationPass){glDisable(GL_DEPTH_TEST);glDepthMask(GL_FALSE);}
+            auto selectBatchProgram=[&](bool grouped=false){
+                if(annotationPass)program=grouped?groupedLegacyProgram:legacyProgram;
+                else selectSceneProgram(shadow,grouped);
+            };
+            bool boundGrouped=false,firstBatch=true;
             for(const auto& b:batches) {
-                const bool grouped=!shadow && groupsAvailable() && b.groupPlan.eligible && b.groupedVertexBuffer && b.instanceTexture;
-                if(grouped!=boundGrouped){selectSceneProgram(shadow,grouped);glUseProgram(program);FrostedGlass::bind(program,false);
+                if(b.annotation!=bool(annotationPass))continue;
+                const bool indexed=indexedRequested && b.indexPlan.eligible && b.indexedVertexBuffer && b.indexBuffer;
+                const bool indexedGroup=!shadow && indexed && indexedGroupsRequested && groupsAvailable() && b.indexedGroupPlan.eligible && b.indexedGroupVertexBuffer && b.indexedGroupIndexBuffer && b.instanceTexture;
+                const bool grouped=indexedGroup || (!shadow && groupsAvailable() && b.groupPlan.eligible && b.groupedVertexBuffer && b.instanceTexture);
+                if(firstBatch || grouped!=boundGrouped){firstBatch=false;selectBatchProgram(grouped);glUseProgram(program);FrostedGlass::bind(program,false);
                     glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&matrix[0][0]);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&model[0][0]);
-                    glUniform1i(glGetUniformLocation(program,"instanced"),1);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);glUniform1i(glGetUniformLocation(program,"atlas"),1);boundGrouped=grouped;}
-                glBindBuffer(GL_ARRAY_BUFFER,grouped?b.groupedVertexBuffer:b.vertexBuffer);
+                    glUniform1i(glGetUniformLocation(program,"instanced"),1);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);
+                    if(annotationPass){
+                        const auto basis=glm::inverse(glm::mat3(model))*glm::mat3_cast(camera)*glm::length(glm::vec3(model[0]));
+                        GLint viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);
+                        glUniform3fv(glGetUniformLocation(program,"annotationRight"),1,&basis[0][0]);
+                        glUniform3fv(glGetUniformLocation(program,"annotationUp"),1,&basis[1][0]);
+                        glUniform2f(glGetUniformLocation(program,"annotationViewport"),float(viewport[2]),float(viewport[3]));
+                    }
+                    glUniform1i(glGetUniformLocation(program,"atlas"),1);boundGrouped=grouped;}
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,indexedGroup?b.indexedGroupIndexBuffer:indexed?b.indexBuffer:0);
+                glBindBuffer(GL_ARRAY_BUFFER,indexedGroup?b.indexedGroupVertexBuffer:grouped?b.groupedVertexBuffer:indexed?b.indexedVertexBuffer:b.vertexBuffer);
                 glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,p));
                 glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,color));
                 glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,uv));
                 glVertexAttribPointer(8,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,normal));
+                glEnableVertexAttribArray(1);glEnableVertexAttribArray(2);
+                if(grouped && !b.compactGroup.empty()){
+                    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(nadoc_vr::view_compact::Vertex),(void*)offsetof(nadoc_vr::view_compact::Vertex,p));
+                    glVertexAttribPointer(8,3,GL_FLOAT,GL_FALSE,sizeof(nadoc_vr::view_compact::Vertex),(void*)offsetof(nadoc_vr::view_compact::Vertex,normal));
+                    glDisableVertexAttribArray(1);glDisableVertexAttribArray(2);
+                    glVertexAttrib4fv(1,&b.vertices.front().color[0]);glVertexAttrib2fv(2,&b.vertices.front().uv[0]);
+                }
                 if(grouped){
                     for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
                     glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);glBindTexture(GL_TEXTURE_BUFFER,b.instanceTexture);glActiveTexture(GL_TEXTURE1);
-                    glUniform1i(glGetUniformLocation(program,"uGroupedInstances"),nadoc_vr::view_groups::textureUnit);glUniform1i(glGetUniformLocation(program,"uGroupBaseVertices"),int(b.vertices.size()));
-                    for(const auto& call:nadoc_vr::view_groups::draws(b.vertices.size(),b.instances.size()))if(call.instances){glUniform1i(glGetUniformLocation(program,"uGroupFirstInstance"),call.firstInstance);glDrawArraysInstanced(GL_TRIANGLES,0,call.vertices,call.instances);groupedHardwareInstances+=call.instances;}
-                    ++groupedBatchDraws;groupedLogicalInstances+=b.instances.size();
+                    glUniform1i(glGetUniformLocation(program,"uGroupedInstances"),nadoc_vr::view_groups::textureUnit);glUniform1i(glGetUniformLocation(program,"uGroupBaseVertices"),int(indexedGroup?b.indexPlan.uniqueVertices:b.vertices.size()));
+                    if(indexedGroup){
+                        for(const auto& call:nadoc_vr::view_indexed::groupDraws(b.indices.size(),b.instances.size()))if(call.instances){glUniform1i(glGetUniformLocation(program,"uGroupFirstInstance"),call.firstInstance);glDrawElementsInstanced(GL_TRIANGLES,call.indexCount,GL_UNSIGNED_INT,nullptr,call.instances);indexedGroupHardwareInstances+=call.instances;}
+                        ++indexedGroupBatchDraws;indexedGroupLogicalInstances+=b.instances.size();++indexedBatchDraws;
+                    }else{
+                        for(const auto& call:nadoc_vr::view_groups::draws(b.vertices.size(),b.instances.size()))if(call.instances){glUniform1i(glGetUniformLocation(program,"uGroupFirstInstance"),call.firstInstance);glDrawArraysInstanced(GL_TRIANGLES,0,call.vertices,call.instances);groupedHardwareInstances+=call.instances;}
+                        ++groupedBatchDraws;groupedLogicalInstances+=b.instances.size();
+                    }
                 }else{
                     glBindBuffer(GL_ARRAY_BUFFER,b.instanceBuffer);
                     for(GLuint a=3;a<=7;++a){glEnableVertexAttribArray(a);glVertexAttribDivisor(a,1);glVertexAttribPointer(a,4,GL_FLOAT,GL_FALSE,sizeof(Instance),(void*)(uintptr_t)((a-3)*sizeof(glm::vec4)));}
-                    glDrawArraysInstanced(GL_TRIANGLES,0,b.vertices.size(),b.instances.size());++legacyBatchDraws;
+                    if(indexed){glDrawElementsInstanced(GL_TRIANGLES,GLsizei(b.indices.size()),GL_UNSIGNED_INT,nullptr,GLsizei(b.instances.size()));++indexedBatchDraws;if(shadow)++indexedShadowBatchDraws;}
+                    else glDrawArraysInstanced(GL_TRIANGLES,0,b.vertices.size(),b.instances.size());
+                    ++legacyBatchDraws;
                 }
             }
+            }
+            glDepthMask(GL_TRUE);glEnable(GL_DEPTH_TEST);
             for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
-            glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);
+            glEnableVertexAttribArray(1);glEnableVertexAttribArray(2);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);
         }
         if(shadow){glUseProgram(program);glUniform1i(glGetUniformLocation(program,"shadowPass"),0);glUseProgram(0);return;}
         const float scale=glm::length(glm::vec3(model[0]));std::vector<V> billboards;billboards.reserve(sprites.size()*6);

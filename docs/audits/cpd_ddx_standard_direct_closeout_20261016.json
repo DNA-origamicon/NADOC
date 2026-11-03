@@ -1,0 +1,51 @@
+{
+  "at": "2026-10-17T03:41:41+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_standard_direct_v1.py",
+    "sha256": "417ea90e6fd26ecb08ac18f7ec2b8f848a6e80864d5dcc2bdecf03b75b03da3d"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1/assessment.json",
+    "sha256": "087f97414e22f1d8d6d9588279b9010d112a408ba0a3478cb7713ca27eedeb8d"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1/output.dat",
+    "sha256": "b04b1ab8072a8c441f1da4b5813bb0b87a45c79704925ea3987762a8f28ccbb4"
+  },
+  "accelerated_reference": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/assessment.json",
+    "sha256": "f087ef3f9ca8150930272b77678f9225bcde7befd01c3d8113d8c5aafbb4427d"
+  },
+  "records": [
+    {
+      "name": "baseline_direct",
+      "shift_kcal_mol": 0.0,
+      "gap_hartree": 0.24407680840286877,
+      "occupied_subspace_loss": 0.0
+    },
+    {
+      "name": "higher_surface_direct",
+      "shift_kcal_mol": 1.2856696149937423,
+      "gap_hartree": 0.005693105125713471,
+      "occupied_subspace_loss": 3.7547426674019277
+    }
+  ],
+  "direct_fmm_comparison": [
+    {
+      "name": "baseline_direct",
+      "direct_minus_fmm_kcal_mol": 0.0005633452407900173,
+      "potential_max_abs_difference_hartree": 9.40177185660418e-05,
+      "potential_frobenius_difference_hartree": 0.00043648000861632
+    },
+    {
+      "name": "higher_surface_direct",
+      "direct_minus_fmm_kcal_mol": -0.02030404868648129,
+      "potential_max_abs_difference_hartree": 0.00040876680194137927,
+      "potential_frobenius_difference_hartree": 0.0014151002440103153
+    }
+  ],
+  "decision": "Direct solver reproduces large surface sensitivity and occupied-space disruption. FMM is not the sole cause. Close this charged-fragment DDX numerical-refinement route; no more SCF/grid/radius tuning or alternate-conformer targets from these energies. Methodological review required before a new solvent route. All failures and diagnostics retained; original QM-MM mismatch unresolved.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

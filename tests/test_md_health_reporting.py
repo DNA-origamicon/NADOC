@@ -24,6 +24,11 @@ from types import SimpleNamespace
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def isolated_memory_registry(tmp_path,monkeypatch):
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory-registry'))
+
 from backend.core import namd_runner
 from backend.core.disk_guard import DISK_ABORT_RC
 from backend.core.md_health import HealthCheckResult, _latest_segment_dcd
@@ -551,6 +556,9 @@ class _FakeTraj:
     def __len__(self) -> int:
         return self.n
 
+    def close(self):
+        pass
+
     def __getitem__(self, i: int):
         if i == self.bad:
             raise OSError(f"truncated frame {i}")
@@ -560,6 +568,7 @@ class _FakeTraj:
 
 class _FakeUniverse:
     def __init__(self, n: int, bad: int | None = None) -> None:
+        self._topology = object()
         self.trajectory = _FakeTraj(n, bad)
         self.atoms = SimpleNamespace(positions=None, charges=[1.0])
 
@@ -567,8 +576,6 @@ class _FakeUniverse:
 @pytest.fixture
 def stub_health(monkeypatch, tmp_path):
     """Drive run_health_check's per-frame loop without MDAnalysis or a real trajectory."""
-    import sys
-
     from backend.core import md_health as H
 
     pkg = tmp_path / "pkg"
@@ -579,9 +586,7 @@ def stub_health(monkeypatch, tmp_path):
 
     def _install(n_frames: int, bad: int | None = None):
         uni = _FakeUniverse(n_frames, bad)
-        monkeypatch.setitem(
-            sys.modules, "MDAnalysis", SimpleNamespace(Universe=lambda *a, **k: uni)
-        )
+        monkeypatch.setattr(H, "_health_universe", lambda *a, **k: uni)
         monkeypatch.setattr(H, "_unpaired_exclusion_set", lambda *a, **k: set())
         monkeypatch.setattr(H, "build_c1_pairs", lambda *a, **k: [(0, 1)])
         monkeypatch.setattr(H, "build_wc_pairs", lambda *a, **k: [(0, 1)])

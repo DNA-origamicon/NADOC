@@ -14,7 +14,7 @@ const PDB = [
   'END',
 ].join('\n')
 
-test('selected protein owns Tab and cycles translate/rotate gizmos', async ({ page }) => {
+test('protein selection stays passive until Move/Rotate is explicitly activated', async ({ page }) => {
   const errors = trackConsoleErrors(page)
   await page.goto('/?doc=e2e-protein-gizmo-tab')
   await page.waitForSelector('#canvas')
@@ -29,6 +29,9 @@ test('selected protein owns Tab and cycles translate/rotate gizmos', async ({ pa
   const proteinId = await page.evaluate(() =>
     window.__nadocTest.store.getState().currentDesign.protein_attachments.at(-1).id)
   await page.evaluate(id => window.__nadocTest.selectProteinForTest(id), proteinId)
+  expect(await page.evaluate(() => window.__nadocTest.isProteinGizmoAttached())).toBe(false)
+  await expect(page.locator('#move-rotate-panel')).not.toBeVisible()
+  await page.evaluate(() => document.getElementById('menu-tools-translate-rotate').click())
   await expect.poll(() => page.evaluate(() => window.__nadocTest.isProteinGizmoAttached())).toBe(true)
 
   const initialLevel = await page.evaluate(() => window.__nadocTest.getSelectionLevel())

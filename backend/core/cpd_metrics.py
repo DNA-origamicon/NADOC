@@ -166,6 +166,27 @@ def designed_weld_pairs(design) -> list[dict]:
                         "resid_b": rb,
                     }
                 )
+    # Formed products are authoritative, including ordinary bases and pairs on
+    # the same strand. Resolve with the atomistic/psfgen identity convention;
+    # the old crossover-only walk cannot describe these cases.
+    if design.photoproduct_junctions:
+        from backend.core.atomistic_cache import build_atomistic_model_cached
+        from backend.core.base_keys import atom_base_key
+        from backend.core.namd_topology import _is_protein_atom, _psfgen_segid
+        model = build_atomistic_model_cached(design)
+        chains = sorted({a.chain_id for a in model.atoms if not _is_protein_atom(a)})
+        segids = {chain: _psfgen_segid(i) for i, chain in enumerate(chains)}
+        addresses = {atom_base_key(a): (segids[a.chain_id], a.seq_num)
+                     for a in model.atoms if a.chain_id in segids}
+        for lesion in design.photoproduct_junctions:
+            a, b = addresses.get(lesion.base_key_1), addresses.get(lesion.base_key_2)
+            if a is None or b is None:
+                continue
+            pairs = [p for p in pairs if {(p['segid_a'], p['resid_a']),
+                                         (p['segid_b'], p['resid_b'])} != {a, b}]
+            pairs.append(dict(id=lesion.id, label=f'Formed {lesion.stereochemistry} CPD',
+                              formed=True, stereochemistry=lesion.stereochemistry,
+                              segid_a=a[0], resid_a=a[1], segid_b=b[0], resid_b=b[1]))
     return pairs
 
 
@@ -401,7 +422,8 @@ def weld_trace(
             s = series[p["id"]]
             s["d"].append(round(g["d_nm"], 5))
             s["eta"].append(round(g["eta_deg"], 3))
-            s["k"].append(round(g["k"], 5))
+            if not p.get("formed"):
+                s["k"].append(round(g["k"], 5))
         times.append(float(ts.time))
         if progress is not None:
             progress(n_done, len(idx))
@@ -420,6 +442,8 @@ def weld_trace(
             {
                 "id": p["id"],
                 "label": p["label"],
+                "formed": bool(p.get("formed")),
+                "stereochemistry": p.get("stereochemistry"),
                 "d_nm": s["d"],
                 "eta_deg": s["eta"],
                 "k": s["k"],
@@ -427,12 +451,12 @@ def weld_trace(
                 "d_mean_nm": float(d.mean()) if len(d) else None,
                 "k_max": float(k.max()) if len(k) else None,
                 "k_mean": float(k.mean()) if len(k) else None,
-                "reactive_frames": int(reactive.sum()),
+                "reactive_frames": None if p.get("formed") else int(reactive.sum()),
                 # Which umbrella windows this run could actually start. Computed here because
                 # it needs the same d series — and knowing a window has no seed is worth far
                 # more BEFORE the GPU time than after.
                 "seeds": seed_windows(s["d"], windows, frame_indices=frame_indices)
-                if windows
+                if windows and not p.get("formed")
                 else [],
             }
         )

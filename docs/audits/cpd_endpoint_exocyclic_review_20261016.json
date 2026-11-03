@@ -1,0 +1,234 @@
+{
+  "at": "2026-10-16T17:35:04+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_exocyclic_check_v1.py",
+    "sha256": "b46985620981b3e8b2fe5d32a63d7e4e883b1854d572f5a5506166f8a3421bff"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/assessment.json",
+    "sha256": "3b1b80e55a7dad48d7bc571dd3087f96556e900c9a015562f70643994427467d"
+  },
+  "records": [
+    {
+      "label": "original_qm_minus15",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/original_qm_minus15/result.json",
+        "sha256": "778309f946ab222bf53dacd7ba225d256e34cfbf4560a0965c73588298e5818c"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/original_qm_minus15/output.dat",
+        "sha256": "84af07904477008455179936309ffa09820de7bc3def24f5586357ef28a8ddfa"
+      },
+      "energy_hartree": -1366.0972195290249,
+      "requested_rotation_verified": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    },
+    {
+      "label": "original_qm_plus15",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/original_qm_plus15/result.json",
+        "sha256": "38f044f795d13ff141e24fc4b91708a200749e258321fcc0b65d9bc0db330be2"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/original_qm_plus15/output.dat",
+        "sha256": "4e2673574b0b8201feb80bba1e510775f38a96590db1b2bd1f1eb7becf6aed92"
+      },
+      "energy_hartree": -1366.1007983835623,
+      "requested_rotation_verified": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    },
+    {
+      "label": "alternate_qm_minus15",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/alternate_qm_minus15/result.json",
+        "sha256": "5153f8e1b5d880a7121bb772141e3a5f50b57468c6df1a36da729e673df9db2c"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/alternate_qm_minus15/output.dat",
+        "sha256": "6e73ed53db92d0ab8e3b80bc70e81238d99c38d581b53848adf0c3c161bc9e0f"
+      },
+      "energy_hartree": -1366.1036338161339,
+      "requested_rotation_verified": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    },
+    {
+      "label": "alternate_qm_plus15",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/alternate_qm_plus15/result.json",
+        "sha256": "267af45cdeeacc6cd4c078f422f1e0936aea7e88220b09050a3e8ed9349cb8a6"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/alternate_qm_plus15/output.dat",
+        "sha256": "39737abdef1a476daab25ce803aa1f0f874098f310cdab244a12701fdc9aec7f"
+      },
+      "energy_hartree": -1366.102981389627,
+      "requested_rotation_verified": true,
+      "unchanged_bonds": true,
+      "canonical_stereochemistry": true
+    }
+  ],
+  "increments": [
+    {
+      "point": "original_qm_minus15",
+      "baseline": "original_qm",
+      "offset_degrees": -15,
+      "qm_delta_kcal_mol": 3.9581324986340727,
+      "mm": {
+        "parent": {
+          "delta_kcal_mol": 3.164623334218323,
+          "error_kcal_mol": -0.7935091644157497
+        },
+        "core_round1": {
+          "delta_kcal_mol": 3.1646233342182963,
+          "error_kcal_mol": -0.7935091644157763
+        }
+      }
+    },
+    {
+      "point": "original_qm_plus15",
+      "baseline": "original_qm",
+      "offset_degrees": 15,
+      "qm_delta_kcal_mol": 1.7123673701162652,
+      "mm": {
+        "parent": {
+          "delta_kcal_mol": 1.3034241682042165,
+          "error_kcal_mol": -0.4089432019120487
+        },
+        "core_round1": {
+          "delta_kcal_mol": 1.3034241682042023,
+          "error_kcal_mol": -0.4089432019120629
+        }
+      }
+    },
+    {
+      "point": "alternate_qm_minus15",
+      "baseline": "alternate_qm",
+      "offset_degrees": -15,
+      "qm_delta_kcal_mol": 2.077403158514955,
+      "mm": {
+        "parent": {
+          "delta_kcal_mol": 0.8591386456472563,
+          "error_kcal_mol": -1.2182645128676985
+        },
+        "core_round1": {
+          "delta_kcal_mol": 0.8591386456472492,
+          "error_kcal_mol": -1.2182645128677057
+        }
+      }
+    },
+    {
+      "point": "alternate_qm_plus15",
+      "baseline": "alternate_qm",
+      "offset_degrees": 15,
+      "qm_delta_kcal_mol": 2.4868069726642013,
+      "mm": {
+        "parent": {
+          "delta_kcal_mol": 3.1511733449067094,
+          "error_kcal_mol": 0.6643663722425082
+        },
+        "core_round1": {
+          "delta_kcal_mol": 3.1511733449067094,
+          "error_kcal_mol": 0.6643663722425082
+        }
+      }
+    }
+  ],
+  "responses": {
+    "parent_original_qm": {
+      "qm_slope_kcal_rad": -4.289095454724176,
+      "mm_slope_kcal_rad": -3.5546285681958985,
+      "qm_curvature_kcal_rad2": 82.73401323055276,
+      "mm_curvature_kcal_rad2": 65.18993205825257
+    },
+    "parent_alternate_qm": {
+      "qm_slope_kcal_rad": 0.7819036889103386,
+      "mm_slope_kcal_rad": 4.377463825503453,
+      "qm_curvature_kcal_rad2": 66.59296889521275,
+      "mm_curvature_kcal_rad2": 58.51145630275021
+    },
+    "core_round1_original_qm": {
+      "qm_slope_kcal_rad": -4.289095454724176,
+      "mm_slope_kcal_rad": -3.554628568195875,
+      "qm_curvature_kcal_rad2": 82.73401323055276,
+      "mm_curvature_kcal_rad2": 65.18993205825197
+    },
+    "core_round1_alternate_qm": {
+      "qm_slope_kcal_rad": 0.7819036889103386,
+      "mm_slope_kcal_rad": 4.377463825503466,
+      "qm_curvature_kcal_rad2": 66.59296889521275,
+      "mm_curvature_kcal_rad2": 58.51145630275011
+    }
+  },
+  "decision": "Local increment errors range -1.22 to +0.66kcal/mol. Responses differ, particularly alternate-conformer slope; this does not establish that an exocyclic torsion correction resolves7.74kcal/mol interconformer error. Check correction identifiability before additional QM or fitting.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "exploratory_identifiability": {
+    "at": "2026-10-16T17:35:25+00:00",
+    "script": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/exocyclic_identifiability_v1.py",
+      "sha256": "d5870351a8607f62280a13047e4d86aaa1df20d2df11762e510c2ac51350f7e6"
+    },
+    "completion_audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-check-v1/completion_audit.json",
+      "sha256": "a20bde2a243d9d51ca188a58040f7217eb9465c826efac8a426c14f3a2a463d0"
+    },
+    "angles_degrees": {
+      "original_qm": 175.7117093182877,
+      "alternate_qm": 46.404883021905825,
+      "original_qm_minus15": 160.7117093182881,
+      "original_qm_plus15": -169.2882906817128,
+      "alternate_qm_minus15": 31.404883021905803,
+      "alternate_qm_plus15": 61.40488302190581
+    },
+    "hypothesis": "Change only existing n1 phase-pi O5-C5-C4-C3 coefficient. Exploratory regression of already inspected diagnostics; not parameter validation or an exported fit.",
+    "checks": {
+      "local_only": {
+        "delta_k_kcal_mol": -5.21506949037253,
+        "final_k_if_applied": -2.71506949037253,
+        "residual_errors_kcal_mol": {
+          "original_qm_minus15": -0.5153792974645377,
+          "original_qm_plus15": -0.3326696619450914,
+          "alternate_qm_minus15": -0.3632613409949751,
+          "alternate_qm_plus15": -0.4357045244852613,
+          "interconformer_delta": 1.0599839279453915
+        },
+        "local_rmse_kcal_mol": 0.417756555529682,
+        "interconformer_error_kcal_mol": 1.0599839279453915
+      },
+      "diagonal_only": {
+        "delta_k_kcal_mol": -4.586654646758141,
+        "final_k_if_applied": -2.0866546467581406,
+        "residual_errors_kcal_mol": {
+          "original_qm_minus15": -0.5488938915015519,
+          "original_qm_plus15": -0.34186060844709787,
+          "alternate_qm_minus15": -0.46628905434263135,
+          "alternate_qm_plus15": -0.3031461986934145,
+          "interconformer_delta": -8.881784197001252e-16
+        },
+        "local_rmse_kcal_mol": 0.42646110013621114,
+        "interconformer_error_kcal_mol": -8.881784197001252e-16
+      },
+      "joint_equal_weight": {
+        "delta_k_kcal_mol": -4.602675758638151,
+        "final_k_if_applied": -2.102675758638151,
+        "residual_errors_kcal_mol": {
+          "original_qm_minus15": -0.5480394542358885,
+          "original_qm_plus15": -0.341626290012885,
+          "alternate_qm_minus15": -0.46366241600164193,
+          "alternate_qm_plus15": -0.3065257047469686,
+          "interconformer_delta": 0.027023742792184002
+        },
+        "local_rmse_kcal_mol": 0.4260271731680515,
+        "interconformer_error_kcal_mol": 0.027023742792184002
+      }
+    },
+    "parameters_changed": false,
+    "minimum_certified": false,
+    "simulation_ready": false
+  },
+  "next_stage": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/handoff.json"
+}

@@ -176,3 +176,14 @@ unaffected (read-back drops `__xb__`). Pins: `test_md_metrics.py`
 `test_filter_to_reference_core_skips_extra_base_inserts`), `test_oxdna_relaxation.py`
 (`test_base_pairing_spatial_profile_skips_extra_base_inserts`); all can-go-red (reproduce the
 exact `invalid literal for int()` on the crossover uuid).
+
+2026-10-28: **forced-ligation inserts are included too.** Gerling reconstruction
+exposed missing TT bases after junctions were classified as forced ligations.
+`crossover_extra_base_junctions` now matches each forced ligation's complete,
+directed pair of endpoints against an actual consecutive-domain transition.
+Same-helix and unequal-BP connections work; reversed polarity/wrong endpoint
+does not acquire an insert. Existing crossover ownership logic is unchanged.
+All consumers of the canonical walk share the corrected particle order/count.
+No placement formula or phase constant changed. Six new regression cases in
+`tests/test_oxdna_forced_ligation_inserts.py`; all six pass (three failed before
+the fix). Existing extra-base and extension checks:48 passed,6 skipped.

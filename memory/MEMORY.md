@@ -15,10 +15,13 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 - **[Structure requires process](feedback_structure_requires_process.md)** — mandatory for every agent-created structure: full truthful feature log and independent replay; no history-free review/candidate/captured-root exception.
 - [Polymerization and extension scope](feedback_polymerization_extension_scope.md) — no implicit strand-to-extension conversion; correct Full attachment at ›1; defer long-tail molecular geometry beyond the feature-log/dependency overhaul.
 
+- [Visible helix labels](feedback_helix_labels.md) — use viewer labels in all communication and UI, never internal helix IDs.
+
 - [Debug visibility](feedback_debug_visibility.md) — autonomously improve viewing conditions, preserve the behavior under test, verify user-visible output; reusable Codex skill.
 
 - [VR human motion](project_vr_human_motion.md) — archived BEHAVIOR Vive recordings, movement modeller, live/Witness adapters; steady_fast first, all four presets for final validation.
 
+- [CPD QM solver preference](feedback_cpd_qm_solver_choice.md) — start charged-fragment solvent references with tested PySCF IEF-PCM; keep numerical/resource gates.
 - [CPD strand builder](project_cpd_strand_builder.md) — preliminary additive cis-syn support, packaged assets, scope and verification.
 
 - [Sella default](feedback_sella_default.md) — user-selected optimizer for new molecular QM/fragment-MM geometry work; preserve independent gates and frozen evidence.
@@ -87,6 +90,8 @@ Files are `feedback_<name>.md`. Match the name against what you're editing; each
 **[namd_4fs_production_only](feedback_namd_4fs_production_only.md)** (4.0 fs is the ONLY production dt — fix the clash, never lower)
 
 ## Active topic files
+
+- [Image evaluation](project_image_evaluation.md) — Help PDF vector-diagram review, BP calibration, routing flags and reconstruction uncertainty.
 
 Files are `project_<name>.md`. Bold = read before touching that area.
 

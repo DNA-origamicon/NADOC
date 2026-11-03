@@ -1,0 +1,76 @@
+{
+  "at": "2026-10-17T03:14:46+00:00",
+  "passed": false,
+  "native_restart_verified": true,
+  "reason": "Fine-grid SCF diverges even from converged orbitals; no converged result.",
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-restart-v1/original_qm/output.dat",
+    "sha256": "bb41ed06c21286ffd733e939b1bae7de784ecf5e2e8f15dd34756e4341d801b2"
+  },
+  "runner": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-restart-v1/original_qm_runner.log",
+    "sha256": "d3cdecde62033e9719bc3974d7ec07be8d4e98d8e23469b8f2c37a464d41a16f"
+  },
+  "wavefunction": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/coarse_wavefunction.npy",
+    "sha256": "19dbcd3443b106fb2527a3eafe3e308d956df0df6bd473effaa4990c954d9c07"
+  },
+  "spectrum_script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_ddx_restart_spectrum_v1.py",
+    "sha256": "64e67f85dd97c3b35559bf69c24f9ce99704f8af5c0af09d1f509a6248ed7381"
+  },
+  "spectrum": [
+    {
+      "name": "baseline",
+      "ao_delta_max": 0.0,
+      "mo_delta_max": 0.0,
+      "occupied_virtual_coupling_max": 0.0,
+      "lowest_orbital_energy": -80.04909174935983,
+      "homo": -0.3938321499656952,
+      "lumo": 0.05649474845852858,
+      "gap_hartree": 0.4503268984242238,
+      "occupied_subspace_loss": 1.4210854715202004e-14,
+      "max_virtual_shift": 0.0
+    },
+    {
+      "name": "integration_only",
+      "ao_delta_max": 0.0071493168262984075,
+      "mo_delta_max": 0.006622029714366932,
+      "occupied_virtual_coupling_max": 0.0006938313389338811,
+      "lowest_orbital_energy": -80.05079941413577,
+      "homo": -0.39411291248885133,
+      "lumo": 0.05738815696169864,
+      "gap_hartree": 0.45150106945054996,
+      "occupied_subspace_loss": 6.610495671566241e-05,
+      "max_virtual_shift": 0.005962313458523705
+    },
+    {
+      "name": "surface_only",
+      "ao_delta_max": 0.035444255828506376,
+      "mo_delta_max": 0.12868073325940232,
+      "occupied_virtual_coupling_max": 0.0032572453438530656,
+      "lowest_orbital_energy": -80.05163227837936,
+      "homo": -0.4271538520210398,
+      "lumo": -0.4241099960728894,
+      "gap_hartree": 0.0030438559481503757,
+      "occupied_subspace_loss": 3.016978398891993,
+      "max_virtual_shift": 0.12868073325940232
+    },
+    {
+      "name": "combined",
+      "ao_delta_max": 0.029516860966483947,
+      "mo_delta_max": 0.11795057622637066,
+      "occupied_virtual_coupling_max": 0.0028427749065494173,
+      "lowest_orbital_energy": -80.05291457717543,
+      "homo": -0.4287355863910189,
+      "lumo": -0.42569267222400997,
+      "gap_hartree": 0.0030429141670089144,
+      "occupied_subspace_loss": 3.005635035253164,
+      "max_virtual_shift": 0.11795057622637066
+    }
+  ],
+  "baseline_diagonal_error": 6.71765421067505e-12,
+  "interpretation": "Frozen-density matrix diagnostic, not a new SCF result or minimum. Occupied-subspace loss measures mixing after one Fock diagonalization at fixed original density. No parameters changed.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

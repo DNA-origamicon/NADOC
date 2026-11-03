@@ -1,0 +1,27 @@
+{
+  "reviewed": "2026-11-02",
+  "scope": "All 32 existing catalog records / 18 publications",
+  "primary_evidence": "Locally retained full-text XML, publisher supplement link lists, and downloaded supporting PDFs; named sequence lists inspected at cited pages.",
+  "web_checks": [
+    "Large size-selective nanopore: data availability, EMDB/EMPIAR terms",
+    "Nuclear-pore-mimic ring: data availability and repository/EMPIAR terms",
+    "Plasmonic mirage: data availability and dataset/repository terms",
+    "Molecular transport through large-diameter nanopores: data availability",
+    "Cargo-sorting DNA robot: AFM dataset/repository terms",
+    "Programmable disorder: data availability",
+    "Folding twisted/curved shapes: EMDB/EMPIAR/dataset terms",
+    "Real-time magnetic actuation: repository/data availability",
+    "Quantifying quality: dataset/repository",
+    "Reusable sequences: microscopy/data",
+    "Salt-free deposition: 60HB characterization",
+    "Geometry recognition: dataset"
+  ],
+  "result": "No verified public raw imaging deposit for these records; not proof of absence. Source figures and functional movies recorded separately.",
+  "not_done": [
+    "Author contact",
+    "Bulk imaging downloads",
+    "Particle processing",
+    "Sequence-to-topology reconciliation",
+    "Simulation matching"
+  ]
+}

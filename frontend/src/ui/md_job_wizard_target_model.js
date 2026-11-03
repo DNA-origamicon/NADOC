@@ -220,9 +220,19 @@ export function resourceContextRows(preview) {
     rows.push(['Throughput', `${Number(r.expected_ns_per_day).toFixed(1)} ns/day${
       r.measured ? ' (measured)' : ' (estimated)'}`])
   }
+  if (r.completion?.available) {
+    const q = r.completion
+    rows.push(['Time until results', `${q.known_hours.toFixed(1)} h (${q.low_hours.toFixed(1)}–${q.high_hours.toFixed(1)} h) + queue waits`])
+    rows.push(['Total allocation cost', `${Math.round(q.cost).toLocaleString()} SU (${Math.round(q.low_cost).toLocaleString()}–${Math.round(q.high_cost).toLocaleString()} SU)`])
+  }
+  if (r.run_hours != null) rows.push(['Estimated compute', `${Number(r.run_hours).toFixed(1)} h (queue and setup additional)`])
+  if (r.planning_hours != null) rows.push(['Compute with headroom', `${Number(r.planning_hours).toFixed(1)} h`])
+  if (r.requires_resubmission) rows.push(['Scheduler submissions', `At least ${r.submission_count}; wall time is capped per submission`])
+  if (r.memory) rows.push(['Memory allowance', `${(r.memory.workflow_ram_mib/1024).toFixed(1)} GiB RAM · ${(r.memory.gpu_mib/1024).toFixed(1)} GiB VRAM`])
   if (r.est_cost_su != null) {
     rows.push(['Est. cost', `${Math.round(r.est_cost_su).toLocaleString()} SU`])
   }
+  if (r.planning_cost_su != null) rows.push(['Cost with headroom', `${Math.round(r.planning_cost_su).toLocaleString()} SU`])
   return rows
 }
 
@@ -231,7 +241,7 @@ export function resourceNotes(preview) {
   const r = preview?.resources
   if (!r) return []
   const notes = Array.isArray(r.notes) ? [...r.notes] : (r.notes ? [String(r.notes)] : [])
-  if (r.safety_factor) notes.unshift(`Wall time carries ${r.safety_factor}× headroom.`)
+  if (r.safety_factor) notes.unshift(`Compute planning includes ${r.safety_factor}× headroom; each submission remains subject to the scheduler limit.`)
   return notes
 }
 
@@ -297,11 +307,13 @@ export function slurmFacts(preview) {
   return [
     ['Partition', `${r.partition}${r.gres_type ? ` (${r.gres_type})` : ''}`],
     ['QoS', r.qos],
-    ['Walltime', r.walltime],
+    ['Walltime', `${r.walltime}${r.requires_resubmission ? ' per submission; restart required' : ''}`],
     ['CPUs / GPUs', `${r.cores} cores · ${r.gpus} GPU${r.gpus === 1 ? '' : 's'}`],
     ['Memory', `${r.mem_gb} GB`],
     ['Throughput', `${r.expected_ns_per_day} ns/day${r.measured ? ' (measured)' : ' (estimated)'}`],
-    ['Est. cost', `${Math.round(r.est_cost_su).toLocaleString()} SU`],
+    ['Est. cost', `${Math.round(r.est_cost_su).toLocaleString()} SU for the full compute estimate`],
+    ...(r.completion?.available ? [['Time until results', `${r.completion.known_hours.toFixed(1)} h (${r.completion.low_hours.toFixed(1)}–${r.completion.high_hours.toFixed(1)} h) + queue waits`]] : []),
+    ...(r.run_hours == null ? [] : [['Estimated compute', `${Number(r.run_hours).toFixed(1)} h; queue and setup additional`]]),
     ['System size', preview.n_atoms
       ? `${Number(preview.n_atoms).toLocaleString()} atoms${
           preview.n_atoms_source === 'estimated' ? ' (estimated — solvation not run yet)' : ''}`

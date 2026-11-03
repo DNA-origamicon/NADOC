@@ -16,7 +16,7 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
     try {
       if (event.action === 'undo') {
         await sendFeedback(event, 'pending', 'undoing')
-        outcome = await transaction.undo({ tool: event.mode, onCommitted: sceneRefresh.onCommitted })
+        outcome = await transaction.undo({ tool: event.mode, onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       } else {
         const config = getConfig()
         const target = resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens })
@@ -38,7 +38,7 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
               targetIdentity: event.targetIdentity, targetKind: event.targetKind,
               execute: async () => {
                 if (!resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens }) || getConfig().sequence !== config.sequence) return { accepted: false, reason: 'stale_target' }
-                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision, onCommitted: sceneRefresh.onCommitted, ...(plan.targets ? { targets: plan.targets } : {}) })
+                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision, onCommitted: sceneRefresh.onCommitted, deferGeometry: true, ...(plan.targets ? { targets: plan.targets } : {}) })
                 return { accepted: !!result, result }
               },
             })

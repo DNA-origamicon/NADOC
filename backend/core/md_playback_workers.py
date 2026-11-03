@@ -9,7 +9,7 @@ import time
 
 _idle = []
 _lock = threading.Lock()
-_MAX_IDLE = 3
+_MAX_IDLE = 1
 
 
 def _serve(connection):
@@ -46,8 +46,15 @@ def acquire(context):
 
 def release(process, connection):
     from backend.core.md_analysis_runner import _kill
+    from backend.core.memory_budget import simulation_active
+    # A running simulation already pays for health overlap. Do not retain an
+    # additional playback interpreter between user requests during that run.
+    try:
+        retain=not simulation_active()
+    except MemoryError:
+        retain=False
     with _lock:
-        keep = process.is_alive() and len(_idle) < _MAX_IDLE
+        keep = retain and process.is_alive() and len(_idle) < _MAX_IDLE
         if keep:
             _idle.append((process, connection, time.monotonic()))
     if not keep:
@@ -63,3 +70,7 @@ def close():
     for process, connection, _since in workers:
         _kill(process)
         connection.close()
+
+
+from backend.core.memory_budget import register_reclaimer
+register_reclaimer('idle_playback_workers', close)

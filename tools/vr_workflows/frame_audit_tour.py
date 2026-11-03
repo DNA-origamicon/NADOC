@@ -60,16 +60,20 @@ def main():
         export=dict(snapshot=str(snapshot),reused=True)
     else:
         raw=args.design.read_bytes()
+        # Full supplies startup geometry; retain only the requested alternatives.
+        # Unrequested atomistic/surface arrays can otherwise dominate the audit's
+        # memory scope and turn a renderer measurement into a reclaim benchmark.
+        exported_representations={'full', *args.representations}
         doc='__test_vr_frame_audit_'+uuid.uuid4().hex
         token=set_current_doc(doc)
         try:
             state.set_design(Design.from_json(raw.decode()))
             with (args.output/'scene.nadocvr').open('w',buffering=1024*1024) as stream:
-                vr._snapshot(vr.VRLaunchRequest(),line_writer=lambda line:stream.write(line+'\n'),representations={'full','stick','ballstick','surface'})
+                vr._snapshot(vr.VRLaunchRequest(),line_writer=lambda line:stream.write(line+'\n'),representations=exported_representations)
         finally:
             state.drop_doc(doc)
             reset_current_doc(token)
-        export=dict(source=str(args.design),sha256=hashlib.sha256(raw).hexdigest(),representations=['full','stick','ballstick','surface'])
+        export=dict(source=str(args.design),sha256=hashlib.sha256(raw).hexdigest(),representations=sorted(exported_representations))
         snapshot=args.output/'scene.nadocvr'
     (args.output/'export.json').write_text(json.dumps(export,indent=2))
     if args.viewer_binary:

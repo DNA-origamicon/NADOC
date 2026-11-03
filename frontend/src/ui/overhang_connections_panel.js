@@ -107,6 +107,7 @@ let _glowB = null   // magenta glow over overhang B's beads
 let _selA    = null   // overhang id chosen in dropdown A (or null)
 let _selB    = null   // overhang id chosen in dropdown B (or null)
 let _selRow  = null   // selected list row: { kind:'version'|'conn'|'binding', id } | null
+let _highlightActive = false   // retained dropdown values are not an active selection
 let _detailsEl = null
 let _collapsedGroups = new Set()   // pairKeys whose version sublist is collapsed
 
@@ -200,13 +201,26 @@ export function initOverhangConnectionsPanel({
   _selectA.style.borderLeft = `3px solid ${_NEON_A}`
   _selectB.style.borderLeft = `3px solid ${_NEON_B}`
 
+  // Blank panel/list space dismisses the row selection, just like a scene
+  // deselection. Ignore bubbling clicks from rows and editing controls.
+  for (const surface of [_body, _list]) {
+    surface?.addEventListener('click', (ev) => {
+      if (ev.target !== surface) return
+      _selRow = null
+      _highlightActive = false
+      _render()
+    })
+  }
+
   _selectA.addEventListener('change', () => {
+    _highlightActive = true
     _selA = _selectA.value || null
     _slotTA = _selA ? ++_clock : 0
     _selRow = null
     _render()
   })
   _selectB.addEventListener('change', () => {
+    _highlightActive = true
     _selB = _selectB.value || null
     _slotTB = _selB ? ++_clock : 0
     _selRow = null
@@ -544,12 +558,12 @@ function _onNanoparticleSelectionChange(state) {
 }
 
 /** Position the cyan (A) / magenta (B) glow over the beads of the overhang in
- *  each dropdown. Cleared while the section is collapsed (highlight is only
- *  active when the section is open). Re-fetches entries each call so it tracks
+ *  each dropdown while its selection is active. Deselecting keeps the dropdown
+ *  values for editing, but clears the glow even across redraws. Re-fetches entries so it tracks
  *  rebuilds / position overlays. No-op when the glow deps weren't injected. */
 function _updateGlow() {
   if (!_glowA || !_glowB) return
-  if (_collapsed) { _glowA.clear(); _glowB.clear(); return }
+  if (_collapsed || !_highlightActive) { _glowA.clear(); _glowB.clear(); return }
   const entries = _designRenderer?.getBackboneEntries?.() ?? []
   _glowA.setEntries(_selA ? entries.filter(e => e?.nuc?.overhang_id === _selA) : [])
   _glowB.setEntries(_selB ? entries.filter(e => e?.nuc?.overhang_id === _selB) : [])
@@ -1026,6 +1040,7 @@ async function _onApply(reapply = false) {
   try {
     if (v.applied && !reapply) {
       await _versionRemoval.unapply(v)
+      if (_versions().some(version => version.id === v.id)) _selRow = { kind: 'version', id: v.id }
     } else {
       const beforeIds = new Set((_store.getState().currentDesign?.cluster_transforms ?? [])
         .map(c => c.id))
@@ -1184,6 +1199,7 @@ function _makeVersionRow(v) {
 }
 
 function _selectVersion(v) {
+  _highlightActive = true
   _selRow = { kind: 'version', id: v.id }
   _selA = v.overhang_a_id ?? null
   _selB = v.overhang_b_id ?? null
@@ -1250,6 +1266,7 @@ function _makeRow(kind, e, nameById) {
 /** Click a list row → select it (show its sequence/details), re-populate the
  *  two overhang dropdowns + (for linkers) the matching connection-type variant. */
 function _selectRow(kind, e) {
+  _highlightActive = true
   _selRow = { kind, id: e.id }
   _selA = e.overhang_a_id ?? null
   _selB = e.overhang_b_id ?? null
@@ -1732,7 +1749,7 @@ function _applyCollapse() {
     _updateGlow()   // collapsing clears the cyan/magenta overhang highlight
   } else if (_selA || _selB) {
     // Opening snaps the dropdowns to whatever the slots hold (the current scene
-    // selection) and re-shows the highlight (via _render → _updateGlow).
+    // selection). A dismissed highlight stays dismissed when reopening.
     _applySlotsToDropdowns()
   } else {
     _updateGlow()   // open with nothing selected → ensure no highlight
@@ -1757,14 +1774,23 @@ function _selectedOverhangIds(state) {
  *   - 0 selected → no pick (a transient deselect leaves the slots alone). */
 function _onSelectionChange(state) {
   const cur = _selectedOverhangIds(state)
+  if (!cur.length) {
+    _selPrev = cur
+    _highlightActive = false
+    _selRow = null
+    _render()
+    _updateGlow()
+    return
+  }
   if (cur.length === _selPrev.length && cur.every((id, index) => id === _selPrev[index])) return
+  _highlightActive = cur.length > 0
   let picks
   if (cur.length === 1) picks = cur
   else if (cur.length >= 2) picks = cur.filter(id => !_selPrev.includes(id))
   else picks = []
   for (const id of picks) _placePick(id)
   _selPrev = cur
-  if (_collapsed || !picks.length) return   // deselection preserves the chosen version
+  if (_collapsed || !picks.length) { _updateGlow(); return } // No newly picked overhang to populate.
   _applySlotsToDropdowns()
 }
 
@@ -1825,6 +1851,7 @@ function _closePopover() {
  *  absent (e.g. before init, or in a headless test without the markup). */
 export function openConnectionForPair(aId, bId) {
   if (!_inited || !_selectA || !_selectB) return
+  _highlightActive = true
   _selA = aId || null
   _selB = bId || null
   _slotTA = _selA ? ++_clock : 0

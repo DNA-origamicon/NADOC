@@ -1,0 +1,26 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-control-v3-service/completion_wake_ack.json",
+    "sha256": "b516aef7b892f76fa407ad33c99bd388c70354720013d93d5b7a84788241b93c"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-control-v3/completion_audit.json",
+    "sha256": "4cf0823d0d6cfdce28f060418c8e176616eff87658884f2429823384eb4ca6c6"
+  },
+  "structural_diagnostic": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/matched-validation-structure-review-v1/assessment.json",
+    "sha256": "30e25f5fd994261130fb5f71270a5f1e898208196b84d82dcf3550646c8b9d41"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-anti-v1/launch_receipt.json",
+    "sha256": "e07700cf60cd62592f13548ffbb72d40993c0bfeefe71b4fb0a60dbdaf931351"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-anti-v1/handoff.json",
+    "sha256": "19de52fe612570f10c50c2c0c135a52ecfb56a34b5dd3959f38ddfcecdc8dcd3"
+  },
+  "qualification": "Provisional candidate diagnostics only. Preliminary structural qualification in protocolv2 requires parameter gates, which remain unresolved; extra seeds do not satisfy or waive that requirement.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

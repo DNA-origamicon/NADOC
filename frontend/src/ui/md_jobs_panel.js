@@ -1,3 +1,4 @@
+import { mergeCreatingJobs } from '../api/sim_job_creation.js'
 import { showConfirm } from './primitives/confirm.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 import {confirmElectrodeProtocol} from './namd_electrode_protocol.js'
@@ -33,6 +34,7 @@ import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdV
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
+import { nadocBroadcast } from '../shared/broadcast.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { openPegQualification } from './namd_peg_review.js'
@@ -170,7 +172,7 @@ export function filterJobsForPart(jobs, partPath, showAll) {
   if (showAll) return jobs
   const current = normalizeWorkspacePath(partPath)
   if (!current) return []
-  return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
+  return jobs.filter(j => j.creating || normalizeWorkspacePath(j.design_source_path) === current)
 }
 
 /**
@@ -439,6 +441,19 @@ export function mdRunControl(selectedJob, {
       title: 'Select a run in the list, or create one with ＋ New job.',
     }
   }
+  // The persisted phase survives polling/reloads; the local guard covers the
+  // interval before the server publishes that phase and the final status refresh.
+  if (selectedJob.execution_target === 'alpine' &&
+      (submitting || selectedJob.remote_submit_progress || selectedJob.creating ||
+       selectedJob.status === 'preparing')) {
+    return {
+      action: RUN_ACTION.SUBMIT, label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      title: 'Preparing and uploading the package to Alpine. Submission is in progress.',
+    }
+  }
+  if (selectedJob.creating || selectedJob.status === 'preparing') return {
+    action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
+  }
   if (selectedJob.restart_snapshot) return { action: RUN_ACTION.RUN, label: 'Preserved attempt', disabled: true,
     title: 'This entry holds the interrupted trajectory. The linked active job owns the Alpine allocation.' }
   if (selectedJob.status === 'failed' && selectedJob.failure_kind === 'electrode_equilibration') {
@@ -470,21 +485,6 @@ export function mdRunControl(selectedJob, {
   // primary control tracks that: it spins while the package builds, then becomes the
   // submit. (Only Alpine — a RunPod job's rental flow is still its own thing.)
   if (selectedJob.execution_target === 'alpine') {
-    if (selectedJob.status === 'preparing') {
-      return {
-        action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
-        title: 'Solvating and building the package on this computer. Submit unlocks when '
-             + 'it is done — attach anchors or an electric field meanwhile.',
-      }
-    }
-    // The upload itself is minutes of SFTP for an 800 MB package, and a second click on
-    // an enabled-looking button during it is exactly how a job gets submitted twice.
-    if (submitting) {
-      return {
-        action: RUN_ACTION.PREPARING, label: 'Submitting…', disabled: true, spinner: true,
-        title: 'Uploading the package to Alpine, then sbatch.',
-      }
-    }
     // The cluster side is already terminal while NADOC pulls and indexes the result
     // tree — true whether it got there by finishing, by a walltime TIMEOUT, or by a
     // manual Terminate-and-download (which scancels BEFORE it ever sets this state;
@@ -497,14 +497,16 @@ export function mdRunControl(selectedJob, {
     // that download can run for hours, during which the button must not lie.
     // Represent the real local transfer phase instead.
     const downloadState = selectedJob.download_status?.state
-    if (['downloading', 'processing'].includes(downloadState)) {
+    if (['queued', 'downloading', 'processing'].includes(downloadState)) {
       const processing = downloadState === 'processing'
       return {
         action: RUN_ACTION.PREPARING,
-        label: processing ? 'Processing results…' : 'Downloading results…',
+        label: downloadState === 'queued' ? 'Waiting to download…' : processing ? 'Processing results…' : 'Downloading results…',
         disabled: true,
-        spinner: true,
-        title: processing
+        spinner: downloadState !== 'queued',
+        title: downloadState === 'queued'
+          ? 'Finished on Alpine — waiting to download results.'
+          : processing
           ? 'The Alpine results are being indexed locally.'
           : 'The Alpine run has ended on the cluster — its results are being downloaded and verified locally.',
       }
@@ -789,7 +791,7 @@ export function hasActiveRemoteJob(jobs) {
   // older backend (or a restart between the two saves) can already be terminal.  Keep the
   // REST poll armed from the durable download state instead of freezing that edge case.
   return (jobs ?? []).some(j => mdIsRemoteJob(j) && (
-    mdJobIsActive(j) || ['downloading', 'processing'].includes(j?.download_status?.state)
+    mdJobIsActive(j) || ['queued', 'downloading', 'processing'].includes(j?.download_status?.state)
   ))
 }
 
@@ -1340,7 +1342,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
   const screeningCard = initNamdSurfaceCharge()
-  const boxSolvent = initBoxSolvent({api,store})
+  const boxSolvent = initBoxSolvent({api,store,saveDraftSettings: _saveDraftBoxSettings})
   const surfaceEnableChk   = document.getElementById('md-surface-enable')
   const surfaceAxisEl      = document.getElementById('md-surface-axis')
   const surfaceOffsetEl    = document.getElementById('md-surface-offset')
@@ -1441,6 +1443,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const trajFramesHint = document.getElementById('md-jobs-traj-frames-hint')
 
   // ── State ──────────────────────────────────────────────────────────────────
+  let _draftSettingsVersion = 0
   let _jobs         = []     // cached list from API
   let _selectedId   = null   // currently displayed job_id
   // The user clicked the selected row to DESELECT it. `_selectBestJob` runs on every poll
@@ -1486,6 +1489,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
+  let _inheritedSeedGeneration = 0
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   let _earlyStopBusy = false      // a live early-stop POST is in flight (locks the toggle until the server confirms)
   const _metricsByJob = new Map()
@@ -1616,8 +1620,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _selectedRunpodGpu = null
   const _runpodPicker = initRunpodGpuPicker({
     mount: runpodPickerEl,
+    fetchOptions: () => api.getRunpodGpuOptions(undefined, boxSolvent?.payload()),
     onSelect: (row) => { _selectedRunpodGpu = row },
   })
+
+  boxSolvent?.subscribe(() => _runpodPicker.refresh())
 
   // Alpine GPU availability: free GPUs, queue depth and estimated wait per partition.
   // Passes the selected job so the estimate is sized for the real run, not a generic one.
@@ -1676,7 +1683,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const previousTarget = _visibleTarget
     _syncTargetPane(previousTarget)
     _visibleTarget = target
-    if (target === 'runpod') void _runpod.refresh()
+    if (target === 'runpod' && !job?.creating) void _runpod.refresh()
   }
 
   let _visibleTarget = _currentRunTarget()
@@ -1881,12 +1888,31 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   const notifyBoxSizeFailures = createBoxSizeFailureNotifier(warnings => boxSolvent?.setJobWarnings(warnings))
 
+  async function _saveDraftBoxSettings(selected, changes) {
+    const job=_jobs.find(j=>j.job_id===selected.job_id) || selected
+    const patch=Object.fromEntries(Object.entries(changes).filter(([key,value])=>
+      JSON.stringify(value)!==JSON.stringify(job.prep_params?.[key])))
+    if(!Object.keys(patch).length)return job
+    _draftSettingsVersion++
+    try {
+      const saved=await api.updateMdDraftPreparation(job.job_id, patch)
+      if(!saved)throw Error(api.lastErrorMessage?.() || 'Could not save job settings')
+      _jobs=_jobs.map(j=>j.job_id===saved.job_id?{...j,...saved}:j)
+      return saved
+    } finally {
+      // A poll that started before this write must not resurrect the old prep_params.
+      _draftSettingsVersion++
+    }
+  }
+
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
+    const settingsVersion=_draftSettingsVersion
     try {
       const jobs = await api.listMdJobs()
+      if(settingsVersion!==_draftSettingsVersion)return
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
-      _jobs = jobs
+      _jobs = mergeCreatingJobs(jobs, 'namd')
       notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
       _jobs.sort((a, b) => b.created_at - a.created_at)
       _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
@@ -1895,6 +1921,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _selectBestJob()
       const selected = _jobs.find(j => j.job_id === _selectedId)
       _updateVizToggles(selected)
+      // Submission phases can change without a selection change or queue refresh.
+      _paintRunControl()
       if (selected) surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
@@ -2059,6 +2087,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
+    boxSolvent?.clearJob()
     _grapheneSelectionId = null
     // Empty job-list refreshes must not clear the setup the user is editing.
     if (_selectedId) {
@@ -2460,15 +2489,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return true
     }
     _clearInheritedSeed()   // switching seeds → drop the previous overlay first
+    const generation = _inheritedSeedGeneration
+    _inheritedSeedShown = seedId // Also own/cancel the in-flight load on a job switch.
     _setDisplayStatus('Loading inherited oxDNA-seed positions…', _C.muted, true)
     const r = await oxd.displayJob(seedId, true).catch(() => null)
+    if (generation !== _inheritedSeedGeneration) return false
     if (r?.ok) {
-      _inheritedSeedShown = seedId
       _setDisplayStatus(
         `Inherited oxDNA-seed positions (${r.stage || ''}${r.n ? `, ${r.n} nt` : ''}) — no MD frame yet`,
         _C.accent)
       return true
     }
+    _clearInheritedSeed()
     return false   // seed has no relaxed frame either → fall through to "waiting"
   }
 
@@ -2476,6 +2508,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // restore=false → just drop the flag: a real MD frame has already overwritten the
   // seed overlay, so restoring would wrongly flash the model back to native.
   function _clearInheritedSeed(restore = true) {
+    _inheritedSeedGeneration++
     if (!_inheritedSeedShown) return
     if (restore) getOxdnaDisplay?.()?.stopAndRestore?.()
     _inheritedSeedShown = null
@@ -2512,19 +2545,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     // Display job changed → reset frame tracking + drop any stale seed overlay.
     if (job.job_id !== _displayJobId) {
+      if (_displayJobId) mdDisplayController.stopDisplayKeepWarm?.()
       _mdFrameShown = false
       _clearInheritedSeed()
+      _displayJobId = job.job_id
+      _displayKey = null
     }
 
-    // Seeded run that hasn't shown a real MD frame yet → show the INHERITED oxDNA-seed
-    // positions (the structure MD started from) as a placeholder.  NAMD creates its DCD
-    // file immediately (so `ready` flips true with zero frames), so we gate on "no MD
-    // frame displayed yet", NOT on `ready` — otherwise the seed never shows.  The first
-    // streamed MD frame clears this overlay (see the md-display-state listener).
-    if (job.seed_oxdna_job_id && !_mdFrameShown) {
-      await _showInheritedSeed(job)
-    }
-
+    // Prefer the prepared job's own starting coordinates. Unprepared oxDNA-seeded
+    // drafts can still show their source until a NAMD package is available.
     try {
       const d = await _fetchDisplayMeta(job.job_id)
       if (!d) throw new Error('Could not load MD display metadata')
@@ -2536,6 +2565,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
+        if (d.starting_structure_config) {
+          const key = d.starting_structure_config
+          const forceReload = _displayKey !== key
+          _displayKey = key
+          mdDisplayController.displayLatest(key, { forceReload, live: false, jobId: job.job_id })
+          _setDisplayStatus('Starting structure — no simulation frame yet', _C.accent)
+          return
+        }
+        if (job.seed_oxdna_job_id && !_mdFrameShown) {
+          await _showInheritedSeed(job)
+          if (_selectedId !== job.job_id || !displayToggle?.checked) return
+        }
         // Remote snapshots are explicit: retain any stored frame, and wait for Refresh
         // when none exists. Never pull coordinates merely because this display tick ran.
         _displayJobId = job.job_id
@@ -3562,6 +3603,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   async function deleteSelected() {
     if (!_selectedId) return false
     const job = _jobs.find(j => j.job_id === _selectedId)
+    if (job?.execution_target === 'alpine' && job.status === 'queued') {
+      const status = await api.getClusterStatus().catch(() => null)
+      if (status?.state !== 'connected') {
+        window.alert('Connect to Alpine before deleting this queued job so it can be cancelled. Then try Delete again.')
+        return false
+      }
+    }
     const label = job ? `${job.design_name} (${job.job_id})` : _selectedId
     if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return false
     try {
@@ -3697,6 +3745,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     // Only `frame` means data is on screen. Loading and topology-ready retain the spinner.
     if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
+    else if (state === 'frame' && _displayMeta?.starting_structure_config && !_displayMeta?.ready) {
+      _setDisplayStatus('Starting structure — no simulation frame yet', _C.accent, false)
+    }
     else if (remoteDisplay) _setDisplayStatus('', _C.dim, false)
     else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
     else if (state === 'topology-ready') _setDisplayStatus(`${message}…`, _C.muted, true)
@@ -3722,6 +3773,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Creating a job has begun but the backend has not returned its id yet, so there is
     // no selected record from which mdRunControl can derive this transient state.
     if (_launching) {
+      if (_selectedJob()?.execution_target === 'alpine') return {
+        action: RUN_ACTION.SUBMIT, label: '☁ Submit to Alpine', disabled: true, spinner: true,
+      }
       return { action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true }
     }
     const sel = _selectedJob()
@@ -3778,7 +3832,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const starting = rc.action === RUN_ACTION.RUN || rc.action === RUN_ACTION.SUBMIT
       || rc.action === RUN_ACTION.PREPARING
     const stopping = !queueing && !starting
-    runBtn.style.background = runBtn.disabled ? '#122117'
+    runBtn.style.background = runBtn.disabled ? '#21262d'
       : queueing ? '#1c2333' : (stopping ? '#2d2119' : '#1a4a1a')
     runBtn.style.borderColor = runBtn.disabled ? _C.border
       : queueing ? '#30456d' : (stopping ? '#d29922' : _C.ok)
@@ -3971,6 +4025,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // into a single button — they used to be a fresh-Relax button, a contextual Stop/Resume
   // button and a Production button, each aware of a different subset of job states.
   runBtn?.addEventListener('click', () => {
+    if (runBtn.disabled || _runControl().disabled) return
     const sel = _selectedJob()
     if (!sel) return
     if (sel.status === 'failed' && sel.failure_kind === 'electrode_equilibration') return _openVramFix(sel.job_id)
@@ -4130,6 +4185,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       getRelaxPresets: () => api.getRelaxPresets(),
       fetchProtocolPlan: body => api.fetchProtocolPlan(body),
       fetchProtocolBoxPreview: body => api.fetchProtocolBoxPreview(body),
+      getMdSolventMeta: id => api.getMdSolventMeta(id),
       // The client returns null on a non-OK response, so the wizard needs this to say
       // WHY a plan came back empty instead of showing a blank table.
       lastErrorMessage: () => api.lastErrorMessage?.(),
@@ -4145,6 +4201,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // card, what it writes, and whether it fits the network volume.  One round trip carries
       // the cards, storage, balance, live pods AND the pre-flight.
       getRunpodJobPreview: body => api.getRunpodJobPreview(body),
+      getRuntimePreview: body => api.getMdRuntimePreview(body),
       getRunpodVolumes: () => api.getRunpodVolumes(),
       setRunpodVolume: id => api.setRunpodVolume(id),
       // The folder picker browses the server's filesystem through the same client.
@@ -4263,15 +4320,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
 
-    // Only warn about a busy GPU when this run actually targets the GPU.
-    // Wizard requests name the preset and deliberately omit its derived protocol.
-    // Treat GBIS as CPU-only at this boundary too; otherwise the visible implicit plan
-    // still enters the explicit-water VRAM gate before the backend can resolve the preset.
-    const implicitRun = isImplicitSolventProtocol(proto.protocol)
-      || proto.relax_preset === 'implicit_gbis'
-    const runsOnGpu = !implicitRun
-      && deviceStr.toLowerCase() !== 'cpu'
-      && deviceStr.toLowerCase() !== 'none'
     _launching = true
     _paintRunControl()
 
@@ -4285,7 +4333,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
       ...physicalPayload,
-      run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
+      run_dir:        getRunDir('namd'),   // shared run-location: write this run into the chosen folder
     }
 
     // Creating is deliberately cheap: record every choice as a draft and leave topology,
@@ -4307,15 +4355,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     // Gate A — verify that the fully solvated system fits before starting the build.
     // Seeded drafts are sized later because their atomistic model is not available yet.
-    if (isLocalRun && draftId && runsOnGpu) {
+    if (isLocalRun && draftId) {
       try {
         const adv = await preflightMdVram(payload)
+        if (!adv) throw new Error('Memory estimate unavailable')
         const gate = gateAMessage(adv)
         if (gate) {
           const proceed = await openGateAModal(adv)
           if (!proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
         }
-      } catch { /* preflight is best-effort — never block a launch */ }
+      } catch {
+        await openGateAModal({tier:'unknown',reason:'The memory check could not complete. Retry before launching.'})
+        hideOpProgress(); _launching = false; runBtn.disabled = false; return
+      }
     }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its
@@ -4326,7 +4378,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       try {
         const fc = await estimateMdDisk(payload)
         // If the run won't fit, offer to archive it to a roomier drive and run THERE.
-        const rec = await recommendArchive(fc)
+        const rec = await recommendArchive(fc, 'namd')
         if (!rec.proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
         payload.run_dir = rec.runDir || null   // suggested archive OR the user's chosen dir
         // No archive suggestion but still tight → the plain low-disk Continue/Cancel warning.
@@ -4586,6 +4638,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     })
   }
 
+  window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
+    if (detail.removeJobId) _jobs = _jobs.filter(j => j.job_id !== detail.removeJobId)
+    if (detail.node?.engine === 'namd') {
+      if (detail.node.creating) {
+        const source = _jobs.find(j => j.job_id === detail.node.copy_source_id)
+        Object.assign(detail.node, {
+          design_source_path: _currentPartPath(),
+          design_name: source?.design_name || detail.node.design_name,
+          prep_params: source?.prep_params || detail.node.prep_params,
+          execution_target: source?.execution_target || detail.node.execution_target,
+        })
+      }
+      _jobs = [detail.node, ..._jobs.filter(j => j.job_id !== detail.node.job_id)]
+    }
+  })
+
   async function _copyJob(jobId) {
     const result = await api.copyMdJob(jobId).catch(() => null)
     const copied = result?.job
@@ -4732,7 +4800,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
     surfaceCard.select(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs), explicit)
     _userDeselected = false   // an explicit pick supersedes a previous deselection
-    if (_selectedId === jobId) { _syncSurfaceCard(); return }
+    if (_selectedId === jobId) { boxSolvent?.selectJob(surfaceJob, mdInheritedPrepParams(surfaceJob, _jobs)); _syncSurfaceCard(); return }
     ionPaths?.off()
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
@@ -4753,7 +4821,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _syncRunTargetToJob(selectedJob)
     const prep = mdInheritedPrepParams(selectedJob, _jobs)
     screeningCard.restore(prep)
-    boxSolvent?.restore(prep)
+    boxSolvent?.selectJob(selectedJob, prep)
     surfaceCard.restore(prep)
     if (surfaceAxisEl) surfaceAxisEl.value = prep.graphene_surface_axis || ''
     if (surfaceOffsetEl) surfaceOffsetEl.value = String(prep.graphene_surface_offset_nm ?? 0)
@@ -4765,6 +4833,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (surfaceMarginEl) surfaceMarginEl.value = String(prep.graphene_sheet_margin_nm ?? 1.5)
     _anchorsCard?.applyConfig?.(prep.anchors || [])
     _surfaceAnchorsCard?.applyConfig?.(prep.surface_anchors || [])
+    _efieldCard?.applyConfig?.(prep.field ?? null)
     surfaceSeedSpec = null
     _syncSurfaceCard()
     if (selectedJob?.seed_oxdna_job_id) {
@@ -4783,6 +4852,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
+    if (selectedJob?.creating) return
     // Repaint Run/Queue off CURRENT server state: this panel has no status poll, so
     // without this the control could offer ▶ Run for a job the queue would refuse (or
     // hide that the job is already waiting in line).
@@ -4866,6 +4936,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
+    boxSolvent?.clearJob()
     _grapheneSelectionId = null
     surfaceCard.clear()
     surfaceCard.restore()
@@ -4923,6 +4994,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const job = _jobs.find(j => j.job_id === jobId)
     if (job) _applyJobState(job)
     if (detailEl) detailEl.style.display = ''
+    if (job?.creating) return
     if (selectionUpdatesVisualization(job)) _fetchDisplayMeta(jobId)
     _fetchJobMetrics(jobId)
 
@@ -5076,7 +5148,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // ── Job detail rendering ──────────────────────────────────────────────────
   function _applyJobState(job, liveMetrics) {
-    if (!job) return
+    if (!job || job.job_id !== _selectedId) return
     _runpod.setJob(job)
 
     const awaitingSubmit = mdRemoteAwaitingSubmit(job)
@@ -5795,6 +5867,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   _paintRunControl()
   if (_isDynamicsTabVisible()) _startMdPrewarm()
 
+  async function invalidateTrajectory(jobId, { broadcast = false } = {}) {
+    // Source frame indices changed; discard prepared/downloaded MD pages too.
+    _setTrajOff()
+    getMdViz?.()?.stopAndRestore?.()
+    getMdViz?.()?.retainPreparedTrajectories?.([])
+    getMdViz?.()?.retainTrajectoryDownloads?.([])
+    _trajRawCounts.clear()
+    _trajCountRequests.clear()
+    if (broadcast) nadocBroadcast.emit('md-trajectory-thinned', { jobId })
+    await _fetchJobs()
+  }
+  nadocBroadcast.onMessage(message => {
+    if (message.type === 'md-trajectory-thinned' && _jobs.some(job => job.job_id === message.jobId)) {
+      void invalidateTrajectory(message.jobId)
+    }
+  })
+
   // The panel's external surface: the currently-selected job (consumed by the shared
   // comparison card's getSources and by the Plan-Run overlay's default root, P4).
   return {
@@ -5821,6 +5910,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // than this panel). A single fetch populates the list AND re-arms the poll once the
     // new job reads active.
     refresh: _fetchJobs,
+    invalidateTrajectory,
     restoreSubmittedDesign: async (jobId) => {
       const job = _jobs.find(j => j.job_id === jobId)
       return job ? restoreSubmittedDesign({ job, rollFn: rollMdJobDesign, refetch: _fetchJobs }) : false

@@ -1,3 +1,18 @@
+    void pollSweepEdit() {
+        if(eventPath_.empty() || ++sweepEditPoll_%15 || toolShell_.executionPending())return;
+        std::ifstream in(eventPath_+".sweep-edit");
+        auto edit=nadoc_vr::SweepEdit::read(in,sweepEditSerial_);
+        if(!edit || edit->serial<=sweepEditSerial_)return;
+        sweepEditSerial_=edit->serial;
+        activateSweep();
+        sweepEdit_=edit;extrudePlane_.plane=edit->plane;latticeSquare_=edit->square;
+        sweepDraft_=edit->draft;extrudeLatticeDraft_.clear();
+        for(const auto& cell:edit->cells)(void)extrudeLatticeDraft_.setSelected(cell,true);
+        for(int i=0;i<3 && nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter())!=edit->filter;++i)(void)toolConfig_.cycleOption();
+        if(toolConfig_.ligateAdjacent()!=edit->ligate)(void)toolConfig_.toggleFlag();
+        latticeOpen_=false;sweepPublishedRevision_=sweepDraft_.revision;
+        publishToolConfiguration();refreshExtrudePanel();
+    }
     std::string sweepTotalBpText() const {
         const auto* feedback=currentToolPreflightFeedback();
         return sweepPublishedRevision_==sweepDraft_.revision && feedback && feedback->sweepTotalBp
@@ -12,16 +27,25 @@
         const auto p=nadoc_vr::latticeCellOffsetNanometers(cell,{},latticeSquare_);
         return extrudePlane_.plane=="XZ"?glm::vec3(p.x,0,p.y):extrudePlane_.plane=="YZ"?glm::vec3(0,p.x,p.y):glm::vec3(p,0);
     }
-    glm::vec3 sweepOriginNm() const {
+    glm::vec3 sweepLatticeCenterNm() const {
         glm::vec3 origin{};
         for(const auto& cell:extrudeLatticeDraft_.cells())origin+=sweepCellNm(cell);
         return origin/float(std::max(size_t(1),extrudeLatticeDraft_.cells().size()));
+    }
+    glm::vec3 sweepOriginNm() const {return sweepEdit_?sweepEdit_->origin:sweepLatticeCenterNm();}
+    glm::mat3 sweepOrientationBasis() const {return sweepEdit_?sweepEdit_->basis:nadoc_vr::sweepBasis(sweepDefaultDirection());}
+    glm::vec3 sweepFrameAngles(glm::mat3 frame) const {
+        float y,x,z;glm::extractEulerAngleYXZ(glm::mat4(glm::transpose(sweepOrientationBasis())*frame),y,x,z);
+        return glm::degrees(glm::vec3(x,y,z));
+    }
+    glm::mat3 sweepFrameOrientation(glm::vec3 angles) const {
+        const auto r=glm::radians(angles);return sweepOrientationBasis()*glm::mat3(glm::eulerAngleYXZ(r.y,r.x,r.z));
     }
     glm::mat4 sweepWorldTransform() const {
         return manipulator_.transform()*
             glm::translate(glm::mat4(1),glm::vec3(0,0,-kViewDistanceMeters)-normalizationCenter_*normalizationScale_)*
             glm::scale(glm::mat4(1),glm::vec3(normalizationScale_))*glm::mat4(sourceAxes_)*
-            glm::translate(glm::mat4(1),sweepOriginNm());
+            glm::translate(glm::mat4(1),sweepOriginNm())*glm::mat4(sweepEdit_?sweepEdit_->rotation:glm::mat3(1));
     }
     glm::vec3 sweepWorldPoint(glm::vec3 relative) const {
         return glm::vec3(sweepWorldTransform()*glm::vec4(relative,1));
@@ -32,8 +56,8 @@
     bool sweepReady() const {
         const auto* feedback=currentToolPreflightFeedback();
         return sweepPanel_.active && sweepDraft_.step==2 && sweepDraft_.validPath() && !sweepHand_ && !sweepGripHand_ &&
-            std::none_of(extrudeLatticeDraft_.cells().begin(),extrudeLatticeDraft_.cells().end(),
-                [&](const auto& cell){return latticeCellOccupied(cell);}) &&
+            (sweepEdit_ || std::none_of(extrudeLatticeDraft_.cells().begin(),extrudeLatticeDraft_.cells().end(),
+                [&](const auto& cell){return latticeCellOccupied(cell);})) &&
             !extrudeLatticeDraft_.cells().empty() && !eventPath_.empty() && !toolShell_.executionPending() &&
             feedback && feedback->mode=="sweep" && (feedback->status=="ok" || feedback->status=="warn") &&
             feedback->toolConfigSequence==toolConfigSequence_;
@@ -47,13 +71,14 @@
         if(sweepDraft_.strokeInvalid)return "INVALID STROKE / TRY FREE DRAW AGAIN";
         if(!sweepDraft_.validPath())return "ADD A SECOND DISTINCT POINT OR FREE DRAW";
         if(eventPath_.empty())return "OPEN VR FROM YOUR DESIGN";
-        if(sweepReady())return currentToolPreflightFeedback()->status=="warn"?"WARNING: BEND LIMIT / CREATION ALLOWED":"STEP 2/2 / READY TO SWEEP";
+        if(sweepReady())return currentToolPreflightFeedback()->status=="warn"?"WARNING: BEND LIMIT / CREATION ALLOWED":(sweepEdit_?"EDIT SWEEP / READY TO APPLY":"STEP 2/2 / READY TO SWEEP");
         const auto* feedback=currentToolPreflightFeedback();
         if(feedback && (feedback->status=="error" || feedback->status=="block"))return "ADJUST PATH / "+feedback->reason;
         return "STEP 2/2 / VALIDATING PATH";
     }
     bool sweepActionAvailable(const std::string& action) const {
         if(!sweepPanel_.active || toolShell_.executionPending())return false;
+        if(sweepEdit_ && (action=="sweep:back" || action=="sweep:plane" || action=="sweep:paint" || action=="sweep:strands" || action=="sweep:ligate"))return false;
         if(sweepDraft_.drawing || sweepHand_ || sweepGripHand_)return action=="sweep:cancel";
         if(action=="sweep:confirm")return sweepDraft_.step==1?!extrudeLatticeDraft_.cells().empty():sweepReady();
         if(action=="sweep:undo")return toolShell_.undoAvailable();
@@ -65,6 +90,7 @@
     }
     void activateSweep() {
         if(toolShell_.executionPending())return;
+        sweepEdit_.reset();
         activateAuthoringTool(4);
         if(extrudePanel_.active)extrudePanel_.exit(sidebarMenus_.menus);
         if(!sidebarMenus_.menus[1].open)toggleSidebar(1);
@@ -78,7 +104,7 @@
     }
     void cancelSweep() {
         if(toolShell_.executionPending())return;
-        sweepHand_.reset();sweepGripHand_.reset();sweepHovered_={};sweepDraft_.cancelStroke();
+        sweepEdit_.reset();sweepHand_.reset();sweepGripHand_.reset();sweepHovered_={};sweepDraft_.cancelStroke();
         sweepPanel_.exit(sidebarMenus_.menus);latticeOpen_=false;latticePaintStroke_.reset();
         latticeHover_.reset();latticeGrip_.cancel();extrudeLatticeDraft_.clear();radialToolMenu_.close();
         toolShell_.apply(nadoc_vr::ToolAction::cancel,"none");publishToolIntent(nadoc_vr::ToolAction::cancel);
@@ -124,7 +150,7 @@
                 const auto index=std::stoul(action.substr(16));
                 if(index<sweepDraft_.pointsNm.size()) {
                     sweepDraft_.select(index);
-                    sweepDraft_.orient(index,sweepDraft_.directionControlled(index)?std::nullopt:std::optional<glm::vec3>(nadoc_vr::sweepAngles(sweepPointBasis(index),sweepDefaultDirection())));
+                    sweepDraft_.orient(index,sweepDraft_.directionControlled(index)?std::nullopt:std::optional<glm::vec3>(sweepFrameAngles(sweepPointBasis(index))));
                 }
             }catch(const std::exception&){}
         } else if(action.starts_with("sweep:point:")) {
@@ -163,6 +189,8 @@
         settings.minimumStrokeLengthNm=.01F/metresPerNm;
     }
     void writeSweepConfiguration(std::ostream& out) const {
+        if(sweepEdit_)out<<",\"edit_reference\":{\"index\":"<<sweepEdit_->index<<",\"revision\":"<<sweepEdit_->revision
+            <<",\"feature_id\":"<<std::quoted(sweepEdit_->featureId)<<",\"design_id\":"<<std::quoted(sweepEdit_->designId)<<"}";
         out<<",\"extrude_from\":\""<<extrudePlane_.plane<<"\",\"strand_filter\":\""
            <<nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter())<<"\",\"ligate_adjacent\":"
            <<(toolConfig_.ligateAdjacent()?"true":"false")<<",\"points_nm\":[";
@@ -217,7 +245,7 @@
         out<<"],\"warning_tooltip\":"<<(sweepWarningTooltip_ && glfwGetTime()<sweepWarningTooltipUntil_?"true":"false")<<"}";
     }
     glm::mat3 sweepPointBasis(size_t index) const {
-        if(sweepDraft_.directionControlled(index))return nadoc_vr::sweepOrientation(*sweepDraft_.orientations[index],sweepDefaultDirection());
+        if(sweepDraft_.directionControlled(index))return sweepFrameOrientation(*sweepDraft_.orientations[index]);
         const auto* feedback=currentToolPreflightFeedback();
         if(sweepPublishedRevision_==sweepDraft_.revision && feedback && index<feedback->sweepBases.size())return feedback->sweepBases[index];
         auto direction=sweepDefaultDirection();
@@ -238,7 +266,7 @@
             auto model=glm::mat3(sweepWorldTransform());for(int i=0;i<3;++i)model[i]=glm::normalize(model[i]);
             const auto delta=glm::mat3_cast(hands_[h].orientation*glm::inverse(sweepGripStart_));
             const auto frame=glm::transpose(model)*delta*model*sweepGripFrame_;
-            if(sweepDraft_.orient(sweepDraft_.selected,nadoc_vr::sweepAngles(frame,sweepDefaultDirection())))pulse(h,.12F);
+            if(sweepDraft_.orient(sweepDraft_.selected,sweepFrameAngles(frame)))pulse(h,.12F);
             if(sweepPublishedRevision_!=sweepDraft_.revision && glfwGetTime()-sweepPublishedAt_>.12)publishSweepDraft();
             return;
         }
@@ -246,7 +274,7 @@
         std::vector<glm::vec3> points;for(const auto p:sweepDraft_.pointsNm)points.push_back(sweepWorldPoint(p));
         for(size_t h=0;h<2;++h) {
             if(blocked[h] || !hands_[h].valid || !gripClicked_[h])continue;
-            const auto hit=nadoc_vr::sweepPointRayHit(points,hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1),.016F);
+            const auto hit=nadoc_vr::sweepPointRayHit(points,hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1),nadoc_vr::sweepNodeHitRadius);
             if(!hit)continue;
             sweepGripFrame_=sweepPointBasis(hit->index);sweepDraft_.select(hit->index);
             sweepDraft_.orient(hit->index,nadoc_vr::sweepAngles(sweepGripFrame_,sweepDefaultDirection()));
@@ -279,7 +307,7 @@
             for(size_t h=0;h<2;++h) {
                 if(blocked[h] || !hands_[h].valid)continue;
                 const auto tip=hands_[h].position+hands_[h].orientation*glm::vec3(0,0,-.12F);
-                const auto hit=nadoc_vr::sweepPointRayHit(points,hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1),.016F);
+                const auto hit=nadoc_vr::sweepPointRayHit(points,hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1),nadoc_vr::sweepNodeHitRadius);
                 if(hit)sweepHovered_[h]=hit->index;
                 if(triggerClicked_[h] && sweepDraft_.freeDrawArmed && h==1) {
                     setSweepSmoothingScale(true);sweepDraft_.beginStroke(sweepRelativePoint(tip));sweepHand_=h;
@@ -301,7 +329,7 @@
     }
     template<class Line> void drawSweep(Line line) {
         if(!sweepPanel_.active || sweepDraft_.step!=2)return;
-        const auto origin=sweepOriginNm();
+        const auto origin=sweepLatticeCenterNm();
         const auto model=sweepWorldTransform();
         auto world=[&](glm::vec3 p){return glm::vec3(model*glm::vec4(p,1));};
         if(sweepGeometryRevision_!=sweepDraft_.revision) {
@@ -365,9 +393,9 @@
             const glm::vec3 color=hovered?glm::vec3(1,1,.55F):i==sweepDraft_.selected?glm::vec3(1,.76F,.18F):glm::vec3(.3F,1,.5F);
             for(int j=0;j<24;++j) {
                 const float a=glm::two_pi<float>()*j/24,b=glm::two_pi<float>()*(j+1)/24;
-                line(q+.012F*(eyeRight*std::cos(a)+eyeUp*std::sin(a)),q+.012F*(eyeRight*std::cos(b)+eyeUp*std::sin(b)),color);
+                line(q+nadoc_vr::sweepNodeRadius*(eyeRight*std::cos(a)+eyeUp*std::sin(a)),q+nadoc_vr::sweepNodeRadius*(eyeRight*std::cos(b)+eyeUp*std::sin(b)),color);
             }
-            line(q-eyeRight*.006F,q+eyeRight*.006F,color);line(q-eyeUp*.006F,q+eyeUp*.006F,color);
+            line(q-eyeRight*.012F,q+eyeRight*.012F,color);line(q-eyeUp*.012F,q+eyeUp*.012F,color);
         }
         for(size_t h=0;h<2;++h)if(sweepHovered_[h] || (sweepHand_==h && !sweepDraft_.drawing))
             line(hands_[h].position,world(sweepDraft_.pointsNm[sweepHand_==h?sweepDraft_.selected:*sweepHovered_[h]]),{.4F,1.F,.65F});
@@ -421,4 +449,28 @@
                 line(a,a+right*(scale*.82F),{1,1,.85F});
             }
         }
+    }
+
+    void writeSweepPreview(std::ostream& out) const {
+        out<<",\"sweepPreview\":";
+        if(!sweepPanel_.active || sweepDraft_.step!=2) {out<<"null";return;}
+        auto vector=[&](glm::vec3 p){out<<'['<<p.x<<','<<p.y<<','<<p.z<<']';};
+        const auto model=sweepWorldTransform();
+        out<<"{\"model\":[";
+        for(int i=0;i<16;++i){if(i)out<<',';out<<model[i/4][i%4];}
+        out<<"],\"radius\":"<<nadoc_vr::sweepNodeRadius<<",\"selected\":"<<sweepDraft_.selected<<",\"nodes\":[";
+        for(size_t i=0;i<sweepDraft_.pointsNm.size();++i){if(i)out<<',';vector(sweepDraft_.pointsNm[i]);}
+        out<<"],\"frames\":[";
+        for(size_t i=0;i<sweepDraft_.pointsNm.size();++i){if(i)out<<',';const auto basis=sweepPointBasis(i);out<<'[';for(int j=0;j<6;++j){if(j)out<<',';out<<basis[j/3][j%3];}out<<']';}
+        out<<"],\"path\":[";
+        const auto& path=sweepDraft_.drawing?sweepDraft_.strokeNm:sweepCurve_;
+        const size_t count=std::min(size_t(512),path.size());
+        for(size_t i=0;i<count;++i){if(i)out<<',';vector(path[count>1?i*(path.size()-1)/(count-1):0]);}
+        out<<"],\"outline\":[";
+        const size_t outline=std::min(size_t(128),sweepSectionOutline_.size());
+        for(size_t i=0;i<outline;++i){if(i)out<<',';const auto p=sweepSectionOutline_[i*sweepSectionOutline_.size()/outline];out<<'['<<p.x<<','<<p.y<<']';}
+        out<<"],\"cells\":[";
+        const size_t cells=std::min(size_t(256),sweepSectionCells_.size());
+        for(size_t i=0;i<cells;++i){if(i)out<<',';const auto p=sweepSectionCells_[i*sweepSectionCells_.size()/cells];out<<'['<<p.x<<','<<p.y<<']';}
+        out<<"]}";
     }

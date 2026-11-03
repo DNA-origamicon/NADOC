@@ -1,0 +1,473 @@
+{
+  "at": "2026-10-18T00:24:34.214323+00:00",
+  "source": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/qm-target-reuse-v1/audit.py",
+    "sha256": "3877cfdd44e30d09b0d36069bf8a2c49050640fca13e9a9257a68f491825cf15"
+  },
+  "records": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "passed_for_reuse_inventory": true,
+      "identity": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.2680379315640438,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.6972246595253444,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.267992870654119,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.6972368908243143,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "source_files": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/optimization/evaluation-030/geometry_bohr.npy",
+          "sha256": "136880cc2125481c26073e01f3eb487d9661062bc6e96bdf567a70cee97e28ee"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/stage1_completion_audit.json",
+          "sha256": "fbc51040de27768c15f09193f793dc678e437f1b187bdb98aaeaa6e09112ebe2"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/assembly/independent_completion_audit.json",
+          "sha256": "3c998d8ea9f65bd6ebb09593986b4122b281cf7cd4cfa3d71d8ec19ebbf0174c"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/completion_audit.json",
+          "sha256": "8897db3a32979f5cd71077c019e6c8dad03980c919a6dda505ccf8490c459930"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/assembly/hessian_hartree_bohr2.npy",
+          "sha256": "06bb73c16d777f785c26d490c08c79f144b3e713b7f50d5019f5900898d1135a"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core_local_minimum_assessment.json",
+          "sha256": "a7a8a905de89bb2c0ffb3433b820b04efdea423ac441124e2c8ab64f1960e81f"
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+      },
+      "graph_template": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/construction.sdf",
+        "sha256": "3fb1cb8acd0d17aae0d63b344eb3a6a9ff7da6d7647473af0302e8d46747a795"
+      },
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/optimization/evaluation-030/geometry_bohr.npy",
+        "sha256": "136880cc2125481c26073e01f3eb487d9661062bc6e96bdf567a70cee97e28ee"
+      },
+      "hessian": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/assembly/hessian_hartree_bohr2.npy",
+        "sha256": "06bb73c16d777f785c26d490c08c79f144b3e713b7f50d5019f5900898d1135a"
+      },
+      "source_atom_keys": [
+        "1:CM",
+        "1:N1",
+        "1:C2",
+        "1:O2",
+        "1:N3",
+        "1:C4",
+        "1:O4",
+        "1:C5",
+        "1:C7",
+        "1:C6",
+        "2:CM",
+        "2:N1",
+        "2:C2",
+        "2:O2",
+        "2:N3",
+        "2:C4",
+        "2:O4",
+        "2:C5",
+        "2:C7",
+        "2:C6",
+        "1:HCM1",
+        "1:H3",
+        "1:H51",
+        "1:H52",
+        "1:H53",
+        "1:H6",
+        "2:HCM1",
+        "2:H3",
+        "2:H51",
+        "2:H52",
+        "2:H53",
+        "2:H6",
+        "1:HCM2",
+        "1:HCM3",
+        "2:HCM2",
+        "2:HCM3"
+      ],
+      "geometry_units": "bohr",
+      "hessian_units": "hartree/bohr^2",
+      "hessian_shape": [
+        108,
+        108
+      ],
+      "symmetry_error": 1.1102230246251565e-16,
+      "bond_length_range_angstrom": [
+        1.0179584661793055,
+        1.5698877895716623
+      ],
+      "methods": {
+        "basis": "6-31G(d)",
+        "reference": "rhf",
+        "scf_type": "df",
+        "mp2_type": "df",
+        "freeze_core": true,
+        "e_convergence": 1e-12,
+        "d_convergence": 1e-12,
+        "solver_convergence": 1e-10,
+        "maxiter": 300,
+        "method": "mp2"
+      },
+      "minimum_evidence": {
+        "status": "numerically_supported_local_harmonic_minimum",
+        "scope": "This exact 36-atom neutral N1-methyl capped core at original frozen-core DF-MP2/6-31G(d), under the documented stationarity and numerical sensitivity assessment. Local harmonic minimum only.",
+        "additional_core_qm_required": false,
+        "lowest_cm_inverse": 58.5231245622
+      },
+      "atom_reordering_control_passed": true,
+      "reflection_rejected": true,
+      "limitation": "Capped-core target only. Graph supplied by current mapped template; coordinates independently checked. No full DNA, external fit, parameter release, or NAMD qualification."
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "passed_for_reuse_inventory": true,
+      "identity": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": -2.32247131319912,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": 1.6821822740564205,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": -2.3224601824731588,
+            "expected_sign": "negative",
+            "coordinate_CIP": "S",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": 1.6822010738127617,
+            "expected_sign": "positive",
+            "coordinate_CIP": "S",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "source_files": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/job_manifest.json",
+          "sha256": "066c66cfbe97ae5ad416bbaba5402333bae7a93e3a1362148aac87bb40f088eb"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/source_geometry.xyz",
+          "sha256": "518b3b4856fc45d1d72b20396936d881c0287fa7f9a07635ecc06e2a622e140d"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/optimized_model_parent.json",
+          "sha256": "967b09c004c8b02b3cd9c42f09d5b849b1f09088b0e80811addc9e428c52c439"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/input.dat",
+          "sha256": "b2eaf6f7d1122052fa4776866a5782d66165e345551303edeaf90018a779f913"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/output.dat",
+          "sha256": "afd7d2e793d6092f0cb0a5225280661f72d7f48e3bbac05b4b2451e7db4ddc59"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/run_manifest.json",
+          "sha256": "ea58afeba872a06a5a32380b9ec0c92fa701ce277c05c65e0f127e2601bb5b2b"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/hessian_hartree_per_bohr2.txt",
+          "sha256": "7ef8d86a69697308ae99e8895e863c4e898b530831c5ec7d1fad3e0deed4e2de"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/frequency_audit.json",
+          "sha256": "7787eb8cf9be6a7365eaab85016d2a69f180c434c51a4a0f3da206e30182220c"
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+      },
+      "graph_template": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-i/construction.sdf",
+        "sha256": "d77aa20270e0793097b5715898f9ba700dfc2ae3d83323bad1d4e99a07b9a34b"
+      },
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/source_geometry.xyz",
+        "sha256": "518b3b4856fc45d1d72b20396936d881c0287fa7f9a07635ecc06e2a622e140d"
+      },
+      "hessian": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/hessian_hartree_per_bohr2.txt",
+        "sha256": "7ef8d86a69697308ae99e8895e863c4e898b530831c5ec7d1fad3e0deed4e2de"
+      },
+      "source_atom_keys": [
+        "1:CM",
+        "1:N1",
+        "1:C2",
+        "1:O2",
+        "1:N3",
+        "1:C4",
+        "1:O4",
+        "1:C5",
+        "1:C7",
+        "1:C6",
+        "2:CM",
+        "2:N1",
+        "2:C2",
+        "2:O2",
+        "2:N3",
+        "2:C4",
+        "2:O4",
+        "2:C5",
+        "2:C7",
+        "2:C6",
+        "1:HCM1",
+        "1:H3",
+        "1:H51",
+        "1:H52",
+        "1:H53",
+        "1:H6",
+        "2:HCM1",
+        "2:H3",
+        "2:H51",
+        "2:H52",
+        "2:H53",
+        "2:H6",
+        "1:HCM2",
+        "1:HCM3",
+        "2:HCM2",
+        "2:HCM3"
+      ],
+      "geometry_units": "angstrom",
+      "hessian_units": "hartree/bohr^2",
+      "hessian_shape": [
+        108,
+        108
+      ],
+      "symmetry_error": 1.1102230246251565e-16,
+      "bond_length_range_angstrom": [
+        1.0186201654331397,
+        1.5834391477866188
+      ],
+      "methods": {
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "charge": 0,
+        "multiplicity": 1,
+        "freeze_core": true,
+        "scf_type": "df",
+        "mp2_type": "df"
+      },
+      "minimum_evidence": {
+        "status": "historical_positive_frequency_evidence_not_fresh_stationarity_certification",
+        "lowest_cm_inverse": 38.3675,
+        "mode_count": 102,
+        "imaginary_modes": 0
+      },
+      "atom_reordering_control_passed": true,
+      "reflection_rejected": true,
+      "limitation": "Capped-core target only. Graph supplied by current mapped template; coordinates independently checked. No full DNA, external fit, parameter release, or NAMD qualification."
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "passed_for_reuse_inventory": true,
+      "identity": {
+        "centers": [
+          {
+            "atom": "1:C5",
+            "signed_volume": 2.3467340021803107,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "signed_volume": -1.584141348418046,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "signed_volume": 2.346738191282051,
+            "expected_sign": "positive",
+            "coordinate_CIP": "R",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "signed_volume": -1.5841494237131515,
+            "expected_sign": "negative",
+            "coordinate_CIP": "R",
+            "passed": true
+          }
+        ],
+        "connectivity_passed": true,
+        "passed": true
+      },
+      "source_files": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/job_manifest.json",
+          "sha256": "5719419eb1e33ad148707236e18beb6df1409c273af3ea6abfade52b32c01674"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/source_geometry.xyz",
+          "sha256": "f65aa32dcc5926517bb21604210d2570422dbabbf3d4fae81b3a594626f4e7e6"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/optimized_model_parent.json",
+          "sha256": "af904c5fc60e018e6d94518303c4ece26028d1fd5acdf6a436bd2d23da37614a"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/input.dat",
+          "sha256": "a1fdb1b90b89eef70ce2b54a03feaf5dad0f6b68220bd00a65021e832b1039af"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/output.dat",
+          "sha256": "3f0a9391ef0f7d17089c1ae3b9ed7b6aa7526b71afb56f12b2ae684350cecc80"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/run_manifest.json",
+          "sha256": "2f96a069b5d88b383a9507831203a91f5ba825a734ba2c1427307c670894bc74"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/hessian_hartree_per_bohr2.txt",
+          "sha256": "c1c1f12d531a486dc2eb1b4669c28fce3325cde1e1be21cf9794d4dc81184764"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/frequency_audit.json",
+          "sha256": "56e06b6bdabf80ffaea0369282d742d4c438e26a780a425b0b74b02b827f74ac"
+        }
+      ],
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+      },
+      "graph_template": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-trans-syn-ii/construction.sdf",
+        "sha256": "ad1a3729eca7f726b0a99b91fc6164a6ebcbd62964b87e851e8f5ba4d5c550ee"
+      },
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/source_geometry.xyz",
+        "sha256": "f65aa32dcc5926517bb21604210d2570422dbabbf3d4fae81b3a594626f4e7e6"
+      },
+      "hessian": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/hessian_hartree_per_bohr2.txt",
+        "sha256": "c1c1f12d531a486dc2eb1b4669c28fce3325cde1e1be21cf9794d4dc81184764"
+      },
+      "source_atom_keys": [
+        "1:CM",
+        "1:N1",
+        "1:C2",
+        "1:O2",
+        "1:N3",
+        "1:C4",
+        "1:O4",
+        "1:C5",
+        "1:C7",
+        "1:C6",
+        "2:CM",
+        "2:N1",
+        "2:C2",
+        "2:O2",
+        "2:N3",
+        "2:C4",
+        "2:O4",
+        "2:C5",
+        "2:C7",
+        "2:C6",
+        "1:HCM1",
+        "1:H3",
+        "1:H51",
+        "1:H52",
+        "1:H53",
+        "1:H6",
+        "2:HCM1",
+        "2:H3",
+        "2:H51",
+        "2:H52",
+        "2:H53",
+        "2:H6",
+        "1:HCM2",
+        "1:HCM3",
+        "2:HCM2",
+        "2:HCM3"
+      ],
+      "geometry_units": "angstrom",
+      "hessian_units": "hartree/bohr^2",
+      "hessian_shape": [
+        108,
+        108
+      ],
+      "symmetry_error": 1.1102230246251565e-16,
+      "bond_length_range_angstrom": [
+        1.0176228797778668,
+        1.5725708822257338
+      ],
+      "methods": {
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "charge": 0,
+        "multiplicity": 1,
+        "freeze_core": true,
+        "scf_type": "df",
+        "mp2_type": "df"
+      },
+      "minimum_evidence": {
+        "status": "historical_positive_frequency_evidence_not_fresh_stationarity_certification",
+        "lowest_cm_inverse": 45.3664,
+        "mode_count": 102,
+        "imaginary_modes": 0
+      },
+      "atom_reordering_control_passed": true,
+      "reflection_rejected": true,
+      "limitation": "Capped-core target only. Graph supplied by current mapped template; coordinates independently checked. No full DNA, external fit, parameter release, or NAMD qualification."
+    }
+  ],
+  "all_identity_and_integrity_checks_passed": true,
+  "new_electronic_calculations": 0,
+  "native_seconds_added": 0,
+  "next": "Reuse compatible archived targets for external-tool input preparation. Do not repeat core optimization/Hessian acquisition. Trans-syn stationarity remains historical, not independently recertified here."
+}

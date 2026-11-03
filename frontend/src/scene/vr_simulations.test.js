@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
+import indexHtml from '../../index.html?raw'
 import { simulationControls, simulationViewActive, createVRSimulations } from './vr_simulations.js'
 import { simulationJobSummary, simulationProgress } from './vr_simulation_controls.js'
 it('shows observed completion time, running progress, and finished relaxation state', () => {
@@ -117,4 +118,25 @@ it('publishes and acknowledges the native loop toggle exactly once', async () =>
  await bridge.activate(event)
  expect(bridge.snapshot().trajectory.loop).toBe(true)
  bridge.reset()
+})
+
+it('reads wrapped and external labels without controls or DOM cloning',()=>{
+ document.body.innerHTML='<div id="cando-display-card"><label>Alpha <span>beta</span><input id="a" type="checkbox"><button>Ignore</button><select><option>Ignore too</option></select></label><label for="b">External gamma</label><input id="b" type="checkbox"></div>'
+ const clone=vi.spyOn(Element.prototype,'cloneNode')
+ try {
+  const controls=simulationControls(document,'cando')
+  expect(controls.find(c=>c.element.id==='a').label).toBe('Alpha beta')
+  expect(controls.find(c=>c.element.id==='b').label).toBe('External gamma')
+  expect(clone).not.toHaveBeenCalled()
+ }finally{clone.mockRestore()}
+})
+
+it('keeps lower-priority views last in desktop markup and the native VR adapter', () => {
+  const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
+  for (const [engine, name, tail] of [['namd', 'md-viz', ['photoproduct', 'occupancy']], ['oxdna', 'oxdna-viz', ['occupancy']]]) {
+    const desktop = [...doc.querySelectorAll(`input[name="${name}"]`)].map(el => el.value)
+    expect(desktop.slice(-tail.length)).toEqual(tail)
+    const native = simulationControls(doc, engine).filter(c => c.kind === 'mode').map(c => c.group)
+    expect(native).toEqual(desktop)
+  }
 })

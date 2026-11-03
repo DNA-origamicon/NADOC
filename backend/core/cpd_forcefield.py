@@ -81,8 +81,17 @@ def assert_cpd_simulation_supported(design: object, *, path: str) -> None:
         return
     from backend.core.photoproduct_registry import photoproduct_capability
 
+    from backend.core.cpd_mvp_simulation import uses_mvp, validate_design
+    mvp = uses_mvp(design)
+    if mvp:
+        validate_design(design)
     registry_blockers: list[str] = []
     for lesion in getattr(design, "photoproduct_junctions", []):
+        if mvp:
+            continue
+        if lesion.orientation_method == "manual-base-only-mvp-v1":
+            registry_blockers.append("Manual base-only MVP placement is for visual construction, not simulation")
+            continue
         try:
             capability = photoproduct_capability(
                 lesion.product, lesion.stereochemistry
@@ -137,6 +146,9 @@ def photoproduct_package_assets(design: object) -> list[dict[str, Any]]:
     assert_cpd_simulation_supported(design, path="photoproduct force-field asset resolver")
     from backend.core.photoproduct_registry import REGISTRY_PATH, photoproduct_registry
 
+    from backend.core.cpd_mvp_simulation import uses_mvp, package_assets
+    if uses_mvp(design):
+        return package_assets(design)
     registry = photoproduct_registry()
     records: dict[str, dict[str, Any]] = {}
     excluded = {"help_trajectory"}

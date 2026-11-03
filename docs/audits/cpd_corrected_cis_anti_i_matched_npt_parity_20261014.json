@@ -1,0 +1,30 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-control-v1-service/completion_wake_ack.json",
+    "sha256": "782c19d1968de20d7300488e5d91ff79bf605dbe83d72255cf8b62040cc8623e"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-control-v1/completion_audit.json",
+    "sha256": "e3329534c1b0c4ffbac738c62320668d98e7b821f21041704cf90e0a9b073f78"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-anti-v2/launch_receipt.json",
+    "sha256": "17dfd799e430f490fa61529d2d8849fd9d3ad17596b3bc7a0e549ce8856b9506"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-npt-condition-anti-v2/handoff.json",
+    "sha256": "cbf3ee5378d02b28f65baa23197f61006049fd33cc986634ce80174df824c6ed"
+  },
+  "parity_inventory": {
+    "native_export": "Existing isolated/full-DNA checks passed; frozen candidate remains provisional.",
+    "core_minimum": "Previously certified36atom core only; no inference of endpoint minimum.",
+    "solvated_engineering": "Matched150ps total each including100ps NPT, native/physical audits pass under documentedv2 dynamics policy.",
+    "conditioning": "Now admitted additional1ns welded, matched control later after review. Historical prep workflow used1ns NPT before10ns validation.",
+    "sampling": "Longer validation, independent replicas and structural sampling not complete for corrected context.",
+    "parameter_accuracy": "7.15616kcal/mol alternate-conformer QM/MM discrepancy unresolved; sugar/charge transfer and holdout qualification incomplete. More MD does not solve these.",
+    "production": "Not certified; no registry/application promotion."
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

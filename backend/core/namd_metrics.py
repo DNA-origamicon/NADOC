@@ -341,7 +341,7 @@ def benchmark_ns_per_day(log_path: Path, head_bytes: int = 256 * 1024) -> float 
 
 
 def benchmark_s_per_step(log_path: Path, head_bytes: int = 256 * 1024) -> float | None:
-    """Wall-clock seconds per integration step, from the log's Benchmark lines (HEAD read).
+    """Wall-clock step cost from recent TIMING windows, falling back to warmup Benchmark lines.
 
     The same bounded-read trick as :func:`benchmark_ns_per_day` and the same reason to
     prefer the LAST line (most equilibrated).  Read the step cost directly rather than
@@ -352,6 +352,10 @@ def benchmark_s_per_step(log_path: Path, head_bytes: int = 256 * 1024) -> float 
 
     ``None`` when the run has not timed any steps yet.
     """
+    from backend.core.namd_timing import sustained_timing
+    sustained = sustained_timing(log_path, max_bytes=head_bytes)
+    if sustained:
+        return sustained['seconds_per_step']
     try:
         with log_path.open("rb") as fh:
             chunk = fh.read(head_bytes)

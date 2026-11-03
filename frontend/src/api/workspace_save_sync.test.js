@@ -43,6 +43,14 @@ describe('workspace save response synchronization', () => {
     expect(store.getState().validationReport).toEqual({ marker: 'before' })
   })
 
+  it('rejects a failed save instead of resolving as if the file were saved', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: false, status: 409, headers: { get: () => null },
+      json: async () => ({ detail: 'The branch has a conflicting edit.' }),
+    })
+    await expect(saveDesignToWorkspace('part.nadoc')).rejects.toThrow('conflicting edit')
+  })
+
   it('also preserves object identity for an explicit save to the same path', async () => {
     const current = { id: 'same-id', strands: [], helices: [], metadata: {} }
     store.setState({ currentDesign: current })
@@ -75,6 +83,20 @@ describe('workspace save response synchronization', () => {
       previous_revision:6, revision:7 }))
     await saveDesignToWorkspace('2hb_1xT.nadoc')
     expect(currentRevisionWatermark()).toBeNull()
+  })
+
+  it.each([saveDesignToWorkspace, saveDesignAs])('keeps simulations active on an initial same-identity path claim (%s)', async save => {
+    const current = { id: 'same-id', strands: [], helices: [], metadata: {} }
+    const claimed = { ...current, metadata: { identity_last_known_path: 'part.nadoc' } }
+    store.setState({ currentDesign: current })
+    fetch.mockResolvedValueOnce(response({ disposition: 'claimed', design: claimed }))
+    const invalidate = vi.fn()
+    window.addEventListener('nadoc:design-changed', invalidate)
+    try {
+      await save('part.nadoc')
+      expect(store.getState().currentDesign).toEqual(claimed)
+      expect(invalidate).not.toHaveBeenCalled()
+    } finally { window.removeEventListener('nadoc:design-changed', invalidate) }
   })
 
   it('still synchronizes an initial path claim or Save As identity change', async () => {

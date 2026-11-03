@@ -1,3 +1,4 @@
+import { createSweepPreview } from './sweep_preview.js'
 import { mountMeetingDrawing } from './meeting_drawing.js'
 import { mountViewerScreenshot } from './viewer_screenshot.js'
 import { applyAnimationTextOverlay } from '../scene/animation_text_overlay.js'
@@ -11,9 +12,11 @@ import { loadMeetingRevision } from './meeting_scene_updates.js'
 import { mountMeetingLiveFrame } from './meeting_live_frame.js'
 export function mountMeetingPresentation({ viewer, base, role, revision, room, selfId = '', document: doc = document, fetch: request = fetch,
   eventSource = url => new EventSource(url), loadRevision = loadMeetingRevision, mountTrajectory = mountMeetingTrajectory, onSharedView = () => {}, onEnded = () => {}, onLoading = () => {}, onPresence = () => {}, onViewReady = () => {}, onViewShared = () => {}, setInterval: repeat = setInterval, clearInterval: cancel = clearInterval }) {
+  const demoDisplay = role === 'display'
   const createTrajectory = () => mountTrajectory({ viewer, base, role, document: doc, fetch: request })
   const vrTextures = new Map()
   const avatar = createVRAvatar({ scene: viewer.runtime.scene })
+  const sweepPreview = createSweepPreview({scene:viewer.runtime.scene})
   let trajectory = createTrajectory()
   const createLive = () => mountMeetingLiveFrame({ viewer, base, revision, document: doc, fetch: request, animationEnabled: () => !!latest?.animationActive })
   let live = createLive()
@@ -26,7 +29,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
   let frozen = viewer.current, updating = false, pendingRevision = null, retryAfter = 0
   const abort = new AbortController(), host = doc.defaultView
   let source
-  let disposed = false, connected = false, following = false, savedEnabled = true, broadcasting = false, inFlight = false, latest = null, latestAt = 0, sequence = -1, sent = ''
+  let disposed = false, connected = false, following = false, savedEnabled = true, broadcasting = false, inFlight = false, latest = null, latestAt = 0, headsetExpires = 0, sequence = -1, sent = ''
   let writes = Promise.resolve(), publicationEpoch = 0, locked = false, priorFollowing = false
   let drawingActive = false, drawingSavedEnabled = true
   const compatible = () => viewer.current === frozen
@@ -70,20 +73,22 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
       else follow(priorFollowing)
       locked = nextLock
     }
-    viewer.setViewLocked?.(locked || drawingActive)
-    for (const id of ['reset', 'mode']) { const input = doc.getElementById(id); if (input) input.disabled = locked || drawingActive || !compatible() }
+    viewer.setViewLocked?.(locked || drawingActive || demoDisplay)
+    for (const id of ['reset', 'mode']) { const input = doc.getElementById(id); if (input) input.disabled = demoDisplay || locked || drawingActive || !compatible() }
     guestViews?.update(); drawing?.update({ locked })
     onLoading(latest?.loading ?? null, updating)
     status.textContent = !compatible() ? 'Different snapshot opened. Reopen the invitation to present.' : !connected ? 'Presentation connection lost; you can still explore.' : role === 'presenter' ? (broadcasting ? 'Your perspective is shared. Guests choose whether to follow.' : 'Your perspective is not being shared.') : following ? 'Following presenter. Drag or scroll to explore independently.' : latest?.presenting ? 'Explore independently or follow the presenter.' : 'Presenter is not sharing a perspective.'
     if (updating) status.textContent = 'Receiving updated visualizations; your camera stays independent.'
-    const canFollow = !updating && latest?.revision === revision && connected && latest?.camera && latest?.presenting && compatible() && !viewer.performanceApi.busy
+    const canFollow = !updating && latest?.revision === revision && connected && performance.now() < headsetExpires && latest?.camera && latest?.presenting && compatible() && !viewer.performanceApi.busy
+    if (demoDisplay && canFollow && !following) follow(true)
     if (el('follow')) {
-      el('follow').disabled = locked || drawingActive || (!following && !canFollow)
+      el('follow').disabled = demoDisplay || locked || drawingActive || (!following && !canFollow)
       if (following) {
         viewer.runtime.controls.enabled = locked || canFollow ? false : savedEnabled
         if (!canFollow) status.textContent = 'Following presenter · Waiting for the shared view…'
       }
     }
+    if (demoDisplay) { el('follow').textContent = 'Demo display · Automatic follow'; status.textContent = canFollow ? 'Following the presenter automatically.' : 'Waiting for the presenter to share a view.'; viewer.runtime.controls.enabled = false }
     if (locked) { status.textContent = latest?.animationActive ? 'Shared animation · Perspective locked by presenter' : 'Perspective locked by presenter'; el('follow').textContent = 'Perspective locked' }
     if (drawingActive) { viewer.runtime.controls.enabled = false; status.textContent = 'Drawing · Camera held steady' }
     if (el('broadcast')) { el('broadcast').disabled = !connected || !compatible() || viewer.performanceApi.busy; el('broadcast').textContent = broadcasting ? 'Pause perspective sharing' : 'Share my perspective'; el('broadcast').setAttribute('aria-pressed', String(broadcasting)) }
@@ -107,10 +112,10 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
   }
   function pause() { broadcasting = false; publicationEpoch++; sent = ''; void post('pause', {}).catch(() => {}); update() }
   const opened = () => { connected = true; publicationEpoch++; sent = ''; update(); void publish() }
-  const lost = () => { avatar.clear(); connected = false; broadcasting = false; follow(false); update() }
+  const lost = () => { sweepPreview.clear(); avatar.clear(); connected = false; broadcasting = false; follow(false); update() }
   async function refreshScene() {
     if (updating || disposed || !compatible() || performance.now() < retryAfter) return
-    updating = true; avatar.clear(); update()
+    updating = true; sweepPreview.clear(); avatar.clear(); update()
     let failure = null
     try {
       while (pendingRevision && pendingRevision !== revision && !disposed) {
@@ -124,7 +129,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
           revision = next; frozen = viewer.current; onSharedView(frozen)
           if (latest?.revision === revision && latest.selectionUpdate?.revision === revision) viewer.receiveSelectionUpdate?.(latest.selectionUpdate)
           if (latest?.revision === revision && latest.selectionPing?.revision === revision) viewer.receiveSelectionPing?.(latest.selectionPing)
-          if (latest?.revision === revision) avatar.receive(latest)
+          if (latest?.revision === revision) { avatar.receive(latest); sweepPreview.receive({...latest,serverTime:latest.serverTime+performance.now()-latestAt}) }
           trajectory.dispose(); trajectory = createTrajectory()
           live.dispose(); live = createLive(); if (latest?.revision === revision) live.receive(latest)
           if (latest?.revision === revision) trajectory.receive({ ...latest, serverTime: latest.serverTime + performance.now() - latestAt })
@@ -139,10 +144,13 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
     if (value.room !== room || !Number.isSafeInteger(value.sequence) || value.sequence <= sequence) return
     if (value.revision !== revision && !/^[a-f0-9]{64}$/.test(value.revision)) return
     if (!Object.hasOwn(value, 'selectionUpdate') && value.revision === latest?.revision) value.selectionUpdate = latest.selectionUpdate
-    try { value = decodeVRUIState(value, vrTextures) } catch { avatar.clear(); return }
-    if (value.ended) { avatar.clear(); onEnded(); return }
+    if (value.preview && !Object.hasOwn(value.preview,'data') && value.revision === latest?.revision) value.preview={...value.preview,data:latest.preview?.data}
+    try { value = decodeVRUIState(value, vrTextures) } catch { avatar.clear(); value={...value,avatar:null} }
+    if (value.ended) { sweepPreview.clear(); avatar.clear(); onEnded(); return }
+    if (value.revision === revision && compatible() && !updating) sweepPreview.receive(value); else sweepPreview.clear()
     onPresence(value.participants ?? [], { serverTime: value.serverTime })
     if (value.revision === revision && compatible()) avatar.receive(value); else avatar.clear()
+    headsetExpires = value.camera?.source === 'headset' ? performance.now() + Math.max(0, Math.min(1500, value.camera.expiresAt - value.serverTime)) : Infinity
     sequence = value.sequence; latest = value; latestAt = performance.now(); pendingRevision = value.revision
     if (value.revision === revision && compatible() && value.selectionUpdate?.revision === revision) viewer.receiveSelectionUpdate?.(value.selectionUpdate)
     if (value.revision === revision && compatible() && value.selectionPing?.revision === revision) viewer.receiveSelectionPing?.(value.selectionPing)
@@ -169,16 +177,19 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
   const visibility = () => { if (!doc.hidden) online() }
   doc.addEventListener('visibilitychange', visibility)
   connect(); host?.addEventListener('offline', offline); host?.addEventListener('online', online)
-  const ownCamera = () => { if (locked || drawingActive) return; guestViews?.cancel(); follow(false); update() }
+  const ownCamera = () => { if (demoDisplay || locked || drawingActive) return; guestViews?.cancel(); follow(false); update() }
   for (const type of ['pointerdown', 'wheel', 'dblclick', 'nadoc:view-navigation']) canvas.addEventListener(type, ownCamera, { capture: true, passive: true })
   doc.getElementById('reset')?.addEventListener('click', ownCamera, true)
   doc.getElementById('mode')?.addEventListener('change', ownCamera, true)
-  if (el('follow')) el('follow').onclick = () => { if (locked || drawingActive) return; guestViews?.cancel(); follow(!following); update() }
+  if (el('follow')) el('follow').onclick = () => { if (demoDisplay || locked || drawingActive) return; guestViews?.cancel(); follow(!following); update() }
   if (el('broadcast')) el('broadcast').onclick = () => { if (broadcasting) pause(); else { broadcasting = true; publicationEpoch++; sent = ''; update(); void publish() } }
   function frame() {
+    if (compatible() && !updating && connected) sweepPreview.frame(); else sweepPreview.clear()
+    avatar.setFirstPerson(following && latest?.camera?.source === 'headset')
     if (compatible() && !updating) avatar.frame(); else avatar.clear()
     if (updating) return
     if (!compatible()) { follow(false); broadcasting = false; source.close(); update(); return }
+    if (following && performance.now() >= headsetExpires) { update(); return }
     if (following && connected && latest?.presenting && latest?.revision === revision && !viewer.performanceApi.busy && latest?.camera) {
       if (!latest.animationActive) followMotion.frame(latest.camera)
       viewer.runtime.controls.enabled = false
@@ -191,7 +202,7 @@ export function mountMeetingPresentation({ viewer, base, role, revision, room, s
   update()
   return () => {
     if (disposed) return
-    disposed = true; drawing?.dispose(); screenshot.dispose(); viewer.setViewLocked?.(false); if (doc.getElementById('anim-text-overlay')) applyAnimationTextOverlay(canvas.parentElement, null); vrTextures.clear(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
+    disposed = true; drawing?.dispose(); screenshot.dispose(); viewer.setViewLocked?.(false); if (doc.getElementById('anim-text-overlay')) applyAnimationTextOverlay(canvas.parentElement, null); vrTextures.clear(); sweepPreview.dispose(); avatar.dispose(); guestViews?.dispose(); onViewReady(() => {}); trajectory.dispose(); live.dispose(); follow(false); abort.abort(); disconnect(); unsubscribe?.()
     if (timer !== null) cancel(timer)
     viewer.runtime.removeFrameCallback(frame)
     doc.removeEventListener('visibilitychange', visibility)

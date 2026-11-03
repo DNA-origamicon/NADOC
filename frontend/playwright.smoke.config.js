@@ -35,7 +35,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
 
-  outputDir: scratch ? path.join(scratch, 'playwright') : 'test-results',
+  outputDir: scratch ? path.join(scratch, 'playwright') : (process.env.NADOC_E2E_OUTPUT_DIR || 'test-results'),
   reporter: scratch ? [['list']] : [['list'], ['./e2e/artifact-cleanup-reporter.js']],
 
   use: {
@@ -50,7 +50,7 @@ export default defineConfig({
   webServer: [
     {
       // Throwaway backend — NO --reload (avoids the WSL2 watcher wedge).
-      command: `uv run uvicorn backend.api.main:app --port ${BACKEND_PORT} --host 127.0.0.1`,
+      command: `uv run uvicorn server_bootstrap:create_app --factory --port ${BACKEND_PORT} --host 127.0.0.1`,
       cwd: REPO_ROOT,
       env: { NADOC_DISABLE_SESSION_CACHE: '1' },   // no .session autosave into shared workspace/
       url: `http://127.0.0.1:${BACKEND_PORT}/docs`,

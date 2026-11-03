@@ -1,0 +1,35 @@
+{
+  "at": "2026-10-16T10:58:29.514139+00:00",
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-control-v1-service/completion_wake_ack.json",
+    "sha256": "3aeaf00df7b9115904f1fa822f9eb428b1bcf1f40c0b73a57fa8a0f3354521ae"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-control-v1/completion_audit.json",
+    "sha256": "91c522a0dfb83dae3be4805faa5ef7b8b8a5e50bce964ff815e69f960ab9e0c1"
+  },
+  "passed": true,
+  "coverage": "Ten native segments,1000 hash-pinned frame verdicts,30 sampled frame replays and10 endpoints; restart and physical gates pass.",
+  "duration_ps": 10000,
+  "final_aligned_RMSD_A": 9.82657021222445,
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/replica-attachment-qm-relevance-v1/handoff.json",
+    "sha256": "7316eccc7f1afbc21e2f291ab2159f4395e9e6e17f31152d9a8523d65e4245db"
+  },
+  "structure_comparison": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/matched-validation-structure-review-v2/assessment.json",
+    "sha256": "9b637155ebe984d486c85c03f1ed3d6febad1380ccedac03cedcb597ab37e8df"
+  },
+  "attachment_sampling": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/replica-attachment-sampling-v1/assessment.json",
+    "sha256": "b35cdb1bc43c9b21cd58fe21e271bba6de0e0a31532ec89d3b8ee9b93d7574ce"
+  },
+  "qm_relevance": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/replica-attachment-qm-relevance-v1/assessment.json",
+    "sha256": "b54d35af1c13813569e257e3a5155ace90b6b06b99896f8c8751b45750b8b2fc"
+  },
+  "interpretation": "Two matched pairs; endpoint RMSD ordering reverses by seed. Contact proxy counts favor weld126vs120 and119vs116 but are not basepair or melting measurements. Both QM fragment conformers share chi105.66degrees;60 sampled welded endpoint1 chi values are at least71.58degrees away. This challenges direct relevance, not evidence of irrelevance or parameter validity.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

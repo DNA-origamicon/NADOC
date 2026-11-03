@@ -82,7 +82,7 @@ function oldOxdnaJobRow(job, { isChild = false, index = 0, depth = 0, listIndex 
   const size = doc.createElement('span')
   size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
   size.style.cssText = `flex-shrink:0;color:${job.archived ? _C.warn : _C.dim};font-size:10px;font-family:var(--font-mono)`
-  if (job.archived) size.title = `Stored outside the main server directory → ${job.archive_path || ''}`
+  if (job.archived) size.title = `Stored outside the default job folder (may be on the same drive) → ${job.archive_path || ''}`
   const sym = jobIsActive(job)
     ? makeSpinner(badge.color, 10, doc)
     : Object.assign(doc.createElement('span'), { textContent: badge.symbol })
@@ -100,7 +100,7 @@ function oldOxdnaJobRow(job, { isChild = false, index = 0, depth = 0, listIndex 
   if (job.archived) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
-    box.title = `Stored outside the main server directory → ${job.archive_path || ''}`
+    box.title = `Stored outside the default job folder (may be on the same drive) → ${job.archive_path || ''}`
     row.append(box)
   }
   if (jobOutOfDate(job) && !autorefineRunning) {
@@ -424,6 +424,15 @@ describe('U3 slice 2a — per-row action button (LAMMPS inline Stop)', () => {
 
 describe('U3 — poll signature short-circuit', () => {
   const ctx = { selectedId: 's', rowSig: (j) => `${j.job_id}:${j.status}` }
+  it('rerenders transfer phase changes even when coarse status remains running', () => {
+    const job = { job_id: 'x', status: 'running', execution_target: 'alpine' }
+    const signature = (state, transferred_bytes = 0) => jobListSignature([
+      { ...job, download_status: { state, transferred_bytes } },
+    ], ctx)
+    expect(signature('queued')).not.toBe(signature('downloading'))
+    expect(signature('downloading', 1)).toBe(signature('downloading', 100))
+    expect(signature('downloading')).not.toBe(signature('processing'))
+  })
   it('is stable across a health-only change and flips on status/selection change', () => {
     const a = [{ job_id: 'x', status: 'running', created_at: 1, health: 0.2 }]
     const b = [{ job_id: 'x', status: 'running', created_at: 1, health: 0.9 }]  // health changed only
@@ -480,4 +489,15 @@ describe('buildJobRowModel — staleTitle as a per-job function', () => {
     expect(buildJobRowModel({ job_id: 'c', status: 'failed' },
       { isStale: () => true, staleTitle: 'static' }).staleTitle).toBe('static')
   })
+})
+
+
+it('shows a static download-queue badge instead of running simulation progress', () => {
+  const row = buildJobRowModel({ job_id: 'waiting', status: 'running',
+    execution_target: 'alpine', slurm_state: 'COMPLETED', progress_fraction: 0.99,
+    download_status: { state: 'queued' } }, { engine: 'md' })
+  expect(row.statusKey).toBe('download-queued')
+  expect(row.isActive).toBe(false)
+  expect(row.progressFraction).toBe(null)
+  expect(statusBadge(row.statusKey).label).toBe('Finished on Alpine — waiting to download')
 })

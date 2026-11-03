@@ -1,0 +1,34 @@
+{
+  "root_cause": "The ready fixture in tests/test_part_evaluation_comparison.py bound __comparison__ document context before a capture-admission HTTP 413. Cleanup began only after setup, so the exception leaked context into subsequent tests. Direct state calls used the leaked document while headerless HTTP calls correctly used __default__. Original-fixture forced failure and four paired context controls reproduce every incident; aligned context passes. Fix registers cleanup immediately using request.addfinalizer, with optional job identity and unconditional context reset.",
+  "affected_paths": [
+    "Fixture ready and tests importing it; subsequent tests in the same pytest worker/context",
+    "tests/test_native_placement_endpoints.py::test_demo_and_per_helix_routes_share_full_authority",
+    "Demo/per-helix API, populated lattice response and posed/unposed overhang frame comparisons used different input documents in affected tests. No production request-context middleware or placement producer changed.",
+    "Full, compact, partial, moved/bent/twisted/scoped and reloaded placement: exact JSON/site controls and 43 full, 12 compact, 17 slab assertions pass. History/undo/redo transient responses: four assertions pass. VR serializer/parity and failure controls: 21 assertions pass.",
+    "Desktop/VR preview and display producers share the unchanged native authority. The only fix is fixture cleanup; no production preview, fallback, cache, transport, export or representation implementation was altered by the fix. The global runtime/test latch intentionally blocked later desktop rendering until review. Physical headset acceptance is not claimed."
+  ],
+  "validation": "New setup-failure cleanup regression passes. Comparison owner 31 and HTTP 13 pass; all 5 endpoint assertions pass. Scope tests 97 assertions pass but native-marked commands exit 1 pending this explicit review. Original/current metadata helper output is byte-exact on five moved/transformed fixtures, 808 sites, with unchanged inputs; reload and partial-selection outputs exact. Inspected shared-frame PNG: original/current backbone markers overlap; slab poses validate. All recorded per-site coordinate/orientation deltas are zero. Failed cross-document HTTP comparisons have no meaningful physical displacement. Existing unrelated broad-suite failures and pending playback browser check remain separate debt; this review does not certify those.",
+  "regression_tests": [
+    "tests/test_comparison_fixture_cleanup.py::test_capture_setup_failure_restores_document_and_removes_session",
+    "tests/test_part_evaluation_comparison.py",
+    "tests/test_part_comparison_routes.py",
+    "tests/test_native_placement_endpoints.py::test_demo_and_per_helix_routes_share_full_authority",
+    "tests/test_native_full_placement.py",
+    "tests/test_native_compact_geometry.py",
+    "tests/test_native_slab_placement.py",
+    "tests/test_native_placement_history.py",
+    "tests/test_native_placement_vr.py"
+  ],
+  "evidence": [
+    "/home/jojo/Work/NADOC/.native-placement-review/incidents/20261023T052656-fe36cbab48aa/report.json",
+    "docs/benchmarks/desktop/round2_fixture_leak_reproduction.json",
+    "docs/benchmarks/desktop/round2_endpoint_context_reproduction.json",
+    "docs/benchmarks/desktop/round2_fixture_cleanup_tests.txt",
+    "docs/benchmarks/desktop/round2_review_tests.json",
+    "docs/benchmarks/desktop/round2_review_scope_tests.json",
+    "docs/benchmarks/desktop/round2_placement_site_evidence.json",
+    "docs/benchmarks/desktop/round2_placement_shared_frame.png"
+  ],
+  "why_previous_gates_missed_it": "Ordinary fixture setup succeeds; yield cleanup then runs. A budget exception under broad-suite load prevented reaching yield, a lifecycle not previously tested. The forced failure regression exercises that boundary without relaxing capture budgets.",
+  "limits": "Test isolation review, not authorization for new molecular placement. No goldens, scientific constants or incident evidence changed. Browser playback validation follows gate review."
+}

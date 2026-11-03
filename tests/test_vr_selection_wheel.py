@@ -13,6 +13,7 @@ def test_clockwise_layout_and_discoverability():
     assert tour['group'] == 'interaction' and tour['runnable']
     assert '--selection-checks' in arguments(tour, True)
     assert '--validate' in arguments(tour, True)
+    assert any(t['id'] == 'clipboard' and t['runnable'] for t in catalog()['tours'])
 
 
 @pytest.mark.parametrize('preset', ['steady_fast', 'steady_deliberate', 'variable_fast', 'variable_deliberate'])
@@ -51,8 +52,8 @@ def test_review_refreshes_only_owned_pad_axis_until_stopped():
 
 def test_edit_layout_and_discoverability():
     from tools.vr_workflows.edit_wheel_check import LABELS, AXES as EDIT_AXES
-    assert LABELS == ('LIGATE', 'NICK', 'UNDO', 'REDO')
-    assert EDIT_AXES == ((.8, 0), (0, .8), (-.8, 0), (0, -.8))
+    assert LABELS == ('LIGATE', 'NICK', 'UNDO', 'REDO', 'COPY', 'PASTE')
+    assert EDIT_AXES == ((.8, 0), (.4, .69282), (-.4, .69282), (-.8, 0), (-.4, -.69282), (.4, -.69282))
     tour = next(t for t in catalog()['tours'] if t['id'] == 'edit-wheel')
     assert tour['runnable'] and '--edit-checks' in arguments(tour, True)
     history = next(t for t in catalog()['tours'] if t['id'] == 'edit-wheel-history')
@@ -66,7 +67,7 @@ def test_edit_review_renews_right_pad_only():
     live = Mock();alive = iter([True, True, False])
     review(live, lambda: next(alive), sleep=lambda _: None)
     assert live.send.call_count == live.frame.call_count == 2
-    live.send.assert_called_with('trackpad_axis', hand=1, x=-.8, y=0)
+    live.send.assert_called_with('trackpad_axis', hand=1, x=-.4, y=.69282)
 
 
 def test_nick_pixel_targets_follow_controller_forward_blades():

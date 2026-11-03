@@ -1,9 +1,12 @@
+import { createVRClipboard } from './vr_clipboard.js'
 import { createVRCommitRefresh } from './vr_commit_refresh.js'
 /** Browser-owned wheel catalogs and serialized desktop-authoritative edits. */
 import { endRole, isValidPair, ligationArgs } from './force_ligation.js'
 
 export function createVRLigation({ getState, api, clearSelection = () => {}, onOutcome = () => {} }) {
+  const clipboard = createVRClipboard({ getState, api })
   let design, geometry, snapshot, version = 0, dirty = true, busy = false
+  let clipboardPreview = []
   let published = '', publishing = false, status = 'ready'
 
   function catalog() {
@@ -59,7 +62,7 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
     if (key === published) return
     publishing = true
     try {
-      const result = await api.sendVRLigationEnds({ version: current.version, status, ends: current.ends, bonds: current.bonds })
+      const result = await api.sendVRLigationEnds({ version: current.version, status, ends: current.ends, bonds: current.bonds, clipboard_preview: clipboardPreview })
       if (result) published = key
     } catch { /* Retry publication on the next native poll. */ }
     finally { publishing = false }
@@ -72,7 +75,7 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
     const a = current.nucleotides[event.source], b = current.nucleotides[event.target]
     const valid = !current.assembly && (action === 'nick'
       ? Number.isSafeInteger(event.source) && !!current.nickArgs[event.source]
-      : action === 'undo' || action === 'redo' || action === 'ligate' &&
+      : action === 'copy' || action === 'paste' || action === 'undo' || action === 'redo' || action === 'ligate' &&
         Number.isSafeInteger(event.source) && Number.isSafeInteger(event.target) && isValidPair(a,b))
     if (event.version !== current.version || !valid) {
       status = 'refused'; dirty = true; onOutcome('Design changed; select the wheel action again')
@@ -80,10 +83,17 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
     }
     busy = true
     const sceneRefresh = createVRCommitRefresh({ api, getState })
+    let pasteCommitted = false
     try {
+      if (action === 'copy') {
+        clipboardPreview = await clipboard.copy(event)
+        status = 'created'
+        return true
+      }
       clearSelection()
       let result
-      if (action === 'nick') result = await api.addNick(current.nickArgs[event.source], { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
+      if (action === 'paste') result = await clipboard.paste(event, { onCommitted: response => { pasteCommitted = true; sceneRefresh.onCommitted(response) } })
+      else if (action === 'nick') result = await api.addNick(current.nickArgs[event.source], { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       else if (action === 'undo' || action === 'redo') result = await api[action]({ onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       else {
         const args = ligationArgs(a,b)
@@ -93,10 +103,12 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
       clearSelection()
       const refresh = await sceneRefresh.complete()
       if (!refresh?.published) throw new Error('Edit saved, but VR scene refresh failed')
+      clipboardPreview = []
       status = 'created'
       return true
     } catch (error) {
-      status = 'failed'; onOutcome(error.message)
+      if (action === 'copy') clipboardPreview = []
+      status = pasteCommitted ? 'created' : 'failed'; onOutcome(error.message)
       return false
     } finally {
       busy = false; dirty = true; await publish()
@@ -104,7 +116,7 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
   }
 
   return { publish, commit, catalog,
-    reset() { published = ''; dirty = true; status = 'ready' },
+    reset() { clipboardPreview = []; clipboard.reset(); published = ''; dirty = true; status = 'ready' },
     get busy() { return busy },
   }
 }

@@ -67,6 +67,9 @@ def test_no_prefix_when_taskset_missing_even_with_env(monkeypatch):
 def test_run_namd_omits_devices_flag_for_cpu_only(tmp_path, monkeypatch):
     """CPU-only NAMD runs must omit +devices entirely; +devices "" confuses NAMD."""
     seen = {}
+    (tmp_path/'min.psf').write_text('1000 !NATOM\n')
+    (tmp_path/'min.conf').write_text('structure min.psf\nminimize 10\n')
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory'))
 
     class FakeProc:
         pid = 123

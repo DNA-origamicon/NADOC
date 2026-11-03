@@ -3,7 +3,11 @@
 In Simulations → NAMD, expand **Box and solvent** above the surface card. Choose
 Recommended (current bounding box + 6 nm per face), custom bounding-box padding,
 Allow any orientation (rotation envelope), or explicit X/Y/Z dimensions in nm.
-Selecting Recommended resets padding to 6 nm. Explicit dimensions work on a blank
+Selecting Recommended resets padding to 6 nm. Editing initial solvent padding commits
+on blur or Enter and switches Recommended to custom padding. The committed value is
+saved to the selected draft job (or document defaults when configuring a new job)
+and refreshes the box/solvent preview, open wizard,
+and Alpine/RunPod size and resource estimates. Explicit dimensions work on a blank
 part without first estimating DNA geometry. Fit modes recalculate when geometry,
 selected padding or surface settings change. Actual six-face water clearances are
 shown separately from selected envelope padding. Preparation does not automatically
@@ -40,11 +44,22 @@ overlay does not imply completed validation.
 
 The live relaxation wizard summarizes these settings and uses the same values
 when creating the job, rather than providing competing preparation controls.
-Existing job snapshots remain immutable. Actual molecular fitting is still checked
+Selecting a draft restores its saved preparation settings; deselecting it turns off
+View details and periodic images. Prepared and started job snapshots remain immutable. Actual molecular fitting is still checked
 at preparation time: an explicit box preview is not proof that a structure fits.
 Plain blank electrolyte native preparation is not qualified by these UI checks.
 
-Current choices are saved as `metadata.namd_box_solvent` in the document. Named
+Local memory admission uses the selected box and salt recipe, including partially
+explicit dimensions. It displays a conservative atom upper budget before preparation
+and uses the PSF count afterward. Preparation has its own RAM budget. Large neighbor
+or margin settings may also require automatic CUDA patch subdivision, even when total
+VRAM fits; subdivision preserves the physical box and force settings. Unsupported
+explicit patch controls block launch rather than retrying on a larger-memory GPU.
+See [memory policy](namd_setup.md#solvent-and-memory-policy) for the limits and scope.
+
+New-job defaults are saved as `metadata.namd_box_solvent` in the document.
+Selected draft edits are saved to that job’s `prep_params`; they do not overwrite
+the defaults for a different job. Named
 presets include this card but remain global files under `workspace/namd_setup_presets`,
 independent of any `.nadoc` document. Both display toggles start off when a new
 document is opened.

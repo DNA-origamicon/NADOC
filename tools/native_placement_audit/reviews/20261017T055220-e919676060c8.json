@@ -1,0 +1,35 @@
+{
+  "incident_id": "20261017T055220-e919676060c8",
+  "reviewer": "Codex",
+  "reviewed_at_utc": "2026-10-17T07:37:03.206516+00:00",
+  "report_sha256": "98863b798ea1b1cd9c3b02e7390b0da7e421f36946254742812d4368281d819d",
+  "review": {
+    "root_cause": "runtime.dispose referenced removed _savedInner after disposing active controls. Both scene-guard test variants reached this obsolete cleanup reference after their blocking assertions passed. Removed obsolete references; active controls and renderer are disposed normally.",
+    "affected_paths": [
+      "Unfold activation, refold and straight-geometry refresh (including undo/redo), helix_renderer.applyUnfoldOffsets and revertToGeometry",
+      "Viewer runtime disposal and persistent desktop/XR/export latch. Backend full/compact/partial producers and native VR placement code are unchanged."
+    ],
+    "validation": "Frontend full suite: 673 files / 7971 tests passed, one new harness module failed before collection; corrected harness and focused suite subsequently passed all 3 tests. Backend canonical placement, endpoints, bend/twist history and VR parity: 90 passed. Commands remained nonzero solely for unresolved review gate after tests passed. Live Vite Chromium module harness: six authoritative forward/reverse bead/slab poses survive unfold/refold, zero matrix delta, no page errors, no placement block; screenshot inspected. Physical headset and original large assembly interaction were not exercised. No molecular placement constants or golden values changed.",
+    "regression_tests": [
+      "frontend/src/scene/unfold_view.native_placement.test.js",
+      "frontend/src/viewer/placement_scene_guard.native_placement.test.js",
+      "frontend/src/scene/helix_renderer.native_placement.test.js",
+      "frontend/src/viewer/geometry_codec.native_placement.test.js",
+      "tests/test_native_full_placement.py",
+      "tests/test_native_slab_placement.py",
+      "tests/test_native_placement_endpoints.py",
+      "tests/test_native_placement_history.py",
+      "tests/test_native_placement_vr.py"
+    ],
+    "evidence": [
+      "/home/jojo/Work/NADOC/.native-placement-review/incidents/20261017T055220-e919676060c8/report.json",
+      ".development-artifacts/positioning-fix/incident-design.nadoc",
+      ".development-artifacts/positioning-fix/incident-assembly.nass",
+      ".development-artifacts/positioning-fix-tests.log",
+      ".development-artifacts/positioning-fix/focused-tests.log",
+      ".development-artifacts/positioning-fix/backend-tests.log",
+      ".development-artifacts/positioning-fix/browser.json",
+      ".development-artifacts/positioning-fix/unfold-refold.png"
+    ]
+  }
+}

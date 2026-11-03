@@ -111,3 +111,104 @@ it('recommends 6 nm per face for free DNA and displays measured clearance',async
  expect(ui.payload()).toMatchObject({box_mode:'bbox',padding_nm:6})
  expect(document.getElementById('md-box-clearance').textContent).toContain('unavailable')
 })
+
+it('shows the saved job box and actual ions without fitting the current design',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const state={currentDesign:{id:'control',metadata:{}},currentGeometry:[1]},listeners=[]
+ const api={getMdSolventMeta:vi.fn(async()=>({ready:true,box_nm:[6.093,8.3438,12.8142],species:{MG:52,CL:11,NA:0}})),fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[14.093,16.344,20.659]}}))}
+ ui=initBoxSolvent({api,store:{getState:()=>state,subscribe:fn=>{listeners.push(fn);return()=>{}}}})
+ const events=[],listen=e=>events.push(e.detail)
+ window.addEventListener('nadoc:box-solvent-details',listen)
+ try{
+  ui.selectJob({job_id:'control',design_name:'2hb_1xT',created_at:1792944569,status:'completed'},{padding_nm:2,box_mode:'bbox'})
+  document.getElementById('md-box-solvent-toggle').click()
+  document.getElementById('md-box-view-details').click()
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,estimated:false,dimensions:[6.093,8.3438,12.8142],numbers:{mg:52,cl:11,na:0}}))
+  expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+  expect(document.getElementById('md-box-padding').disabled).toBe(true)
+  state.currentGeometry=[2];listeners.forEach(fn=>fn())
+  expect(events.at(-1).dimensions).toEqual([6.093,8.3438,12.8142])
+  expect(document.getElementById('md-box-clearance').textContent).not.toContain('X−')
+  ui.beginPreparation()
+  expect(document.getElementById('md-box-padding').disabled).toBe(false)
+  expect(ui.payload().padding_nm).toBe(6)
+  await vi.waitFor(()=>expect(api.fetchProtocolBoxPreview).toHaveBeenCalled())
+ }finally{window.removeEventListener('nadoc:box-solvent-details',listen)}
+})
+
+it('rejects stale job reads and never substitutes defaults for unavailable saved boxes',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const pending=[],api={getMdSolventMeta:vi.fn(()=>new Promise(resolve=>pending.push(resolve))),fetchProtocolBoxPreview:vi.fn()}
+ ui=initBoxSolvent({api,store:{getState:()=>({}),subscribe:()=>()=>{}}})
+ document.getElementById('md-box-solvent-toggle').click()
+ ui.selectJob({job_id:'a',created_at:1,status:'completed'},{padding_nm:2})
+ await vi.waitFor(()=>expect(pending).toHaveLength(1))
+ ui.selectJob({job_id:'b',created_at:2,status:'completed'},{padding_nm:6})
+ await vi.waitFor(()=>expect(pending).toHaveLength(2))
+ pending[0]({ready:true,box_nm:[6,8,12]})
+ pending[1]({ready:false,box_nm:null})
+ await vi.waitFor(()=>expect(document.getElementById('md-box-warnings').textContent).toContain('No default box is substituted'))
+ expect(document.getElementById('md-box-x').value).toBe('')
+ expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
+})
+
+it.each(['focusout','keydown'])('commits padding on %s and persists custom sizing',async(type)=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ const state={currentDesign:{id:'padding',metadata:{}}}
+ const api={fetchProtocolBoxPreview:vi.fn(async p=>({box_preview:{selected_nm:[10,12,14].map(n=>n+2*p.padding_nm)}})),updateMetadata:vi.fn(async metadata=>{state.currentDesign.metadata=metadata;return {}})}
+ const store={getState:()=>state,subscribe:()=>()=>{}}
+ ui=initBoxSolvent({api,store})
+ document.getElementById('md-box-solvent-toggle').click()
+ await vi.waitFor(()=>expect(document.getElementById('md-box-x').value).toBe('22.000'))
+ const listener=vi.fn();ui.subscribe(listener)
+ const padding=document.getElementById('md-box-padding');padding.value='3.5'
+ padding.dispatchEvent(new Event('input',{bubbles:true}))
+ expect(listener).not.toHaveBeenCalled()
+ padding.dispatchEvent(type==='keydown'?new KeyboardEvent(type,{key:'Enter',bubbles:true}):new FocusEvent(type,{bubbles:true}))
+ await vi.waitFor(()=>expect(document.getElementById('md-box-x').value).toBe('17.000'))
+ expect(api.fetchProtocolBoxPreview.mock.calls.at(-1)[0]).toMatchObject({padding_nm:3.5,box_size_nm:null})
+ expect(state.currentDesign.metadata.namd_box_solvent).toMatchObject({padding:'3.5',sizing:'bbox'})
+ expect(listener).toHaveBeenCalledTimes(1)
+ padding.dispatchEvent(new FocusEvent('focusout',{bubbles:true}))
+ expect(listener).toHaveBeenCalledTimes(1)
+ ui.dispose();ui=initBoxSolvent({api,store})
+ expect(ui.payload().padding_nm).toBe(3.5)
+})
+
+it('saves selected draft padding to the job and hides details on deselection, even during a save',async()=>{
+ const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+ for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
+ let job={job_id:'relax',design_name:'Gerling',status:'draft',prep_params:{padding_nm:6,box_mode:'bbox'}}
+ let finishSave
+ const saveDraftSettings=vi.fn((selected,changes)=>new Promise(resolve=>{finishSave=()=>{job={...selected,prep_params:{...selected.prep_params,...changes}};resolve(job)}}))
+ const api={fetchProtocolBoxPreview:vi.fn(async p=>({box_preview:{selected_nm:[10,12,14].map(n=>n+2*p.padding_nm)}})),updateMetadata:vi.fn()}
+ const events=[],listen=e=>events.push(e.detail)
+ window.addEventListener('nadoc:box-solvent-details',listen)
+ ui=initBoxSolvent({api,saveDraftSettings,store:{getState:()=>({currentDesign:{id:'gerling',metadata:{}}}),subscribe:()=>()=>{}}})
+ try{
+  ui.selectJob(job,job.prep_params)
+  document.getElementById('md-box-solvent-toggle').click()
+  document.getElementById('md-box-view-details').click()
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,dimensions:[22,24,26]}))
+  const padding=document.getElementById('md-box-padding');padding.value='3.5'
+  padding.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,dimensions:[17,19,21]}))
+  ui.clearJob()
+  expect(document.getElementById('md-box-view-details').checked).toBe(false)
+  expect(events.at(-1).enabled).toBe(false)
+  ui.selectJob(job,job.prep_params) // the server still has 6 while the write is in flight
+  expect(padding.value).toBe('3.5')
+  expect(events.at(-1).enabled).toBe(false)
+  finishSave()
+  await vi.waitFor(()=>expect(job.prep_params.padding_nm).toBe(3.5))
+  ui.clearJob();ui.selectJob(job,job.prep_params)
+  expect(padding.value).toBe('3.5')
+  document.getElementById('md-box-view-details').click()
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,dimensions:[17,19,21]}))
+  expect(api.updateMetadata).not.toHaveBeenCalled()
+  expect(saveDraftSettings).toHaveBeenCalledTimes(1)
+ }finally{window.removeEventListener('nadoc:box-solvent-details',listen)}
+})

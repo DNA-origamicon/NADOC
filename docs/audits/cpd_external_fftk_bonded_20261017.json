@@ -1,0 +1,49 @@
+{
+  "schema": "nadoc.cpd.external-bonded-preflight.v1",
+  "runs": [
+    {
+      "state": "failed",
+      "returncode": 1,
+      "started_at": 1792281758.3228655,
+      "finished_at": 1792281809.2723393,
+      "elapsed_seconds": 50.9494743347168,
+      "attempt": 1,
+      "reason": "QCEngine subprocess PATH lacks python3.10"
+    },
+    {
+      "state": "failed",
+      "returncode": 1,
+      "started_at": 1792281827.7472517,
+      "finished_at": 1792281879.0997922,
+      "elapsed_seconds": 51.352540731430054,
+      "attempt": 2,
+      "reason": "QCEngine version reader lacks pkg_resources"
+    },
+    {
+      "state": "deadline",
+      "returncode": null,
+      "started_at": 1792281919.7948065,
+      "finished_at": 1792282039.8039901,
+      "elapsed_seconds": 120.00918412208557,
+      "attempt": 3,
+      "reason": "120s deadline during79-displacement Hessian acquisition; process group terminated"
+    }
+  ],
+  "native_seconds_used": 2088.9574601380464,
+  "expectations": {
+    "external_writer_generates_bonded_input": "PASS using upstream GUI-backed QMtool",
+    "native_exit0_within120s": "FAIL",
+    "finite_square_internal_hessian_readback": "NOT EVALUATED: acquisition incomplete"
+  },
+  "runtime_repairs": [
+    "Archive-only OptKing0.2.1 installed",
+    "Activate runtime bin on PATH for QCEngine children",
+    "Setuptools<81 provides pkg_resources; QCEngine get_version preflight returns1.6"
+  ],
+  "source_modified": false,
+  "scientific_input_identical_across_attempts": true,
+  "verdict": "BONDED_INTERFACE_UNVERIFIED_WITHIN_REGISTERED_EXAMPLE_CAP",
+  "no_active_native_job": true,
+  "next": "Stop identical example retries. Retain geometry-interface pass; assess acquisition cost/available reference assets before further bounded workflow work. CPD fitting and qualification remain incomplete.",
+  "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-fftk-v1"
+}

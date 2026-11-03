@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+
 from backend.core import namd_runner as nr
 from backend.core.md_health import HealthCheckResult
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
@@ -30,6 +31,18 @@ from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
 
 _NAME_STEM = "T"
 _MIN_NAME = "T_00_min"
+
+
+@pytest.fixture(autouse=True)
+def measured_fake_resources(monkeypatch, tmp_path):
+    # These state-machine fixtures intentionally contain no molecular topology.
+    # Resource parsing/admission is exercised separately with real config fixtures.
+    from backend.core import namd_resources, md_vram
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR', str(tmp_path/'memory'))
+    monkeypatch.setattr(namd_resources, 'configuration_memory', lambda *a, **kw:
+                        namd_resources.MemoryEstimate(1000, False, 64, 64, True))
+    monkeypatch.setattr(md_vram,'detect_gpu_activity',lambda **kw:
+                        {'total_mb':12000,'used_mb':100})
 
 
 def _segment_dicts() -> list[dict]:

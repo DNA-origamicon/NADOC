@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-18T02:35:04.134851+00:00",
+  "status": "sugar_assignments_received_and_isolated_DNA_topology_transfer_passed",
+  "intake": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-return-v1/audit.json",
+    "sha256": "ba51efa821bc855aefe73bd43ce89b9be28070cfd03bf86260208ba47c068736"
+  },
+  "stereochemistry": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-return-v1/stereo_audit.json",
+    "sha256": "a25bf6d72a5b9125ee2dec464bbdd47c07cc19459618fb63f93a961e21a75496"
+  },
+  "transfer": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v3/audit.json",
+    "sha256": "9c5fd81e2ecdc15706f40f6867016c8cdd73ed23f3813b27846db6b9ee43df69"
+  },
+  "transfer_policy": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v3/policy.json",
+    "sha256": "35cc5fa8a9d72c52c8ef8aa739b8073a7ab483c899a134e316b86367192295c4"
+  },
+  "independent_comparison": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-dna-transfer-v3/independent_audit.json",
+    "sha256": "0bb8e83d0786f06ae9e91ffeee3656a70a30e8ff1ad89c6d6c0b550219b05b66"
+  },
+  "results": {
+    "four_external_assignments": "Input bytes match; returned molecular identity and charge pass; all terms resolved with CGenFF5.0.",
+    "matched_charge_differences": "All three lesions: base delta-0.138e, retained sugar delta+0.138e, terminal OH cap deltas0. No redistribution.",
+    "DNA_harness": "Three191atom six-T topologies retain net-5e, with two intended crosslinks and full coverage.",
+    "unchanged_nonbase_terms_per_case": {
+      "bonds": 172,
+      "angles": 318,
+      "dihedrals": 454,
+      "impropers": 12
+    },
+    "production_changes": false,
+    "new_native_simulations": 0
+  },
+  "limitations": [
+    "The isolated v3 charge-difference policy is a provisional transfer hypothesis and does not replace historical v2 or production files.",
+    "Topology harnesses have no coordinates; physical starting conformations remain to be constructed and independently checked.",
+    "No numerical dynamics stability, restart/integration, practical equivalence or sampling claim.",
+    "Formation/context restrictions and finite existing native budget remain unchanged."
+  ],
+  "preserved_failure": "Initial transfer asserted no NBFIX; CGenFF has halogen-specific exceptions for some base types. build_v2.py preserves those exceptions under renamed base types; original source and failure log retained.",
+  "next": "Prepare two distinct canonical DNA starting conformations per admitted isomer/context, register finite native admission/feasibility allocation and observable references, then run serial restartable native checks. No new energetic refinement."
+}

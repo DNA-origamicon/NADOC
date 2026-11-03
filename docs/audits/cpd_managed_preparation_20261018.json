@@ -1,0 +1,77 @@
+{
+  "job_id": "560bc36fc61a",
+  "package": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/560bc36fc61a/package/2hb_1xT_CPD_trans-syn-II_namd_solvated",
+  "atoms": 472636,
+  "configurations": 23,
+  "relaxation_stages": 21,
+  "chemistry": [
+    {
+      "isomer": "trans-syn-II",
+      "chirality": {
+        "schema": "nadoc.photoproduct-chirality-audit.v1",
+        "product_id": "tt-cpd-trans-syn-ii",
+        "passed": true,
+        "centers": [
+          {
+            "atom": "1:C5",
+            "ccd_configuration": "R",
+            "signed_volume": 2.6450423699999854,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "ccd_configuration": "R",
+            "signed_volume": -1.7866299439999758,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "ccd_configuration": "R",
+            "signed_volume": 2.621596350000044,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "ccd_configuration": "R",
+            "signed_volume": -1.8506192619999813,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ]
+      },
+      "two_covalent_crosslinks": true
+    }
+  ],
+  "parameter_hashes_verified": 7,
+  "all_timesteps_at_most_2_fs": true,
+  "no_hmr": true,
+  "not_started": true,
+  "psf_sha256": "0292494498cf8c82a03530b02eb07ef0b86f74cc970d72bfaa5509a6c23618d3",
+  "workflow": "Desktop Chromium: library folder > trans-syn-II saved design > Simulations > NAMD > New job > stage plan > Create job. Never clicked Run, Queue, Rent or Submit.",
+  "backend": "Dedicated port 8002 with lifespan off; no supervisor or live backend reuse.",
+  "initial_failure": "400: Product-specific HMR/4 fs behavior has not been validated; wizard default fast=true, relax_timestep_fs=4, relax_hmr=true treated as explicit.",
+  "changes": [
+    "Preserve actual explicit request fields when resolving preset defaults.",
+    "Show CPD integrator limits as forced settings in the wizard plan.",
+    "Prepare formed CPD packages on Create even when the wizard requests a draft; autostart remains false for all execution targets."
+  ],
+  "tests": {
+    "real_browser_managed_package": 1,
+    "cpd_simulation_and_target_creation": 18,
+    "protocol_plan_regressions": 127
+  },
+  "remote_scope": "Local managed package built in browser. Local/Alpine/RunPod creation dispatch checked without starting or submitting; remote connectivity and execution not exercised.",
+  "superseded_test_jobs_removed": [
+    "a3dc8ea630c4",
+    "32a5a32524d2",
+    "d23b12b9bd0e"
+  ],
+  "screenshots": [
+    ".development-artifacts/cpd-managed-preparation/wizard.png",
+    ".development-artifacts/cpd-managed-preparation/result.png"
+  ],
+  "qualification": "Provisional experimental CPD forcefield; package readiness does not establish physical validation."
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "file": "tests/test_project_revisions.py",
+    "test": "test_topology_autosave_commit_race",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_slow_recheck_0.txt"
+  },
+  {
+    "file": "tests/test_mrdna_surface.py",
+    "test": "test_field_into_surface_prepares_without_a_strand_anchor",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_slow_recheck_1.txt"
+  },
+  {
+    "file": "tests/test_design_identity_api.py",
+    "test": "test_autosave_after_undo_redo_and_further_edit",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_slow_recheck_2.txt"
+  },
+  {
+    "file": "tests/test_part_immutable_creation.py",
+    "test": "test_real_durable_create_batch_flush_restart_restore_and_edit",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_slow_recheck_3.txt"
+  },
+  {
+    "file": "tests/test_project_collaboration_api.py",
+    "test": "test_authenticated_peer_can_transfer_and_fast_forward_project",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_slow_recheck_4.txt"
+  }
+]

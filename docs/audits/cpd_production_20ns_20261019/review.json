@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-19",
+  "scope": "Saved-frame analysis of two completed 20 ns CPD runs and the first 20 ns of three archived unmodified 2hb_1xT production jobs.",
+  "conclusion": "Both CPD cores meet a provisional numerical/structural MVP interpretation over the observed 20 ns. Global motion is comparable to the approximate baselines. Cis-anti-I has an unresolved late flanking base-pair opening; cis-syn-I has an earlier transient local opening that recovers. Neither result establishes force-field accuracy or equilibrium.",
+  "cpd_jobs": {
+    "cis-syn-I": "edb512c46112",
+    "cis-anti-I": "e345c67349bf"
+  },
+  "baseline_jobs": {
+    "replica_A": "bd13e4dfa6c5",
+    "replica_B": "07d7cd2766e3",
+    "older_small_box": "29c5b267380f"
+  },
+  "excluded_baseline": {
+    "job_id": "7d5937e569c6",
+    "reason": "Job metadata says completed 200 ns, but currently retained DCD has only 1226 frames spanning 69.81\u201382.06 ns; cannot compare its first 20 ns."
+  },
+  "method": {
+    "cpd_frames_per_run": 1000,
+    "cpd_frame_interval_ps": 20,
+    "baseline_frames": [
+      1000,
+      1000,
+      2000
+    ],
+    "common_heavy_atom_identities": 1963,
+    "local_heavy_atom_identities": 126,
+    "local_region": "Two extra thymine nucleotides plus the immediately preceding and following residues on their strands; D001 residues 14\u201316 and D000 residues 7\u20139.",
+    "base_pairs": 42,
+    "local_base_pairs": 4,
+    "pairing_criterion": "Every canonical donor/acceptor heavy-atom distance in a pair <= the common initial-design reference distance + 0.75 A; minimum-image distances. Not an angular H-bond criterion.",
+    "rmsd": "Each group independently rigid-aligned to its own production-job start; same DNA sequence and atom identities verified.",
+    "periodic_images": "Stored unwrapped DNA coordinates for modern runs; fragment unwrapping and assembly image reconstruction for older wrapAll-on baseline.",
+    "cpd_reference_distances": "The two CPD reference plans have identical pair identities and reference distances; those same thresholds were mapped by atom identity to all baselines.",
+    "plot": "Nonoverlapping 1 ns means; complete sampled-frame traces retained in CSV."
+  },
+  "chemistry": "Both intended crosslinks exist in PSF; all seven packaged assets hash-verified for each CPD run; four stereocenters retain expected signed volumes in every saved frame. Crosslink lengths average approximately 1.55\u20131.56 A. No coordinate nonfiniteness or pathological lesion/DNA heavy-atom close contacts found (minimum nonbonded distance 2.44 A, excluding 1\u20132 and 1\u20133 neighbors).",
+  "protocol_differences": [
+    "CPDs: 2 fs, ordinary masses, roughly 472624 atoms, approximately 141 x 163 x 208 A box.",
+    "Newer baselines: 4 fs/HMR, 62677 atoms, approximately 60 x 83 x 130 A box. Shared relaxation parent, different production seeds.",
+    "Older baseline: 4 fs/HMR, 21436 atoms, approximately 44 x 67 x 114 A box; Langevin damping 5 rather than 1; starts after a prior 2 ns production job.",
+    "Starting geometries and relaxation histories differ. These are useful empirical baselines, not matched causal controls."
+  ],
+  "interpretation": [
+    "Whole-DNA RMSD growth and terminal fraying are also seen in the baselines; the CPD trajectories are not exceptional on those measures.",
+    "The crosslinked six-residue regions move less than the newer unlinked baselines; a covalent linkage itself restricts motion, so lower RMSD alone does not validate the force field.",
+    "Cis-syn-I local pairing falls around 5\u201310 ns then recovers to baseline-like occupancy in the final 5 ns.",
+    "Cis-anti-I D000:THY9\u2013D002:ADE9 pairing drops late: approximately 40% occupancy in the last 5 ns versus 90\u201397% in the three baselines. This is a local difference worth reproducing, not proof of an incorrect force field."
+  ],
+  "next_decision": "Keep both as provisional MVP elements. Do not retune parameters solely to suppress observed opening. Prioritize a cis-anti-I repeat and a matched non-CPD baseline with the same box/integrator/relaxation protocol if deciding whether local destabilization is lesion-specific.",
+  "limitations": [
+    "One current CPD trajectory per isomer; saved frames are correlated and are not independent replicas.",
+    "No inference about unsaved 2 fs transients; sample spacing is 20 ps for CPDs.",
+    "Fixed product topology cannot validate photochemical formation, bond-breaking kinetics, or isomer free energies.",
+    "No equilibrium or broad origami transferability certification; no simulation settings changed."
+  ]
+}

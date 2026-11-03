@@ -1,0 +1,10 @@
+{
+  "196": {"doi": "10.1038/s41565-023-01516-x", "evidence": "https://www.nature.com/articles/s41565-023-01516-x", "note": "Journal version found; Nanobase links the earlier preprint. Uploaded variant equivalence is unverified."},
+  "237": {"doi": "10.1126/sciadv.adn9423", "evidence": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11225781/", "note": "Journal version found; Nanobase links the earlier preprint. Antibody/fluorophore variants require matching."},
+  "263": {"doi": "10.1038/s41467-025-56846-2", "evidence": "https://www.nature.com/articles/s41467-025-56846-2", "note": "Journal version found; Nanobase links the earlier preprint. An author correction exists (10.1038/s41467-025-57186-x)."},
+  "260": {"doi": "10.1038/s41563-025-02418-0", "evidence": "https://api.crossref.org/works/10.1101/2024.02.09.579479", "note": "Crossref identifies a journal successor to the deposited preprint; uploaded variant equivalence is unverified."},
+  "232": {"doi": "10.1021/acsnano.4c10796", "evidence": "https://pubs.acs.org/toc/ancac3/18/43", "note": "Journal version found by title/authors; Nanobase links arXiv. Uploaded variant equivalence is unverified."},
+  "270": {"doi": "10.1038/s41467-025-66195-9", "evidence": "https://www.nature.com/articles/s41467-025-66195-9", "note": "Journal version found by title/authors; Nanobase links arXiv. Triangle interface variants require matching."},
+  "236": {"doi": "10.1038/s41586-023-06890-z", "evidence": "https://www.nature.com/articles/s41586-023-06890-z", "note": "Journal version found for the cited arXiv paper. This is SST self-assembly, not scaffolded caDNAno origami."},
+  "293": {"doi": "10.1038/s41598-025-93269-x", "evidence": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11923261/", "note": "Publication association found from authors, filenames and described tailed/trenched designs; Nanobase supplies no citation. File equivalence unverified."}
+}

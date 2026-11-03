@@ -106,6 +106,7 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     _lastReport = null
     _clearMarkers()
     _legend?.classList.remove('visible')
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   /** Re-resolve the LAST report against the current backbone entries — no refetch.
@@ -121,10 +122,20 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
       designRenderer?.getXoverBeadEntries?.() ?? [])
     if (pierced.length) designRenderer?.setPiercingHighlight?.(pierced)
     else designRenderer?.clearPiercingHighlight?.()
+    window.dispatchEvent(new Event('nadoc:view-scene-changed'))
   }
 
   /** Re-fetch the clash report and repaint (no-op while toggled off). */
-  async function refresh() {
+  let pending = Promise.resolve()
+  function refresh() {
+    pending = refreshReport()
+    return pending
+  }
+  async function whenReady() {
+    let current
+    do { current = pending; await current } while (current !== pending)
+  }
+  async function refreshReport() {
     if (!_on) return
     const design = store?.getState?.().currentDesign
     if (!design) { clear(); return }
@@ -195,5 +206,5 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     if (typeof unsubscribe === 'function') unsubscribe()
     window.removeEventListener('nadoc:display-rebuilt', _repaint)
   }
-  return { toggle, refresh, clear, isOn, dispose }
+  return { toggle, refresh, clear, isOn, dispose, whenReady }
 }

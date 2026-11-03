@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Restore Voltron Run 10</title>
+<style>body{margin:0;background:#10151c;color:#fff;font:14px system-ui}iframe{border:0;width:100vw;height:calc(100vh - 42px)}#status{height:42px;box-sizing:border-box;padding:10px 16px}</style></head>
+<body><div id="status" role="status">Loading VoltronCoreArmV2 and its saved Run 10 configuration…</div><iframe title="NADOC restored simulation"></iframe>
+<script type="module">
+const frame = document.querySelector('iframe')
+const status = document.getElementById('status')
+const doc = new URLSearchParams(location.search).get('doc') || 'voltron-run10-recovery'
+const path = new URLSearchParams(location.search).get('open') || 'VoltronCoreArmV2_Run10_Recovery.nadoc'
+frame.src = '/?doc=' + encodeURIComponent(doc) + '&open=' + encodeURIComponent(path)
+try {
+  const deadline = Date.now() + 240000
+  let w
+  while (Date.now() < deadline) {
+    w = frame.contentWindow
+    const t = w?.__nadocTest
+    if (t?.store.getState().currentDesign?.metadata?.name?.includes('VoltronCoreArmV2') &&
+        t.getDesignRenderer().getBackboneEntries().length && w.__nadocOxdnaDisplay) break
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  if (!w?.__nadocOxdnaDisplay || !w.__nadocTest?.getDesignRenderer().getBackboneEntries().length)
+    throw new Error('The Voltron document did not finish loading. Please keep this page open and reload it.')
+  const t = w.__nadocTest
+  if (!t.store.getState().currentDesign?.metadata?.name?.includes('VoltronCoreArmV2'))
+    throw new Error('This tab does not contain VoltronCoreArmV2; no changes were made.')
+  // Use the normal oxDNA display controller, with the surface job's original frame.
+  await t.setRepresentation('beads')
+  const result = await w.__nadocOxdnaDisplay.displayJob('b53b610666ff', false)
+  if (!result?.ok) throw new Error(result?.reason || 'The saved configuration could not be displayed.')
+  // Fit the restored rendered coordinates, rather than the unrelaxed design axes.
+  const entries = t.getDesignRenderer().getBackboneEntries()
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+  for (const e of entries) e.pos.toArray().forEach((v,i) => { lo[i] = Math.min(lo[i],v); hi[i] = Math.max(hi[i],v) })
+  const target = lo.map((v,i) => (v+hi[i])/2)
+  const span = Math.max(10,Math.hypot(...lo.map((v,i) => hi[i]-v)))
+  t.applyCameraPoseForTest({ target, position: target.map((v,i) => v + [1.2,.4,.3][i]*span) })
+  status.textContent = 'Restored oxDNA Run 10. Your clustering is preserved; the saved simulation files are unchanged.'
+  document.body.dataset.restored = 'true'
+} catch (error) {
+  status.textContent = 'Recovery stopped: ' + error.message
+  document.body.dataset.error = error.message
+}
+</script></body></html>

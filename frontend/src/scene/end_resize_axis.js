@@ -6,10 +6,10 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 const SAMPLE_STEP = 7
 
 /** Read-only preview path in displayed coordinates, anchored at the end bead. */
-export function createEndResizeAxis(helix, axis, bp, beadPosition, cadnano = false) {
+export function createEndResizeAxis(helix, axis, bp, beadPosition) {
   const first = helix.bp_start ?? 0
   const last = first + Math.max(1, (helix.length_bp ?? 2) - 1)
-  const samples = cadnano ? null : axis?.samples
+  const samples = axis?.samples
   const points = samples?.length >= 2
     ? samples.map(p => new THREE.Vector3(...p))
     : [new THREE.Vector3(...(axis?.start ?? [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])),
@@ -22,12 +22,10 @@ export function createEndResizeAxis(helix, axis, bp, beadPosition, cadnano = fal
     return i
   }
   const tangent = value => {
-    if (cadnano) return new THREE.Vector3(0, 0, 1)
     const i = segment(value)
     return points[i + 1].clone().sub(points[i]).normalize()
   }
   const rawPoint = value => {
-    if (cadnano) return new THREE.Vector3(0, 0, value * BDNA_RISE_PER_BP)
     if (value < first) return points[0].clone().addScaledVector(tangent(first), (value - first) * BDNA_RISE_PER_BP)
     if (value > last) return points.at(-1).clone().addScaledVector(tangent(last), (value - last) * BDNA_RISE_PER_BP)
     const i = segment(value)
@@ -38,7 +36,7 @@ export function createEndResizeAxis(helix, axis, bp, beadPosition, cadnano = fal
   const offset = beadPosition.clone().sub(rawPoint(bp))
   const point = value => rawPoint(value).add(offset)
   const path = (from, to) => {
-    const inside = cadnano ? [] : bps.filter(v => v > Math.min(from, to) && v < Math.max(from, to))
+    const inside = bps.filter(v => v > Math.min(from, to) && v < Math.max(from, to))
     if (to < from) inside.reverse()
     return [from, ...inside, to].map(value => ({ bp: value, position: point(value) }))
   }

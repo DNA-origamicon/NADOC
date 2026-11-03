@@ -161,8 +161,16 @@ def _gpu_nsday_guess(
     Scaled by the partition's GPU speed relative to the A100 the constant is
     anchored to; ``None`` (or an unknown partition) means no scaling.
     """
-    n = max(1, int(n_atoms))
-    return _GPU_NSDAY_ATOM_CONSTANT / n * gpu_speed_factor(partition, gres_type)
+    # Same per-step hardware priors as Runpod. The legacy 63k-atom MIG
+    # observation is not a whole-card production calibration.
+    from backend.core.runpod_select import estimate_rate
+    sm={"aa100":"sm_80","atesting_a100":"sm_80","ah200":"sm_90",
+        "artxpro6000":"sm_120","al40":"sm_89"}.get(partition or "aa100")
+    if sm:
+        rate=estimate_rate(sm,max(1,int(n_atoms)),1.)
+        return rate['ns_day'] * _MIG_SPEED_FRACTION.get(gres_type or '',1.)
+    return _GPU_NSDAY_ATOM_CONSTANT / max(1,int(n_atoms)) * gpu_speed_factor(partition,gres_type)
+
 
 
 def _mem_gb_for_atoms(n_atoms: int) -> int:
@@ -218,6 +226,13 @@ def recommend(
     safety_factor: float = _DEFAULT_SAFETY_FACTOR,
     partition: str | None = None,
     gres_type: str | None = None,
+    stages: list | None = None,
+    box_nm: list | None = None,
+    measured_timestep_fs: float = 4.0,
+    prepared: bool = False,
+    workspace_dir=None,
+    upload_mbps: float = 11,
+    download_mbps: float = 50,
 ) -> dict:
     """Recommend SLURM resources for a prepared job.
 
@@ -297,6 +312,12 @@ def recommend(
 
     kind = part.kind if part else ("gpu" if use_gpu else "cpu")
 
+    if measured_ns_per_day is None and workspace_dir is not None:
+        from backend.core.cluster_throughput import lookup_throughput
+        measured_ns_per_day=lookup_throughput(workspace_dir,cluster=profile.name,
+            partition=partition_name,n_atoms=n_atoms,
+            gres_type=gpu_resource.gres_type if gpu_resource else None)
+
     # Throughput → walltime.
     if measured_ns_per_day and measured_ns_per_day > 0:
         expected = float(measured_ns_per_day)
@@ -305,18 +326,37 @@ def recommend(
         if use_gpu:
             resolved_gres = gpu_resource.gres_type if gpu_resource else gres_type
             expected = _gpu_nsday_guess(n_atoms, partition_name, resolved_gres)
-            factor = gpu_speed_factor(partition_name, resolved_gres)
-            scaled = "" if factor == 1.0 else f" x{factor:g} for {partition_name}"
+            scaled = f" for {partition_name}/{resolved_gres or 'whole GPU'}"
         else:
-            expected = _gpu_nsday_guess(n_atoms) * 0.15
+            expected = _GPU_NSDAY_ATOM_CONSTANT / max(1,n_atoms) * 0.15
             scaled = ""
         notes.append(
             f"No measured throughput yet — guessing {expected:.1f} ns/day from system size"
-            f"{scaled} (first run per size is a guess by design)."
+            f"{scaled} (hardware prior; benchmark this target to refine it)."
         )
 
-    raw_days = total_ns / expected if expected > 0 else 0.0
-    walltime_h = raw_days * 24.0 * safety_factor
+    from backend.core.namd_planning import memory_plan,stage_dicts,phase_work
+    from backend.core.namd_runtime import compute_estimate,stage_rate,completion_quote
+    from backend.core.disk_guard import namd_run_output_bytes
+    from backend.core.md_protocols import _RESIDENT_MIN_ATOMS
+    work=stage_dicts(stages)
+    default_resident=use_gpu and (n_atoms>=_RESIDENT_MIN_ATOMS or not work)
+    if not use_gpu:
+        work=[{**stage,'gpu_resident':False} for stage in work]
+    if not work:
+        work=phase_work(None,production_ns=total_ns,resident=default_resident)
+    reference_dt=measured_timestep_fs if measured_ns_per_day else 4.0
+    milliseconds=reference_dt*86.4/expected
+    compute=compute_estimate(work,lambda stage:stage_rate(n_atoms,stage,
+        resident_ms=milliseconds,resident=default_resident,box_nm=box_nm))
+    run_hours=compute['hours'] if compute else 0.
+    planning_hours=max(run_hours*safety_factor,compute['high_hours'] if compute else 0.)
+    # Startup/health are allocated time as well, and therefore belong in SLURM's
+    # request. Local preparation and network transfer do not belong in that cap.
+    preliminary=completion_quote(compute,target='alpine',n_atoms=n_atoms,stages=work,prepared=prepared)
+    if preliminary.get('available'):
+        planning_hours=max(planning_hours,preliminary['billed_high_hours'])
+    walltime_h=planning_hours
 
     # QoS selection + clamp to ceiling.  Names are partition-KIND aware: Alpine's
     # GPU partitions require the gpu-* QoS names (SLURM rejects the plain ones on
@@ -351,19 +391,27 @@ def recommend(
     # A minimum so a tiny run still requests a sane block.
     walltime_h = max(walltime_h, 0.5)
 
-    mem_gb = _mem_gb_for_atoms(n_atoms)
+    memory=memory_plan(n_atoms,stages=work,box_nm=box_nm,resident=default_resident,threads=cores)
+    mem_gb=max(4,math.ceil((memory['workflow_ram_mib']+512)/1024))
+    if not use_gpu:
+        mem_gb=max(mem_gb,_mem_gb_for_atoms(n_atoms))
+        memory.update(gpu_mib=0,workflow_ram_mib=mem_gb*1024-512,in_measured_domain=False)
+        memory['limitations'].append('CPU-only execution uses a conservative host-memory planning rule; the GPU measurements do not qualify it.')
     if part and part.mem_per_core_gb:
-        mem_ceiling = int(part.mem_per_core_gb * cores)
-        if mem_gb > mem_ceiling:
-            mem_gb = mem_ceiling
-            notes.append(
-                f"Memory clamped to {mem_gb} GB (partition ceiling {part.mem_per_core_gb} GB/core × {cores})."
-            )
+        cap=gpu_resource.max_cores if gpu_resource else part.max_cores
+        needed_cores=math.ceil(mem_gb/part.mem_per_core_gb)
+        if needed_cores>cap:raise ValueError(f'Requires {mem_gb} GiB RAM; {partition_name} permits only {part.mem_per_core_gb*cap:g} GiB for this resource')
+        if needed_cores>cores:
+            cores=needed_cores;notes.append(f'CPU allocation increased to {cores} cores to provide the required host RAM.')
+    if gpu_resource and gpu_resource.vram_gb and memory['gpu_mib']>gpu_resource.vram_gb*1024*.85:
+        raise ValueError(f"Requires {memory['gpu_mib']/1024:.1f} GiB VRAM with this stage plan; select a larger GPU resource")
+    notes.extend(memory['limitations'])
+    notes.append('Compute and end-to-end completion are separate. Queue waits and retries are unknown; planning ranges are not confidence bounds.')
 
     est_cost = estimate_cost_su(
         cores,
         gpus,
-        walltime_h,
+        run_hours,
         profile,
         part,
         gpu_rate=gpu_resource.su_per_gpu_hour if gpu_resource else None,
@@ -382,8 +430,16 @@ def recommend(
                 f"{atom_ceiling:,}-atom planning ceiling; benchmark or use a larger GRES."
             )
 
+    submissions=max(1,math.ceil(planning_hours/ceiling))
+    quote=completion_quote(compute,target='alpine',n_atoms=n_atoms,stages=work,prepared=prepared,
+        output_bytes=namd_run_output_bytes([(s.get('steps',0),s.get('dcd_freq',0)) for s in work],n_atoms),
+        upload_mbps=upload_mbps,download_mbps=download_mbps,
+        hourly_rate=estimate_cost_su(cores,gpus,1,profile,part,
+            gpu_rate=gpu_resource.su_per_gpu_hour if gpu_resource else None),submissions=submissions)
     return {
         "partition": partition_name,
+        "compute": compute,
+        "completion": quote,
         "kind": kind,
         "gpus": gpus,
         "gres_type": (gpu_resource.gres_type if gpu_resource else "") if gpus else "",
@@ -394,8 +450,23 @@ def recommend(
         "mem_gb": mem_gb,
         "walltime": _format_walltime(walltime_h),
         "walltime_h": round(walltime_h, 3),
+        "run_hours": round(run_hours,3),
+        "planning_hours": round(planning_hours,3),
+        "requires_resubmission": planning_hours>ceiling,
+        "submission_count": max(1,math.ceil(planning_hours/ceiling)),
+        "planning_cost_su": round(estimate_cost_su(cores,gpus,planning_hours,profile,part,
+            gpu_rate=gpu_resource.su_per_gpu_hour if gpu_resource else None),1),
+        "requested_cost_su": round(estimate_cost_su(cores,gpus,walltime_h,profile,part,
+            gpu_rate=gpu_resource.su_per_gpu_hour if gpu_resource else None),1),
+        "memory": memory,
+        "timing_basis": 'verified target timing scaled to planned work' if measured_ns_per_day else 'hardware throughput prior; per-stage work' if work else 'hardware throughput prior; nominal 4 fs',
+        "timing_qualified": False,
+        "measurement_qualified": bool(measured_ns_per_day),
+        "completion_hours": None,
         "qos": qos,
-        "expected_ns_per_day": round(expected, 3),
+        "expected_ns_per_day": round(total_ns*24/run_hours if work and run_hours>0 else expected, 3),
+        "reference_ns_per_day": round(expected,3),
+        "reference_timestep_fs": measured_timestep_fs if measured_ns_per_day else 4.0,
         "measured": bool(measured_ns_per_day and measured_ns_per_day > 0),
         "est_queue_min": est_queue,
         "est_cost_su": round(est_cost, 1),
@@ -432,12 +503,12 @@ def total_ns_from_manifest(manifest: dict) -> float:
     """
     settings = manifest.get("relax_protocol_settings") or {}
     ts_fs = float(settings.get("timestep_fs") or 2.0)
-    seg_steps = sum(int(s.get("steps", 0)) for s in manifest.get("segments", []))
-    total_ns = seg_steps * ts_fs / 1e6
+    segments=manifest.get('segments',[])
+    total_ns=sum(int(s.get('steps',0))*float(s.get('timestep_fs') or ts_fs)/1e6 for s in segments)
 
     prod = manifest.get("production_extension") or {}
     prod_ns = prod.get("length_ns")
-    if isinstance(prod_ns, (int, float)) and prod_ns > 0:
+    if isinstance(prod_ns, (int, float)) and prod_ns > 0 and not any('production' in str(s.get('name','')).lower() for s in segments):
         total_ns += float(prod_ns)
     return total_ns
 

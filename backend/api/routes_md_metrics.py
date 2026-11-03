@@ -17,6 +17,8 @@ in ``backend/api/main.py``.
 
 from __future__ import annotations
 
+from backend.core.trajectory_cache import persistent_analysis
+
 import threading
 import time
 import uuid
@@ -46,7 +48,7 @@ _LOCK = threading.Lock()
 class MdMetricsStartRequest(BaseModel):
     scope: str = "latest"  # "latest" (this job only) | "chain" (whole refit lineage)
     n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
-    max_frames: int = 64  # interactive uniform sample; short trajectories stay exact
+    max_frames: int = 0  # all frames; positive values explicitly request a preview
 
 
 def _set(run_id: str, **fields) -> None:
@@ -131,7 +133,7 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
     return chain or [anchor]
 
 
-def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
+def _read_job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
     """Energy/pressure log samples for one job on a monotonic simulated-time axis.
 
     A resumed segment has a base log plus ``.resumeN.log`` files whose timesteps overlap
@@ -198,9 +200,60 @@ def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
     }
 
 
+@persistent_analysis
+def _cached_scalar_series(package, segment_names, segment_metadata, timestep_hint, sources):
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(
+        package_dir=lambda ws: package,
+        segments=[SimpleNamespace(name=n, steps=s, status=state)
+                  for n, s, state in segment_metadata],
+        live_metrics={"timestep_fs": timestep_hint},
+    )
+    return _read_job_scalar_series(job, segment_names, package)
+
+
+def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
+    package = job.package_dir(ws)
+    sources = []
+    for name in dict.fromkeys(segment_names):
+        sources.extend([package / f"{name}.log", package / f"{name}.conf"])
+        sources.extend(sorted(package.glob(f"{name}.resume*.log")))
+    return _cached_scalar_series(
+        package, segment_names,
+        [(s.name, s.steps, s.status) for s in job.segments],
+        (job.live_metrics or {}).get("timestep_fs"), sources,
+    )
+
+
+@persistent_analysis
+def _measure(psf, segments, ref, design, n_slices=0, max_frames=0,
+             on_frame=None, on_stage=None):
+    from backend.core.oxdna_health import metric_reference_geometry
+    from backend.core.md_trajectory import md_metric_series
+
+    reference, unavailable = metric_reference_geometry(design)
+    if unavailable is not None:
+        return unavailable
+
+    return md_metric_series(
+        psf, segments, ref, design, reference,
+        n_slices=n_slices, max_frames=max_frames,
+        on_frame=on_frame, on_stage=on_stage,
+    )
+
+
 def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
-    from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.md_trajectory import count_md_frames, md_metric_series
+    from backend.core.memory_budget import exclusive_analysis
+    try:
+        with exclusive_analysis(on_wait=lambda reason:_set(run_id,phase=reason,eta_s=None)):
+            _compute_ready(run_id,job_id,req,ws)
+    except Exception as exc:
+        _set(run_id,state='error',error=str(exc))
+
+
+def _compute_ready(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
+    from backend.core.md_trajectory import count_md_frames
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
@@ -260,6 +313,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         temporal_frame_indices: list[int] = []
         boundaries: list[dict] = []
         per_job: list[dict] = []
+        skipped_jobs: list[dict] = []
         n_designed = 0
         raw_frame_offset = 0
         energy_x: list[float] = []
@@ -270,19 +324,22 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         pressure_boundaries: list[dict] = []
         scalar_time_offset = 0.0
         for j, (psf, ref, segments, design) in inputs:
-            analytic = core_reference_geometry(design)
-            res = md_metric_series(
+            res = _measure(
                 psf,
                 segments,
                 ref,
                 design,
-                analytic,
                 n_slices=req.n_slices,
-                max_frames=per_job_limits[j.job_id],
+                max_frames=0 if req.max_frames <= 0 else per_job_limits[j.job_id],
                 on_frame=_tick,
                 on_stage=lambda phase: _set(run_id, phase=phase),
             )
             if not res.get("ready"):
+                skipped_jobs.append({
+                    "job_id": j.job_id,
+                    "reason": res.get("reason", "No measurable trajectory frames."),
+                    "not_applicable": res.get("not_applicable") is True,
+                })
                 continue
             boundaries.append(
                 {
@@ -333,7 +390,10 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                 state="done",
                 result={
                     "ready": False,
-                    "reason": "trajectory has too few helices/frames to measure",
+                    "reason": "; ".join(dict.fromkeys(p["reason"] for p in skipped_jobs))
+                              or "trajectory has too few helices/frames to measure",
+                    "not_applicable": bool(skipped_jobs) and all(p["not_applicable"] for p in skipped_jobs),
+                    "skipped_jobs": skipped_jobs,
                 },
             )
             return
@@ -341,7 +401,8 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         result = {
             "ready": True,
             "scope": req.scope,
-            "jobs": [j.job_id for j, _ in inputs],
+            "jobs": [p["job_id"] for p in per_job],
+            "skipped_jobs": skipped_jobs,
             "frames_raw": raw_total,
             "frames_sampled": len(twist_pf),
             "sampling": "uniform" if len(twist_pf) < raw_total else "all",
@@ -510,12 +571,15 @@ def get_md_cpd_colvars(
         return {"ready": False, "reason": inputs, "config": "", "windows": []}
     psf, _ref, _segments, design = inputs
     pairs = designed_weld_pairs(design)
+    formed = any(p.get('formed') for p in pairs)
+    pairs = [p for p in pairs if not p.get('formed')]
     if not pairs:
         return {
             "ready": True,
             "config": "",
             "windows": [],
-            "reason": "design has no extra-base reciprocal crossover pair",
+            "reason": ("Formed CPDs have no reactant umbrella-window ladder. Use the geometry trace."
+                       if formed else "design has no extra-base reciprocal crossover pair"),
         }
     try:
         import MDAnalysis as mda
@@ -553,6 +617,17 @@ class MdCpdTraceRequest(BaseModel):
 def _compute_cpd_trace(
     run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path
 ) -> None:
+    from backend.core.memory_budget import exclusive_analysis
+    try:
+        with exclusive_analysis(on_wait=lambda reason:_set(run_id,phase=reason,eta_s=None)):
+            _compute_cpd_trace_ready(run_id,job_id,req,ws)
+    except Exception as exc:
+        _set(run_id,state='error',error=str(exc))
+
+
+def _compute_cpd_trace_ready(
+    run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path
+) -> None:
     """Background pass: read the trajectory once and measure the weld coordinates."""
     from backend.core.cpd_metrics import weld_trace
 
@@ -563,7 +638,7 @@ def _compute_cpd_trace(
             _set(run_id, state="error", error=inputs)
             return
         psf, _ref, segments, design = inputs
-        _set(run_id, frames_total=None)
+        _set(run_id, frames_total=None, phase='Measuring trajectory')
 
         def _progress(done: int, total: int) -> None:
             _set(

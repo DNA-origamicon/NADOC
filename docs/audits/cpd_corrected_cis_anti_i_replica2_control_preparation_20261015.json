@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-16T02:40:20.133042+00:00",
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-control-v1-service/completion_wake_ack.json",
+    "sha256": "90427d82c356f769148725f33e9a75c1aba2ad87e336801377deff688681aed9"
+  },
+  "preparation_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-control-v1/completion_audit.json",
+    "sha256": "235269353c52d495da4ffa5de89e4ce996fc2b21de863ab754f2d32253ddbffe"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-control-v1/launch_receipt.json",
+    "sha256": "d9bca0b7ba04b5f0a35aebe01ce4a50391bd8e357ee4be0aa05ee2f3d76901f6"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-control-v1/handoff.json",
+    "sha256": "e52db0108ff34515d6b016c849ca66e3abb9ff6600f93f0265bd424e07e02223"
+  },
+  "audit_coverage": "27 native segments and250 pinned worker frame verdicts;81 sampled frame replays and all27 endpoints. Seed614032 and uninterrupted coordinate/velocity/cell lineage verified.",
+  "duration_ps": 1150,
+  "elapsed_seconds": 3509.579874932999,
+  "final_density_g_ml": 1.0232535747457387,
+  "final_aligned_RMSD_A": 7.911651471749393,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

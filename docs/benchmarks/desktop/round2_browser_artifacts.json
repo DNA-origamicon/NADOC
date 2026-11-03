@@ -1,0 +1,38 @@
+{
+  "before": [
+    {
+      "path": "/media/jojo/Archive/nc1-mmt5awf0/round2-browser/workspace",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/media/jojo/Archive/nc1-mmt5awf0/round2-browser/captures",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false,
+      "entries": []
+    }
+  ],
+  "doc": "__e2e__desktop-playback-round2",
+  "isolation": "Empty Archive workspace; uvicorn lifespan off; no user designs/jobs",
+  "cleanup": "afterEach deletes doc and closes page; global teardown removes __e2e__ stores and test credentials; task-owned workspace/captures removed after servers stop and dependency checks",
+  "scratch": "/media/jojo/Archive/nc1-mmt5awf0/round2-browser",
+  "credentials_before": [],
+  "after": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "credentials": [],
+    "captures_retained": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round2/placement-gate-browser",
+    "process_references": [],
+    "result": "Blocked by existing placement-integrity latch before rendering; not verified in app."
+  }
+}

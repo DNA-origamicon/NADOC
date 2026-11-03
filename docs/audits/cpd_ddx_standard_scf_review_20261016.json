@@ -1,0 +1,83 @@
+{
+  "at": "2026-10-17T03:28:58+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_standard_scf_v1.py",
+    "sha256": "3d6d3e4d33768d05918bc91c5f1692f0e3ae57a1c049dee5f72a169365a61205"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-scf-v1/assessment.json",
+    "sha256": "c60fedf0dd1052aa0d2c1bf4da70c5845a2616e8f535d9c05c298bf3f29ea8e9"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-scf-v1/original_qm/output.dat",
+    "sha256": "ed025185c11c79ff61ded50102cf36069eb71e9a35f4271652d2bc7b5410ed2b"
+  },
+  "energy_hartree": -1963.977228174095,
+  "wall_seconds": 535.3998064670013,
+  "electron_count": 250.00000000000085,
+  "wavefunction": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-scf-v1/original_qm/fine_wavefunction.npy",
+    "sha256": "58ea497a2a87acfa6c24fe08c4f505da0503abd9110ef4affff77dc874a3bfa6"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-scf-v1/original_qm/fine_density.npy",
+    "sha256": "f9fbf402bf3ed18563b242fb6a9865aea50a2cc93206fd3818d1c8e2e45d0325"
+  },
+  "decision": "Fine-grid standard UFF1.1 SCF feasibility passes. Next one same-geometry same-cavity coarse-grid SCF measures numerical sensitivity before alternate-conformer work. No comparison to unscaled-model energy as accuracy test.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "next_launch": {
+    "at": "2026-10-17T03:29:15.561561+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/plan.json",
+      "sha256": "f2ee5cba64e2e49e688a5103be45e328f09b3386a143d64782e8e59d2a790830"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-ddx-standard-grid-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=2085",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1-service"
+    ],
+    "watcher": {
+      "token": "0bc0d5e4-2b66-43cf-8f7f-0215042c2261",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792207755.556912,
+      "expected_seconds": 480,
+      "supervisor_pid": 1542981,
+      "supervisor_identity": "26285085",
+      "state": "armed",
+      "watcher_pid": 1542983,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 780,
+      "active_deadline_id": "endpoint-ddx-standard-grid-v1-review",
+      "active_deadline_epoch": 1792209555.4799027
+    },
+    "limits": "RuntimeMaxUSec=34min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792209855.4799027,
+    "review_epoch": 1792209555.4799027,
+    "cloud_spending_usd": 0
+  }
+}

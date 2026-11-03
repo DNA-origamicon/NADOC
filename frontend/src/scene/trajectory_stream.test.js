@@ -105,7 +105,8 @@ it('stops full preparation at the memory budget without substituting requested f
   const opened=await loadProgressiveTrajectory({jobId:'x',spec:{},downloads:{get,consumed:()=>{}},
     metadata:async()=>({n_frames:100}),heavy:async()=>24,evict,live:()=>true,budgetBytes:900})
   await opened.ensure(0);await opened.fill()
-  expect(opened.status()).toMatchObject({buffered:24,limited:true,complete:false})
+  // Float32 frames occupy 12 bytes; the 8-frame seed plus four 16-frame pages fit in 900 bytes.
+  expect(opened.status()).toMatchObject({buffered:72,limited:true,complete:false})
   await opened.ensure(90)
   expect(opened.resp.frames[90]).toBeDefined()
   expect(opened.status().bytes).toBeLessThanOrEqual(900)

@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-15T17:27:21.515749+00:00",
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/pause-handoff-20261015-replica2/handoff.json",
+    "sha256": "202ba3e5d16e0aa40794403b62b04265e3f293c0c2fb0d9ebcaeae2429903351"
+  },
+  "resume_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/pause-handoff-20261015-replica2/resume_plan.json",
+    "sha256": "fc35d8b64b0ba6c567f0ed0eb40b6cbc52971d53e00555404354541f88b25182"
+  },
+  "pause": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/pause.json",
+    "sha256": "46d1601a7240165bd7156da792335fde240ee89903ce043c08bec712d58e0284"
+  },
+  "stopped_units": [
+    "cpd-corrected-formation-replica2-validation-anti-v1.service",
+    "cpd-corrected-formation-replica2-validation-anti-v1-watch.service"
+  ],
+  "completed_segments": 4,
+  "remaining_validation_ns": 6
+}

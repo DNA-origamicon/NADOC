@@ -1,0 +1,532 @@
+{
+  "date": "2026-10-27",
+  "design": "VoltronCoreArmV2",
+  "parent_relaxation": "223c939e616c",
+  "original_failed_job": "4da9ffada764",
+  "original_error": "ERROR: ParameterFile Could Not Be Opened",
+  "fixes": [
+    "Copy required frozen protein parameter inputs into continuation jobs; repair missing inputs on Resume only from a topology-identical parent.",
+    "Save Surface deposition as an option on the selected queued continuation; only Run launches it.",
+    "Persist captured/contacted anchors, retain normal restraints across thermal excursions, and clear runtime contact history on Copy.",
+    "Preserve checkpoint velocities across adaptive contact windows and contact retries."
+  ],
+  "defaults": {
+    "initial_gentle_force_pn": 1,
+    "approach_force_pn": 5,
+    "max_approach_force_pn": 50,
+    "surface_anchor_stiff_oxdna": 2,
+    "capture_gap_nm": 1,
+    "contact_gap_nm": 0.75,
+    "approach_window_steps": 10000,
+    "max_approach_windows": 40
+  },
+  "tests": {
+    "backend_passed": 288,
+    "backend_skipped": 10,
+    "frontend_passed": 137,
+    "browser_workflow_passed": 1,
+    "commands": [
+      "uv run pytest tests/test_oxdna_relaxation.py tests/test_oxdna_surface.py -q",
+      "cd frontend && npx vitest run src/ui/oxdna_jobs_panel.test.js src/ui/oxdna_job_settings.test.js",
+      "cd frontend && npx playwright test e2e/oxdna_job_setup.spec.js -g 'surface deposition is'"
+    ]
+  },
+  "runs": [
+    {
+      "job_id": "85639effad47",
+      "status": "completed",
+      "note": "Calibration run resumed through parameter/contact fixes. Full 250000-step gentle, 500000-step settle and 250000-step equilibration stages. Approach includes additional diagnostic retries.",
+      "directory": "/tmp/nadoc-voltron-deposition-cleg5j7m/oxdna_jobs/85639effad47",
+      "stages": [
+        {
+          "name": "1_surface_gentle",
+          "kind": "deposition_gentle",
+          "steps": 250000,
+          "status": "done",
+          "started_at": 1793114222.0863311,
+          "resumed": false,
+          "completed_steps": 0
+        },
+        {
+          "name": "2_surface_approach",
+          "kind": "deposition_approach",
+          "steps": 1760000,
+          "status": "done",
+          "started_at": 1793115791.1172166,
+          "resumed": true,
+          "completed_steps": 1747500
+        },
+        {
+          "name": "3_surface_settle",
+          "kind": "deposition_settle",
+          "steps": 500000,
+          "status": "done",
+          "started_at": 1793115800.3952062,
+          "resumed": false,
+          "completed_steps": 0
+        },
+        {
+          "name": "4_surface_equil",
+          "kind": "deposition_equil",
+          "steps": 250000,
+          "status": "done",
+          "started_at": 1793116096.055734,
+          "resumed": false,
+          "completed_steps": 0
+        }
+      ],
+      "particle_count": 30849,
+      "finite_final_configuration": true,
+      "inherited_topology_sha256": "8e926e0e3b0b1ce66c0ed9d7fce1b018bc3ca76fb916a0998c6e2323dca85961",
+      "inherited_anm_sha256": "26a4bd058cd4732c2f47347a3f2746132f52dde938621fe67d4e2d83cd1257ab",
+      "surface_anchor_count": 7,
+      "final_anchor_distances_nm": {
+        "('h_sc_36', 8, 'FORWARD')": 0.7601701131967348,
+        "('h_sc_8', 8, 'FORWARD')": 0.5044414878991869,
+        "('h_sc_4', 8, 'FORWARD')": 0.5979775398401048,
+        "('h_sc_37', 199, 'REVERSE')": 0.037035779366129964,
+        "('h_sc_33', 199, 'REVERSE')": 0.9017463152078385,
+        "('h_sc_13', 199, 'REVERSE')": 0.08808810502565621,
+        "('h_sc_59', 71, 'REVERSE')": 0.86934614297426
+      },
+      "final_health": {
+        "wall_time": 1793116312.2658877,
+        "stage": "4_surface_equil",
+        "bp_retained_fraction": 0.9532527426455174,
+        "potential_energy": -1.390995,
+        "max_backbone_clash": 1.5438306597973588,
+        "max_backbone_fene": 0.9746422852735002,
+        "steps_per_s": 1161.2724797889498,
+        "passed": true,
+        "reason": "base-pair retention 95%"
+      },
+      "run_config": {
+        "kind": "surface_deposition",
+        "seed": 1696238347,
+        "surface": {
+          "dir": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "position_nm": 7.937621008887651,
+          "plane_point_nm": [
+            0.0,
+            7.937621008887651,
+            0.0
+          ],
+          "tangent_u": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "offset_nm": -1.077505329405426e-07,
+          "stiff": 5.0
+        },
+        "surface_anchors": [
+          {
+            "kind": "base",
+            "helixId": "h_sc_13",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_33",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_37",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_8",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_4",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_36",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_59",
+            "bp": 71,
+            "direction": "REVERSE"
+          }
+        ],
+        "approach_force_pn": 5.0,
+        "max_approach_force_pn": 50.0,
+        "approach_retry_chunk_steps": 10000,
+        "max_approach_windows": 56,
+        "capture_gap_nm": 1.0,
+        "contact_gap_nm": 0.75,
+        "surface_anchor_stiff": 2.0,
+        "n_surface_anchor_particles": 7,
+        "surface_anchor_keys": [
+          [
+            "h_sc_36",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_8",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_4",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_37",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_33",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_13",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_59",
+            71,
+            "REVERSE"
+          ]
+        ],
+        "surface_placement": {
+          "translation_oxdna": [
+            -0.0,
+            0.31112567270087543,
+            -0.0
+          ],
+          "translation_nm": [
+            -0.0,
+            0.2650168480066057,
+            -0.0
+          ],
+          "translated": true,
+          "minimum_clearance_before_nm": 0.3150168480066057,
+          "minimum_clearance_after_nm": 0.04999999999999999,
+          "max_penetration_after_nm": 0.0,
+          "anchor_gap_min_nm": 50.570038142981915,
+          "anchor_gap_max_nm": 63.210753522315365,
+          "anchor_normal_span_nm": 12.640715379333454
+        },
+        "surface_deposition": true,
+        "steps": 5000000,
+        "production_anchor_stiff": 1000.0,
+        "approach_retry_count": 37,
+        "approach_retry_force_pn": 50.0,
+        "approach_retry_max_gap_nm": 1.0312998884347673,
+        "approach_retry_captured": 7,
+        "approach_retry_remaining": 0,
+        "surface_captured_particles": [
+          29463,
+          29527,
+          29543,
+          29559,
+          29575,
+          29591,
+          29639
+        ],
+        "surface_contacted_particles": [
+          29463,
+          29527,
+          29559,
+          29575,
+          29591,
+          29639
+        ]
+      }
+    },
+    {
+      "job_id": "7d209528db4e",
+      "status": "completed",
+      "note": "Started from the original relaxed configuration with the same seven anchors and full 250000+750000 approach schedule. Settling and equilibration shortened to 20000 steps each. Paused/resumed once to exercise the checkpoint-velocity fix; no coordinates were changed.",
+      "directory": "/tmp/nadoc-voltron-deposition-cleg5j7m/oxdna_jobs/7d209528db4e",
+      "stages": [
+        {
+          "name": "1_surface_gentle",
+          "kind": "deposition_gentle",
+          "steps": 250000,
+          "status": "done",
+          "started_at": 1793116494.9761503,
+          "resumed": false,
+          "completed_steps": 0
+        },
+        {
+          "name": "2_surface_approach",
+          "kind": "deposition_approach",
+          "steps": 1070000,
+          "status": "done",
+          "started_at": 1793117366.9234672,
+          "resumed": true,
+          "completed_steps": 1057500
+        },
+        {
+          "name": "3_surface_settle",
+          "kind": "deposition_settle",
+          "steps": 20000,
+          "status": "done",
+          "started_at": 1793117375.5821798,
+          "resumed": false,
+          "completed_steps": 0
+        },
+        {
+          "name": "4_surface_equil",
+          "kind": "deposition_equil",
+          "steps": 20000,
+          "status": "done",
+          "started_at": 1793117490.2650745,
+          "resumed": false,
+          "completed_steps": 0
+        }
+      ],
+      "particle_count": 30849,
+      "finite_final_configuration": true,
+      "inherited_topology_sha256": "8e926e0e3b0b1ce66c0ed9d7fce1b018bc3ca76fb916a0998c6e2323dca85961",
+      "inherited_anm_sha256": "26a4bd058cd4732c2f47347a3f2746132f52dde938621fe67d4e2d83cd1257ab",
+      "surface_anchor_count": 7,
+      "final_anchor_distances_nm": {
+        "('h_sc_36', 8, 'FORWARD')": 0.8033167284158494,
+        "('h_sc_8', 8, 'FORWARD')": 0.4973684454110887,
+        "('h_sc_4', 8, 'FORWARD')": 0.5292730903772187,
+        "('h_sc_37', 199, 'REVERSE')": 0.050301288017869414,
+        "('h_sc_33', 199, 'REVERSE')": 0.49097533132111987,
+        "('h_sc_13', 199, 'REVERSE')": 0.3146781023172136,
+        "('h_sc_59', 71, 'REVERSE')": 0.6197084413675066
+      },
+      "final_health": {
+        "wall_time": 1793117605.648875,
+        "stage": "4_surface_equil",
+        "bp_retained_fraction": 0.939207602543498,
+        "potential_energy": -1.37926,
+        "max_backbone_clash": 1.5492054859730193,
+        "max_backbone_fene": 0.9216716746435217,
+        "steps_per_s": 174.7038835414185,
+        "passed": true,
+        "reason": "base-pair retention 94%"
+      },
+      "run_config": {
+        "kind": "surface_deposition",
+        "seed": 1722993731,
+        "surface": {
+          "dir": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "position_nm": 7.937621008887651,
+          "plane_point_nm": [
+            0.0,
+            7.937621008887651,
+            0.0
+          ],
+          "tangent_u": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "offset_nm": -1.077505329405426e-07,
+          "stiff": 5.0
+        },
+        "surface_anchors": [
+          {
+            "kind": "base",
+            "helixId": "h_sc_13",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_33",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_37",
+            "bp": 199,
+            "direction": "REVERSE"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_8",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_4",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_36",
+            "bp": 8,
+            "direction": "FORWARD"
+          },
+          {
+            "kind": "base",
+            "helixId": "h_sc_59",
+            "bp": 71,
+            "direction": "REVERSE"
+          }
+        ],
+        "approach_steps": 1000000,
+        "settle_steps": 500000,
+        "equil_steps": 250000,
+        "steps_per_frame": 10000,
+        "approach_window_steps": 10000,
+        "approach_force_pn": 5.0,
+        "max_approach_force_pn": 50.0,
+        "approach_retry_chunk_steps": 10000,
+        "max_approach_windows": 40,
+        "capture_gap_nm": 1.0,
+        "contact_gap_nm": 0.75,
+        "surface_anchor_stiff": 2.0,
+        "n_surface_anchor_particles": 7,
+        "surface_anchor_keys": [
+          [
+            "h_sc_36",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_8",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_4",
+            8,
+            "FORWARD"
+          ],
+          [
+            "h_sc_37",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_33",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_13",
+            199,
+            "REVERSE"
+          ],
+          [
+            "h_sc_59",
+            71,
+            "REVERSE"
+          ]
+        ],
+        "surface_placement": {
+          "translation_oxdna": [
+            -0.0,
+            0.31112567270087543,
+            -0.0
+          ],
+          "translation_nm": [
+            -0.0,
+            0.2650168480066057,
+            -0.0
+          ],
+          "translated": true,
+          "minimum_clearance_before_nm": 0.3150168480066057,
+          "minimum_clearance_after_nm": 0.04999999999999999,
+          "max_penetration_after_nm": 0.0,
+          "anchor_gap_min_nm": 50.570038142981915,
+          "anchor_gap_max_nm": 63.210753522315365,
+          "anchor_normal_span_nm": 12.640715379333454
+        },
+        "surface_deposition": true,
+        "autostart": false,
+        "steps": 1000,
+        "production_anchor_stiff": 1000.0,
+        "stage_overrides": {
+          "1_surface_gentle": {
+            "steps": 250000,
+            "backend": "CUDA",
+            "device": "0",
+            "salt_concentration": 0.5
+          },
+          "2_surface_approach": {
+            "steps": 750000,
+            "backend": "CUDA",
+            "device": "0",
+            "salt_concentration": 0.5
+          },
+          "3_surface_settle": {
+            "steps": 20000,
+            "backend": "CUDA",
+            "device": "0",
+            "salt_concentration": 0.5
+          },
+          "4_surface_equil": {
+            "steps": 20000,
+            "backend": "CUDA",
+            "device": "0",
+            "salt_concentration": 0.5
+          }
+        },
+        "approach_retry_count": 32,
+        "approach_retry_force_pn": 50.0,
+        "approach_retry_max_gap_nm": 0.8704322412637453,
+        "approach_retry_captured": 7,
+        "surface_captured_particles": [
+          29463,
+          29527,
+          29543,
+          29559,
+          29575,
+          29591,
+          29639
+        ],
+        "surface_contacted_particles": [
+          29463,
+          29527,
+          29543,
+          29559,
+          29575,
+          29591,
+          29639
+        ],
+        "approach_retry_remaining": 0
+      }
+    }
+  ],
+  "additional_experiment": {
+    "job_id": "efccfe44effb",
+    "outcome": "stopped, not a passing validation",
+    "note": "Shortened initial approach schedule (25000+75000) was insufficient to assess deposition from the original 50\u201363 nm anchor separation."
+  },
+  "interpretation": "The 0.75 nm threshold is an actual-contact criterion for each anchor; bound anchors retain their normal restraints during subsequent thermal fluctuations. Final instantaneous distances may exceed the initial contact band. These are workflow/engine validations, not a guarantee of convergence for every random seed or anchor selection.",
+  "correction_2026_10_27": {
+    "surface_contact_validation_invalid": true,
+    "reason": "Deposition omitted the leading protein-particle offset. Recorded contacts belong to the wrong DNA particles, so completion did not establish contact of the selected anchors. See oxdna_surface_anchor_indexing_2026-10-27.json.",
+    "scope": "Execution completion and recorded numerical measurements remain historical observations; they do not validate intended-anchor deposition."
+  }
+}

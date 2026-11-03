@@ -15,10 +15,17 @@ export function visible(el, root) {
   return true
 }
 const label = el => {
-  const wrapper = el.labels?.[0]?.cloneNode(true)
-  wrapper?.querySelectorAll('input,select,button').forEach(child => child.remove())
-  return clean(wrapper?.textContent || el.getAttribute('aria-label') || el.title || el.textContent || el.id)
+  // labels is a document-wide live lookup; most controls already have a wrapper.
+  // Read label text without cloning a DOM subtree for every playback update.
+  const wrapper = el.closest('label') ?? el.labels?.[0], text = []
+  const collect = node => {
+    if (node.nodeType === 3) text.push(node.textContent)
+    else if (!['INPUT', 'SELECT', 'BUTTON'].includes(node.nodeName)) for (const child of node.childNodes) collect(child)
+  }
+  if (wrapper) collect(wrapper)
+  return clean(text.join('') || el.getAttribute('aria-label') || el.title || el.textContent || el.id)
 }
+
 /** Visualization card only: never expose launch, delete or simulation setup actions. */
 export function simulationControls(doc, engine, { trajectoryMode = '' } = {}) {
   const root = doc.getElementById(SIMULATION_CARDS[engine]), result = []

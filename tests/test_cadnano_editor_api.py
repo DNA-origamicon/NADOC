@@ -501,6 +501,7 @@ class TestSkipGeometryHeader:
         assert not any(k in js for k in self._GEOM_KEYS), js.keys()
         assert js.get("design") and js["design"]["helices"]  # topology preserved
         assert "validation" in js
+        assert js["deferred_geometry_helix_ids"] == [hid]
 
     def test_falsey_header_value_still_ships_geometry(self, client):
         """A '0' / 'false' header value is treated as not-set (geometry shipped)."""

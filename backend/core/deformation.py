@@ -2704,17 +2704,9 @@ def _segments_for_helix(design: "Design", h: "Helix", candidates=None) -> list[d
                 ],
             }
         )
-    # An independently moved residue no longer lies on its domain's helix axis.
-    # Keep sticks only over the remaining contiguous residues, rather than
-    # extending a domain axis through a base displayed elsewhere.
-    posed = {(p.bp_index, p.direction) for p in design.nucleotide_transforms
-             if p.kind == "base" and p.helix_id == h.id and p.copy_k == 0
-             and (not np.allclose(p.translation, 0, rtol=0, atol=1e-10)
-                  or not np.allclose(_rot_from_quaternion(*p.rotation), np.eye(3), rtol=0, atol=1e-10))}
-    if posed:
-        directions = {(strand.id, di): dom.direction for strand, di, dom in cands}
-        deduped = [sub for seg in deduped for sub in _split_segment_by_bps(seg,
-            {bp for bp, direction in posed if direction == directions.get((seg["strand_id"], seg["domain_index"]))})]
+    # Residue poses are projected after the complete owner-aware axes exist.
+    # Removing their ranges here would erase the segments before that projection
+    # and would also cut a paired axis when only one strand moves.
     # Carve out flexible ssDNA bp ranges — no axis stick over a flexible segment.
     flex_bps = _flexible_bps_on_helix(design, h.id)
     if flex_bps:
@@ -2842,6 +2834,75 @@ def _seg_endpoints_curve(
     return _interp(seg["bp_lo"]), _interp(seg["bp_hi"] + 1)
 
 
+def _apply_residue_poses_to_axes(design: "Design", axes: list[dict]) -> None:
+    """Keep axis segments in the same world-space pose as their residues.
+
+    Split at pose boundaries: moving half an ssDNA domain must not drag its
+    other half. A duplex axis moves only when both occupied directions share
+    the pose; an independently edited base does not move the duplex axis.
+    """
+    from scipy.spatial.transform import Rotation
+
+    poses = {t.target_key(): (tuple(t.pivot), tuple(t.translation), tuple(t.rotation))
+             for t in design.nucleotide_transforms if t.kind == "base" and t.copy_k == 0}
+    if not poses:
+        return
+    helices = {h.id: h for h in design.helices}
+    domains = {}
+    for strand in design.strands:
+        for dom in strand.domains:
+            domains.setdefault(dom.helix_id, []).append(dom)
+    affected = {key[1] for key in poses}
+    for axis in axes:
+        hid = axis["helix_id"]
+        if hid not in affected:
+            continue
+        h = helices[hid]
+        segments = []
+        changed = False
+        for seg in axis.get("segments", []):
+            def pose_at(bp):
+                directions = {d.direction for d in domains.get(hid, [])
+                              if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp)}
+                occupied = {poses.get(("base", hid, bp, direction, 0)) for direction in directions}
+                return occupied.pop() if len(occupied) == 1 else None
+
+            runs = []
+            for bp in range(seg["bp_lo"], seg["bp_hi"] + 1):
+                pose = pose_at(bp)
+                if runs and runs[-1][2] == pose:
+                    runs[-1][1] = bp
+                else:
+                    runs.append([bp, bp, pose])
+            source_samples = seg.get("samples", axis.get("samples"))
+            for lo, hi, pose in runs:
+                sub = {**seg, "bp_lo": lo, "bp_hi": hi}
+                if len(runs) > 1:
+                    # Interpolate in this segment's already transformed frame.
+                    start, end = np.asarray(seg["start"]), np.asarray(seg["end"])
+                    span = seg["bp_hi"] + 1 - seg["bp_lo"]
+                    sub["start"] = (start + (end-start) * ((lo-seg["bp_lo"])/span)).tolist()
+                    sub["end"] = (start + (end-start) * ((hi+1-seg["bp_lo"])/span)).tolist()
+                    if source_samples and len(source_samples) > 2:
+                        sample_bps = [bp - h.bp_start for bp in
+                                      _sample_bp_list_for_axis(h, len(source_samples))]
+                        sub["start"], sub["end"] = _seg_endpoints_curve(
+                            sample_bps, source_samples, sub, h)
+                if pose is not None:
+                    pivot, translation, quaternion = pose
+                    rotation = Rotation.from_quat(quaternion).as_matrix()
+                    def project(point):
+                        return (np.asarray(pivot) + rotation @ (np.asarray(point)-pivot) + translation).tolist()
+                    sub["start"], sub["end"] = project(sub["start"]), project(sub["end"])
+                    if source_samples:
+                        sub["samples"] = [project(p) for p in source_samples]
+                    changed = True
+                segments.append(sub)
+        if changed:
+            axis["segments"] = segments
+            axis["residue_transformed"] = True
+
+
 def deformed_helix_axes(design: "Design") -> list[dict]:
     """Project native non-helical paths alongside the ordinary duplex axes."""
     axes = (_scope.selected_axes(design, _lattice_helix_axes)
@@ -2864,6 +2925,7 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         for segment in entry.get("segments", []):
             segment["start"] = points.get(segment["bp_lo"], samples[0])
             segment["end"] = points.get(segment["bp_hi"], samples[-1])
+    _apply_residue_poses_to_axes(design, axes)
     return axes
 
 

@@ -7,7 +7,8 @@
  * control, three meanings, driven entirely by the currently-selected job's state:
  *
  *   nothing selected / a completed job selected  →  ▶ <verb>        (launch a new run)
- *   the selected job is running/preparing        →  ■ Stop <verb>   (stop it)
+ *   the selected job is preparing                →  Preparing…     (disabled, spinner)
+ *   the selected job is running                  →  ■ Stop <verb>   (stop it)
  *   the selected job is stopped/failed           →  ↻ Resume <verb> (resume it)
  *
  * Pure + engine-agnostic: each engine supplies its own `isActive` / `isResumable`
@@ -17,7 +18,7 @@
  */
 
 /**
- * `QUEUE` / `DEQUEUE` / `SUBMIT` / `PREPARING` are NOT produced by `runControlState` — an
+ * `QUEUE` / `DEQUEUE` / `SUBMIT` are NOT produced by `runControlState` — an
  * engine wrapper adds them (NAMD's run queue and its cluster hand-off, `mdRunControl`).
  * They live here so every panel reads one action vocabulary off `dataset.runAction`.
  *
@@ -43,6 +44,9 @@ const GLYPH = Object.freeze({ run: '▶', stop: '■', resume: '↻' })
  * @returns {{action:string, label:string, disabled:boolean}}
  */
 export function runControlState(selectedJob, { verb, isActive, isResumable, busy = false } = {}) {
+  if (selectedJob?.creating || selectedJob?.status === 'preparing') {
+    return { action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true }
+  }
   if (selectedJob && isActive?.(selectedJob)) {
     return { action: RUN_ACTION.STOP, label: `${GLYPH.stop} Stop ${verb}`, disabled: busy }
   }

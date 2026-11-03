@@ -1,0 +1,100 @@
+{
+  "schema": "nadoc.cpd.formation-roster-working.v1",
+  "status": "Working provenance inventory; not a completed admission or model qualification",
+  "scope": "Established TT CPDs only; pending entries retained without assuming they form or excluding them definitively.",
+  "entries": [
+    {
+      "isomer": "cis-syn-I",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+      "formation_status": "formation_supported",
+      "context": "Adjacent TT in duplex DNA; nonadjacent bulge-loop TT also reported.",
+      "sources": [
+        "https://www.rcsb.org/structure/1N4E"
+      ],
+      "next": "Select a canonical experimental fixture and register applicable observables.",
+      "NAMD_qualified": false
+    },
+    {
+      "isomer": "trans-syn-I",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+      "formation_status": "formation_supported",
+      "context": "Adjacent TT in TpT and irradiated DNA; distinct from trans-syn-II.",
+      "sources": [
+        "https://onlinelibrary.wiley.com/doi/full/10.1111/php.13694"
+      ],
+      "next": "Retrieve primary structure and map ordered atoms before fixture construction.",
+      "NAMD_qualified": false,
+      "numerical_qualification": "Short six-T engineering admission passed; see cpd_cgenff_numerical_panel_20261017.json. Physical qualification incomplete."
+    },
+    {
+      "isomer": "trans-syn-II",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+      "formation_status": "formation_supported_context_limited",
+      "context": "Sensitized photolysis of unmodified TpT reported to yield trans-syn-II at2percent (Kao,Nadji,Taylor1993); also characterized as Rp-methyl phosphate ester. Neither establishes ordinary genomic-DNA formation.",
+      "sources": [
+        "https://pubmed.ncbi.nlm.nih.gov/8374057/"
+      ],
+      "next": "Retrieve quantitative NMR couplings/conditions and map TpT chemistry before registering physical validation.",
+      "NAMD_qualified": false,
+      "correction": "Previous modified-precursor-only restriction was too narrow; primary abstract explicitly reports unmodified TpT formation.",
+      "numerical_qualification": "Short six-T engineering admission passed; see cpd_cgenff_numerical_panel_20261017.json. Physical qualification incomplete."
+    },
+    {
+      "isomer": "cis-anti-I",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+      "formation_status": "formation_supported",
+      "context": "Nonadjacent T2/T7 in a14mer under acidic UVB conditions.",
+      "sources": [
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC2724876/"
+      ],
+      "next": "Use canonical sugar fixtures; retain source-context limits.",
+      "NAMD_qualified": false,
+      "numerical_qualification": "Short six-T engineering admission passed; see cpd_cgenff_numerical_panel_20261017.json. Physical qualification incomplete."
+    },
+    {
+      "isomer": "cis-anti-II",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+      "formation_status": "ordered_identity_provenance_pending",
+      "context": "Anti products and multiple cis-anti products observed; exact ordered-II assignment to be checked in primary structural evidence.",
+      "sources": [
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC4005637/"
+      ],
+      "next": "Resolve absolute configuration and endpoint order; not excluded from goal.",
+      "NAMD_qualified": false
+    },
+    {
+      "isomer": "trans-anti-I",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+      "formation_status": "not_admitted_pending_resolved_attachment_order",
+      "context": "Trans-anti TT photoproduct class established in telomeric DNA; ordered I versus II not resolved by class-level evidence.",
+      "sources": [
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC2722299/"
+      ],
+      "next": "Obtain experimental evidence resolving ordered attachment; user explicitly rejects admission of both provisional embeddings from class-level evidence.",
+      "NAMD_qualified": false
+    },
+    {
+      "isomer": "trans-anti-II",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+      "formation_status": "not_admitted_pending_resolved_attachment_order",
+      "context": "Same class-level evidence as trans-anti-I; separate ordered qualification required.",
+      "sources": [
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC2722299/"
+      ],
+      "next": "Obtain experimental evidence resolving ordered attachment; user explicitly rejects admission of both provisional embeddings from class-level evidence.",
+      "NAMD_qualified": false
+    },
+    {
+      "isomer": "cis-syn-II",
+      "definition": "backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+      "formation_status": "formation_not_established_for_adjacent_DNA",
+      "context": "Review reports no formation evidence for adjacent cis-syn-II in dinucleotides or longer DNA; theoretical registry entry is insufficient.",
+      "sources": [
+        "https://onlinelibrary.wiley.com/doi/full/10.1111/php.13694"
+      ],
+      "next": "Do not parameterize as an established DNA photoproduct without applicable evidence.",
+      "NAMD_qualified": false
+    }
+  ],
+  "trans_anti_scope_decision": "User requires resolved experimental attachment-order evidence before admission; do not admit both ordered embeddings from class-level evidence."
+}

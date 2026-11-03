@@ -31,3 +31,12 @@ describe('filterAtomData', () => {
     expect(filterAtomData(undefined, new Set(['x']), true)).toEqual({ atoms: [], bonds: [], element_meta: undefined })
   })
 })
+
+it.each(['vdw', 'ballstick', 'stick'])('retains crossover extra atoms and supported bonds in %s volumes', rep => {
+  const extra = { serial: 4, helix_id: 'h1', bp_index: 0, crossover_id: 'xo', extra_base_k: 0 }
+  const data = { ...cache, atoms: [...cache.atoms, extra], bonds: [...cache.bonds, [1, 4]] }
+  const filtered = filterAtomData(data, new Set(['h1:0']), rep !== 'vdw')
+  expect(filtered.atoms).toEqual([cache.atoms[0], extra])
+  expect(filtered.bonds).toEqual(rep === 'vdw' ? [] : [[1, 4]])
+  expect(filterAtomData(data, new Set(['h2:0']), true).atoms).not.toContain(extra)
+})

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "tests/test_design_geometry_core.py",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_design_geometry_core_tests.txt"
+  },
+  {
+    "file": "tests/test_native_compact_geometry.py",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_native_compact_geometry_tests.txt"
+  },
+  {
+    "file": "tests/test_flexible_segments.py",
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_flexible_segments_tests.txt"
+  }
+]

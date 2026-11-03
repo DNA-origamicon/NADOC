@@ -102,3 +102,41 @@ def test_adaptive_minimization_resume_keeps_minimizing_and_subtracts_paid_work()
     assert "binVelocities" not in resumed
     assert "minimize $nadoc_min_this" in resumed
     assert resumed.index("temperature        0") < resumed.index("minimize $nadoc_min_this")
+
+
+def test_generated_tcl_distinguishes_roundoff_from_energy_rise(tmp_path):
+    import shutil
+    import subprocess
+    import pytest
+
+    tclsh = shutil.which("tclsh")
+    if not tclsh:
+        pytest.skip("tclsh unavailable")
+    (tmp_path / "output").mkdir()
+    conf = M._min_conf("min", "demo", (100., 100., 100.), False, 47280, 0.5,
+                       n_atoms=472636)
+    block = conf.split("# NADOC_ADAPTIVE_MIN_BEGIN", 1)[1].split("# NADOC_ADAPTIVE_MIN_END", 1)[0]
+    for delta, expected in [(0.0002, "plateau"), (1.0, "maximum")]:
+        # Replay the measured energy magnitude, alternately rising/falling by delta.
+        # A real 1 kcal/mol rise must still reset stability; only roundoff is tolerated.
+        harness = f"""
+set energy -2095747.56
+set iteration 0
+proc callback {{name}} {{}}
+proc print {{message}} {{puts $message}}
+proc minimize {{steps}} {{
+    global energy iteration
+    incr iteration
+    set e [expr {{$energy + ($iteration % 2) * {delta}}}]
+    nadoc_min_callback {{TOTAL}} [list $e]
+}}
+"""
+        result = subprocess.run([tclsh], input=harness + block, text=True,
+                                capture_output=True, cwd=tmp_path, check=True)
+        assert not result.stderr, result.stderr
+        report = (tmp_path / "output/min.adaptive_min.txt").read_text()
+        assert f"reason={expected}" in report
+        if expected == "plateau":
+            assert "steps=19200" in report
+        else:
+            assert "steps=47280" in report

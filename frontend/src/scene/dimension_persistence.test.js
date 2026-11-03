@@ -47,4 +47,26 @@ describe('dimension persistence', () => {
     binding.dispose()
   })
 
+  it('ignores a failed read for a document that has been closed', async () => {
+    vi.useFakeTimers()
+    const store = fixture(), onError = vi.fn()
+    let reject
+    const load = vi.fn(() => new Promise((resolve, fail) => { reject = fail }))
+    const binding = initDimensionPersistence({ store, transport: { load }, onRecords: () => {}, onError })
+    store.set({ currentDesign: null })
+    reject(new Error('Document closed'))
+    await Promise.resolve()
+    expect(onError).not.toHaveBeenCalled()
+    binding.dispose()
+  })
+  it('still reports read failures for the current document', async () => {
+    vi.useFakeTimers()
+    const onError = vi.fn(), error = new Error('offline')
+    const binding = initDimensionPersistence({ store: fixture(),
+      transport: { load: vi.fn().mockRejectedValue(error) }, onRecords: () => {}, onError })
+    await Promise.resolve()
+    expect(onError).toHaveBeenCalledWith(error)
+    binding.dispose()
+  })
+
 })

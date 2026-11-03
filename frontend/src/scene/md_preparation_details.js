@@ -45,7 +45,7 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
     if(!bounds && d.boundary!=='slab'){
       const box=new THREE.Box3()
       for(const e of getEntries())if(e.pos)box.expandByPoint(e.pos)
-      if(!box.isEmpty()){bounds={min:box.min.toArray(),max:box.max.toArray()};box.getCenter(center)}
+      if(!box.isEmpty()){if(d.estimated!==false)bounds={min:box.min.toArray(),max:box.max.toArray()};box.getCenter(center)}
     }
     group.userData.dimensions=[...size];group.userData.preview=d
     outline(size,center,0x8b949e,'Simulation cell outline')
@@ -100,7 +100,10 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
       text.name=`Cell dimension ${'XYZ'[axis]}`;text.position.copy(middle);group.add(text)
     }
     const n=d.numbers
-    const note=label(`NaCl ${d.na} mM · MgCl₂ ${d.mg} mM\nBulk ions ≈ Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}\n${d.temperature} ${d.temperatureLabel}\nEstimates exclude counterions / solute`,{callout:true})
+    const text=d.estimated===false
+      ? `${d.source} · ${d.jobName || 'Selected job'}\n${n?`Actual ions: Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}`:'Ion counts unavailable'}\nNPT dimensions change during simulation\nCentered on displayed structure for reference`
+      : `New preparation preview\nNaCl ${d.na} mM · MgCl₂ ${d.mg} mM\nBulk ions ≈ Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}\n${d.temperature} ${d.temperatureLabel}\nEstimates exclude counterions / solute`
+    const note=label(text,{callout:true})
     note.name='Solvent conditions callout';group.add(note)
     const anchor=center.clone().add(new THREE.Vector3(solvent[0]/2,solvent[1]/2,solvent[2]/2))
     const leader=line([anchor,anchor,anchor,anchor],'Solvent callout leader')

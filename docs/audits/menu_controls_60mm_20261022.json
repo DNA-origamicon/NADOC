@@ -1,0 +1,46 @@
+{
+  "button_height_mm": 60,
+  "at_menu_scale": 0.585,
+  "changes": [
+    "Shared button height and 115-unit row pitch (about 7.3 mm physical gap).",
+    "Reflowed trajectory range, actions, frame, scrubber and navigation rows; wheel input follows relocated visuals.",
+    "Centered labels; aligned mode/option columns; seven modes or six options per page (three with color scale).",
+    "Extended panel vertically and moved status/progress/footer clear of content. Existing 220 ms scale animation retained."
+  ],
+  "captures": {
+    "selected": {
+      "path": ".development-artifacts/menu-controls-60mm-final/selected",
+      "submitted": true,
+      "layout": "target_undersized",
+      "layout_detail": "3 issue(s): target_undersized[sim:local:t:300] hit target is below its size floor; target_undersized[sim:local:t:301] hit target is below its size floor; target_undersized[sim:local:t:302] hit target is below its size floor"
+    },
+    "options": {
+      "path": ".development-artifacts/menu-controls-60mm-final/options",
+      "submitted": true,
+      "layout": "valid",
+      "layout_detail": "valid: 8 text, 27 controls"
+    },
+    "options-page2": {
+      "path": ".development-artifacts/menu-controls-60mm-final/options-page2",
+      "submitted": true,
+      "layout": "valid",
+      "layout_detail": "valid: 8 text, 25 controls"
+    },
+    "scale-options": {
+      "path": ".development-artifacts/menu-controls-60mm-final/scale-options",
+      "submitted": true,
+      "layout": "target_undersized",
+      "layout_detail": "2 issue(s): target_undersized[sim:local:c:200] hit target is below its size floor; target_undersized[sim:local:c:201] hit target is below its size floor"
+    }
+  },
+  "checks": [
+    "Four native tests passed: simulation-panel, simulation-trajectory, sidebar-grips, sidebar-unit.",
+    "Pairwise control overlap and panel containment assertions for trajectory, dense mode/option pages and color-scale options.",
+    "Profile estimates: all four unchanged presets, 1000 trials each at .3/.6/.9 m; docs/audits/menu_controls_60mm_profiles_20261022.json."
+  ],
+  "limitations": [
+    "No physical through-lens review.",
+    "Wheel and color-scale handles retain their geometry and native undersized flags; modal numeric keyboards retain existing layout."
+  ],
+  "observation": "Isolated metadata-only native viewer. Panel faced tracked eye using normal controller placement; no user document changed. Viewer stopped after capture."
+}

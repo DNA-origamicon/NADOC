@@ -26,6 +26,7 @@ export function initRunpodGpuPicker({
   fetchOptions = getRunpodGpuOptions,
   onSelect = () => {},
 } = {}) {
+  let version = 0
   let _resp = null
   let _busy = false
   let _selected = null
@@ -44,6 +45,7 @@ export function initRunpodGpuPicker({
         rows
           ? `<div style="margin-top:6px;border:1px solid #30363d;border-radius:5px;overflow:hidden">
                ${gpuOptionsHeader()}
+               <div style="padding:5px 7px;font-size:10px;color:#8b949e">Compute estimates exclude startup, analysis and transfers. The job wizard includes your stage plan and a separate planning allowance.</div>
                <div style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;
                  gap:1px;font-size:10px;padding:2px">${rows}</div>
              </div>`
@@ -77,13 +79,18 @@ export function initRunpodGpuPicker({
 
   /** Poll RunPod for GPU options. Never throws — a failure renders as a message, not a crash. */
   async function check() {
+    const current=++version
     _busy = true
     _render()
     try {
-      _resp = await fetchOptions()
+      const result = await fetchOptions()
+      if(current!==version)return
+      _resp=result
     } catch {
+      if(current!==version)return
       _resp = { ok: false, gpus: [], note: 'Backend unreachable.' }
     } finally {
+      if(current!==version)return
       _busy = false
       _render()
     }
@@ -94,6 +101,7 @@ export function initRunpodGpuPicker({
 
   return {
     check,
+    refresh(){if(_resp || _busy)void check()},
     get options() {
       return _resp
     },
@@ -101,6 +109,7 @@ export function initRunpodGpuPicker({
       return _selected
     },
     clear() {
+      version++;_busy=false
       _resp = null
       _selected = null
       _render()

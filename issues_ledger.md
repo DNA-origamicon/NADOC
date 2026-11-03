@@ -1757,6 +1757,33 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 `.development-artifacts/vr-join-20261013/reselection-repro.log`,
 `reselection-fixed.log`, and `physical-fixed/steady_fast/`.
 
+## ISSUE-97 — Ball+Stick Flex temporal splitting at half application cadence (2026-10-15, IMPROVED, OPEN)
+
+User recording 140701076018774 contains 179 final stereo presentations but only
+90 distinct submitted images. Actual molecular landmarks shift on a reused image
+and return when the next application image arrives; four landmarks across both
+eyes agree. Recorded grip transforms follow current controller poses, with no
+flagged tracking dropout or hover/haptic event in that recording. The symptom is
+temporal position splitting, not an established duplicate silhouette in one frame.
+
+The restored 24HB Flex Ball+Stick view draws 22.95M triangles per eye. Plain exact
+indexing reduced repeated vertex records but left the live workload near 13 ms
+GPU / 45 application Hz. Exact groups of eight indexed sphere meshes reduced the
+per-instance rendering cost while preserving all vertices, ordered triangles,
+matrices, colors and normal/shadow arithmetic. Optional resource failures fall
+back. Existing small-stick grouping is unchanged.
+
+The normal deployed candidate now averages 87.343 application Hz (median gap
+11.166 ms, maximum 22.447 ms). Three full 120-result GPU windows have medians
+8.497/8.473/8.577 ms, zero query skips. Scientific export and geometry payloads are
+unchanged; actual eye output and browser attachment were verified. Eight native
+checks and 50 focused tour checks passed; `main.js` LOC delta is zero.
+
+Occasional misses remain, and a fresh physical torso-motion capture is pending.
+Do not close this issue or MV-44 on the quiet timing result alone. ISSUE-77's
+menu/hover correlation is a separate unresolved comparison. Review and rollback
+evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.development-artifacts/vr-temporal-fix-20261015/index.html).
+
 ## ISSUE-79 — Selecting assembly parts writes animations and rebuilds large Full assemblies (2026-10-13, FIXED)
 
 - Repro: open the seven-part native Benchy, select previously unanimated parts,
@@ -3438,3 +3465,159 @@ HTTP regression covers accepted move, undo, redo and reopen on an organized pose
 - Discovered during ISSUE-170 persistence verification: importing existing `workspace/test.nadoc`, executing the recorded batch move and verifying native history succeeds, but `scripts.agent_structure_guard.publish` refuses with `AGENT_PROCESS_REQUIRED: Unrecorded or irreproducible changes: active_loadout_id, loadouts`.
 - The input already contains a Main loadout snapshot. The guard's structural comparison includes that state, whereas replay from its authoring commands does not reproduce it. No file was published, no loadout/history was stripped, and no guard was weakened.
 - Follow-up: establish the truthful recorded loadout lifecycle at the publication/replay boundary. ISSUE-170's persistence regression instead builds a fresh design through public bundle/scaffold commands and passes the unchanged guard; it does not certify the original fixture for agent republication.
+
+- **Integration review (November 3):** `project_revisions.refresh_active_revision` automatically creates the `main` / `Main` loadout during ordinary workspace persistence. `design_loadouts.encode_snapshot` retains its construction log but strips nested loadouts. This is not evidence of a molecular edit or a missing native CAD command.
+- `part_history_contract.FIELD_ROLES` classifies loadouts, active/last-editable selection and atomistic references as physical state. Native CAD proof excludes that layer; the agent guard deliberately compares it. Neither `part_proof_commands` nor the feature registry records the loadout lifecycle. The create/rename/select/delete endpoints instead use ordinary state/branch replacement.
+- **Development review required:** define a recorded document/loadout lifecycle for Save and explicit branch actions, including pinned branch inputs, active selection and portable revision references. Independently replay every retained branch and check its physical references; a branch snapshot is input to verification, never a replacement for construction. Protected simulation loadouts require their own provenance contract.
+- Do not resolve this by excluding the physical fields, stripping the Main branch, copying it into the replay result, or adding a private diagnostic/import-root feature. Existing saved files cannot acquire invented past loadout actions. No geometry decision or molecular candidate promotion is needed; this is a document-provenance development task.
+- A focused regression now exercises actual revision persistence after recorded native construction: the source and embedded branch remain independently replayable, while agent publication of the saved wrapper must still fail closed until that contract exists. Validation evidence is recorded with the integration result.
+
+## ISSUE-98 — VR numeric popup buttons miss angled rays (2026-10-20)
+
+- [x] Reproduce against production `SidebarMenu::hit`: aim at the drawn popup face from above/below, then Cancel and Apply.
+- [x] Match hit/control-observation depth to the rendered 0.070 panel-local face; prioritize generic numeric popup controls over disabled background rows.
+- [ ] Physical headset verification after the user's current viewer session ends (MV-48).
+
+Root cause: raised numeric controls used the base panel ray plane. Earlier tests aimed perpendicular rays or invoked Apply directly, masking parallax. Regression covers trajectory and generic numeric edits, unchanged frame/request on Cancel, and requested seek/value on Apply. Existing simulation tour now exercises Cancel before Apply.
+
+## ISSUE-99 — Atomistic VR frame packing and repeated native style acknowledgement (2026-10-21)
+
+- [x] Profile the completed CPD jobs and isolate resident 24HB playback from disk reads.
+- [x] Cache immutable local vertex templates; pack current instance matrices/colors directly into Float32 buffers. Geometry, saved coordinates, visibility and material semantics remain unchanged.
+- [x] Reproduce native lazy-style acknowledgement reapplying the desktop's settled representation, rebuilding geometry and pausing playback. Route this acknowledgement through `ensureRepresentation`; retain explicit forced rebuilds. The new regression failed before implementation.
+- [x] Extend the registered playback benchmark to both 24HB jobs, remove setup request interception before measurement, and wait for native style preparation. Report delivered scene versions separately from headset submissions and browser endpoints.
+- [ ] Physical through-lens comfort/continuity review: MV-49. Large-scene GPU and transport limits remain; no claim of hitch-free playback.
+
+Evidence and final validation: `docs/audits/cpd_vr_hitches_20261021.json`, `docs/vr_cpd_playback.md`. Main.js task delta: 0 lines (one thin call replacement).
+
+## ISSUE-100 — Overhang menu test leaves deferred bindings after jsdom teardown (2026-10-21)
+
+- [x] Full frontend run: all 8,384 assertions passed, then a `document is not defined` uncaught exception originated from the unchanged overhang-orientation menu test.
+- [x] Test cleanup now drains the zero-delay binding and dispatches Escape through the normal menu lifecycle before removing DOM. Runtime context-menu code is unchanged.
+- Validation is recorded with ISSUE-99 in `docs/audits/cpd_vr_hitches_20261021.json`.
+
+## ISSUE-101 — Repeated atomistic snapshot rebuild/transfer (2026-10-21)
+
+- [x] Negotiate lossless absolute transform packets with legacy fallback and immutable full-base validation.
+- [x] Preserve mesh/index/group buffers; alternate fenced instance buffers under the unchanged staging budget.
+- [x] Verify exact frontend encoding, backend rotation, native CPU/GPU bytes, rendered pixels and replacement-base rejection.
+- [x] Compare resident CPD/24HB playback and retain failed attempts in `docs/audits/vr_transform_stream_20261021.json`.
+- [ ] Physical headset continuity/comfort: MV-50. Large-scene GPU limits and publication boundary stalls remain.
+
+Main.js task delta: zero. No topology, source-coordinate or geometry-authority changes.
+
+## ISSUE-102 — Per-vector stream-read overhead in native transform decoding (2026-10-21)
+
+- [x] Compare original scalar decode with bounded block reads, retaining exact matrix bytes and arithmetic.
+- [x] Validate block boundaries, truncation/nonfinite late blocks and production GL pixel/buffer parity.
+- [x] Measure 24HB P1 end-to-end: native preparation improves ~12%; scene medians unchanged. Decoder-only tuning has diminishing returns.
+- Long CPD repeat and cleanup: `docs/audits/vr_final_pass_20261021.json`. Physical review remains MV-50. Main.js task delta: zero.
+
+
+## ISSUE-103 — Dense trajectory sphere meshes dominate large-model GPU work (2026-10-21)
+
+- [x] Reproduce 24HB P1 ball-and-stick/VDW and preserve source-job fingerprints.
+- [x] Add guarded, version-matched native-oriented offline inputs and exact-pixel
+  group sweeps to the registered playback workflow. Reject blank comparisons.
+- [x] Exclude the initial unrotated export; actual-eye inspection detected wrong
+  framing. Correct export with the production backend camera rotation.
+- [x] Evaluate 1/2/4/8/16/32/64 groups twice per style; no consistent improvement.
+  Culling is faster but fails exact depth/color equivalence, so it remains offline.
+- [ ] Implement and qualify explicit analytic sphere rendering with unchanged
+  simulated centers/radii and correct stereo, clipping, depth and bond occlusion.
+
+This initial investigation made no production GPU change or new through-lens claim.
+The compact-buffer follow-up is ISSUE-104. Initial audit:
+docs/audits/vr_gpu_20261021.json. Main.js task LOC delta: 0.
+
+
+## ISSUE-104 — Burst-prone Smooth playback and repeated GPU attributes (2026-10-21)
+
+- [x] Start Smooth pacing after pair preparation, stretch transitions to at least
+  250 ms, and wait for busy publication without catch-up skipping.
+- [x] Keep raw saved-frame 12 Hz and source coordinates unchanged.
+- [x] Add bounded exact compact sphere/bond-group vertices with original-buffer
+  fallback; leave index-size/order experiments offline.
+- [x] Exercise all four CPD isomers in three atomistic representations.
+- [x] Isolate a pre-handler publication stall to 149.6 ms full-heap GC and add a
+  dedicated startup factory that excludes the permanent import graph from later
+  collections. Dynamic cycles remain collectible. Long-window upload maxima
+  improve 160.8→31.8 ms raw and 58.8→26.7 ms Smooth.
+- [ ] Resolve remaining browser encoding/scheduling outliers and physically
+  assess continuity. Older 929/361/147 ms uploads lacked GC instrumentation;
+  do not attribute every historical outlier retrospectively.
+- [ ] Physical headset continuity/comfort: MV-51. Large sphere meshes remain a
+  substantial GPU workload; this does not claim perfectly seamless rendering.
+
+Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta: 0.
+
+
+## ISSUE-105 — Close Session smoke leaves operation-progress overlay visible (2026-10-27)
+
+- Status: open; observed during Nanobase inventory validation outside the feature workflow.
+- Repro: `just smoke`, `frontend/e2e/smoke.spec.js` test “Close Session from a loaded
+  design tears down cleanly”. At line 357, `#op-progress` retains class `visible`.
+- Result: 22 other smoke tests passed; inventory and Image evaluation browser exercises passed.
+- Evidence: Archive `runtime/development-artifacts/nanobase-inventory/smoke.log`.
+- Root cause uninvestigated; no claim that the menu change caused it. Preserve the existing
+  regression test and investigate cancellation/progress cleanup separately.
+
+## ISSUE-106 — Figure detector misses verified diagrams and can identify grids as routing (2026-10-27)
+
+- Open. All 21 verified Nanobase figure records evaluated: only 3 yield candidates.
+  Fourteen records have raster routing, which the current vector-only detector cannot trace.
+- Rotation/4× normalization of List ring/dumbbell figures produces tens of thousands of
+  apparent crossovers from grids. These experimental hypotheses are rejected, not promoted.
+- Evidence: Archive `runtime/development-artifacts/nanobase-reconstruction-20261027/`
+  `evaluation/summary.json` and `normalization-summary.json`. Application detector unchanged.
+- Stage-two prototype preserves primitive evidence and requires explicit registration,
+  reviewed direction/nicks/indels; no claim of automatic reconstruction accuracy.
+
+## ISSUE-107 — NADOC caDNAno-to-oxDNA geometry differs from converter-matched deposited starts (2026-10-27)
+
+- Open investigation; no production geometry modification authorized or made.
+- Ten native-file trials: equal particle counts/strand-length multisets and zero mismatches
+  on tested single-copy address-mapped directed neighbors. Loop-copy alignment excluded.
+- Proper rigid alignment to tacoxDNA b8a1706d yields position RMSD 0.66–16.20 nm;
+  nine trials have median a3 deviations about 175–180 degrees, one about 18 degrees.
+- Nine deposited starts (eight records) reproduce fresh tacoxDNA positions/orientations to
+  numerical precision; the tenth (record35) has nonzero simulation time despite its label.
+- Evidence: Archive `nanobase-reconstruction-20261027/export-comparison.json`, exported
+  configurations, source hashes/manifests, converter logs. These comparisons do not prove
+  a root cause or simulation failure. Preserve direction/placement authorization gates.
+
+## ISSUE-108 — oxDNA nucleotide walk omitted forced-ligation inserts (2026-10-28)
+
+- [x] Fixed. Gerling Fig.S1's saved design contains forced ligations carrying TT;
+  the canonical exporter emitted only inserts belonging to crossover records,
+  shortening published staples despite the insert sequence remaining in the file.
+- Match each forced ligation to its full directed consecutive-domain endpoints;
+  emit its bases through the existing insertion walk. Covers same-helix and
+  unequal-BP joins and preserves crossover ownership/unique particle keys.
+- Six focused regression cases pass; three reproduced missing bases before the
+  fix. Existing crossover/terminal-insert checks:48 passed,6 skipped. Both corrected
+  Gerling variants pass full native sequence and reciprocal-backbone verification.
+- No atom-placement formula, molecular phase constant, or simulation was changed.
+
+## ISSUE-109 — Linker authority test triggers persistent placement review (2026-11-02)
+
+- [x] Resolved 2026-11-03 after user-authorized review. October 29 commit
+  `9cbbf654` reused zero-scale DS connector meshes for playback, including when
+  native bridge boundary records were absent. The original absence assertion
+  remained valid; the placeholder also entered connector picking candidates.
+- `_makeDsLinkerMeshes` now waits independently for each side's native boundary.
+  Collapsed connectors backed by real native records still expand during playback.
+  No nucleotide coordinates, placement constants or geometry goldens changed.
+- Original regression retained; added partial/full/cleared rebuild, exact endpoint,
+  input immutability and missing-bridge picking checks. 53 focused frontend tests
+  and 90 native full/slab/API/history/VR placement tests passed before acknowledgement.
+- Explicit review recorded for incident `20261103T064355-2dbec3347e96`;
+  `python3 -m tools.native_placement_audit check` reports clear. Immutable original
+  evidence retained; portable acknowledgement is in `tools/native_placement_audit/reviews/`.
+
+## ISSUE-110 — Trajectory buffer expectation differs from actual fill (2026-11-02)
+
+- [ ] Open. `just test-frontend` failed `trajectory_stream.test.js:108`: expected
+  buffered 24, received 72, with limited=true and complete=false.
+- Found during YggDNAsil validation; no trajectory code changed. Root cause and
+  intended fill behavior require investigation. Existing test is the repro.

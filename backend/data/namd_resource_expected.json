@@ -1,0 +1,193 @@
+{
+  "basis": "origami-20261102-qualified-success-expected-v3",
+  "features": [
+    "intercept",
+    "million_atoms",
+    "million_restraints",
+    "spatial_tile_pair_capacity_mib",
+    "million_atoms_neighbor_volume_delta",
+    "four_fs_million_atoms",
+    "harmonic_constraint_million_atoms",
+    "thousand_patches"
+  ],
+  "qualified_gpu_names": [
+    "NVIDIA GeForce RTX 3080 Ti"
+  ],
+  "modes": {
+    "resident": {
+      "ram": [
+        171.374338434181,
+        2963.4411975819803,
+        49.61923784194383,
+        0.0,
+        0.0,
+        76.73979114494905,
+        177.85208714773694,
+        0.0
+      ],
+      "gpu": [
+        274.8710698119701,
+        1182.82324397379,
+        205.3950245064502,
+        0.9577836719889697,
+        0.0,
+        451.67344652569886,
+        178.30739945297316,
+        0.0
+      ],
+      "validation": {
+        "ram": {
+          "method": "leave-one-geometry-group-out",
+          "cases": 409,
+          "median_absolute_pct": 2.777083111015788,
+          "p95_absolute_pct": 9.957076069627908,
+          "maximum_absolute_pct": 12.077757914552567,
+          "minimum_signed_pct": -10.398927538732694,
+          "maximum_signed_pct": 12.077757914552567,
+          "underpredicted": 228,
+          "overpredicted": 181
+        },
+        "gpu": {
+          "method": "leave-one-geometry-group-out",
+          "cases": 409,
+          "median_absolute_pct": 5.945018661806123,
+          "p95_absolute_pct": 19.356524844782598,
+          "maximum_absolute_pct": 22.75345531251942,
+          "minimum_signed_pct": -19.526213576598693,
+          "maximum_signed_pct": 22.75345531251942,
+          "underpredicted": 283,
+          "overpredicted": 126
+        }
+      },
+      "training_cases": 409,
+      "feature_ranges": [
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.183146,
+          2.174291
+        ],
+        [
+          0.000144,
+          1.56392
+        ],
+        [
+          210.0040279328823,
+          3241.600050870329
+        ],
+        [
+          0.0,
+          3.631159393689985
+        ],
+        [
+          0.0,
+          2.174291
+        ],
+        [
+          0.0,
+          2.174291
+        ],
+        [
+          0.081,
+          3.36
+        ]
+      ]
+    },
+    "offload": {
+      "ram": [
+        154.6903924995834,
+        1845.3649052540327,
+        195.159992003007,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        78.25515140602405
+      ],
+      "gpu": [
+        275.4270972586489,
+        464.28837831539704,
+        0.0,
+        1.0637371079630638,
+        0.0,
+        0.0,
+        0.0,
+        151.42052321784792
+      ],
+      "validation": {
+        "ram": {
+          "method": "leave-one-geometry-group-out",
+          "cases": 17,
+          "median_absolute_pct": 2.545287931701179,
+          "p95_absolute_pct": 8.71060209922716,
+          "maximum_absolute_pct": 8.778189779882272,
+          "minimum_signed_pct": -8.778189779882272,
+          "maximum_signed_pct": 8.693705179063382,
+          "underpredicted": 9,
+          "overpredicted": 8
+        },
+        "gpu": {
+          "method": "leave-one-geometry-group-out",
+          "cases": 17,
+          "median_absolute_pct": 0.8125951866604364,
+          "p95_absolute_pct": 6.162035815562672,
+          "maximum_absolute_pct": 6.162035815562672,
+          "minimum_signed_pct": -6.162035815562672,
+          "maximum_signed_pct": 5.619537951511178,
+          "underpredicted": 13,
+          "overpredicted": 4
+        }
+      },
+      "training_cases": 17,
+      "feature_ranges": [
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.183146,
+          2.174291
+        ],
+        [
+          0.055323,
+          1.56392
+        ],
+        [
+          242.4500060454011,
+          3171.7589164972305
+        ],
+        [
+          0.0,
+          3.631159393689985
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.081,
+          2.912
+        ]
+      ]
+    }
+  },
+  "confidence": null,
+  "scope": "Single qualified GPU/build/driver; expected process peaks, never time averages or admission bounds. Patch count applies only to offload. Empirical profile effects remain; geometry-held-out errors are not statistical coverage guarantees.",
+  "qualified_drivers": [
+    "580.178.04"
+  ],
+  "qualified_threads": [
+    16,
+    32
+  ],
+  "fit_method": "nonnegative least squares minimizing relative error; geometry groups held out together",
+  "estimate_kind": "expected_process_peak",
+  "qualified_engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+  "evidence_policy": "Only matching-engine, cleanly completed runs and complete parent chains with validated outputs; exclusions retained separately."
+}

@@ -1,0 +1,12 @@
+{
+  "deleted_files_absent": 11404,
+  "packaged_asset_hashes_verified": 24,
+  "source_asset_hashes_verified": 12,
+  "relaxation_psf_hashes_and_final_coordinates_verified": [
+    "935bbecba8cf",
+    "6d6c46163a00",
+    "b2b43076da96",
+    "974191dc2e63"
+  ],
+  "managed_jobs_modified_by_cleanup": false
+}

@@ -15,54 +15,20 @@ from backend.core.md_vram import (
     max_atoms_for_vram,
 )
 
-# ── Measured throughput model ────────────────────────────────────────────────
-# Wall-clock on a single GPU is dominated by atom count, and to a good first
-# approximation throughput ~ K / N_atoms with a per-path constant K.  Both anchors
-# below are real benchmarks of the SAME design (6hbx100_90deg) on an RTX 2080 Super,
-# NAMD 3.0.2, HMR + rigidBonds all + 4 fs + stepspercycle 20:
-#
-#   GPU-resident, full solvation : 12.8 ns/day @ 747,262 atoms
-#   CUDA-offload, 12 A carve     : 18.8 ns/day @ 196,606 atoms
-#
-# K is machine-specific (a 3080 is ~3x these); these anchors only rank execution paths.
-K_GPU_RESIDENT = 12.8 * 747_262  # ~9.6e6 atom·ns/day
-K_OFFLOAD = 18.8 * 196_606  # ~3.7e6 atom·ns/day
-K_CPU = K_OFFLOAD / 12.0  # crude: the CPU build is ~an order slower
+def predict_ns_per_day(n_atoms: int, *, gpu_resident: bool, gpu: bool = True,
+                       devices: str = "0", threads: int = 16) -> float | None:
+    """Current-engine dynamics estimate at 4 fs, only within matching evidence.
 
-# GPU-resident's advantage is NOT scale-free — the 2.6x-per-atom ratio above only holds
-# for large systems.  Below ~100k atoms both paths hit the same fixed per-step
-# kernel-launch floor and resident's extra setup makes it a net LOSS.  Measured on an
-# RTX 3080 Ti (+p16, startup excluded), offload -> resident ms/step:
-#
-#     32.5k relax      0.840 -> 0.862   0.97x    32.5k k=0 prod  1.116 -> 1.266  0.88x
-#      111k            1.749 -> 1.544   1.13x     181k           3.338 -> 2.507  1.33x
-#      770k           32.10  -> 16.16   1.99x    3.14M         125.6  -> 39.0    3.22x
-#
-# So the model must not promise a speed-up it cannot deliver: below the threshold the
-# resident path is predicted at the OFFLOAD rate times the measured small-system penalty.
-# Threshold shared with the conf writer (md_protocols._RESIDENT_MIN_ATOMS) so the
-# optimiser's advice and the emitted confs can never disagree.
-_SMALL_SYSTEM_RESIDENT_PENALTY = 0.89  # 1.116 -> 1.266 ms/step at 32.5k atoms
-
-
-def predict_ns_per_day(n_atoms: int, *, gpu_resident: bool, gpu: bool = True) -> float:
-    """Rough throughput ESTIMATE for *n_atoms* on the given path (ns/day, 4 fs).
-
-    An extrapolation from two benchmarks of one design on one card — not a measurement of
-    the caller's machine, and known to be wrong by ~2x on at least one box (exp52).  Every
-    caller must label its output as an estimate, and prefer ``md_bench_probe`` when a real
-    measurement for this machine exists.
+    Missing hardware/mode/size coverage returns None. Historical engines are
+    never substituted for a current-machine timing measurement.
     """
+    from backend.core.namd_timing import local_step_ms
     if n_atoms <= 0:
         return 0.0
     if not gpu:
-        return K_CPU / n_atoms
-    if not gpu_resident:
-        return K_OFFLOAD / n_atoms
-    if n_atoms < _RESIDENT_MIN_ATOMS:
-        # Small system: resident does not beat offload, it loses to it.
-        return (K_OFFLOAD / n_atoms) * _SMALL_SYSTEM_RESIDENT_PENALTY
-    return K_GPU_RESIDENT / n_atoms
+        return None
+    milliseconds=local_step_ms(n_atoms,resident=gpu_resident,devices=devices,threads=threads)
+    return 4*86.4/milliseconds if milliseconds else None
 
 
 def gpu_resident_pays(n_atoms: int, *, workspace=None, machine=None) -> bool:
@@ -108,7 +74,7 @@ def probe_hardware(devices: str = "0") -> dict:
     building the design's heavy-atom model (~26 s on a 6-helix bundle), which is why
     the two are separate calls rather than a fabricated progress animation.
     """
-    from backend.core.md_vram import detect_gpu_activity  # noqa: PLC0415
+    from backend.core.namd_timing import gpu_identity  # noqa: PLC0415
 
     cpu_only = (devices or "").strip().lower() in ("cpu", "none")
     vram_mb = None if cpu_only else detect_vram_mb(devices)
@@ -117,8 +83,8 @@ def probe_hardware(devices: str = "0") -> dict:
     name = None
     if not cpu_only:
         try:
-            act = detect_gpu_activity(devices)
-            name = (act or {}).get("name")
+            act = gpu_identity(devices)
+            name = (act or {}).get("gpu")
         except Exception:  # noqa: BLE001
             name = None
 
@@ -225,31 +191,35 @@ def recommend_advanced(
             "facts": facts,
         }
 
-    full_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+    full_atoms = profile.get("atom_upper_bound") or profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
     chosen_atoms = full_atoms
     gpu_resident = bool(gpu and gpu_resident_pays(full_atoms))
     rec["gpu_resident"] = bool(gpu_resident)
     rationale.append("The complete periodic water box is retained.")
 
-    est = predict_ns_per_day(chosen_atoms, gpu_resident=gpu_resident, gpu=gpu)
+    est = predict_ns_per_day(chosen_atoms, gpu_resident=gpu_resident, gpu=gpu,devices=devices,threads=threads)
     facts.update(
         {
             "full_atoms": full_atoms,
             "chosen_atoms": chosen_atoms,
-            "est_ns_per_day": round(est, 1),
+            "est_ns_per_day": round(est, 1) if est else None,
+            "timing_basis": "current-engine-probes" if est else None,
             "gpu_resident": bool(gpu_resident),
         }
     )
-    rationale.append(
-        f"Estimated throughput ≈ {est:.0f} ns/day at ~{chosen_atoms:,} atoms "
-        f"({'GPU-resident' if gpu_resident else 'CUDA offload'}, 4 fs)."
-    )
+    if est:
+        rationale.append(
+            f"Estimated dynamics throughput ≈ {est:.0f} ns/day at ~{chosen_atoms:,} atoms "
+            f"(GPU-resident, 4 fs; matching current-engine probes). Startup and analysis are additional."
+        )
+    else:
+        rationale.append("No matching current-engine timing evidence covers this hardware, mode and system size; benchmark before relying on a completion estimate.")
 
     if atom_cap is not None and chosen_atoms > atom_cap:
         warnings.append(
             f"Even the recommended system (~{chosen_atoms:,} atoms) may exceed this machine's "
-            f"~{atom_cap:,}-atom memory ceiling. It may still run — but expect an out-of-memory "
-            "abort. Consider a smaller design or the CPU build."
+            f"~{atom_cap:,}-atom planning allowance. Exact stage preflight is required before "
+            "local launch; select Alpine or Runpod if it cannot establish sufficient capacity."
         )
 
     return {

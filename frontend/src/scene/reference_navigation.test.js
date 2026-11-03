@@ -43,3 +43,45 @@ describe('reference navigation projection', () => {
     expect(navigationDesign({ currentDesign: design, simulationTabActive: true })).toBe(projected)
   })
 })
+
+describe('hidden content navigation', () => {
+  const helix = (id, x, length) => ({ id, bp_start: 0, length_bp: length,
+    axis_start: { x, y: 0, z: 0 }, axis_end: { x, y: 0, z: length - 1 } })
+  const d = { helices: [helix('core', 10, 3), helix('arm', 0, 100)], strands: [] }
+  const g = d.helices.flatMap(h => Array.from({ length: h.length_bp }, (_, bp) => ({
+    helix_id: h.id, strand_id: h.id, strand_type: 'scaffold', domain_index: 0,
+    bp_index: bp, direction: 'FORWARD', backbone_position: [h.axis_start.x, 0, bp],
+  })))
+  const state = { currentDesign: d, currentGeometry: g }
+  const hidden = new Set(g.filter(n => n.helix_id === 'arm').map(n => `arm:${n.bp_index}:FORWARD`))
+
+  it('excludes a hidden arm from fit geometry and orbit/zoom axes, without mutating topology', () => {
+    expect(navigationGeometry(state, hidden)).toEqual(g.slice(0, 3))
+    expect(navigationDesign(state, hidden).helices.map(h => h.id)).toEqual(['core'])
+    expect(d.helices).toHaveLength(2)
+  })
+
+  it('trims hidden ends and gaps on a shared helix rather than retaining its full axis', () => {
+    const keys = new Set(hidden)
+    for (const bp of [20, 21, 30, 31]) keys.delete(`arm:${bp}:FORWARD`)
+    expect(navigationDesign(state, keys).helices.filter(h => h.id === 'arm')
+      .map(h => [h.axis_start.z, h.axis_end.z])).toEqual([[20, 21], [30, 31]])
+  })
+
+  it('invalidates cached navigation immediately when visibility changes', () => {
+    const first = navigationDesign(state, hidden)
+    expect(navigationDesign(state, hidden)).toBe(first)
+    const shown = new Set(hidden); shown.delete('arm:99:FORWARD')
+    expect(navigationDesign(state, shown).helices.at(-1).axis_end.z).toBe(99)
+    expect(navigationDesign(state, new Set())).toBe(d)
+    expect(navigationDesign({ ...state, currentGeometry: [] }, hidden).helices).toEqual([])
+  })
+
+  it('combines reference and staple hiding with explicit base hides', () => {
+    const next = { currentDesign: { ...d, strands: [{ id: 'arm', is_reference: true }] },
+      currentGeometry: g.map(n => ({ ...n, strand_type: n.helix_id === 'core' ? 'staple' : 'scaffold' })),
+      showReferenceGeometry: false, staplesHidden: true }
+    expect(navigationGeometry(next)).toEqual([])
+    expect(navigationDesign(next).helices).toEqual([])
+  })
+})

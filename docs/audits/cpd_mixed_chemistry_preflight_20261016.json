@@ -1,0 +1,570 @@
+{
+  "at": "2026-10-17T01:56:14.950511+00:00",
+  "coordinate_audit": {
+    "at": "2026-10-17T01:54:42+00:00",
+    "passed": true,
+    "records": [
+      {
+        "case": "double_oh_control",
+        "parent": "original_qm",
+        "passed": true,
+        "charge": -4.163336342344337e-17,
+        "atoms": 49,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_original_qm/seed-0/geometry_angstrom.npy",
+          "sha256": "70418bd5e5d0e0f17509472f678a1559ef7e3586d1d393622e17d065e0302a40"
+        }
+      },
+      {
+        "case": "double_oh_control",
+        "parent": "alternate_qm",
+        "passed": true,
+        "charge": -4.163336342344337e-17,
+        "atoms": 49,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_alternate_qm/seed-0/geometry_angstrom.npy",
+          "sha256": "e1edfcf933b8e6750d130ff804b559a1f7518c647e504b9bac3d2f735b54716c"
+        }
+      },
+      {
+        "case": "five_prime_terminal",
+        "parent": "original_qm",
+        "passed": true,
+        "charge": -1.0,
+        "atoms": 56,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_original_qm/seed-20261018/geometry_angstrom.npy",
+          "sha256": "7fb4a8318b1d891ede1080f823deb0a3dc76c3ff26588e37b3f6aafe10791783"
+        }
+      },
+      {
+        "case": "five_prime_terminal",
+        "parent": "alternate_qm",
+        "passed": true,
+        "charge": -1.0,
+        "atoms": 56,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_alternate_qm/seed-20261017/geometry_angstrom.npy",
+          "sha256": "f8e6d04a127232f1d5746ae25786194af6dba07478cf2567792584d613b61822"
+        }
+      },
+      {
+        "case": "three_prime_terminal",
+        "parent": "original_qm",
+        "passed": true,
+        "charge": -1.0,
+        "atoms": 56,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_original_qm/seed-20261016/geometry_angstrom.npy",
+          "sha256": "873cf38d0eeb86ea84500edb2e1039bcd71bcd2cd10a08273c0e3a2e77a43433"
+        }
+      },
+      {
+        "case": "three_prime_terminal",
+        "parent": "alternate_qm",
+        "passed": true,
+        "charge": -1.0,
+        "atoms": 56,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_alternate_qm/seed-20261017/geometry_angstrom.npy",
+          "sha256": "d3752c4bec57565aeb13eb829aad122eee8b83c89be3f510514d8993a2743b49"
+        }
+      },
+      {
+        "case": "internal",
+        "parent": "original_qm",
+        "passed": true,
+        "charge": -2.0,
+        "atoms": 63,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_original_qm/seed-20261016/geometry_angstrom.npy",
+          "sha256": "0a965739a26e28e294a6a2e2cc0bd2c4243020078e22a31f588cb9f0d7a306da"
+        }
+      },
+      {
+        "case": "internal",
+        "parent": "alternate_qm",
+        "passed": true,
+        "charge": -2.0,
+        "atoms": 63,
+        "unchanged_parent": true,
+        "canonical_identity": true,
+        "selected": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_alternate_qm/seed-20261016/geometry_angstrom.npy",
+          "sha256": "1fe4e88f3d34dc78f99e1266849b62caaa1dae41aee7453585c6f471e5a24978"
+        }
+      }
+    ],
+    "limitations": "Geometry screens and constrained cap relaxations only; no minimum certificate. Generic-P methyl cap angle/UB analogs explicitly transferred to missing P2 terms. Separate cap choices are not matched training targets."
+  },
+  "matrix": {
+    "at": "2026-10-17T01:52:45+00:00",
+    "passed": true,
+    "script": {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/prepare_endpoint_chemistry_matrix_v4.py",
+      "sha256": "4ef51d39aeebced1233b7ca7f11c30d67703d9c1a9fb5bb73b9cbe991f307a26"
+    },
+    "sources": [
+      {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/top_all36_na.rtf",
+        "sha256": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49"
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/par_all36_na.prm",
+        "sha256": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/bundle/inputs/forcefield/top_all36_cgenff.rtf",
+        "sha256": "18b0f76e4d9fba1918e321327984850b1bb216403a2fe21e251d038f84b48069"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-primary-syn-anti-fit-v1/local-run-v1/bundle/inputs/forcefield/par_all36_cgenff.prm",
+        "sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/published_last.prm",
+        "sha256": "190dfbc482bd88ee8e885793b5115bfaa26efe5742118185f251bf68098e7722"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/endpoint/fixture.json",
+        "sha256": "5fca7a702e076e00a4c75bc357aaf7350493cd8532dc0e7badc6bbe3677028ba"
+      }
+    ],
+    "cases": [
+      {
+        "case": "double_oh_control",
+        "atoms": 49,
+        "charge_e": -4.163336342344337e-17,
+        "patches": [],
+        "parameter_coverage": true,
+        "fixture": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/double_oh_control/fixture.json",
+          "sha256": "6d42f7b4083fb7e68d7b5d1156c31643a84a023487df35bc1aa03636595c5778"
+        },
+        "system": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/double_oh_control/baseline_system.xml",
+          "sha256": "3b5b847cf28e50d6a1ab442227d2af08a558c5b3fb19ad9fee9d4cd5684000a2"
+        },
+        "warnings": []
+      },
+      {
+        "case": "five_prime_terminal",
+        "atoms": 56,
+        "charge_e": -1.0,
+        "patches": [
+          "3POM"
+        ],
+        "parameter_coverage": true,
+        "fixture": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/five_prime_terminal/fixture.json",
+          "sha256": "7708d0dbe82f4790340b818120abad7841a6c03ae86b85734a234a2a7587e053"
+        },
+        "system": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/five_prime_terminal/baseline_system.xml",
+          "sha256": "127df9811202b304b7ca2fe07cd01707d8f701dbbd0202541a8bbb432204cb91"
+        },
+        "warnings": []
+      },
+      {
+        "case": "three_prime_terminal",
+        "atoms": 56,
+        "charge_e": -1.0,
+        "patches": [
+          "5POM"
+        ],
+        "parameter_coverage": true,
+        "fixture": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/three_prime_terminal/fixture.json",
+          "sha256": "6e517aaae2a234d514f8b728faf6776054e387d123d8a8c5ecea1287c751bba9"
+        },
+        "system": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/three_prime_terminal/baseline_system.xml",
+          "sha256": "2ad7ead9b5a4fa52e4bcbb6bc5e4b5acf01578591917a1863986adad2de279e6"
+        },
+        "warnings": []
+      },
+      {
+        "case": "internal",
+        "atoms": 63,
+        "charge_e": -2.0,
+        "patches": [
+          "3POM",
+          "5POM"
+        ],
+        "parameter_coverage": true,
+        "fixture": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/internal/fixture.json",
+          "sha256": "171204f2133413645a1343a9b33ed9061f3ebb3486f5b94ef3f651b9be4b44bc"
+        },
+        "system": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/internal/baseline_system.xml",
+          "sha256": "c9524353bec2f789606492e3fe2f878054b72c1ad9fcb6c2e6e16aa3fc209086"
+        },
+        "warnings": []
+      }
+    ],
+    "scope": "Topology-only one-sugar/N1-methyl endpoint references. 3POM/5POM methyl-phosphodiester proxies with DNA DEOX/DEOS P2 phosphorus typing; v1 generic-P fixtures and v2 missing-parameter failure preserved. Explicit missing methyl-cap-only P-to-P2 analog terms logged; provisional surrogate approximation. These are not whole DNA, not candidate exports, and not representative two-sugar validation. No coordinates, minimization, QM, fitted torsion, or minimum certificate.",
+    "next": "Generate isolated canonical coordinates using reference endpoint plus phosphate cap conformers; audit stereochemistry, valence, charge, contacts and parameter mapping before resource-budgeted pilot. Charged references require an explicitly registered electrostatic environment; do not compare absolute energies across different chemistry/charge.",
+    "minimum_certified": false,
+    "simulation_ready": false
+  },
+  "cap_analog_parameters": {
+    "aliases": [
+      {
+        "category": "angle_types",
+        "source": [
+          "CN9",
+          "ON2",
+          "P"
+        ],
+        "target": [
+          "CN9",
+          "ON2",
+          "P2"
+        ]
+      },
+      {
+        "category": "urey_bradley_types",
+        "source": [
+          "CN9",
+          "ON2",
+          "P"
+        ],
+        "target": [
+          "CN9",
+          "ON2",
+          "P2"
+        ]
+      }
+    ],
+    "scope": "Explicit generic-P methyl-cap analogs only where P2 entries absent. Surrogate cap approximation, not native DNA transfer certification. Existing P2 sugar parameters never overwritten."
+  },
+  "pilot": {
+    "at": "2026-10-17T01:54:42+00:00",
+    "worker": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/worker.py",
+      "sha256": "07fced85b6e65bc100be20a03f7ccdbbee5370cb9a9d421b0ba19acadc1a060a"
+    },
+    "sources": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/assessment.json",
+        "sha256": "f391d8dadaa0058d2cb007fd98e2e31a7f04561e8621d20371394e93ef2a1318"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/cap_parameter_aliases.json",
+        "sha256": "70fbf452199cd2a0b9e8b23867db326ebab3b77f4a3e033df2d068a43921b22e"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/double_oh_control/fixture.json",
+        "sha256": "6d42f7b4083fb7e68d7b5d1156c31643a84a023487df35bc1aa03636595c5778"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/double_oh_control/baseline_system.xml",
+        "sha256": "3b5b847cf28e50d6a1ab442227d2af08a558c5b3fb19ad9fee9d4cd5684000a2"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_original_qm/assessment.json",
+        "sha256": "d725515b3505016773e1ba38f0a0530b65ddcd0f6509ad446d13d6708d12c42d"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_original_qm/seed-0/geometry_angstrom.npy",
+        "sha256": "70418bd5e5d0e0f17509472f678a1559ef7e3586d1d393622e17d065e0302a40"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_original_qm/seed-0/seed.sdf",
+        "sha256": "c6c658e29f8511bdc3c2737e97277f1b8172f7d159356063658e35e9f36a80eb"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_alternate_qm/assessment.json",
+        "sha256": "201868a6c562cc030533c64e3a7920f4d6c101bd778878999fea0923de217a15"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_alternate_qm/seed-0/geometry_angstrom.npy",
+        "sha256": "e1edfcf933b8e6750d130ff804b559a1f7518c647e504b9bac3d2f735b54716c"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/double_oh_control_alternate_qm/seed-0/seed.sdf",
+        "sha256": "2504e366ffbb893e3fb8349101ba92f7f9871e63dd1431eb05431c05476a8e02"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/five_prime_terminal/fixture.json",
+        "sha256": "7708d0dbe82f4790340b818120abad7841a6c03ae86b85734a234a2a7587e053"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/five_prime_terminal/baseline_system.xml",
+        "sha256": "127df9811202b304b7ca2fe07cd01707d8f701dbbd0202541a8bbb432204cb91"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_original_qm/assessment.json",
+        "sha256": "473a233ba251c1a3f7cd7a5836c9f0e6fcf2ca52bdb57c86fae05a903ba2332e"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_original_qm/seed-20261018/geometry_angstrom.npy",
+        "sha256": "7fb4a8318b1d891ede1080f823deb0a3dc76c3ff26588e37b3f6aafe10791783"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_original_qm/seed-20261018/seed.sdf",
+        "sha256": "b4afd484cae7a8a021053c23ad7ce45874465d7ee074882aff389b3497c83e0a"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_alternate_qm/assessment.json",
+        "sha256": "d1d9be19a83947acce2af00581eabad0e252915e3ece90229ac4ad48482f77ba"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_alternate_qm/seed-20261017/geometry_angstrom.npy",
+        "sha256": "f8e6d04a127232f1d5746ae25786194af6dba07478cf2567792584d613b61822"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_alternate_qm/seed-20261017/seed.sdf",
+        "sha256": "5587de6e1b12efff67adcb0f54c46ed569d2e4614d9285a49d4c6a3703b75c2c"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/three_prime_terminal/fixture.json",
+        "sha256": "6e517aaae2a234d514f8b728faf6776054e387d123d8a8c5ecea1287c751bba9"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/three_prime_terminal/baseline_system.xml",
+        "sha256": "2ad7ead9b5a4fa52e4bcbb6bc5e4b5acf01578591917a1863986adad2de279e6"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_original_qm/assessment.json",
+        "sha256": "76a727c825fb3bf2f46f57c3d544faf9042cd7838ad9021418eae3d92b906b2f"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_original_qm/seed-20261016/geometry_angstrom.npy",
+        "sha256": "873cf38d0eeb86ea84500edb2e1039bcd71bcd2cd10a08273c0e3a2e77a43433"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_original_qm/seed-20261016/seed.sdf",
+        "sha256": "0555f35bdaaed855baf157e23877a497b46bba9d62e144441df2fb3377cc8645"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_alternate_qm/assessment.json",
+        "sha256": "7e2b53832e27a55b4a7c98c66948f5dd8258b582ae1ef087c9ce4d9a9d8115d1"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_alternate_qm/seed-20261017/geometry_angstrom.npy",
+        "sha256": "d3752c4bec57565aeb13eb829aad122eee8b83c89be3f510514d8993a2743b49"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/three_prime_terminal_alternate_qm/seed-20261017/seed.sdf",
+        "sha256": "57f4e951a11ddbc1b8fa855a8e7c75f6f034a97b3e8071f635bebc6439f2b8b2"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/internal/fixture.json",
+        "sha256": "171204f2133413645a1343a9b33ed9061f3ebb3486f5b94ef3f651b9be4b44bc"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-matrix-v4/internal/baseline_system.xml",
+        "sha256": "c9524353bec2f789606492e3fe2f878054b72c1ad9fcb6c2e6e16aa3fc209086"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_original_qm/assessment.json",
+        "sha256": "ff55fa8f8e0800cad6c942d4bc6669aaa2d4067c863b45979bc57653fdfe8278"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_original_qm/seed-20261016/geometry_angstrom.npy",
+        "sha256": "0a965739a26e28e294a6a2e2cc0bd2c4243020078e22a31f588cb9f0d7a306da"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_original_qm/seed-20261016/seed.sdf",
+        "sha256": "8109f541035fcffc1c4c8261e70426652ca2364c1cdd94acf8c339e9924dec0e"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_alternate_qm/assessment.json",
+        "sha256": "ded5595c4e7764a6d1351f065ef7c64f334ec44341760930e18f9db1fe942847"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_alternate_qm/seed-20261016/geometry_angstrom.npy",
+        "sha256": "1fe4e88f3d34dc78f99e1266849b62caaa1dae41aee7453585c6f471e5a24978"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v3/internal_alternate_qm/seed-20261016/seed.sdf",
+        "sha256": "b156923d72a57d6b6885e39826ea4a89dadc731e21c1a7fc9bfe1493980de540"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/coordinate_audit.json",
+        "sha256": "816c762b27b3551bae06ccf16bbb157c55bc28e549e0cd3ae3d08a85a9ca75e6"
+      }
+    ],
+    "points": [
+      {
+        "name": "original_qm",
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_original_qm/seed-20261018/geometry_angstrom.npy",
+          "sha256": "7fb4a8318b1d891ede1080f823deb0a3dc76c3ff26588e37b3f6aafe10791783"
+        },
+        "elements": [
+          "O",
+          "C",
+          "C",
+          "O",
+          "C",
+          "O",
+          "C",
+          "C",
+          "N",
+          "C",
+          "O",
+          "N",
+          "C",
+          "O",
+          "C",
+          "C",
+          "C",
+          "C",
+          "N",
+          "C",
+          "O",
+          "N",
+          "C",
+          "O",
+          "C",
+          "C",
+          "C",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "P",
+          "O",
+          "O",
+          "O",
+          "C",
+          "H",
+          "H",
+          "H"
+        ],
+        "charge": -1
+      },
+      {
+        "name": "alternate_qm",
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-chemistry-coordinates-v2/five_prime_terminal_alternate_qm/seed-20261017/geometry_angstrom.npy",
+          "sha256": "f8e6d04a127232f1d5746ae25786194af6dba07478cf2567792584d613b61822"
+        },
+        "elements": [
+          "O",
+          "C",
+          "C",
+          "O",
+          "C",
+          "O",
+          "C",
+          "C",
+          "N",
+          "C",
+          "O",
+          "N",
+          "C",
+          "O",
+          "C",
+          "C",
+          "C",
+          "C",
+          "N",
+          "C",
+          "O",
+          "N",
+          "C",
+          "O",
+          "C",
+          "C",
+          "C",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "H",
+          "P",
+          "O",
+          "O",
+          "O",
+          "C",
+          "H",
+          "H",
+          "H"
+        ],
+        "charge": -1
+      }
+    ],
+    "options": {
+      "basis": "def2-SVPD",
+      "scf_type": "df",
+      "reference": "rhf",
+      "e_convergence": 1e-09,
+      "d_convergence": 1e-09,
+      "maxiter": 150,
+      "pcm": true
+    },
+    "pcm_input": "Units = Angstrom\nMedium { SolverType = IEFPCM\nSolvent = Water }\nCavity { RadiiSet = UFF\nType = GePol\nScaling = False\nArea = 0.3\nMode = Implicit }\n",
+    "psi4_version": "1.11",
+    "hard_seconds": 2100,
+    "native_timeout_seconds": 900,
+    "scope": "Two fixed56atom/-1e singlet5prime-terminal references; DF-RHF/def2-SVPD with IEFPCM water, UFF cavity, scalingfalse,area0.3. Capability/runtime/SCF feasibility pilot only. HF replaces MP2 ONLY for this pilot, never a parameter target or a resolution of prior MP2 discrepancy. No PCM-MM comparison to vacuum MM; no cross-chemistry energy comparison; no salt or specific-ion representation.",
+    "next": "Audit native charge, method, diffuse basis, PCM water/cavity, convergence, geometry and cost. Then decide a matched solvent-aware correlated reference protocol; do not fit these pilot energies.",
+    "minimum_certified": false,
+    "simulation_ready": false
+  },
+  "timer": {
+    "at": "2026-10-17T01:56:14.950511+00:00",
+    "systemd": "NextElapseUSecMonotonic=2d 23h 47min 16.970139s\nActiveState=active\n",
+    "one_retry_minutes": 20,
+    "periodic_retry": false,
+    "imports_verified": true
+  },
+  "limitations": [
+    "No minimum certification; parent atoms fixed and new caps only relaxed.",
+    "Methyl cap angle and Urey-Bradley analogs explicitly transferred; no production parameters modified.",
+    "Original/alternate cap choices are independent seeds, not matched fit targets.",
+    "Def2-SVPD HF/PCM pilot checks numerical feasibility only, not prior MP2 discrepancy."
+  ],
+  "environment_reference": "https://psicode.org/psi4manual/master/pcmsolver.html"
+}

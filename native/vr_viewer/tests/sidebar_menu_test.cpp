@@ -18,7 +18,12 @@ int main() {
         require(shown==assembly,"Assembly tab must match the document context");
         require(menu.tab().key=="properties","Default Properties tab changed with Assembly visibility");
     }
-    // All selected/hover pairs must reveal full names without widening tabs or enlarging the panel.
+    for (const auto& tab : nadoc_vr::kSidebarTabs) {
+        require(tab.key != "photo" && tab.key != "plates", "Desktop-only tab exposed in VR");
+        for (const auto& row : tab.rows)
+            require(!row.id.starts_with("photo-") && !row.id.starts_with("plates-"), "Desktop-only control exposed in VR");
+    }
+    // Full-height rails retain full hover labels, fixed endpoints and matching ray geometry.
     for(int side=0;side<2;++side){
         nadoc_vr::SidebarMenu m(side,true);m.open=true;m.placement.openDocked({0,0,0},{1,0,0,0});
         for(size_t selected=0;selected<m.tabs.size();++selected)for(size_t hover=0;hover<m.tabs.size();++hover){
@@ -30,8 +35,9 @@ int main() {
                 for(size_t i=0;i<m.tabs.size();++i){
                     require(before[i].bounds.minimum.x==after[i].bounds.minimum.x && before[i].bounds.maximum.x==after[i].bounds.maximum.x,"Tab animation changes thickness or column position");
                     require(std::abs(after[i].bounds.maximum.x-after[i].bounds.minimum.x-.09F)<1e-6F,"Tab thickness changed");
-                    require(std::abs(after[i].bounds.maximum.y-(i?after[i-1].bounds.minimum.y-nadoc_vr::CompactTabs::gap:.647F))<1e-6F,"Tab expansion must flow downward with fixed gaps");
+                    require(std::abs(after[i].bounds.maximum.y-(i?after[i-1].bounds.minimum.y-nadoc_vr::CompactTabs::gap:.647F))<1e-6F,"Tab rail must retain fixed gaps");
                 }
+                require(std::abs(after[m.tabs.size()-1].bounds.minimum.y+.647F)<1e-6F,"Tab rail leaves unused space or escapes the menu");
                 m.draw([](auto,auto,auto){},[](auto,auto){});
                 require(m.audit.valid(),m.audit.summary().c_str());
             }
@@ -56,7 +62,12 @@ int main() {
     }
     const auto vrTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="vr";});
     require(vrTab!=nadoc_vr::kSidebarTabs.end(),"VR tab missing");
-    require(std::any_of(vrTab->rows.begin(),vrTab->rows.end(),[](const auto& row){return row.id=="qr-cube-calibrate" && row.action=="qr:cube";}),"Cube calibration must be available in VR tab");
+    for(const auto& tab:nadoc_vr::kSidebarTabs)for(const auto& row:tab.rows)
+        require(!row.action.starts_with("qr:"),"Retired AR tools exposed in menu");
+    const auto shareTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="share";});
+    require(shareTab!=nadoc_vr::kSidebarTabs.end(),"Share tab missing");
+    for(const auto* action:{"share:start","share:end"})
+        require(std::any_of(shareTab->rows.begin(),shareTab->rows.end(),[&](const auto& row){return row.action==action;}),"Presentation lifecycle action missing");
     nadoc_vr::SidebarMenu part(1);
     require(std::none_of(part.tabs.begin(),part.tabs.end(),[](auto i){return nadoc_vr::kSidebarTabs[i].key=="assembly";}),"Part session exposed Assembly navigation");
     nadoc_vr::MenuFocus focus;

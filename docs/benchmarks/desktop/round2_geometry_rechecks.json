@@ -1,0 +1,68 @@
+[
+  {
+    "file": "plate_layout_api",
+    "original": false,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_plate_layout_api_current.txt"
+  },
+  {
+    "file": "plate_layout_api",
+    "original": true,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_plate_layout_api_original.txt"
+  },
+  {
+    "file": "native_placement_endpoints",
+    "original": false,
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_native_placement_endpoints_current.txt"
+  },
+  {
+    "file": "native_placement_endpoints",
+    "original": true,
+    "exit_code": 1,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_native_placement_endpoints_original.txt"
+  },
+  {
+    "file": "relax_bond",
+    "original": false,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_relax_bond_current.txt"
+  },
+  {
+    "file": "relax_bond",
+    "original": true,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_relax_bond_original.txt"
+  },
+  {
+    "file": "part_comparison_routes",
+    "original": false,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_part_comparison_routes_current.txt"
+  },
+  {
+    "file": "part_comparison_routes",
+    "original": true,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_part_comparison_routes_original.txt"
+  },
+  {
+    "file": "part_evaluation_comparison",
+    "original": false,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_part_evaluation_comparison_current.txt"
+  },
+  {
+    "file": "part_evaluation_comparison",
+    "original": true,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_part_evaluation_comparison_original.txt"
+  },
+  {
+    "file": "alpine_download_queue",
+    "original": false,
+    "exit_code": 0,
+    "log": "docs/benchmarks/desktop/round2_geometry_recheck_alpine_download_queue_current.txt"
+  }
+]

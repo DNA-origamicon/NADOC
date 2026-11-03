@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-14T15:49:43.013880+00:00",
+  "passed": true,
+  "integrated_ps": 10,
+  "saved_frames": 105,
+  "restart_potential_error_kcal": 0.00019999999999953388,
+  "native_calls_this_recovery": 1,
+  "first_chunk_reused": true,
+  "failures_preserved": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-v1/assessment.json",
+      "sha256": "97382ea0a18eceb50f3142b7db2c9f779441f286d9819a007e0477b61a674442"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-v2/assessment.json",
+      "sha256": "4db96411c2ac9cf3b05ce3d750c536aca4b822decf0095cb4ef732c5f0c9e99e"
+    }
+  ],
+  "failure_causes": [
+    "DCD float32 values rejected by RDKit; promote to float64 before audit.",
+    "Restart ENERGY rows precede ETITLE; use existing native_log_v3 completed-log parser."
+  ],
+  "audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-audit-v3/assessment.json",
+    "sha256": "ed38a1ae3a744ff3ac741cdbea9acc4978c963eaedc49bd23aea038ece2ea76f"
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

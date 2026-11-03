@@ -44,7 +44,6 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.api import state as design_state
 from backend.core import runpod_api, runpod_preflight
 from backend.core.md_vram import (
-    estimate_atoms_from_design_geometry,
     estimate_profile_from_design,
 )
 from backend.core.runpod_api import RunpodClient, RunpodError
@@ -524,11 +523,8 @@ class EstimateRequest(BaseModel):
 
 @router.post("/runpod/estimate")
 def estimate(body: EstimateRequest):
-    """Which GPU would this system need, and what would it cost? Creates no pod.
-
-    Sizing comes from the VRAM model MEASURED on a rented 4090 across systems spanning
-    25x (225k → 5.66M atoms): offload ≈ 2.1 GB/Matom, resident ≈ 3.2 GB/Matom.
-    """
+    """Coarse capacity selection using the current admission allowance; no pod."""
+    from backend.core.namd_planning import memory_plan
     plan = plan_execution(body.n_atoms)
     gpu = plan["gpu"]
     return {
@@ -547,6 +543,7 @@ def estimate(body: EstimateRequest):
         ),
         "reason": plan["reason"],
         "feasible": gpu is not None,
+        "memory": memory_plan(body.n_atoms,resident=plan['gpu_resident']),
     }
 
 
@@ -608,6 +605,9 @@ async def preflight(body: PreflightRequest | None = None):
 
 
 class GpuOptionsRequest(BaseModel):
+    padding_nm: float = Field(6.0, gt=0)
+    box_mode: str = 'rotation'
+    box_size_nm: tuple[float | None,float | None,float | None] | None = None
     n_atoms: Optional[int] = Field(
         None, gt=0, description="System size; if omitted, sized from the active design"
     )
@@ -624,9 +624,13 @@ async def gpu_options(body: GpuOptionsRequest | None = None):
     if not n_atoms:
         try:
             design = design_state.get_or_404().without_reference_geometry()
-            profile = await run_in_threadpool(estimate_profile_from_design, design)
+            profile = await run_in_threadpool(
+                estimate_profile_from_design, design,
+                padding_nm=body.padding_nm if body else 6.0,
+                box_mode=body.box_mode if body else 'rotation',box_size_nm=body.box_size_nm if body else None,
+            )
             if profile:
-                n_atoms = (
+                n_atoms = profile.get('atom_upper_bound',
                     profile["dna_atoms"]
                     + profile["full_water"] * 3
                     + profile["ion_atoms"]
@@ -668,11 +672,12 @@ async def gpu_options(body: GpuOptionsRequest | None = None):
     }
 
 
-class JobPreviewStage(BaseModel):
+from backend.core.namd_planning import PlanningStage
+
+
+class JobPreviewStage(PlanningStage):
     """One planned NAMD stage, as the Job Wizard's plan table already describes it."""
 
-    steps: int = Field(0, ge=0)
-    dcd_freq: int = Field(1, ge=1)
 
 
 class JobPreviewRequest(BaseModel):
@@ -686,6 +691,12 @@ class JobPreviewRequest(BaseModel):
     n_atoms: Optional[int] = Field(
         None, gt=0, description="Sized from the active design if omitted"
     )
+    box_mode: str = 'rotation'
+    box_size_nm: tuple[float | None,float | None,float | None] | None = None
+    salt_mode: str = 'screening'
+    ion_conc_mM: float = Field(0,ge=0)
+    mg_conc_mM: float = Field(12.5,ge=0)
+    gpu_resident_mode: str = 'auto'
     relax_ns: float = Field(0.0, ge=0)
     production_ns: float = Field(0.0, ge=0)
     relax_timestep_fs: float = Field(4.0, gt=0)
@@ -693,6 +704,10 @@ class JobPreviewRequest(BaseModel):
     stages: Optional[list[JobPreviewStage]] = Field(
         None, description="For the disk forecast. Omitted → no output-size estimate."
     )
+    prepared: bool = False
+    parent_job_id: str | None = None
+    upload_mbps: float = Field(11, gt=0, allow_inf_nan=False)
+    download_mbps: float = Field(50, gt=0, allow_inf_nan=False)
     package_bytes: int = Field(0, ge=0)
     budget_usd: float = Field(DEFAULT_BUDGET_USD, gt=0)
     padding_nm: Optional[float] = Field(
@@ -722,24 +737,8 @@ async def job_preview(body: JobPreviewRequest | None = None):
     """
     body = body or JobPreviewRequest()
 
-    n_atoms, source = body.n_atoms, "provided"
-    if not n_atoms:
-        source = "estimated"
-        try:
-            design = design_state.get_or_404().without_reference_geometry()
-            kwargs = {"padding_nm": body.padding_nm} if body.padding_nm else {}
-            n_atoms = await run_in_threadpool(
-                partial(estimate_atoms_from_design_geometry, design, **kwargs)
-            )
-        except Exception:  # noqa: BLE001 — includes get_or_404's HTTPException, deliberately
-            # The wizard re-asks this on EVERY debounced plan refresh, including before a
-            # design is open. Letting `get_or_404` propagate would turn "you haven't loaded a
-            # design yet" into an error toast on a panel the user is still filling in, so an
-            # unsizable request is answered softly below — the same contract
-            # ``/runpod/gpu-options`` already has.
-            logger.warning(
-                "runpod job-preview: could not size the active design", exc_info=True
-            )
+    from backend.api.routes_md_runtime import resolve_size
+    n_atoms, box_nm, source = await resolve_size(body,estimator=estimate_profile_from_design)
     if not n_atoms:
         # Without a size there is no honest cost. Say so rather than invent one.
         return {
@@ -748,14 +747,15 @@ async def job_preview(body: JobPreviewRequest | None = None):
             "reason": "No design loaded, so the system size is unknown.",
         }
 
-    stock = None
-    if _SESSION.is_connected() and _SESSION.api_key:
-        try:
-            stock = await runpod_preflight.fetch_gpu_stock(_SESSION.api_key)
-        except Exception:  # noqa: BLE001 — a stock failure means indicative prices, not a 500
-            logger.warning("runpod job-preview: GPU stock lookup failed", exc_info=True)
+    from backend.api.routes_md_runtime import live_stock
+    stock = await live_stock()
 
     try:
+        from backend.core.md_integrator import resident_decision
+        from backend.core.md_protocols import _RESIDENT_MIN_ATOMS
+        default_resident=resident_decision(n_atoms=int(n_atoms),
+            force_resident={'on':True,'off':False}.get(body.gpu_resident_mode),
+            min_atoms=_RESIDENT_MIN_ATOMS).on
         gpus = plan_options(
             int(n_atoms),
             relax_ns=body.relax_ns,
@@ -766,12 +766,12 @@ async def job_preview(body: JobPreviewRequest | None = None):
             stock=stock,
             registry=load_rate_registry(),
             show_ineligible=True,
+            stages=body.stages,box_nm=box_nm,resident=default_resident,
         )
     except ValueError as exc:  # unknown build
         raise HTTPException(400, str(exc)) from exc
 
-    # Storage and staging are quoted against the card the user would get FIRST, since that is
-    # the one whose hourly rate the staging upload bills at.
+    # Upload is outside the pod lifetime when S3 staging is configured.
     top = gpus[0] if gpus else None
     volume = await _volume_info(_SESSION.network_volume_id)
     storage = storage_estimate(
@@ -780,6 +780,8 @@ async def job_preview(body: JobPreviewRequest | None = None):
         package_bytes=body.package_bytes,
         volume_size_gb=(volume or {}).get("size_gb"),
         usd_per_hour=(top or {}).get("usd_per_hour"),
+        upload_mbps=body.upload_mbps,
+        billable=not bool(runpod_s3.resolve_credentials() and (volume or {}).get("data_center_id")),
     )
 
     balance = {"available": False, "reason": "not connected"}
@@ -806,11 +808,9 @@ async def job_preview(body: JobPreviewRequest | None = None):
         s3_transfer_detail=s3_detail,
     )
 
-    estimated = (top or {}).get("total_cost")
-    # The staging upload bills before NAMD starts a step, so it belongs INSIDE the budget
-    # comparison — leaving it out is how a "just under budget" run goes over.
-    staging_usd = storage["staging"].get("usd") or 0.0
-    projected = (estimated + staging_usd) if estimated is not None else None
+    from backend.api.routes_md_runtime import attach_runpod_quotes
+    attach_runpod_quotes(gpus,body,n_atoms,box_nm,volume)
+    projected=(top or {}).get('completion',{}).get('high_cost')
 
     return {
         "sized": True,

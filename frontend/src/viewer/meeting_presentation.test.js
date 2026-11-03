@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { it, expect, vi, afterEach } from 'vitest'
 import { mountMeetingPresentation } from './meeting_presentation.js'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
@@ -5,7 +6,7 @@ const cameraDefaults = { target: [0, 0, 0], up: [0, 1, 0], fov: 55, near: .1, fa
 function setup(role = 'guest', options = {}) {
   document.body.innerHTML = '<header></header><main><canvas></canvas></main><button id="reset"></button><select id="mode"></select>'
   const events = new EventTarget(); events.close = vi.fn()
-  const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ ...cameraDefaults, position: [2, 3, 4] })), applyCamera: vi.fn() }
+  const frames = new Set(), viewer = { current: {}, performanceApi: { busy: false }, runtime: { scene: new THREE.Scene(), controls: { enabled: true }, addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn) }, captureCamera: vi.fn(() => ({ ...cameraDefaults, position: [2, 3, 4] })), applyCamera: vi.fn() }
   let tick
   viewer.mobile = options.mobile ?? false
   viewer.setViewLocked = vi.fn()
@@ -236,4 +237,48 @@ it('delivers same-scene selection pings without reloading or interrupting Follow
   v.state(3, undefined, { selectionPing: { ...selectionPing, revision: 'stale' } })
   expect(v.viewer.receiveSelectionPing).toHaveBeenCalledOnce()
   v.dispose()
+})
+
+it('holds an expired headset camera even when unrelated state messages continue', () => {
+  let time=100
+  vi.spyOn(performance,'now').mockImplementation(()=>time)
+  const v=setup()
+  const camera={position:[0,1.6,2],target:[0,1.6,1],source:'headset',unitsPerMeter:1,expiresAt:1500}
+  v.state(1,camera,{serverTime:0});document.querySelector('[data-follow]').click()
+  time=200;v.frame();expect(v.viewer.applyCamera).toHaveBeenCalledOnce()
+  time=1800;v.state(2,camera,{serverTime:1700});v.frame()
+  expect(v.viewer.applyCamera).toHaveBeenCalledOnce()
+  expect(document.querySelector('[data-connection]').textContent).toContain('Waiting')
+  v.state(3,{...camera,expiresAt:3200},{serverTime:1700});v.frame()
+  expect(v.viewer.applyCamera).toHaveBeenCalledTimes(2)
+  v.dispose()
+})
+
+it('a demo display automatically follows, ignores navigation, and resumes after reconnection', () => {
+ const v=setup('display')
+ v.state(1);v.frame()
+ expect(v.viewer.applyCamera).toHaveBeenCalledOnce()
+ expect(document.querySelector('[data-follow]').disabled).toBe(true)
+ expect(document.querySelector('[data-follow]').textContent).toContain('Automatic follow')
+ document.querySelector('canvas').dispatchEvent(new Event('pointerdown'));v.frame()
+ expect(v.viewer.applyCamera).toHaveBeenCalledTimes(2)
+ v.events.dispatchEvent(new Event('error'));v.frame()
+ expect(v.viewer.applyCamera).toHaveBeenCalledTimes(2)
+ v.events.dispatchEvent(new Event('open'));v.state(2);v.frame()
+ expect(v.viewer.applyCamera).toHaveBeenCalledTimes(3)
+ expect(document.querySelector('[data-broadcast], [data-draw]')).toBeNull()
+ v.dispose()
+})
+
+it('retains compact preview geometry across camera-only events and clears it on cancel or disconnect',()=>{
+ const v=setup('display'),matrix=new THREE.Matrix4().toArray()
+ const data={trackingToSource:matrix,model:matrix,radius:.024,selected:0,nodes:[[0,0,0]],frames:[[1,0,0,0,1,0]],path:[[0,0,0],[0,0,1]],outline:[],cells:[]}
+ v.state(1,undefined,{preview:{data,expiresAt:3000},serverTime:0});v.frame()
+ const root=v.viewer.runtime.scene.getObjectByName('vr-sweep-preview');expect(root.visible).toBe(true)
+ const geometry=root.children[0].geometry.getAttribute('position')
+ v.state(2,undefined,{preview:{expiresAt:4000},serverTime:1000});v.frame()
+ expect(root.visible).toBe(true);expect(root.children[0].geometry.getAttribute('position')).toBe(geometry)
+ v.state(3,undefined,{preview:null,serverTime:1001});v.frame();expect(root.visible).toBe(false)
+ v.state(4,undefined,{preview:{data,expiresAt:5000},serverTime:2000});v.frame();expect(root.visible).toBe(true)
+ v.events.dispatchEvent(new Event('error'));v.frame();expect(root.visible).toBe(false);v.dispose()
 })

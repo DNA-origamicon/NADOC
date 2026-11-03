@@ -116,3 +116,16 @@ it('retries a failed acknowledgement publication without repeating the edit', as
   expect(h.api.sendVRLigationEnds).toHaveBeenCalledTimes(2)
   expect(h.api.forcedLigation).toHaveBeenCalledOnce()
 })
+
+it('publishes the resolved clipboard preview without changing canonical selection', async () => {
+  const h = fixture()
+  h.state.selection = { items: [{kind:'base',key:'h:0:FORWARD'}] }
+  const preview = [{a:[0,0,0],b:[0,0,5]}]
+  h.api.validateVRClipboard = vi.fn(async () => ({accepted:true,preview}))
+  const ok = await h.tool.commit({action:'copy',version:h.tool.catalog().version,
+    owners:[encodeURIComponent('["base","h:0:FORWARD"]')]})
+  expect(ok).toBe(true)
+  expect(h.api.sendVRLigationEnds.mock.calls.at(-1)[0].clipboard_preview).toEqual(preview)
+  expect(h.state.selection.items).toEqual([{kind:'base',key:'h:0:FORWARD'}])
+  expect(h.api.refreshNativeVRScene).not.toHaveBeenCalled()
+})

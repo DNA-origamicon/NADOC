@@ -2,16 +2,11 @@
 //
 //  window._nadocDebug.help()           — print this usage guide
 //  window._nadocDebug.posTrace(on)     — log every backbone-bead position update
-//                                        with a stack trace (cadnano-active only)
+//                                        with a stack trace while tracing
 //  window._nadocDebug.snapPos(label)   — snapshot all bead [x,y,z] positions now
 //  window._nadocDebug.diffPos(a, b)    — compare two snapshots; print moved beads
 //  window._nadocDebug.storeTrace(keys) — log every store.setState() that touches
 //                                        the listed keys (or all keys if omitted)
-//  window._nadocDebug.subTrace(on)     — log every store subscriber notification
-//                                        when cadnano is active
-//  window._cnDebug = true              — cadnano_view verbose logging (existing)
-//  window._cnCheck()                   — snapshot cadnano state (existing)
-//  window._cnMonitor()                 — watch bead-0.x for drift (existing)
 //
 // Lifted verbatim from the main() closure (the closure-captured deps became
 // factory params). `window._nadocDebug` is a shared debug namespace: photo-mode
@@ -39,19 +34,18 @@ export function initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs
   function posTrace(on = true) {
     if (on === _posTraceOn) return
     _posTraceOn = on
-    const fns = ['applyUnfoldOffsets', 'applyDeformLerp', 'applyCadnanoPositions']
+    const fns = ['applyUnfoldOffsets', 'applyDeformLerp']
 
     if (on) {
       for (const name of fns) {
         const original = designRenderer[name].bind(designRenderer)
         _savedDrFns[name] = original
         designRenderer[name] = function(...args) {
-          if (store.getState().cadnanoActive)
-            console.trace(`[posTrace f${window._cnFrame ?? '?'}] designRenderer.${name}()`)
+            console.trace(`[posTrace f${window._viewerFrame ?? '?'}] designRenderer.${name}()`)
           return original(...args)
         }
       }
-      console.log('[nadocDebug.posTrace] ON — stack traces logged when cadnano active')
+      console.log('[nadocDebug.posTrace] ON — stack traces logged while tracing')
     } else {
       for (const name of fns) {
         if (_savedDrFns[name]) { designRenderer[name] = _savedDrFns[name]; delete _savedDrFns[name] }
@@ -67,7 +61,7 @@ export function initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs
       if (e.nuc.helix_id?.startsWith('__')) continue
       m.set(`${e.nuc.helix_id}:${e.nuc.bp_index}:${e.nuc.direction}`, [e.pos.x, e.pos.y, e.pos.z])
     }
-    console.log(`[nadocDebug.snapPos] "${label}" — ${m.size} beads, cadnanoActive=${store.getState().cadnanoActive}`)
+    console.log(`[nadocDebug.snapPos] "${label}" — ${m.size} beads`)
     return { label, map: m }
   }
 
@@ -100,25 +94,13 @@ export function initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs
       const changed = Object.keys(partial)
       const relevant = keys.length ? changed.filter(k => keys.includes(k)) : changed
       if (relevant.length > 0)
-        console.trace(`[storeTrace f${window._cnFrame ?? '?'}] setState: ${relevant.join(', ')}`)
+        console.trace(`[storeTrace f${window._viewerFrame ?? '?'}] setState: ${relevant.join(', ')}`)
       return orig(partial)
     }
     const stop = () => { store.setState = orig; _storeTraceUnsub = null; console.log('[nadocDebug.storeTrace] OFF') }
     _storeTraceUnsub = stop
     console.log(`[nadocDebug.storeTrace] ON — watching: ${keys.length ? keys.join(', ') : 'ALL keys'}`)
     return stop
-  }
-
-  /**
-   * Wrap every store subscriber to log which one is firing (by insertion index)
-   * and whether cadnano is active.  Heavy — only use when debugging subscriber order.
-   */
-  function subTrace(on = true) {
-    window._cnSubTrace = on
-    console.log(`[nadocDebug.subTrace] ${on ? 'ON' : 'OFF'} — set window._cnSubTrace=false to stop`)
-    // Actual interception is done by patching store.subscribe retroactively; since
-    // that's not feasible post-init, use this flag to gate logging inside the
-    // cadnano reapply subscriber (which is the most critical one).
   }
 
   /** Inventory ds-linker state: backend (currentDesign) vs frontend (renderer)
@@ -222,13 +204,12 @@ export function initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs
   function help() {
     console.log(`
 NADOC debug tools — window._nadocDebug
-  .posTrace(true/false)   Intercept designRenderer position setters; log stack traces when cadnano is active.
+  .posTrace(true/false)   Intercept designRenderer position setters; log stack traces while tracing.
                           Reveals exactly which fn last moved beads.  Use with .snapPos / .diffPos for before/after.
   .snapPos("label")       → {label, map}  Snapshot all backbone bead [x,y,z] positions.
   .diffPos(a, b)          Compare two snapshots; shows beads that moved > 0.05 nm.
   .storeTrace(["key"…])   Patch store.setState to log matching keys with stack traces.
                           Pass [] for all keys.  Returns unsubscribe fn.
-  .subTrace(true)         Set window._cnSubTrace=true to gate extra logging in key subscribers.
 
   .linkers()              Print backend vs renderer ds-linker inventory; flags mismatches like
                           "0 connections but bridge meshes still in scene". Returns the inventory.
@@ -240,23 +221,11 @@ NADOC debug tools — window._nadocDebug
                           seek, the bug is in the seek path; if they persist here, the bug is on
                           the backend.
 
-Also available (cadnano_view.js):
-  window._cnDebug = true  Verbose per-frame cadnano logging.
-  window._cnCheck()       Show cadnano state: active, midX, bead counts at midX vs off-midX.
-  window._cnMonitor()     Watch bead-0.x every frame for drift.
-  window._cnEntries()     Return all backbone entries for manual inspection.
-
-Typical debugging workflow for "reverts to 3D" bug:
-  1.  _nadocDebug.posTrace(true)              // start intercepting
-  2.  Delete a crossover in cadnano mode
-  3.  Check console — last logged stack trace before positions go wrong is the culprit
-  4.  OR: snap1=_nadocDebug.snapPos('before'); delete crossover; snap2=_nadocDebug.snapPos('after')
-         _nadocDebug.diffPos(snap1, snap2)    // see which beads moved and how far
 `)
   }
 
   return {
-    posTrace, snapPos, diffPos, storeTrace, subTrace, linkers, forceRebuild, refetch, help,
+    posTrace, snapPos, diffPos, storeTrace, linkers, forceRebuild, refetch, help,
     // Test-only handles — expose the running module instances so Playwright
     // can drive selection / inspect arc meshes without simulating mouse
     // events on the 3D canvas.

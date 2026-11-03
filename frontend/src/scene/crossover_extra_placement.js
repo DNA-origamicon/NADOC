@@ -220,7 +220,7 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
     // local conformation. Both precede the same saved unit pose.
     const product = productGeometry.get(simK)
     if (product) {
-      sourceCenter.set(...product.backbone_position)
+      if (!product.backbone_fixed) sourceCenter.set(...product.backbone_position)
       sourceBaseCenter.set(...product.base_position)
       frameQuaternion.set(...product.frame_rotation)
     }

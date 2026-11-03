@@ -29,11 +29,11 @@ describe('runDirLabel', () => {
 })
 
 describe('shared preference (getRunDir/setRunDir)', () => {
-  it('persists to one engine-neutral key and reads back fresh', () => {
+  it('persists an engine-specific key and reads back fresh', () => {
     expect(getRunDir()).toBe(null)
     setRunDir('/media/jojo/Archive')
     expect(getRunDir()).toBe('/media/jojo/Archive')
-    expect(localStorage.getItem('nadoc.runDir')).toBe('/media/jojo/Archive')
+    expect(localStorage.getItem('nadoc.runDir.namd')).toBe('/media/jojo/Archive')
     setRunDir(null)
     expect(getRunDir()).toBe(null)
   })
@@ -90,7 +90,7 @@ describe('mountDirectoryButton', () => {
 
     expect(btn.textContent).toMatch(/checking/)
     await vi.waitFor(() => expect(btn.dataset.runDirState).toBe('ok'))
-    expect(api.getMdRunDirStatus).toHaveBeenCalledWith(null)
+    expect(api.getMdRunDirStatus).toHaveBeenCalledWith(null, 'namd')
     expect(btn.textContent).toContain('md_jobs')
     expect(btn.textContent).not.toContain('⚠')
   })
@@ -104,8 +104,38 @@ describe('mountDirectoryButton', () => {
     const btn = mountDirectoryButton(container, { api })
 
     await vi.waitFor(() => expect(btn.dataset.runDirState).toBe('error'))
-    expect(api.getMdRunDirStatus).toHaveBeenCalledWith('/media/other-machine/nadoc_jobs')
+    expect(api.getMdRunDirStatus).toHaveBeenCalledWith('/media/other-machine/nadoc_jobs', 'namd')
     expect(btn.textContent).toContain('⚠')
     expect(btn.title).toMatch(/does not exist/)
   })
+})
+
+it('keeps legacy choices initially, then changes and resets each engine independently', () => {
+  localStorage.setItem('nadoc.runDir', '/legacy')
+  expect(getRunDir('oxdna')).toBe('/legacy')
+  expect(getRunDir('namd')).toBe('/legacy')
+  setRunDir('/oxdna', 'oxdna')
+  expect(getRunDir('namd')).toBe('/legacy')
+  setRunDir('/namd', 'namd')
+  expect(getRunDir('oxdna')).toBe('/oxdna')
+  setRunDir(null, 'oxdna')
+  expect(getRunDir('oxdna')).toBeNull()
+  expect(getRunDir('namd')).toBe('/namd')
+})
+it('updates on engine switches and preserves the engine of an open picker', async () => {
+  setRunDir('/dna', 'oxdna'); setRunDir('/atoms', 'namd')
+  let finish
+  pickSystemFolder.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const btn = mountDirectoryButton(document.createElement('div'), { engine: 'oxdna' })
+  expect(btn.textContent).toContain('dna')
+  const pending = btn.onClick()
+  btn.setEngine('namd')
+  expect(btn.textContent).toContain('atoms')
+  finish('/new-dna'); await pending
+  expect(getRunDir('oxdna')).toBe('/new-dna')
+  expect(getRunDir('namd')).toBe('/atoms')
+  expect(btn.textContent).toContain('atoms')
+  btn.dispatchEvent(new MouseEvent('contextmenu'))
+  expect(getRunDir('namd')).toBeNull()
+  expect(getRunDir('oxdna')).toBe('/new-dna')
 })

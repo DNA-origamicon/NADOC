@@ -60,6 +60,11 @@ def apply_transfer_state(job, workspace: Path) -> None:
         if record.get('id') and current.get('worker_transfer_id') == record['id']:
             job.download_status = None
         return
+    # A newly admitted retry supersedes the old interrupted transfer until its
+    # worker publishes fresh state. Never hide live worker progress.
+    if (current.get('state') == 'queued' and status.get('state') == 'interrupted'
+            and current.get('enqueued_at', 0) > state_path(job, workspace).stat().st_mtime):
+        return
     # Once this transfer has been adopted, backend indexing owns processing state.
     if (current.get('worker_transfer_id') == record.get('id')
             and current.get('state') in {'processing', 'verified'}):
@@ -73,19 +78,22 @@ async def recover_downloads(workspace: Path, conn, *, reconnect: bool = False) -
     """Reattach unfinished transfers, including stopped and preserved jobs."""
     from backend.core.md_job import MdJob
     from backend.core.md_executor import fetch_outputs
-    import logging
+    from backend.core.alpine_download_queue import schedule, recovery_order
+    from backend.core.md_executor import is_remote_active
 
-    for job in MdJob.list_jobs(workspace):
+    jobs = sorted(MdJob.list_jobs(workspace), key=recovery_order)
+    for job in jobs:
         if job.execution_target != 'alpine':
             continue
         state = (job.download_status or {}).get('state')
-        if state != 'downloading' and not (reconnect and state == 'interrupted'):
+        if state not in {'queued', 'downloading'} and not (reconnect and state == 'interrupted'):
             continue
         # Legacy scheduler downloads retain their existing reconciliation path.
         record = read_state(job, workspace)
-        if not record or not matches_submission(record, job, workspace):
+        if state != 'queued' and (not record or not matches_submission(record, job, workspace)):
             continue
-        try:
-            await fetch_outputs(job, workspace, conn=conn)
-        except Exception:
-            logging.getLogger(__name__).exception('[%s] transfer recovery failed', job.job_id)
+        # Active scheduler jobs need outcome/checkpoint finalization too; the normal
+        # reconciliation pass owns them. Stopped/preserved snapshots only fetch.
+        if job.slurm_job_id and is_remote_active(job.status):
+            continue
+        schedule(job, workspace, lambda job=job: fetch_outputs(job, workspace, conn=conn))

@@ -1,0 +1,89 @@
+{
+  "grid_shift_kcal_mol": -0.02107091237200305,
+  "grid_screen_passed": true,
+  "baseline": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/assessment.json",
+    "sha256": "a4b9e044826c6a43294af4309dacfe484f068d57c9a823898951e2986232f267"
+  },
+  "at": "2026-10-17T07:56:11+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_pyscf_alternate350_v1.py",
+    "sha256": "1edde395a7faf2f1704ce35bd551f133e70ed7e530f66a82cc1212aa24ba8003"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/assessment.json",
+    "sha256": "8f4d10c8b4d836b8e96a247045822c669abf6144f12ae9a66cb0348e2bdeb47d"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/output.dat",
+    "sha256": "9bf76c48905d13d9c647fecb90349588e2b7210a259a64274f5558ad679cfae7"
+  },
+  "checkpoint": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/scf.chk",
+    "sha256": "2e3c7e2d66f3572a6be0fad854a0b1db1351c241cdd03b299b3e59dabf055f2b"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/density.npy",
+    "sha256": "8ca32fe61ef2c37afb959a5eb26939ab58900929b3c4be8ab69794fd146620b3"
+  },
+  "energy_hartree": -1963.973612577216,
+  "gap_hartree": 0.4819843807388082,
+  "wall_seconds": 2422.5580786640057,
+  "decision": "Alternate surface302-to350 shift passes0.5kcal/mol engineering screen. Next original350 from audited original302 density to complete paired relative sensitivity0.2kcal/mol. No full grid-limit, physical validation, fit or minimum certificate.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "launch": {
+    "at": "2026-10-17T07:56:26.915102+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1/plan.json",
+      "sha256": "e59acc08e91da0d56c63e60e3ffe0d7e67866fe3fdfd4f955e6bb08c5bc28f37"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-pyscf-pcm-original350-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=3885",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1-service"
+    ],
+    "watcher": {
+      "token": "363283e9-cef2-4479-89cb-65908b4c1c58",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792223786.9122305,
+      "expected_seconds": 900,
+      "supervisor_pid": 1959972,
+      "supervisor_identity": "27888222",
+      "state": "armed",
+      "watcher_pid": 1959974,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-pyscf-pcm-original350-v1-review",
+      "active_deadline_epoch": 1792227386.8522296
+    },
+    "limits": "RuntimeMaxUSec=1h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792227686.8522296,
+    "review_epoch": 1792227386.8522296,
+    "cloud_spending_usd": 0
+  }
+}

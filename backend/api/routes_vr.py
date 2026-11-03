@@ -93,6 +93,7 @@ SelectionKind = Literal[
     "overhang",
     "extension",
     "protein",
+    "nanoparticle",
 ]
 
 
@@ -1488,6 +1489,8 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
+    from backend.core.vr_rigid_geometry import append_rigid_elements
+
     lines = _SceneLineEmitter(line_writer, representations)
     from backend.core.extrude_plane import extrude_plane_record
     from backend.core.vr_lattice_context import lattice_context_records
@@ -1526,6 +1529,7 @@ def _serialize_scene(
     declared_owner_tokens.clear()
     lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
     append_tool_handles()
+    append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
     assigned = [
         (index, nucleotide)
         for index, nucleotide in enumerate(nucleotides)
@@ -1650,11 +1654,18 @@ def _serialize_scene(
 
     # Desktop and VR consume the same authoritative pose. No local solver,
     # re-pairing, inferred frame, or fallback placement exists at this boundary.
+    cpd_slabs = {}
+    cpd_keys = {key for lesion in getattr(design, "photoproduct_junctions", ()) for key in lesion.design_coordinates}
     for (index, nucleotide), pose in zip(assigned, authoritative_slab_poses([n for _, n in assigned])):
         if pose is None:
             continue
         center, frame = pose
         tangential, tangent, normal = (frame[:, column] for column in range(3))
+        if cpd_keys and base_key(nucleotide) in cpd_keys:
+            scopes = nucleotide_owner_tokens(nucleotide)
+            cpd_slabs[base_key(nucleotide)] = (
+                rotation @ center, rotation @ frame @ np.diag([.30, .06, .70]),
+                scopes, tuple((token, 1., 1.) for token in scopes if token in cluster_transform_tokens))
         raw_bead = np.asarray(nucleotide["backbone_position"], dtype=float)
         z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
         corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
@@ -1857,6 +1868,8 @@ def _serialize_scene(
                 sim_reversed=first_key not in domain_end_keys,
                 local_frame_reversed=first_key[2] == "REVERSE",
             )
+            from backend.core.vr_cpd import cpd_extra_projections
+            projections = cpd_extra_projections(design, connection_id, projections)
             bead_palette = palette_variant(palette, first_nucleotide, "#0070bb")
             slab_palette = palette_variant(palette, first_nucleotide, "#0277bd")
             backbone_points = [first]
@@ -1897,6 +1910,10 @@ def _serialize_scene(
                         connection_id,
                     ),
                 )
+                if extra_key in cpd_keys:
+                    cpd_slabs[extra_key] = (
+                        slab_center, np.column_stack((slab_axis_x, slab_axis_y, slab_axis_z)),
+                        extra_aliases, projection_transform_owners)
                 emit(
                     "P",
                     extra_base_identity(extra_key, "bead"),
@@ -2023,6 +2040,8 @@ def _serialize_scene(
 
     append_linker_geometry(include_full_bases=True)
     append_flexible_geometry()
+    from backend.core.vr_cpd import append_cpd_bars
+    append_cpd_bars(design, cpd_slabs, emit, owner_tokens, solid_palette)
 
     axis_helices = {h.id: h for h in getattr(design, 'helices', ())}
 
@@ -2087,6 +2106,7 @@ def _serialize_scene(
         declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         append_tool_handles()
+        append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         direct_overhang_ids: set[str] = set()
         for binding in getattr(design, "overhang_bindings", []):
             if getattr(binding, "bound", True) is False or getattr(
@@ -2463,6 +2483,7 @@ def _serialize_scene(
         declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         append_tool_handles()
+        append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         # Atom handles are needed even in stick-only mode: the live visualization
         # feed addresses each bond endpoint by its real trajectory atom position.
         append_tool_handles(atom_tool_handles)
@@ -2589,6 +2610,7 @@ def _serialize_scene(
             declared_owner_tokens.clear()
             lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
             append_tool_handles()
+            append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         append_records(extra_geometry, nucleotides, rotation, begin_extra, emit, lines,
                        nucleotide_owner_tokens, base_key, palette_for_index, progress=work_progress)
 
@@ -3544,7 +3566,7 @@ def _event_payload(state: dict | None) -> dict:
             **({"prompt": value} if (value := parse_prompt_event(event.get("prompt"))) else {}),
             **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),
-            **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"))) else {}),
+            **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"), basis)) else {}),
             **({"end_resize": resize} if (resize := _parse_end_resize(event.get("end_resize"))) else {}),
             "hover_identity": hover_identity,
             "select_sequence": select_sequence,

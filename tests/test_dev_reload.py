@@ -60,6 +60,14 @@ def test_a_production_server_is_not_a_reload(monkeypatch):
     assert dev_reload.under_reloader(100) is False
 
 
+def test_dedicated_bootstrap_factory_still_preserves_reload_handoff(monkeypatch):
+    _patch(monkeypatch, {
+        100: ('python -c from multiprocessing.spawn import spawn_main; ...', 50),
+        50: ('uvicorn server_bootstrap:create_app --factory --reload --reload-dir backend', 1),
+    })
+    assert dev_reload.under_reloader(100) is True
+
+
 def test_unreadable_proc_falls_back_to_terminating(monkeypatch):
     """Fail toward the expensive-but-safe answer: a leaked pod bills forever, a killed dev
     run costs minutes and resumes from the volume."""

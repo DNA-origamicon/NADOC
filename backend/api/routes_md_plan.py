@@ -1378,6 +1378,29 @@ async def protocol_plan(body: ProtocolPlanRequest, include_box_preview: bool = T
         # coarse-grained-seed safety ladder and greys out the overridden controls.
         resolved = resolved.model_copy(update={"declash": True, "force_soft": True})
 
+    cpd_fields = {}
+    if kind == "relaxation":
+        from backend.core.cpd_forcefield import CpdCapabilityError, design_has_photoproducts
+        from backend.api.routes_md import _apply_photoproduct_integrator_policy
+        try:
+            current_design = design_state.get_or_404()
+        except HTTPException:
+            current_design = None
+        if current_design is not None and design_has_photoproducts(current_design):
+            # Preview the supported integrator even when a previous wizard state
+            # still carries the ordinary 4 fs defaults. Creation rejects unsafe API
+            # requests; these controls are visibly forced and omitted on submission.
+            preview = resolved.model_copy()
+            preview.__pydantic_fields_set__ = set()
+            try:
+                resolved = _apply_photoproduct_integrator_policy(current_design, preview)
+            except CpdCapabilityError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            cpd_fields = {key: {"value": getattr(resolved, key), "provenance": "forced",
+                "reason": "Formed CPDs require ordinary masses and a timestep of at most 2 fs."}
+                for key in ("fast", "relax_timestep_fs", "relax_hmr",
+                            "production_timestep_fs", "production_hmr")}
+
     plan = (
         _production_plan(body, resolved)
         if kind == "production"
@@ -1414,7 +1437,7 @@ async def protocol_plan(body: ProtocolPlanRequest, include_box_preview: bool = T
             "unavailable_reason": why,
         },
         "protocol": resolved.protocol,
-        "request": _provenance(body, resolved),
+        "request": {**_provenance(body, resolved), **cpd_fields},
         "param_groups": [g for g, _ in md_plan.PARAM_GROUPS],
         "totals": {
             "n_stages": len(stages),

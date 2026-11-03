@@ -33,12 +33,12 @@ describe('transformed end resize path', () => {
     close(axis.point(25), [-1.5, -.5, 15 * RISE])
   })
 
-  it('keeps zero-delta previews at the bead and cadnano resizing on its flat track', () => {
+  it('keeps zero-delta previews at the bead on a bent axis', () => {
     const bead = new THREE.Vector3(4, 5, 26 * RISE)
-    const axis = createEndResizeAxis(helix, bent, 26, bead, true)
+    const axis = createEndResizeAxis(helix, bent, 26, bead)
     close(axis.point(26), bead.toArray())
-    close(axis.point(30), [4, 5, 30 * RISE])
-    close(axis.tangent(26), [0, 0, 1])
+    close(axis.point(30), [4 + 4 * RISE, 5, 26 * RISE])
+    close(axis.tangent(26), [1, 0, 0])
   })
 
   it('uses the straight two-sample mapping for a transformed rigid helix', () => {

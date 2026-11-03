@@ -356,6 +356,29 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   // ── Tree container ──────────────────────────────────────────────────────────
 
+  let _diskRefreshing = false
+  let _jobsRefreshing = false
+  let _refreshNoticeStarted = false
+  let _refreshNoticeFinished = false
+  const refreshStatus = document.createElement('div')
+  refreshStatus.className = 'lib-simulation-refresh-status'
+  refreshStatus.setAttribute('role', 'status')
+  refreshStatus.style.cssText = 'display:none;align-items:center;gap:7px;padding:6px 0;color:var(--text-muted,#8b949e);font-size:var(--text-sm)'
+  const refreshSpinner = document.createElement('span')
+  refreshSpinner.className = 'nadoc-spinner'
+  refreshSpinner.setAttribute('aria-hidden', 'true')
+  refreshStatus.append(refreshSpinner, document.createTextNode('Refreshing simulation jobs…'))
+  mount.appendChild(refreshStatus)
+  function _updateRefreshStatus() {
+    const busy = _diskRefreshing || _jobsRefreshing
+    if (busy) _refreshNoticeStarted = true
+    else if (_refreshNoticeStarted) _refreshNoticeFinished = true
+    // Once the initial load settles, polling and later visits stay silent.
+    const visible = busy && !_refreshNoticeFinished
+    refreshStatus.style.display = visible ? 'flex' : 'none'
+    refreshStatus.setAttribute('aria-busy', String(visible))
+  }
+
   const treeEl = document.createElement('div')
   treeEl.className = 'lib-tree'
   treeEl.setAttribute('role', 'tree')
@@ -374,10 +397,18 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   let _diskUsageTimer = null
   async function _refreshDiskUsage(generation, attempt = 0) {
-    if (typeof api.libraryDiskUsage !== 'function') return
+    if (typeof api.libraryDiskUsage !== 'function') {
+      _diskRefreshing = false
+      _updateRefreshStatus()
+      return
+    }
     const usage = await api.libraryDiskUsage().catch(() => null)
-    if (generation !== _refreshGeneration || !usage) return
-    if (usage && Object.values(usage).some(value => value === null) && attempt < 6) {
+    if (generation !== _refreshGeneration) return
+    const retry = usage && Object.values(usage).some(value => value === null) && attempt < 6
+    _diskRefreshing = !!retry
+    _updateRefreshStatus()
+    if (!usage) return
+    if (retry) {
       _diskUsageTimer = setTimeout(() => {
         if (generation === _refreshGeneration && !_activePeerId) void _refreshDiskUsage(generation, attempt + 1)
       }, Math.min(30000, 2000 * 2 ** attempt))
@@ -392,6 +423,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     _initialRefreshPending = false
     clearTimeout(_diskUsageTimer)
     const generation = ++_refreshGeneration
+    _diskRefreshing = !_activePeerId
+    _updateRefreshStatus()
     if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
     try {
       const files = _activePeerId
@@ -400,6 +433,9 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       if (generation !== _refreshGeneration) return
       _allEntries = Array.isArray(files) ? files : []
     } catch {
+      if (generation !== _refreshGeneration) return
+      _diskRefreshing = false
+      _updateRefreshStatus()
       if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-empty">Could not reach server.</div>'
       return
     }
@@ -826,9 +862,16 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   async function _refreshJobStatuses() {
     // Skip work while the welcome screen is hidden (editor open).
-    if (mount.offsetParent === null) return
-    _activeJobs = await fetchActiveJobs()
-    for (const [path, el] of _statusEls) _applyJobStatus(el, path)
+    if (mount.offsetParent === null || _jobsRefreshing) return
+    _jobsRefreshing = true
+    _updateRefreshStatus()
+    try {
+      _activeJobs = await fetchActiveJobs()
+      for (const [path, el] of _statusEls) _applyJobStatus(el, path)
+    } finally {
+      _jobsRefreshing = false
+      _updateRefreshStatus()
+    }
   }
 
   function _startJobPolling() {

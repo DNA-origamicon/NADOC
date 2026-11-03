@@ -61,7 +61,7 @@ export function createVRAvatar({ scene, now = () => performance.now() }) {
   }
   const ui=createVRUI(root)
   scene?.add(root)
-  let latest=null, expires=0, last=now()
+  let firstPerson=false, latest=null, expires=0, last=now()
   function receive(value) {
     try {
       latest = validateVRAvatar(value?.avatar?.pose ?? null)
@@ -91,6 +91,9 @@ export function createVRAvatar({ scene, now = () => performance.now() }) {
       bones[2+i*2].visible=bones[3+i*2].visible=!!arm.elbow
       if(arm.elbow){segment(bones[2+i*2],arm.shoulder,arm.elbow);segment(bones[3+i*2],arm.elbow,arm.wrist)}
     })
+    headset.visible = !firstPerson
+    if(firstPerson)for(const bone of bones)bone.visible=false
+    else { bones[0].visible=true; bones[1].visible=true }
   }
-  return { root, receive, frame, clear(){latest=null;root.visible=false}, dispose(){ui.dispose();root.removeFromParent();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose())} }
+  return { root, setFirstPerson(value){firstPerson=value}, receive, frame, clear(){latest=null;root.visible=false}, dispose(){ui.dispose();root.removeFromParent();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose())} }
 }

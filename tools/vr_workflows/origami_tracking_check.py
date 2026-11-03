@@ -14,6 +14,11 @@ def main():
               "for a timing review of image reuse, menu hover, texture work and haptic dispatch.\n"
               "NADOC_VR_GPU_PASS_TIMING=1 measures shadow and eye GPU timeline intervals.\n"
               "Use summarize-gpu-passes on the saved viewer log to inspect cost and missing measurements.\n"
+              "For a preserved Ball+Stick view, keep indexing enabled and compare\n"
+              "NADOC_VR_GROUPED_INDEXED_MESHES=0 and =1 in separate launches. Check indexed_meshes\n"
+              "group counters, GPU intervals and final-image reuse; plain indexing also has an opt-out.\n"
+              "Confirm molecular held-frame drift/new-frame return with compare-temporal; GPU cost alone\n"
+              "does not establish that a visible motion problem is resolved. See the documented workflow.\n"
               "Final distorted pixel positions still require separate lens calibration.\n"
               "This entry never restarts a runtime or changes the scene.")
         return

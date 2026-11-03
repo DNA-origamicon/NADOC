@@ -4,6 +4,17 @@ from pathlib import Path
 import numpy as np
 from tools.vr_motion.metrics import rotate
 
+def remote_drag_delta(start, end, ray_distance):
+ """Expected translation of the grabbed point at a fixed controller-ray depth."""
+ offset=[0,0,-ray_distance]
+ return (np.asarray(end['position'])+rotate(end['orientation_xyzw'],offset)
+         -np.asarray(start['position'])-rotate(start['orientation_xyzw'],offset))
+
+def remote_pointing_distance(aim, toward, visible_points):
+ """Keep the observing hand beyond the visible molecule's front extent."""
+ front=max((float(np.dot(np.asarray(p)-aim,toward)) for p in visible_points),default=0.)
+ return max(.45,front+.20)
+
 def centers(directory,eye_name,token):
  directory=Path(directory);e=json.loads((directory/'evidence.json').read_text())
  eye=next(v for v in e['eyes'] if v['eye']==eye_name)

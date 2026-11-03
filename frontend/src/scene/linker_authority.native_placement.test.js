@@ -45,6 +45,35 @@ describe('[native-placement] DS linker connector authority', () => {
     } finally { arcs.dispose() }
   })
 
+  it('admits only arrived native sides across partial, full and cleared rebuilds', () => {
+    const scene = new THREE.Scene(), arcs = initOverhangLinkArcs(scene)
+    const a = { helix_id: '__lnk__c', bp_index: 0, direction: 'FORWARD', strand_id: '__lnk__c__a', backbone_position: [1, 2, 3] }
+    const b = { helix_id: '__lnk__c', bp_index: 1, direction: 'REVERSE', strand_id: '__lnk__c__b', backbone_position: [3, 2, 3] }
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
+    camera.position.set(0, 0, 20); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true)
+    const canvas = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) }
+    const geometry = [...anchors(), a, b], before = JSON.stringify(geometry)
+    try {
+      arcs.rebuild(design, anchors()); scene.updateMatrixWorld(true)
+      expect(arcs.hitTest(50, 50, camera, canvas)).toBeNull()
+      arcs.rebuild(design, [...anchors(), a])
+      expect(arcs.group.getObjectByName('overhangDsConnectorArcA')).toBeDefined()
+      expect(arcs.group.getObjectByName('overhangDsConnectorArcB')).toBeUndefined()
+      arcs.rebuild(design, geometry)
+      for (const [name, start, end] of [['A', [0, 0, 0], a.backbone_position], ['B', [4, 0, 0], b.backbone_position]]) {
+        const mesh = arcs.group.getObjectByName(`overhangDsConnectorArc${name}`)
+        expect(mesh.geometry.parameters.path.getPoint(0).toArray()).toEqual(start)
+        expect(mesh.geometry.parameters.path.getPoint(1).toArray()).toEqual(end)
+        expect(mesh.scale.toArray()).toEqual([1, 1, 1])
+      }
+      expect(JSON.stringify(geometry)).toBe(before)
+      arcs.rebuild(design, anchors()); scene.updateMatrixWorld(true)
+      expect(arcs.group.getObjectByName('overhangDsConnectorArcA')).toBeUndefined()
+      expect(arcs.group.getObjectByName('overhangDsConnectorArcB')).toBeUndefined()
+      expect(arcs.hitTest(50, 50, camera, canvas)).toBeNull()
+    } finally { arcs.dispose() }
+  })
+
   it('rejects missing native DS backbone sites in assembly connectors too', () => {
     const strand = { id: '__lnk__c__a', domains: [{ helix_id: 'h_a', start_bp: 0, end_bp: 0 },
       { helix_id: '__lnk__c', start_bp: 0, end_bp: 1 }] }

@@ -36,3 +36,20 @@ describe('VR feature log uses desktop contracts', () => {
     await adapter.activate('r:0');expect(seekConfig).toHaveBeenCalledWith(0)
   })
 })
+
+it('marks native Edit dispatch while ordinary desktop clicks remain ordinary', async () => {
+  document.body.innerHTML = '<select></select><div id="list"><div data-fl-row="1">Sweep<button title="Edit sweep path">Edit</button></div></div>'
+  const button = document.querySelector('button'), clicks = []
+  button.addEventListener('click', e => clicks.push(e.detail))
+  const adapter = createFeatureLogVR({ list: document.getElementById('list'), target: document.querySelector('select'), prepare: () => {}, context: () => ({ cursor: -1 }) })
+  await adapter.activate('a:0:edit')
+  button.click()
+  expect(clicks).toEqual([{ nativeVR: true }, 0])
+})
+
+it('propagates asynchronous native editor failures to the VR history coordinator', async () => {
+  document.body.innerHTML = '<select></select><div id="list"><div data-fl-row="1">Sweep<button title="Edit sweep path">Edit</button></div></div>'
+  document.querySelector('button').addEventListener('click', e => { e.detail.completion = Promise.reject(new Error('Sweep snapshot is unavailable')) })
+  const adapter = createFeatureLogVR({ list: document.getElementById('list'), target: document.querySelector('select'), prepare: () => {}, context: () => ({ cursor: -1 }) })
+  await expect(adapter.activate('a:0:edit')).rejects.toThrow('Sweep snapshot is unavailable')
+})

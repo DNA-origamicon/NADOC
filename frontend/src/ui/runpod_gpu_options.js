@@ -66,16 +66,18 @@ const JOB_OPTION_COLUMNS = 'minmax(170px,1.6fr) 64px 72px 78px 72px'
  * raising the cap is a legitimate response to seeing the number.
  */
 export function jobOptionView(row, { budgetUsd = null } = {}) {
-  const total = row.total_cost
+  const total = row.completion?.cost ?? row.total_cost
+  const planning = row.completion?.high_cost ?? row.planning_cost ?? total
   return {
     ...gpuOptionView(row),
     relaxCost: formatCost(row.relax_cost),
     production: formatRelaxTime(row.production_hours),
     productionCost: formatCost(row.production_cost),
-    total: formatRelaxTime(row.total_hours),
+    total: formatRelaxTime(row.completion?.known_hours ?? row.total_hours),
     totalCost: formatCost(total),
     nsdayRelax: row.ns_day_relax != null ? `${row.ns_day_relax} ns/day relaxing` : '',
-    overBudget: budgetUsd != null && total != null && total > budgetUsd,
+    planningCost: formatCost(planning),
+    overBudget: budgetUsd != null && planning != null && planning > budgetUsd,
     eligible: row.eligible !== false,
     insufficientReason: row.insufficient_reason || '',
   }
@@ -110,7 +112,7 @@ export function renderJobOptionRows(gpus, selectedKey = null, { budgetUsd = null
       const title = !eligible
         ? `Insufficient for this job: ${v.insufficientReason}`
         : v.overBudget
-        ? `Estimated ${v.totalCost} — over your cap. Raise the cap or shorten the run.`
+        ? `Planning allowance ${v.planningCost} exceeds your cap. Raise the cap or shorten the run.`
         : 'est. total cost for this whole plan'
       return (
         `<div class="runpod-gpu-row" data-key="${_esc(row.key)}" ` +

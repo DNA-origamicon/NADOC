@@ -1,0 +1,22 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-control-v1-service/completion_wake_ack.json",
+    "sha256": "d8fec903d85e460925341405b14ec3e12ce97f0ba4edb3a1b759aa2f6b104c8f"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-control-v1/completion_audit.json",
+    "sha256": "4b6003a1439fd88b71775b059041afcaeb744b7a359e1421921173e4c0a88b42"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-anti-v1/launch_receipt.json",
+    "sha256": "4c07260f56838a6e483ecdad1806c9fee85fa6a39aaa715162e44191239bd2a8"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-anti-v1/handoff.json",
+    "sha256": "93dbc2b8294b822517b1ae2dbf4bbdaebcc959fc051516565357509ac9a89073"
+  },
+  "decision": "Both matched contexts approach300K; stop initial warming. Admit staged welded restraint release, then matched control before NPT. Inherited generic replay next_action is superseded by this decision.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

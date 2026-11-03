@@ -74,6 +74,23 @@ export function colorForAtom(ctx, atom, selection) {
   return normal
 }
 
+// Scalar/cluster map lookup is expensive; defer it until selection is known.
+function colorForMappedAtom(ctx, atom, selection) {
+  const el      = atom.element
+  const cpk     = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
+  const selected = _selectionIndex(selection)
+  if (selected?.extensionIds.has(atom.extension_id)) return C_HIGHLIGHT
+  if (selected?.helixIds.has(atom.helix_id)) return C_HIGHLIGHT
+  if (selected?.strandIds.has(atom.strand_id)) return C_HIGHLIGHT
+  const intervals = selected?.domains.size
+    ? selected.domains.get(`${atom.strand_id}\0${atom.helix_id}\0${atom.direction}`) : null
+  if (intervals?.some(([lo, hi]) => atom.bp_index >= lo && atom.bp_index <= hi)) return C_HIGHLIGHT
+  if (selected?.bases.size && selected.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}`)) return C_HIGHLIGHT
+  // Selection overrides normal colour. Resolve scalar/cluster maps only when
+  // that result will be used, and avoid keys for empty selection collections.
+  return _normalColor(ctx, atom, cpk)
+}
+
 /** Normal display colour, including scalar overlays, with no selection treatment. */
 function _normalColor(ctx, atom, cpk) {
   if (ctx.scalarColors) {
@@ -123,7 +140,8 @@ function _colorByMode(ctx, atom, cpk) {
 export function resolveAtomColor(ctx, atom, selection, hasSelection) {
   const el  = atom.element
   const cpk = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
-  if (hasSelection) return colorForAtom(ctx, atom, selection)
+  if (hasSelection) return (ctx.scalarColors || ctx.clusterColors?.size)
+    ? colorForMappedAtom(ctx, atom, selection) : colorForAtom(ctx, atom, selection)
   // Scalar overlay (e.g. oxDNA flexibility map): when present and nothing is
   // selected, an atom's nucleotide colour wins over CPK/strand so the heavy rep
   // shows the SAME rigid→flexible ramp as the beads.  Keyed by helix:bp:dir.

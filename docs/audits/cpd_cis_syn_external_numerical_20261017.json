@@ -1,0 +1,131 @@
+{
+  "date_utc": "2026-10-18T03:29:41.607288+00:00",
+  "product": "tt-cpd-cis-syn",
+  "external_return": "cgenff-cis-syn-return-v1",
+  "transfer": "cgenff-cis-syn-transfer-v4",
+  "static_geometry": "cgenff-cis-syn-geometry-v1",
+  "cases": [
+    {
+      "start": "repaired-start-1",
+      "native_stages_passed": 8,
+      "admission_frames_and_endpoints_checked": 458,
+      "minimum_signed_margin_A3": 1.2063390016555786,
+      "restart_potential_deltas": [
+        0.004800000009709038,
+        0.004099999991012737
+      ]
+    },
+    {
+      "start": "repaired-start-2",
+      "native_stages_passed": 8,
+      "admission_frames_and_endpoints_checked": 458,
+      "minimum_signed_margin_A3": 1.2965588569641113,
+      "restart_potential_deltas": [
+        0.003899999996065162,
+        0.0028999999922234565
+      ]
+    }
+  ],
+  "timestep": {
+    "records": [
+      {
+        "case_index": 0,
+        "product": "tt-cpd-cis-syn",
+        "start": "repaired-start-1",
+        "dt_fs": 1,
+        "native_seconds": 1.917063592991326,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 1.5813649995192835e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 0,
+        "product": "tt-cpd-cis-syn",
+        "start": "repaired-start-1",
+        "dt_fs": 2,
+        "native_seconds": 1.1654984049964696,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.00015290586816850855,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 1,
+        "product": "tt-cpd-cis-syn",
+        "start": "repaired-start-2",
+        "dt_fs": 1,
+        "native_seconds": 2.0172373519744724,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 2.7254810425238565e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 1,
+        "product": "tt-cpd-cis-syn",
+        "start": "repaired-start-2",
+        "dt_fs": 2,
+        "native_seconds": 1.1655109110288322,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 9.280673273342911e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      }
+    ],
+    "comparisons": [
+      {
+        "case_index": 0,
+        "solute_endpoint_rms_displacement_A": 0.49941533812917527,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 1,
+        "solute_endpoint_rms_displacement_A": 0.5823451056670744,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      }
+    ],
+    "native_seconds_added": 6.2653102609911,
+    "native_seconds_total": 3131.489165677429,
+    "terminal": true,
+    "all_passed": true
+  },
+  "expectations_and_results": [
+    {
+      "expectation": "Exact submitted input and correct mapped graph/all10centers in external return",
+      "result": "Passed; independent RDKit return audit."
+    },
+    {
+      "expectation": "Complete parameter coverage, neutral62atom input; conserving transfer to191atom DNA charge-5",
+      "result": "Passed. Matched reference base-0.138/sugar+0.138e; zero removed OHcap increments; parent nonbase bonded/LJ types unchanged."
+    },
+    {
+      "expectation": "Two canonical starts load finite NAMD energies/forces",
+      "result": "Passed; rounded-coordinate22center checks; distinct4.57165A proper-rotation heavyRMSD, not known physical basins."
+    },
+    {
+      "expectation": "Two velocity seeds/start; minimization lowers own potential, finite/stereo trajectory and restartpotentialdelta<=0.01",
+      "result": "Passed all16stages and4restarts;10ps restrained+10ps released+1ps restart perbranch at1fs."
+    },
+    {
+      "expectation": "Four paired1ps1fs/2fs NVE tests finite/canonical and maxenergychange/initialkinetic<=0.001",
+      "result": "Passed; maximumfraction=0.00015290586816850855"
+    }
+  ],
+  "native_seconds_total": 3131.489165677429,
+  "native_seconds_this_admission": 183.56510515796253,
+  "native_admission_limit_seconds": 600,
+  "shared_campaign_limit_hours": 48,
+  "scope": "New independent external cis-syn provisional numerical model in internal six-T engineering fixture. Ordinary masses/rigidBondsall; no termini,mixedisomers,equilibrium or experimental accuracy qualification. Legacy model untouched.",
+  "physical_validation": "Insufficient: source-matched quantitative comparison and sampling not established. Numerical2fs screening does not establish ensemble equivalence.",
+  "refinement": "No established-observable discrepancy shown; no refit triggered.",
+  "active_job": null
+}

@@ -49,6 +49,50 @@ starts at the current sweep origin; its shape follows controller-tip displacemen
 Confirm creates the same editable Sweep feature as desktop authoring, with
 ordinary history, undo and redo.
 
+In the VR **Feature Log**, choose **Edit** beside a saved Sweep. The native
+**Edit Sweep** panel opens directly on its saved path. Select a point and use the
+coordinate arrows, Trigger dragging, or Grip rotation; **Apply** updates that
+same feature and refreshes the VR scene. **Cancel** discards the draft. The saved
+footprint, source attachment, strand filter and ligation choice are retained.
+Existing desktop Undo/Redo restores the applied edit, and the VR tool Undo is
+bound to that edit's document revision. If the document changes while the editor
+is open, cancel and reopen Edit to obtain a fresh revision.
+
+The existing guest-sharing path publishes the applied design after it settles.
+Unconfirmed point drags remain draft previews. A native Edit opens its right-hand
+panel while the Feature Log can remain open on the left; close the history panel
+with its own **Close** control if it obstructs the editor. While Sweep is active,
+either controller's menu button toggles the right-hand Sweep panel.
+
+Validation (2026-10-16): 41 focused backend tests, 77 frontend tests, two native
+Sweep tests, the production frontend build and the desktop edit regression pass.
+Physical-runtime controller tests exercise Feature Log Edit, Cancel/reopen,
+coordinate adjustment, Apply, guest delivery and desktop Undo/Redo. Both steady
+profiles pass. `variable_fast` passed in the preceding run but missed the small
+coordinate arrow in the final run; `variable_deliberate` missed that arrow in the
+preceding run. Four-profile validation therefore remains **incomplete**. Motion
+presets, acquisition thresholds and the three-attempt limit were not relaxed.
+The probe positions both controllers relative to the tracked eye and closes the
+left history panel through its ordinary Close control to expose the editor.
+Selecting the point explicitly before its coordinate arrow did not eliminate
+the variable-motion failure. Treat small-arrow acquisition as an open demo risk.
+
+Successful local small-model runs measured 1.6–2.6 seconds from the start of the
+Apply reach through native refresh, and 5.0–7.2 seconds through the guest's latest
+document-hash convergence. These include controller movement and background
+document synchronization; they are not isolated network-transfer measurements
+or a guarantee for larger models. Guest evidence uses a real local prepared
+host; internet/tunnel timing is not measured. Stereo captures establish rendered
+eye output, not through-lens legibility or comfort. Apply/Cancel pixel checks
+also reject an offscreen negative control. The owned viewer was stopped by test
+cleanup.
+
+Retained successful captures, failed attempts, delivery measurements and logs:
+`.development-artifacts/vr-sweep-feature-edit-20261016/` (`final/`,
+`validation2/`, and `desktop/`). Earlier diagnostic failures remain under
+`/tmp/nadoc-sweep-edit-*`; these included setup/overlap issues, a reused capture
+directory, geometry-array ordering after Undo, and a stale expected sharing hash.
+
 In the desktop **Feature Log**, choose the Sweep feature's **Edit** action. Its
 painted footprint and fitted control points reopen in the desktop Sweep editor;
 change a point's coordinates and confirm to update that feature. Undo and Redo

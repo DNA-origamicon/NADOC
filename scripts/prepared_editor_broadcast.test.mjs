@@ -11,7 +11,8 @@ test('editor lease replaces revisions without touching invitations or guests and
   const api = room.editorBroadcast
   assert.throws(() => api.start({ cameraOnly: true, sourceHash: 'a'.repeat(64) }), /differs/)
   const { lease } = api.start(); assert.throws(() => api.start(), /Another editor/)
-  api.apply('camera', lease, JSON.stringify({ revision: 'old', camera }))
+  const acknowledgement=api.apply('camera', lease, JSON.stringify({ revision: 'old', camera }))
+  assert.deepEqual(Object.keys(acknowledgement).sort(),['camera','revision','sequence','serverTime'])
   const next = Buffer.from('NADOCVW1new'), updated = api.apply('scene', lease, next)
   assert.notEqual(updated.revision, 'old'); assert.equal(room.presentation.snapshot().revision, updated.revision)
   assert.equal(room.presentation.snapshot().presenting, true); assert.equal(room.scene, next); assert.equal(room.sessions.has('cookie'), true)

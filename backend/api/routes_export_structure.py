@@ -321,10 +321,10 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
 def export_pdb_file() -> Response:
     """Export the active design as an all-atom PDB file (heavy atoms, CHARMM36 names)."""
     from backend.core.atomistic_cache import build_atomistic_model_cached
-    from backend.core.pdb_export import export_pdb
+    from backend.core.pdb_export import export_coordinate_pdb
 
     design = _design_for_export()
-    pdb_text = export_pdb(
+    pdb_text = export_coordinate_pdb(
         design,
         model=build_atomistic_model_cached(design, fast_bridges=True),
         viewer_terminals=True,
@@ -341,7 +341,7 @@ def export_pdb_file() -> Response:
 def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
     """Export a PDB translated onto the simulation/FEM positions shown by the UI."""
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.pdb_export import export_pdb
+    from backend.core.pdb_export import export_coordinate_pdb
 
     design = _design_for_export()
 
@@ -443,7 +443,7 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
             close_backbone=True,
         )
     coloring = payload.coloring
-    pdb_text = export_pdb(
+    pdb_text = export_coordinate_pdb(
         design,
         model=model,
         viewer_terminals=True,

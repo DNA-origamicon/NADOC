@@ -1596,8 +1596,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 return
               }
               if (nativeTransform) { onEditFeature?.(entry, i); return }
-              if (entry.op_kind === 'sweep') { onEditSweep?.(entry, i); return }
-
+              if (entry.op_kind === 'sweep') {
+                const result = (e.detail?.nativeVR === true ? onEditSweep?.(entry, i, { nativeVR: true }) : onEditSweep?.(entry, i))
+                if (e.detail?.nativeVR) e.detail.completion = result
+                return
+              }
             })
           }
         }

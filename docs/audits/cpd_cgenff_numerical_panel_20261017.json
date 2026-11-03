@@ -1,0 +1,316 @@
+{
+  "date_utc": "2026-10-18T02:59:23.355726+00:00",
+  "status": "finite-numerical-admission-closed",
+  "cases": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "start": "start-1",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-1/config-repair-v2",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.278846263885498,
+      "restart_potential_deltas_kcal_mol": [
+        0.003000000011525117,
+        0.004800000009709038
+      ]
+    },
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "start": "start-2",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-cis-anti-i/start-2",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.2076036930084229,
+      "restart_potential_deltas_kcal_mol": [
+        0.00029999999969732016,
+        0.0008000000088941306
+      ]
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "start": "repaired-start-1",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-trans-syn-i/repaired-start-1",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.0558353662490845,
+      "restart_potential_deltas_kcal_mol": [
+        0.0010999999940395355,
+        0.0004999999946448952
+      ]
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "start": "repaired-start-2",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-trans-syn-i/repaired-start-2",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.2001852989196777,
+      "restart_potential_deltas_kcal_mol": [
+        0.0005000000091968104,
+        0.0014999999984866008
+      ]
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "start": "repaired-start-1",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-trans-syn-ii/repaired-start-1",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.2141938209533691,
+      "restart_potential_deltas_kcal_mol": [
+        0.0008000000088941306,
+        0.00010000000474974513
+      ]
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "start": "repaired-start-2",
+      "directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-solvated-admission-v1/tt-cpd-trans-syn-ii/repaired-start-2",
+      "stages_passed": 8,
+      "frame_and_endpoint_checks": 458,
+      "minimum_signed_margin_A3": 1.051112413406372,
+      "restart_potential_deltas_kcal_mol": [
+        0.0025000000023283064,
+        0.0010000000038417056
+      ]
+    }
+  ],
+  "timestep": {
+    "records": [
+      {
+        "case_index": 0,
+        "product": "tt-cpd-cis-anti-i",
+        "start": "start-1",
+        "dt_fs": 1,
+        "native_seconds": 2.0172175419866107,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 5.2166509241464754e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 0,
+        "product": "tt-cpd-cis-anti-i",
+        "start": "start-1",
+        "dt_fs": 2,
+        "native_seconds": 1.1655592910246924,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.00023874818636138837,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 1,
+        "product": "tt-cpd-cis-anti-i",
+        "start": "start-2",
+        "dt_fs": 1,
+        "native_seconds": 1.967047106998507,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 2.7909379390881124e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 1,
+        "product": "tt-cpd-cis-anti-i",
+        "start": "start-2",
+        "dt_fs": 2,
+        "native_seconds": 1.2153500900021754,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.00015640427740204344,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 2,
+        "product": "tt-cpd-trans-syn-i",
+        "start": "repaired-start-1",
+        "dt_fs": 1,
+        "native_seconds": 1.9670932450098917,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 4.092595977763705e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 2,
+        "product": "tt-cpd-trans-syn-i",
+        "start": "repaired-start-1",
+        "dt_fs": 2,
+        "native_seconds": 1.1656919909873977,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.0001917713625956415,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 3,
+        "product": "tt-cpd-trans-syn-i",
+        "start": "repaired-start-2",
+        "dt_fs": 1,
+        "native_seconds": 1.9667234949884005,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 3.4721614852876134e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 3,
+        "product": "tt-cpd-trans-syn-i",
+        "start": "repaired-start-2",
+        "dt_fs": 2,
+        "native_seconds": 1.1659181349677965,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 5.66708172120234e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 4,
+        "product": "tt-cpd-trans-syn-ii",
+        "start": "repaired-start-1",
+        "dt_fs": 1,
+        "native_seconds": 1.916965349984821,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 2.2855123843876615e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 4,
+        "product": "tt-cpd-trans-syn-ii",
+        "start": "repaired-start-1",
+        "dt_fs": 2,
+        "native_seconds": 1.1656505760038272,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.00010876870155252626,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 5,
+        "product": "tt-cpd-trans-syn-ii",
+        "start": "repaired-start-2",
+        "dt_fs": 1,
+        "native_seconds": 1.9170884920167737,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 3.321879405894001e-05,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      },
+      {
+        "case_index": 5,
+        "product": "tt-cpd-trans-syn-ii",
+        "start": "repaired-start-2",
+        "dt_fs": 2,
+        "native_seconds": 1.1657825630391017,
+        "returncode": 0,
+        "timeout": false,
+        "passed": true,
+        "max_abs_energy_change_over_initial_kinetic": 0.00011204363212778939,
+        "physical_duration_ps": 1.0,
+        "stereo_finite_passed": true
+      }
+    ],
+    "comparisons": [
+      {
+        "case_index": 0,
+        "solute_endpoint_rms_displacement_A": 0.6556363047712273,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 1,
+        "solute_endpoint_rms_displacement_A": 0.6747744256421369,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 2,
+        "solute_endpoint_rms_displacement_A": 0.5714888355391149,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 3,
+        "solute_endpoint_rms_displacement_A": 0.6507585936753907,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 4,
+        "solute_endpoint_rms_displacement_A": 0.5469939971315351,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      },
+      {
+        "case_index": 5,
+        "solute_endpoint_rms_displacement_A": 0.6592565614302428,
+        "interpretation": "1ps paired integrator diagnostic, not a physical equivalence tolerance"
+      }
+    ],
+    "native_seconds_added": 18.796087877009995,
+    "native_seconds_total": 2947.3957649814856,
+    "terminal": true,
+    "all_passed": true
+  },
+  "native_seconds_used_shared_campaign": 2947.3957649814856,
+  "native_seconds_initial_admission_panel": 552.6605405980372,
+  "native_hours_ceiling": 48,
+  "no_active_jobs": true,
+  "expectations_and_results": [
+    {
+      "expectation": "Complete parameters, neutral solvent assembly, canonical sugars and CPD identity",
+      "result": "Pass for all six starts; external source and topology audits retained."
+    },
+    {
+      "expectation": "Minimization lowers its own constrained potential",
+      "result": "Pass in all twelve minimization stages; not minimum certification."
+    },
+    {
+      "expectation": "Two independent velocity seeds per start retain finite output and all22center signs",
+      "result": "Pass for12branches, each10ps restrained+10ps released+1ps restart at1fs."
+    },
+    {
+      "expectation": "Restart potential difference <=0.01kcal/mol",
+      "result": "Pass for all12restarts."
+    },
+    {
+      "expectation": "Paired1fs/2fs1ps NVE retains chemistry, completes duration and maxenergychange/initialkinetic <=0.001",
+      "result": "Pass all12checks"
+    }
+  ],
+  "scientific_verdict": {
+    "numerical_stability": "Short1fs admission passed for all3new candidates,2starts,2seeds;2fs verdict in timestep records.",
+    "practical_equivalence": "Not established. No calibrated parameter-uncertainty family or matched experimental-observable equivalence test was run.",
+    "sampling": "Insufficient for equilibrium, populations or local-DNA experimental agreement. Distinct embeddings do not certify relevant physical basins.",
+    "refinement": "No established-observable discrepancy demonstrated; no energetic refit authorized by these diagnostics.",
+    "freeze": "Retain exact candidate files as provisional versions for the tested numerical scope only; no production promotion.",
+    "context_limits": [
+      "Six-T internal-endpoint engineering harnesses only; terminal lesions unqualified.",
+      "No source-matched experimental DNA contexts or prespecified physical-effect tolerances evaluated.",
+      "Trans-syn-II formation claim limited to admitted modified precursor context.",
+      "Trans-antiI/II remain excluded pending resolved ordered-attachment evidence.",
+      "Matched CGenFF charge-increment transfer remains provisional.",
+      "Original bounded parameter-sensitivity question remains inconclusive."
+    ]
+  },
+  "next_action": "No automatic continuation or parameter fitting. Source-matched observable validation is required before claiming physical qualification; user owns melting studies."
+}

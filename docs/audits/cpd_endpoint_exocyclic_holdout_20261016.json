@@ -1,0 +1,426 @@
+{
+  "at": "2026-10-16T17:49:51.828912+00:00",
+  "native_audit": {
+    "at": "2026-10-16T17:48:40+00:00",
+    "passed": true,
+    "script": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_exocyclic_holdout_v1.py",
+      "sha256": "6bf7cca703520220f435a82b8761d24ec87b02b51eaec5f107a0971f1cce6b0a"
+    },
+    "assessment": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/assessment.json",
+      "sha256": "e6afd0765e0093d361f5f6c261f9039dddddd2bd0bbd7c1d820815b42ee9e6e8"
+    },
+    "records": [
+      {
+        "label": "original_qm_minus30",
+        "result": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/original_qm_minus30/result.json",
+          "sha256": "e3fc3fec581805ea51afadc0e08dbd8274bd812bdc4ab603fcb176bc15328cd1"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/original_qm_minus30/output.dat",
+          "sha256": "cdaa7857c56e9f9de6ec31da21ce8da08d512c48969731863fd4f0b1048136c1"
+        },
+        "energy_hartree": -1366.064986493553,
+        "requested_rotation_verified": true,
+        "unchanged_bonds": true,
+        "canonical_stereochemistry": true
+      },
+      {
+        "label": "original_qm_plus30",
+        "result": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/original_qm_plus30/result.json",
+          "sha256": "83e949eb634dfa88837aad5ea182ccdad5711d9b424cbdb6e286828621c6399a"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/original_qm_plus30/output.dat",
+          "sha256": "9c77ada65516991d321337870e9fb679d87607f35541cfaba999b43ea5b0bbf5"
+        },
+        "energy_hartree": -1366.0952355452673,
+        "requested_rotation_verified": true,
+        "unchanged_bonds": true,
+        "canonical_stereochemistry": true
+      },
+      {
+        "label": "alternate_qm_minus30",
+        "result": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/alternate_qm_minus30/result.json",
+          "sha256": "77cbbd5fbe78103a6279a8a3b9dc1487bfbe5d2c7b105ef7ded94eb38e7dc2ec"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/alternate_qm_minus30/output.dat",
+          "sha256": "08d16bf75f49b1ddbfcbb1e5b31a3d3f36f38265a4999431daf9976efd8cb09b"
+        },
+        "energy_hartree": -1366.0976185663858,
+        "requested_rotation_verified": true,
+        "unchanged_bonds": true,
+        "canonical_stereochemistry": true
+      },
+      {
+        "label": "alternate_qm_plus30",
+        "result": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/alternate_qm_plus30/result.json",
+          "sha256": "180c26afd5417d2b92528020ef70013eb5a177862f853813a3db143aad4b4b97"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/alternate_qm_plus30/output.dat",
+          "sha256": "4f3261f03fbb68d7c67718931f9237b15980eebf6529c5d9a87f041046f6342d"
+        },
+        "energy_hartree": -1366.0924758544688,
+        "requested_rotation_verified": true,
+        "unchanged_bonds": true,
+        "canonical_stereochemistry": true
+      }
+    ],
+    "increments": [
+      {
+        "point": "original_qm_minus30",
+        "baseline": "original_qm",
+        "offset_degrees": -30,
+        "qm_delta_kcal_mol": 24.18466763499462,
+        "mm": {
+          "parent": {
+            "delta_kcal_mol": 36.356449942205934,
+            "error_kcal_mol": 12.171782307211313
+          },
+          "core_round1": {
+            "delta_kcal_mol": 36.35644994220592,
+            "error_kcal_mol": 12.171782307211299
+          }
+        }
+      },
+      {
+        "point": "original_qm_plus30",
+        "baseline": "original_qm",
+        "offset_degrees": 30,
+        "qm_delta_kcal_mol": 5.203101102886891,
+        "mm": {
+          "parent": {
+            "delta_kcal_mol": 4.569613856429328,
+            "error_kcal_mol": -0.6334872464575634
+          },
+          "core_round1": {
+            "delta_kcal_mol": 4.569613856429326,
+            "error_kcal_mol": -0.6334872464575652
+          }
+        }
+      },
+      {
+        "point": "alternate_qm_minus30",
+        "baseline": "alternate_qm",
+        "offset_degrees": -30,
+        "qm_delta_kcal_mol": 5.852029364296187,
+        "mm": {
+          "parent": {
+            "delta_kcal_mol": 3.178012950464421,
+            "error_kcal_mol": -2.674016413831766
+          },
+          "core_round1": {
+            "delta_kcal_mol": 3.1780129504644137,
+            "error_kcal_mol": -2.6740164138317732
+          }
+        }
+      },
+      {
+        "point": "alternate_qm_plus30",
+        "baseline": "alternate_qm",
+        "offset_degrees": 30,
+        "qm_delta_kcal_mol": 9.07912981456595,
+        "mm": {
+          "parent": {
+            "delta_kcal_mol": 9.436395854613444,
+            "error_kcal_mol": 0.3572660400474934
+          },
+          "core_round1": {
+            "delta_kcal_mol": 9.43639585461342,
+            "error_kcal_mol": 0.35726604004746854
+          }
+        }
+      }
+    ],
+    "responses": {
+      "parent_original_qm": {
+        "qm_slope_kcal_rad": -18.126060847275788,
+        "mm_slope_kcal_rad": -30.354192529819073,
+        "qm_curvature_kcal_rad2": 107.19372647266006,
+        "mm_curvature_kcal_rad2": 149.28038013238407
+      },
+      "parent_alternate_qm": {
+        "qm_slope_kcal_rad": 3.081653931087085,
+        "mm_slope_kcal_rad": 5.9763154497427715,
+        "qm_curvature_kcal_rad2": 54.46233796156086,
+        "mm_curvature_kcal_rad2": 46.011845918837416
+      },
+      "core_round1_original_qm": {
+        "qm_slope_kcal_rad": -18.126060847275788,
+        "mm_slope_kcal_rad": -30.354192529819073,
+        "qm_curvature_kcal_rad2": 107.19372647266006,
+        "mm_curvature_kcal_rad2": 149.28038013238395
+      },
+      "core_round1_alternate_qm": {
+        "qm_slope_kcal_rad": 3.081653931087085,
+        "mm_slope_kcal_rad": 5.976315449742755,
+        "qm_curvature_kcal_rad2": 54.46233796156086,
+        "mm_curvature_kcal_rad2": 46.0118459188373
+      }
+    },
+    "decision": "Native holdout calculation audited; frozen correction acceptance is evaluated separately, not inferred from execution success.",
+    "minimum_certified": false,
+    "simulation_ready": false
+  },
+  "frozen_trial": {
+    "at": "2026-10-16T17:49:04+00:00",
+    "script": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/evaluate_exocyclic_holdout_v1.py",
+      "sha256": "1c4d7417363f1b0d7f748141d3fc1ceba16ec21c1116bca2a69cb8d5c60d47e8"
+    },
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/plan.json",
+      "sha256": "26fd6a2759a7ac99c44428bb9a8be3968ccc5deca2f73f80660253135a371f5e"
+    },
+    "native_audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/completion_audit.json",
+      "sha256": "69ee38e7748b99fc26fe8d2f896b95eb63ba471d37124409268f77af721a558e"
+    },
+    "passed": false,
+    "rows": [
+      {
+        "point": "original_qm_minus30",
+        "qm_increment": 24.18466763499462,
+        "unchanged_error": 12.171782307211299,
+        "frozen_correction": 0.8917090500192988,
+        "corrected_error": 13.063491357230598
+      },
+      {
+        "point": "original_qm_plus30",
+        "qm_increment": 5.203101102886891,
+        "unchanged_error": -0.6334872464575652,
+        "frozen_correction": 0.5017525711513926,
+        "corrected_error": -0.13173467530617256
+      },
+      {
+        "point": "alternate_qm_minus30",
+        "qm_increment": 5.852029364296187,
+        "unchanged_error": -2.6740164138317732,
+        "frozen_correction": 1.406671565686838,
+        "corrected_error": -1.2673448481449352
+      },
+      {
+        "point": "alternate_qm_plus30",
+        "qm_increment": 9.07912981456595,
+        "unchanged_error": 0.35726604004746854,
+        "frozen_correction": -2.3702415046516982,
+        "corrected_error": -2.0129754646042297
+      }
+    ],
+    "unchanged_rmse": 6.241626259044579,
+    "corrected_rmse": 6.639472751098815,
+    "parameters_changed": false,
+    "decision": "Reject frozen single-torsion trial; preserve all holdouts, no retuning or parameter export.",
+    "minimum_certified": false,
+    "simulation_ready": false
+  },
+  "decomposition": {
+    "at": "2026-10-16T17:49:04+00:00",
+    "source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/candidate_endpoint.xml",
+      "sha256": "e2b562a6bdaa65a254353a641494d56d47ecb7f6603d78a19f035b886ba8ecb2"
+    },
+    "groups_delta": {
+      "0:HarmonicBondForce": 8.881784197001252e-15,
+      "1:HarmonicAngleForce": 0.0,
+      "2:HarmonicBondForce": 1.887379141862766e-15,
+      "3:PeriodicTorsionForce": -1.372160833779489,
+      "4:CustomTorsionForce": 0.0,
+      "5:CMAPTorsionForce": 0.0,
+      "6:NonbondedForce": 37.72861077598532
+    },
+    "lj_delta": 41.86572592342502,
+    "coulomb_delta": -4.13711514743982,
+    "largest_lj_changes": [
+      {
+        "atoms": [
+          "1:O5'",
+          "2:O4"
+        ],
+        "baseline": {
+          "distance_A": 2.8366831087110955,
+          "coulomb": 27.27276927298297,
+          "lj": 0.6113183248523381
+        },
+        "holdout": {
+          "distance_A": 2.1943594086909943,
+          "coulomb": 35.2559401245013,
+          "lj": 28.805658191859578
+        },
+        "lj_change": 28.19433986700724,
+        "coulomb_change": 7.983170851518331
+      },
+      {
+        "atoms": [
+          "2:O4",
+          "1:HO5'"
+        ],
+        "baseline": {
+          "distance_A": 1.9365987931184392,
+          "coulomb": -26.027048669446188,
+          "lj": -0.07419551708009053
+        },
+        "holdout": {
+          "distance_A": 1.2559483260291686,
+          "coulomb": -40.13218537504844,
+          "lj": 10.525248900446766
+        },
+        "lj_change": 10.599444417526856,
+        "coulomb_change": -14.105136705602249
+      },
+      {
+        "atoms": [
+          "1:O5'",
+          "1:O4'"
+        ],
+        "baseline": {
+          "distance_A": 2.8656768572926588,
+          "coulomb": 38.239142389648144,
+          "lj": 0.8396468051447261
+        },
+        "holdout": {
+          "distance_A": 2.6462410702880557,
+          "coulomb": 41.410069029275924,
+          "lj": 3.2524988895042815
+        },
+        "lj_change": 2.4128520843595553,
+        "coulomb_change": 3.1709266396277798
+      },
+      {
+        "atoms": [
+          "1:O5'",
+          "2:H52"
+        ],
+        "baseline": {
+          "distance_A": 2.81426731696988,
+          "coulomb": -7.008781451226694,
+          "lj": -0.019668875555936
+        },
+        "holdout": {
+          "distance_A": 2.460487872346748,
+          "coulomb": -8.01653395314614,
+          "lj": 0.5119489693145488
+        },
+        "lj_change": 0.5316178448704848,
+        "coulomb_change": -1.0077525019194464
+      },
+      {
+        "atoms": [
+          "1:O5'",
+          "2:C4"
+        ],
+        "baseline": {
+          "distance_A": 3.8248638907103567,
+          "coulomb": -25.70798006624732,
+          "lj": -0.1284565084300782
+        },
+        "holdout": {
+          "distance_A": 3.173987657134801,
+          "coulomb": -30.979806880299687,
+          "lj": 0.29353311876601773
+        },
+        "lj_change": 0.4219896271960959,
+        "coulomb_change": -5.271826814052368
+      },
+      {
+        "atoms": [
+          "2:O4",
+          "1:H5''"
+        ],
+        "baseline": {
+          "distance_A": 2.4732801811708933,
+          "coulomb": -4.265454537593448,
+          "lj": 0.2894819996301244
+        },
+        "holdout": {
+          "distance_A": 2.9719921763918107,
+          "coulomb": -3.549694462629206,
+          "lj": -0.056740122196025616
+        },
+        "lj_change": -0.34622212182615,
+        "coulomb_change": 0.7157600749642419
+      },
+      {
+        "atoms": [
+          "1:H5''",
+          "1:H3'"
+        ],
+        "baseline": {
+          "distance_A": 2.3602516686439188,
+          "coulomb": 1.139588677536591,
+          "lj": 0.0024913913644881856
+        },
+        "holdout": {
+          "distance_A": 2.0564557807688013,
+          "coulomb": 1.3079377163742911,
+          "lj": 0.31193983104578465
+        },
+        "lj_change": 0.3094484396812965,
+        "coulomb_change": 0.16834903883770003
+      },
+      {
+        "atoms": [
+          "1:O5'",
+          "2:C7"
+        ],
+        "baseline": {
+          "distance_A": 3.8018015903790863,
+          "coulomb": 8.875531975971882,
+          "lj": -0.10882904839676896
+        },
+        "holdout": {
+          "distance_A": 3.3651338886061777,
+          "coulomb": 10.027241916275292,
+          "lj": 0.03257441022618478
+        },
+        "lj_change": 0.14140345862295373,
+        "coulomb_change": 1.1517099403034106
+      },
+      {
+        "atoms": [
+          "1:C3'",
+          "1:H5''"
+        ],
+        "baseline": {
+          "distance_A": 2.6977578175109307,
+          "coulomb": 1.5509186037426312,
+          "lj": 0.05026021534560763
+        },
+        "holdout": {
+          "distance_A": 2.520755294691349,
+          "coulomb": 1.659821084728546,
+          "lj": 0.189310999711404
+        },
+        "lj_change": 0.13905078436579638,
+        "coulomb_change": 0.1089024809859147
+      },
+      {
+        "atoms": [
+          "1:O5'",
+          "1:H4'"
+        ],
+        "baseline": {
+          "distance_A": 2.7158090682992424,
+          "coulomb": -7.262876024758397,
+          "lj": 0.021269025050429338
+        },
+        "holdout": {
+          "distance_A": 2.9552250330506338,
+          "coulomb": -6.674478034456355,
+          "lj": -0.052401658846556225
+        },
+        "lj_change": -0.07367068389698556,
+        "coulomb_change": 0.5883979903020427
+      }
+    ],
+    "scope": "Exact MM partition only; no corresponding QM partition, so cannot uniquely assign QM/MM error to LJ or caps. Does not excuse or discard failed holdout."
+  },
+  "decision": "Reject frozen torsion trial without retuning. Stop extending capped-fragment scans. Obtain intended weld-site terminal/phosphate chemistry before a representative transfer reference is prepared. No production changes, no minimum certificate."
+}

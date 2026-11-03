@@ -1,0 +1,750 @@
+[
+  {
+    "path": "sources/shapes-supp.pdf",
+    "bytes": 14767150,
+    "sha256": "7c48c56b081a51493c6d148fac3bab19c4801a4adb120e6d59a71ad611ee5d88",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p4.png",
+    "bytes": 622127,
+    "sha256": "538d21ce65b55ad3cdd7e7b91c99e2ce055d6a8c692878583a24f797ab1d673d",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 4,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p5.png",
+    "bytes": 603973,
+    "sha256": "bbf7709a3c7c64f82445c9084ffd496ef8bf46442cb1acbcb9d709dbf0719ff1",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 5,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/twist-supp.pdf",
+    "bytes": 16232004,
+    "sha256": "9efdb9f71af9bc6169a420cf391b42eef17b97f23ac34ed7128c0dbc8c0c0232",
+    "source_url": "https://www.dietzlab.org/app/download/8873041685/curvature_supporting_info.pdf?t=1474487673",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/twist-supp-p19.png",
+    "bytes": 490381,
+    "sha256": "5fbc4b6fd364a7cd2b2d9ae113e264060958bb5ddfc65d02e459ae54321f3369",
+    "source_url": "https://www.dietzlab.org/app/download/8873041685/curvature_supporting_info.pdf?t=1474487673",
+    "derived_from": "sources/twist-supp.pdf",
+    "pdf_page": 19,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/twist-supp-p20.png",
+    "bytes": 210951,
+    "sha256": "e6130e2174192861445ec9c457a8b5336e460f4f70c95e8092694d0521118eab",
+    "source_url": "https://www.dietzlab.org/app/download/8873041685/curvature_supporting_info.pdf?t=1474487673",
+    "derived_from": "sources/twist-supp.pdf",
+    "pdf_page": 20,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC5036142-41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "bytes": 15370303,
+    "sha256": "2dfd793c0b5bd16f166533e0620b81d401d9de14f16dd4473e10193b84d5afa0",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12787/MediaObjects/41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5036142-41467_2016_BFncomms12787_MOESM1904_ESM-p19.png",
+    "bytes": 575913,
+    "sha256": "31ce73e82e7d9123afda60e10272255d59b06377e3e6b08de91214254b007a6d",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12787/MediaObjects/41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "derived_from": "sources/PMC5036142-41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "pdf_page": 19,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p6.png",
+    "bytes": 673837,
+    "sha256": "08a257042afc57af34bb0d7b9af9d104579aeed7fad0388b2b5ebe20fe005361",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 6,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p7.png",
+    "bytes": 856241,
+    "sha256": "7cbbc15593cda096e9fa2a8d0073a5f5622efad1e5ba48cbeef9164d8f96cf98",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 7,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p8.png",
+    "bytes": 850427,
+    "sha256": "2fc45daf29e223543e1aed257f8303367618d634f92c03074e970360a21355b7",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 8,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/shapes-supp-p9.png",
+    "bytes": 749193,
+    "sha256": "418896caaccf210b6cffa36f6c5bf2b5679334d174d3df84493b80163c43348e",
+    "source_url": "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf?t=1474488006",
+    "derived_from": "sources/shapes-supp.pdf",
+    "pdf_page": 9,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5036142-41467_2016_BFncomms12787_MOESM1904_ESM-p21.png",
+    "bytes": 638674,
+    "sha256": "602a99428a56a237a51dfbad803437dbabc8df4eab0413ce2a72fe196747f19b",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12787/MediaObjects/41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "derived_from": "sources/PMC5036142-41467_2016_BFncomms12787_MOESM1904_ESM.pdf",
+    "pdf_page": 21,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2017_BFncomms13966_MOESM667_ESM.zip",
+    "bytes": 8722076,
+    "sha256": "af7342bd0439509682af16c2c54c5b4fe50c7714a47cd06d9082c03f7e6a5dc1",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM667_ESM.zip",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/mirage-Supplementary-Data-File-1.png",
+    "bytes": 9266168,
+    "sha256": "27cc803321d7b6c3e863fb4c48f07281e44ff8150a63ee45c6b355fee2c1de75",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM667_ESM.zip",
+    "derived_from": "sources/41467_2017_BFncomms13966_MOESM667_ESM.zip",
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC5648847-41467_2017_1072_MOESM1_ESM.pdf",
+    "bytes": 9952341,
+    "sha256": "07fc319d0d64d2d295725d7fa145c88e199f5ef475d8ac0701b02f44911520e0",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-017-01072-8/MediaObjects/41467_2017_1072_MOESM1_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5648847-41467_2017_1072_MOESM1_ESM-p8.png",
+    "bytes": 691026,
+    "sha256": "0169cc3a35e5a30dee7ba652469e91870d9aa842ffd4c7e4fd592495abb3c6cf",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-017-01072-8/MediaObjects/41467_2017_1072_MOESM1_ESM.pdf",
+    "derived_from": "sources/PMC5648847-41467_2017_1072_MOESM1_ESM.pdf",
+    "pdf_page": 8,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC6906287-41467_2019_13284_MOESM2_ESM.pdf",
+    "bytes": 5173187,
+    "sha256": "e3a25f55eb557d1ed9ad27431553e22b12c5ebde82e46c72ed4874f7e0e7655f",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-019-13284-1/MediaObjects/41467_2019_13284_MOESM2_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC6906287-41467_2019_13284_MOESM2_ESM-p45.png",
+    "bytes": 1471406,
+    "sha256": "54291e3d7c70dbe33ed752914292b3cf56bcb0b471e897aa207014c7ac2f2447",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-019-13284-1/MediaObjects/41467_2019_13284_MOESM2_ESM.pdf",
+    "derived_from": "sources/PMC6906287-41467_2019_13284_MOESM2_ESM.pdf",
+    "pdf_page": 45,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2017_BFncomms13966_MOESM668_ESM.zip",
+    "bytes": 605260,
+    "sha256": "021ca24a3fba69f6fa090217929ebc4cee44b66fa39355377f96a12ef7975919",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM668_ESM.zip",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/mirage-Supplementary-Data-File-2.png",
+    "bytes": 710811,
+    "sha256": "8da4b0634f5819c25164bc53d186a44eb9624d30cf9a7c8d0815ed5f76bff3b8",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM668_ESM.zip",
+    "derived_from": "sources/41467_2017_BFncomms13966_MOESM668_ESM.zip",
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2017_BFncomms13966_MOESM669_ESM.zip",
+    "bytes": 625490,
+    "sha256": "75522a86d86a3e99b364fea734fcdfb9754c3145c21e9dad6b8e37e13285f0d9",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM669_ESM.zip",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/mirage-Supplementary-Data-File-3.png",
+    "bytes": 732539,
+    "sha256": "167ea96c56f32a9fe0522ae5d69f2732405912bf54c4d3b50f71f94b0b9cccb9",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM669_ESM.zip",
+    "derived_from": "sources/41467_2017_BFncomms13966_MOESM669_ESM.zip",
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2017_BFncomms13966_MOESM670_ESM.zip",
+    "bytes": 601263,
+    "sha256": "f62a932c836c302d0d6267f1260263f65daa8d91b5f3e8fc5b331ce77703e99f",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM670_ESM.zip",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/mirage-Supplementary-Data-File-4.png",
+    "bytes": 715422,
+    "sha256": "8ebf8b7bcaf6d5f1352c1fe8b3b6645f2aac283a6934db706735c0437bb85c07",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM670_ESM.zip",
+    "derived_from": "sources/41467_2017_BFncomms13966_MOESM670_ESM.zip",
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "bytes": 27124082,
+    "sha256": "19887ff1f3a69885e10039d1b0a784e93d127e94cc95fec4d04f0612c84e7089",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms2095/MediaObjects/41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM-p60.png",
+    "bytes": 462404,
+    "sha256": "c44fc65b7ab92556e454fe668539a66874d0a775d4f9d6ff09e83db3aa054c33",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms2095/MediaObjects/41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "derived_from": "sources/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "pdf_page": 60,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM-p61.png",
+    "bytes": 844141,
+    "sha256": "249058b3a9e3b1a87bd582600c66de9a9aa13b3aa6092f4eaa0f53800924dbf5",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms2095/MediaObjects/41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "derived_from": "sources/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "pdf_page": 61,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM-p66.png",
+    "bytes": 337550,
+    "sha256": "b9ef887e699e57d518806680855b0516adaeceeedc40603e4be0abaa0b8b17f4",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms2095/MediaObjects/41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "derived_from": "sources/PMC3493638-41467_2012_BFncomms2095_MOESM1188_ESM.pdf",
+    "pdf_page": 66,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC3997801-41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+    "bytes": 16496986,
+    "sha256": "fd51bb7a08c2862716bdc06059507ae26f323d018572cc810a49d0ebaef30242",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms4691/MediaObjects/41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC3997801-41467_2014_BFncomms4691_MOESM86_ESM-p1.png",
+    "bytes": 322329,
+    "sha256": "de005f8543a440b546f92fee6d6ddd75b593d9a7da79fed2440d294bad17773d",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms4691/MediaObjects/41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+    "derived_from": "sources/PMC3997801-41467_2014_BFncomms4691_MOESM86_ESM.pdf",
+    "pdf_page": 1,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/tilings.pdf",
+    "bytes": 11789929,
+    "sha256": "2156fa08db34f0ea48f91dfe71daef138118f5027cf7376ff97e2b89cfb970e2",
+    "source_url": "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/tilings-p80.png",
+    "bytes": 326892,
+    "sha256": "376771709a2f2beaf067c793f983a354ed92441e65ca024ef59951753dab1f1a",
+    "source_url": "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf",
+    "derived_from": "sources/tilings.pdf",
+    "pdf_page": 80,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/tilings-p81.png",
+    "bytes": 314908,
+    "sha256": "44488752ff2e15355cf04fb53739de90085fc2b1296ff73d572c7e0bd3123abf",
+    "source_url": "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf",
+    "derived_from": "sources/tilings.pdf",
+    "pdf_page": 81,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC4616047-41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "bytes": 2974968,
+    "sha256": "4a573a97b2f67e1a7636d1755ab98be8c572e9deae885bb83579c64c93903871",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep15634/MediaObjects/41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC4616047-41598_2015_BFsrep15634_MOESM1_ESM-p9.png",
+    "bytes": 666754,
+    "sha256": "e503e23c4e2a3931f5cb46e1296d37d3ac8ac5ef3fbfb72e02d0e3051df385da",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep15634/MediaObjects/41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "derived_from": "sources/PMC4616047-41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "pdf_page": 9,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/cargo-sorting.pdf",
+    "bytes": 11664712,
+    "sha256": "3c89da84f10543a84413bb79f16a83f5e4b0aa5d5184c89f8c2e77253561f0b9",
+    "source_url": "https://www.dna.caltech.edu/Papers/CargoSortingSupplementary2017.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/cargo-sorting-p21.png",
+    "bytes": 1492573,
+    "sha256": "e9e51ef89b06b9c3695fb31f1e99468f20795ce411363c631d227b64ea64e442",
+    "source_url": "https://www.dna.caltech.edu/Papers/CargoSortingSupplementary2017.pdf",
+    "derived_from": "sources/cargo-sorting.pdf",
+    "pdf_page": 21,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC5834454-41467_2018_3313_MOESM1_ESM.pdf",
+    "bytes": 14861708,
+    "sha256": "ba6e4721c7f44224a7a307d362e69f9a4cedf1b5f518b0c770aee566cc84946b",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-03313-w/MediaObjects/41467_2018_3313_MOESM1_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5834454-41467_2018_3313_MOESM1_ESM-p3.png",
+    "bytes": 434590,
+    "sha256": "f70d55cb739ba8628b2c88e464943389ec076f845a2c7fc8cd2f4d861301c7db",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-03313-w/MediaObjects/41467_2018_3313_MOESM1_ESM.pdf",
+    "derived_from": "sources/PMC5834454-41467_2018_3313_MOESM1_ESM.pdf",
+    "pdf_page": 3,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC5899095-41467_2018_3601_MOESM1_ESM.pdf",
+    "bytes": 9252058,
+    "sha256": "4a651982c9418491243e35bec5c29cf39ebf2c49c89037e81044dc14338bce50",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-03601-5/MediaObjects/41467_2018_3601_MOESM1_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5899095-41467_2018_3601_MOESM1_ESM-p3.png",
+    "bytes": 527702,
+    "sha256": "39c500e394bf0a24069a0fb5e3f816bd0676ee08d58be851d3395c13937e4345",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-03601-5/MediaObjects/41467_2018_3601_MOESM1_ESM.pdf",
+    "derived_from": "sources/PMC5899095-41467_2018_3601_MOESM1_ESM.pdf",
+    "pdf_page": 3,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC5899095-41467_2018_3601_MOESM1_ESM-p9.png",
+    "bytes": 417983,
+    "sha256": "a13c48afc0ba2d6443cdc8b4663a695e7100d3baeeec647e43a557398e23259a",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-03601-5/MediaObjects/41467_2018_3601_MOESM1_ESM.pdf",
+    "derived_from": "sources/PMC5899095-41467_2018_3601_MOESM1_ESM.pdf",
+    "pdf_page": 9,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC4914096-supp_gkw208_20160324_Supp.pdf",
+    "bytes": 27545285,
+    "sha256": "72d3eebefc7473d5f0f066f41cb441411cd16c15081ac51f317c1e8cead0d722",
+    "source_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC4914096/supplementaryFiles",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC4914096-supp_gkw208_20160324_Supp-p6.png",
+    "bytes": 1088651,
+    "sha256": "c58a628be02592913c4eaf9e6a0218939f3602f5ace94c3a192ec546ef68c56a",
+    "source_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC4914096/supplementaryFiles",
+    "derived_from": "sources/PMC4914096-supp_gkw208_20160324_Supp.pdf",
+    "pdf_page": 6,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC4979213-41598_2016_BFsrep31379_MOESM37_ESM.pdf",
+    "bytes": 928756,
+    "sha256": "1a35af05dbc486b53c830d4aad5ed283c8080fef0faabc1bad6bb5bcfe9979a7",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep31379/MediaObjects/41598_2016_BFsrep31379_MOESM37_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC4979213-41598_2016_BFsrep31379_MOESM37_ESM-p8.png",
+    "bytes": 1114744,
+    "sha256": "daa1667a9150bb6de4123a97fa264d90fea49f0a2bc18c2d817998199ab17f2a",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep31379/MediaObjects/41598_2016_BFsrep31379_MOESM37_ESM.pdf",
+    "derived_from": "sources/PMC4979213-41598_2016_BFsrep31379_MOESM37_ESM.pdf",
+    "pdf_page": 8,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/rapid-figure.jpg",
+    "bytes": 192059,
+    "sha256": "7ddf6a40e4a831d75373c8761d948c202c8894faf8047a97e7aa0f0b7ecd7bbd",
+    "source_url": "https://cdn.ncbi.nlm.nih.gov/pmc/blobs/1fbe/2731887/8a7fccb631f8/gkp436f1.jpg",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/stacking-bonds.pdf",
+    "bytes": 7228361,
+    "sha256": "cedc02195e45be5972188a8cc530713a281a6ec896ff8ae84f548a45f61a191a",
+    "source_url": "https://www.dna.caltech.edu/Papers/stacking-bonds2011_SI.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/stacking-bonds-p15.png",
+    "bytes": 575121,
+    "sha256": "94e6416cfdc13812f4d57dc8803a39c92b82e20cd76e6e7b160571b014111de5",
+    "source_url": "https://www.dna.caltech.edu/Papers/stacking-bonds2011_SI.pdf",
+    "derived_from": "sources/stacking-bonds.pdf",
+    "pdf_page": 15,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC4012984-41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+    "bytes": 22309493,
+    "sha256": "c62795132f12896e8bb4cc826971d8850ba5254ea41d4c9fc842e5ec085c349f",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2014.58/MediaObjects/41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+    "derived_from": null,
+    "pdf_page": null,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "images/PMC4012984-41565_2014_BFnnano201458_MOESM9_ESM-p5.png",
+    "bytes": 399954,
+    "sha256": "fbebf0d5bce221832964258ef4f2bdbe4e22189fac431c4018f1069cc2453dde",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fnnano.2014.58/MediaObjects/41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+    "derived_from": "sources/PMC4012984-41565_2014_BFnnano201458_MOESM9_ESM.pdf",
+    "pdf_page": 5,
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2016_BFncomms12787_MOESM1905_ESM.docx",
+    "bytes": 88009,
+    "sha256": "ae006a822c31ae86f0f989391651c25b0c60e75ac45625d3b4aa830171cd8e29",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12787/MediaObjects/41467_2016_BFncomms12787_MOESM1905_ESM.docx",
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/PMC5512867-41467_2017_BFncomms13966_MOESM666_ESM.pdf",
+    "bytes": 999364,
+    "sha256": "c92c401543577bb6f63e9de288a002e6d8f333e128e5ec9db777d10b13ccfede",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms13966/MediaObjects/41467_2017_BFncomms13966_MOESM666_ESM.pdf",
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "sources/41467_2012_BFncomms2095_MOESM1190_ESM.xls",
+    "bytes": 280576,
+    "sha256": "9a8dfbee8484ce7393042474a775b03697ab1ef0118c1389ea43fe846cb45db7",
+    "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms2095/MediaObjects/41467_2012_BFncomms2095_MOESM1190_ESM.xls",
+    "retrieved": "2026-11-02"
+  },
+  {
+    "path": "designs/ReuseDNA/24helix.json",
+    "bytes": 283958,
+    "sha256": "5647a2408f12ecc032d27ad4e966c4379402476c493c7a97488d1820a1ab4813",
+    "source_url": "https://raw.githubusercontent.com/stefanniekamp/ReuseDNA/f48a77294e3349052ad4f4b8afd2d2747f431abd/Example_json-files/24helix.json",
+    "git_commit": "f48a77294e3349052ad4f4b8afd2d2747f431abd"
+  },
+  {
+    "path": "designs/ReuseDNA/6helix.json",
+    "bytes": 156710,
+    "sha256": "bec0cbb490c13774c787230c1e0933459fb34740b15a1b881dc1108887404e88",
+    "source_url": "https://raw.githubusercontent.com/stefanniekamp/ReuseDNA/f48a77294e3349052ad4f4b8afd2d2747f431abd/Example_json-files/6helix.json",
+    "git_commit": "f48a77294e3349052ad4f4b8afd2d2747f431abd"
+  },
+  {
+    "path": "designs/pScaf/6hb-1512.json",
+    "bytes": 51516,
+    "sha256": "bd805a79bf495221ea01b3b23767846093a609fd8aa7f9ad54cd546689014b1e",
+    "source_url": "https://raw.githubusercontent.com/douglaslab/pScaf/56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb/3_cadnano_designs/6hb-1512.json",
+    "git_commit": "56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb"
+  },
+  {
+    "path": "designs/pScaf/6hb-2268.json",
+    "bytes": 76066,
+    "sha256": "15468808b5b905f2fd068f7946599c7594d9f15a94071594a61e133b66243edd",
+    "source_url": "https://raw.githubusercontent.com/douglaslab/pScaf/56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb/3_cadnano_designs/6hb-2268.json",
+    "git_commit": "56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb"
+  },
+  {
+    "path": "designs/pScaf/6hb-3024.json",
+    "bytes": 100618,
+    "sha256": "a84ade788b3e9e9f70243ad2252d7139a96030189125c4fdd9a8ee24c69b839b",
+    "source_url": "https://raw.githubusercontent.com/douglaslab/pScaf/56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb/3_cadnano_designs/6hb-3024.json",
+    "git_commit": "56ecd31da81e8f57dcd7740518b0ba9f7f9b09fb"
+  },
+  {
+    "path": "designs/rapid/i_16x4.json",
+    "bytes": 316464,
+    "sha256": "ced7b914ab598193d8bad66b38769b92c0453110571e0a25274d72e86b60088f",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/ii_10x6.json",
+    "bytes": 296235,
+    "sha256": "49bf485d4a282af413f6f35147ed896e66166d41fef901eb6305b1b704bebbca",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/iii_8x8.json",
+    "bytes": 316717,
+    "sha256": "b0419e0f6ee2ac7cdd86e266fd15cb0ab71e3a2e3bb21860b29e60385b3bce57",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/iv_6x10.json",
+    "bytes": 296431,
+    "sha256": "3af5289c623a6a86f4de6b3eaaf27ea5b4ae144b55b241eaf815d5988f24d447",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/v_4x16.json",
+    "bytes": 316871,
+    "sha256": "6ed3a2d791d13ee4d14d39b9c534e1d1be957e574345a334d744d645b02a1766",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/vi_3x20.json",
+    "bytes": 296632,
+    "sha256": "7b06604f632ab5c0577814b99c7ac00a395a4a1f07e4d6c76b221d62e1d61264",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/rapid/vii_2x30.json",
+    "bytes": 296687,
+    "sha256": "e021f1400affdac9a62118e44271914097353d3109ca096c91606d07a033b9b6",
+    "source_url": "https://www.dropbox.com/scl/fi/j0s0zxzctf8nzc77l28xj/NAR09.zip?rlkey=dwezs6wgre4lzvcinh0u4ij1a&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/doublegear.json",
+    "bytes": 300606,
+    "sha256": "01dbd9d3071b9de527e21ce30727dd8413d267b765e4f77fdb6a854d4ad43bbd",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/monolith.json",
+    "bytes": 296234,
+    "sha256": "3bf4d914c55566c0f22a8c8ad73410fb6a1a78f67be08cc970532fcf98bb7b98",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/railedbridge.json",
+    "bytes": 482900,
+    "sha256": "5a4cbb737e61e707345860d7898c5a7dcdd9792e307c9099a285686ea990fa5e",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/slottedcross.json",
+    "bytes": 788138,
+    "sha256": "5626c82c85106d26f23639b8dbe5e9b3ed5859f0794a5b0f804911ff81d44529",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/squarenut.json",
+    "bytes": 296842,
+    "sha256": "68b14bc7502d2fdcd5c2371a474a3040fd468517b2ae65ed8ad32a8400fc109b",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/shapes/stackedcross.json",
+    "bytes": 418679,
+    "sha256": "5034028a10f388fcff0c66b6381a2b576139faa9d1c5c4d6ed66a86b41e92e64",
+    "source_url": "https://www.dropbox.com/scl/fi/swn5n0yij823rmtrs242p/Nature09.zip?rlkey=wf4rgxmyu6r5i3t1x8so04lk1&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Corner_origami_with_edge_shapes,reversed_polarity-scaf_M13mp18_from_5561.cdn",
+    "bytes": 554281,
+    "sha256": "443ac6fb42338d0903914af1eff23fc07da17e47bc935b95d54ccb5bf4587598",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Corner_origami_with_edge_shapes-scaf_M13mp18_from_5560.cdn",
+    "bytes": 472313,
+    "sha256": "658a27051ffb5bb26417fb10ca1e491eda083cd74a0690db5bb8eae2e64343ee",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Corner_origami_with_straight_edges-scaf_m13mp18_from_5560.cdn",
+    "bytes": 432520,
+    "sha256": "2f7932319f3d1a53be93d403a79a14a6a12f224cbaeae36e8840f5c6cce2f819",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Origami_A-scaf_M13mp18_from_5558.cdn",
+    "bytes": 563053,
+    "sha256": "56581b857c79f504939a3828a518db0b5e32bfc8aec5f0a72018ce90b7a0dd9e",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Origami_B-scaf_M13mp18_from_5558.cdn",
+    "bytes": 714869,
+    "sha256": "b9ac22a919d9ca7e79aa0ed9646588c0311b3f00c9bbb02af2a5f7db3eef140b",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Origami_C-scaf_M13mp18_from_5626.cdn",
+    "bytes": 565028,
+    "sha256": "80ef5116f5bf24e860c8073d3b2f354717d4561b641b6b62ac7532267bf581c7",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/stacking-bonds/Origami_D-scaf_M13mp18_from_5558.cdn",
+    "bytes": 562407,
+    "sha256": "2a2e31c0f15c441f4a70502f882dd94f66d6aeee18bacc6b65e07a5df2872c4d",
+    "source_url": "https://authors.library.caltech.edu/records/386nr-f7943/files/nchem.1070-s4.zip?download=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/beachball.json",
+    "bytes": 733416,
+    "sha256": "7116bfb764580d552d0714a92d99534a4117ff5af1b0c2a0e3d83b441580edff",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/gear180.json",
+    "bytes": 327957,
+    "sha256": "d0a51ebdedf43fa68c8b7e6ee5c5173c0ff458c22cb807884959998424edcce6",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/gear90.json",
+    "bytes": 327831,
+    "sha256": "aff6f21a7221c57ef2f3fee34b5549daad5b4ef777cb8de3295f92db54185aa7",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/monolight_left_twist.json",
+    "bytes": 296473,
+    "sha256": "bff0fe8d2ea75e45db0a45805616c2b56935f9c2675e5f6995c36f2db0efe730",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/monolith_right_twist.json",
+    "bytes": 296280,
+    "sha256": "6e8cf81f09bdde65466479e2255e584cbb3995b131c4dcea954e1b692f2dc84f",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_0_v3.json",
+    "bytes": 280820,
+    "sha256": "829b0cd2d6f2820733b80c09c96e49e9b2debdc32caae8d5dc736a46fa7a0c14",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_120_98_v3.json",
+    "bytes": 280989,
+    "sha256": "9659444180251d480bd11aa7f24ffbf52dbd020433a3bfed470903a00b5255b6",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_150_98_v3.json",
+    "bytes": 281032,
+    "sha256": "9c43b8fd7ad579e81498e3ee6c680f6214418ebddedaa67bde70d4311bd8ed86",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_180_98_v3.json",
+    "bytes": 280944,
+    "sha256": "240ad5d36f18bcb088ff0fac3e47a33099a18230fd7111e6194ea054f25dc9ec",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_30_98_v4.json",
+    "bytes": 280746,
+    "sha256": "5b7271049c0d6bd1f10a855502a068e6d3f55891082d26f436f50ec0fae7d176",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_60_98_v4.json",
+    "bytes": 280792,
+    "sha256": "bf614ba84919cc7717f928d13d8019c3ddc90f060addace35fa38a249f9979a9",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  },
+  {
+    "path": "designs/twist/protractor_90_98_v3.json",
+    "bytes": 280953,
+    "sha256": "aa7beb9ae1ff3fa25f7e1e84853f5ea9c7b7dfe9494f94b4ac9f13dd4e9061c0",
+    "source_url": "https://www.dropbox.com/scl/fi/9lhrzf8r2svfkyten4izb/Science09.zip?rlkey=n257w8pbudlwn9964ygwma4l2&dl=1",
+    "git_commit": ""
+  }
+]

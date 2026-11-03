@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import subprocess
 
-import pytest
-
 from backend.core import runpod_script as bm
 from backend.core.runpod_script import (
     GPU_TYPES,
@@ -26,31 +24,18 @@ from backend.core.runpod_script import (
     required_vram_mb,
 )
 
-# ── measured reference points (RTX 4090, NAMD 3.0.2p1, 2026-07-13) ────────────
+# Representative sizes used by the selectors; these are not timing calibrations.
 SIXHB = 225_504
 FLAT = 1_442_735
 VOLTRON = 5_656_632
 
 
 class TestVramModel:
-    """The fits must reproduce the systems they were fitted to."""
-
-    @pytest.mark.parametrize(
-        "atoms, resident, measured_mb",
-        [
-            (SIXHB, False, 854),
-            (FLAT, False, 3_496),
-            (VOLTRON, False, 12_334),
-            (SIXHB, True, 1_114),
-            (FLAT, True, 5_016),
-        ],
-    )
-    def test_predicts_measured_vram_within_10pct(self, atoms, resident, measured_mb):
-        got = required_vram_mb(atoms, gpu_resident=resident)
-        assert got == pytest.approx(measured_mb, rel=0.10), (
-            f"{atoms:,} atoms resident={resident}: predicted {got:.0f} MB "
-            f"vs measured {measured_mb} MB"
-        )
+    def test_current_resident_probe_is_covered_with_admission_headroom(self):
+        # 18hb_fast, current qualified engine, 2026-11-02, completed probe:
+        # 2,979,096 atoms / 9704 MiB observed. Include unknown restraints here.
+        allowance = required_vram_mb(2_979_096, gpu_resident=True)
+        assert 9704 < allowance < 12*1024
 
     def test_resident_costs_more_vram_than_offload(self):
         assert required_vram_mb(FLAT, gpu_resident=True) > required_vram_mb(

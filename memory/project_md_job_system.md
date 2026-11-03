@@ -110,3 +110,14 @@ See [barostat diagnosis and validation](../docs/namd_graphene_barostat_failure_a
 - [Direct NAMD PEG surface drafts (2026-09-11) — continued detail](details/project_md_job_system/03-graphene-display-controls--2026-09-05.md)
 
 - [Direct NAMD PEG surface drafts (2026-09-11) — continued detail](details/project_md_job_system/04-direct-namd-peg-surface-drafts-2026-09-11.md)
+
+## Saved box display (2026-10-25)
+
+Box and solvent now separates selected prepared jobs from new preparation intent.
+Selected jobs use `getMdSolventMeta` for initial package dimensions and actual ion
+counts, label their source and creation date, and do not recompute clearance using
+the current design. Unavailable package dimensions never fall back to defaults.
+View settings also uses the saved cell rather than estimating from the open design.
+New relaxation restores document setup; production still inherits its package.
+See `docs/namd_box_sizing.md`. This fixes a misleading historical-job preview;
+it does not change any existing simulation box or ionic composition.

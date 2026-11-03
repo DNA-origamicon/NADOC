@@ -14,7 +14,7 @@ from backend.core.native_full_placement import SOURCE, NativePlacementError
 
 SLAB_DIMENSIONS = (0.30, 0.06, 0.70)
 SLABLESS_SOURCES = frozenset({"native-full-extension-v1", "chemical-modification-v1"})
-AUTHORED_SOURCES = frozenset({"authored-residue-c1-v1", "authored-residue-o5-v1"})
+AUTHORED_SOURCES = frozenset({"authored-residue-c1-v1", "authored-residue-o5-v1", "manual-cpd-base-only-v1", "manual-cpd-context-v1"})
 
 
 def _vector(record, field):
@@ -119,6 +119,10 @@ def _expected_slab_pose(record):
                          "actual_local_base_nm": actual_base_offset.tolist(),
                          "max_error_nm": float(np.max(abs(actual_base_offset - base_offset)))})
         center = bead + frame @ slab_offset
+    elif source == "manual-cpd-context-v1":
+        center = _vector(record, "fixed_slab_position")
+    elif source == "manual-cpd-base-only-v1":
+        center = _vector(record, "base_position")
     else:
         # Deposited chemical conformations have their own actual landmarks.
         # They are never a fallback for an unplaceable native helical site.

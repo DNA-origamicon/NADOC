@@ -86,6 +86,8 @@ def lookup_throughput(
     """Learned mean ns/day for this exact resource and size bucket, or ``None``."""
     rec = _load(workspace_dir).get(_key(cluster, partition, n_atoms, gres_type))
     if isinstance(rec, dict):
+        from backend.core.namd_planning import timing_provenance_valid
+        if not timing_provenance_valid(rec.get('provenance')) or rec.get('reference_timestep_fs')!=4.0:return None
         v = rec.get("ns_per_day")
         if isinstance(v, (int, float)) and v > 0:
             return float(v)
@@ -100,18 +102,25 @@ def record_throughput(
     n_atoms: int,
     ns_per_day: float,
     gres_type: str | None = None,
+    provenance: dict | None = None,
+    timestep_fs: float | None = None,
 ) -> None:
     """Fold a completed remote run's measured throughput into the store.
 
     Best-effort: a bad ``ns_per_day`` or an IO error is logged and dropped — learning
     must never break a completing job's bookkeeping.
     """
-    if not (isinstance(ns_per_day, (int, float)) and ns_per_day > 0):
+    from backend.core.namd_planning import timing_provenance_valid
+    if not (isinstance(ns_per_day, (int, float)) and ns_per_day > 0
+            and timing_provenance_valid(provenance) and timestep_fs and timestep_fs>0):
         return
     try:
         store = _load(workspace_dir)
         key = _key(cluster, partition, n_atoms, gres_type)
-        store[key] = update_record(store.get(key), float(ns_per_day))
+        previous=store.get(key)
+        if previous and not timing_provenance_valid(previous.get('provenance')):previous=None
+        store[key] = update_record(previous, float(ns_per_day)*4/timestep_fs)
+        store[key].update(provenance=provenance,reference_timestep_fs=4.0)
         path = _store_path(workspace_dir)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")

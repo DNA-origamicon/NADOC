@@ -1,0 +1,94 @@
+{
+  "before": [
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.session/__e2e__loading-open",
+      "exists": false,
+      "resolved": "/media/jojo/Archive/NADOC_archive/runtime/workspace/.session/__e2e__loading-open"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.nadoc-projects/__e2e__loading-open",
+      "exists": false,
+      "resolved": "/media/jojo/Archive/NADOC_archive/runtime/workspace/.nadoc-projects/__e2e__loading-open"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/__e2e__loading-open.nadoc",
+      "exists": false,
+      "resolved": "/media/jojo/Archive/NADOC_archive/runtime/workspace/__e2e__loading-open.nadoc"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false,
+      "resolved": "/home/jojo/Work/NADOC/frontend/test-results"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false,
+      "resolved": "/home/jojo/Work/NADOC/frontend/playwright-report"
+    }
+  ],
+  "preexisting_e2e": [],
+  "cleanup": "Verified test documents/stores, default outputs and port credentials absent. All remaining task-owned scratch/captures removed after process-reference check.",
+  "isolated_credentials": {
+    "path": "/media/jojo/Archive/nr1-h15b0t0j/nadoc-viewer-test-97af2be37cb5-5175.json",
+    "exists_before": false,
+    "cleanup": "Vite close hook and Playwright global teardown"
+  },
+  "custom_output": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round1/playwright",
+    "cleanup": "Explicit task-owned removal after verification; reporter handles only default dirs"
+  },
+  "isolated_retry": {
+    "workspace": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round1/browser-workspace",
+    "preexisting_entries": [],
+    "doc": "__e2e__desktop-render-init",
+    "startup": "uvicorn --lifespan off",
+    "cleanup": "afterEach deletes document; global teardown prefixed files/credentials; full task-owned workspace removed after backend stops",
+    "captures": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/desktop-round1/playwright-isolated"
+  },
+  "interrupted_run_cleanup": [
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.session/__e2e__loading-open",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.nadoc-projects/__e2e__loading-open",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/__e2e__loading-open.nadoc",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false
+    }
+  ],
+  "after": [
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.session/__e2e__loading-open",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/.nadoc-projects/__e2e__loading-open",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/workspace/__e2e__loading-open.nadoc",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false
+    }
+  ],
+  "isolated_document_absent": true,
+  "isolated_credentials_absent": true
+}

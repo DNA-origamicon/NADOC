@@ -1,0 +1,60 @@
+{
+  "date_utc": "2026-10-18T03:01:09.637496+00:00",
+  "goal_complete": false,
+  "previous_turn": "progress: completed serial native admission and integration panel with archived evidence",
+  "requirements": [
+    {
+      "requirement": "Formation-supported ordered roster",
+      "verdict": "partially verified",
+      "evidence": "/home/jojo/Work/NADOC/docs/audits/cpd_mvp_formation_roster_20261017.json",
+      "remaining": "cis-anti-II ordered identity unresolved; trans-antiI/II excluded per user until attachment evidence. Trans-syn-II provenance corrected from primary abstract."
+    },
+    {
+      "requirement": "External parameterization workflow for every admitted isomer",
+      "verdict": "incomplete",
+      "evidence": "CGenFF return provenance for cis-anti-I/trans-syn-I/II; docs/audits/cpd_mvp_cis_syn_reuse_20261017.json",
+      "remaining": "cis-syn-I legacy published-derived/local-fit model is not a completed independent external workflow."
+    },
+    {
+      "requirement": "Separate canonical stereochemical and native admission",
+      "verdict": "verified only in stated engineering scopes",
+      "evidence": "docs/audits/cpd_cgenff_numerical_panel_20261017.json; docs/audits/cpd_mvp_cis_syn_reuse_20261017.json"
+    },
+    {
+      "requirement": "Applicable prespecified established-observable comparison",
+      "verdict": "incomplete",
+      "remaining": "Quantitative source data, measurement conditions, atom mapping, uncertainty/tolerance and source-matched fixtures not yet registered. Six-T trajectories cannot answer these comparisons."
+    },
+    {
+      "requirement": "Finite budget and candidate isolation",
+      "verdict": "verified for completed panel",
+      "evidence": "Archive closeout and package manifests;2947.3957649814856native seconds;no active job"
+    },
+    {
+      "requirement": "No untriggered refinement",
+      "verdict": "retained",
+      "remaining": "Do not fit parameters based on this audit or qualitative structural statements."
+    }
+  ],
+  "reference_candidates": [
+    {
+      "isomer": "cis-anti-I",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2724876/",
+      "fixture": "d(GTATCATGAGGTGC), lesionT2/T7",
+      "observable_candidate": "Reported stereodiagnostic NOE contact pattern; quantitative distance/tolerance and conditions must be extracted before comparison. Absence of crosspeak is not automatically a distance bound."
+    },
+    {
+      "isomer": "cis-syn-I/trans-syn-I",
+      "source": "https://pubmed.ncbi.nlm.nih.gov/2271562/",
+      "fixture": "d(CGTATTATGC).d(GCATAATACG), lesionT5/T6",
+      "observable_candidate": "NMR contacts/assignments at10C. Qualitative shift asymmetry alone is not a numerical structural tolerance. Melting excluded from campaign."
+    },
+    {
+      "isomer": "trans-syn-II",
+      "source": "https://pubmed.ncbi.nlm.nih.gov/8374057/",
+      "fixture": "TpT; distinguish Rp-methyl phosphate ester",
+      "observable_candidate": "Reported three-bond scalar couplings and ROESY. Numeric tables, conditions and defensible forward model needed."
+    }
+  ],
+  "next_action": "Acquire quantitative primary experimental reference data and close external-workflow provenance gap for cis-syn-I; no further native simulation or fit until appropriate registration."
+}

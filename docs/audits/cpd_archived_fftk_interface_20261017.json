@@ -1,0 +1,156 @@
+{
+  "at": "2026-10-18T00:27:11.173528+00:00",
+  "status": "archived_hessian_external_transform_and_adapted_readback_passed",
+  "expectations": {
+    "finite_symmetric_external_transform": "PASS all three",
+    "jacobian_rank_102": "PASS all three",
+    "exact_nonempty_row_dimensions": "PASS all three",
+    "strict_rectangular_raw_readback": "FAIL: upstream EOF loop adds empty row",
+    "strict_rectangular_eof_adapted_readback": "PASS all three; only terminal newline omitted"
+  },
+  "transformation": {
+    "external_serialization_source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-fftk-v1/bonded-example-v1/hessian.py",
+      "sha256": "ab66e88154ead0b9cb78e929317930cbac52f3eb9d4aa015e9de6c5023f58983"
+    },
+    "external_transform_source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-fftk-v1/psi4-16/lib//python3.10/site-packages/optking/molsys.py",
+      "sha256": "9b777a47f7b4d10e87ea20599171b596f53088c87efcebb233fceb7c313739c9"
+    },
+    "records": [
+      {
+        "product": "tt-cpd-cis-anti-i",
+        "coordinates": 224,
+        "bonds": 38,
+        "angles": 72,
+        "torsions": 114,
+        "rank": 102,
+        "finite": true,
+        "symmetry_error": 3.5822039778921066e-16,
+        "external_transform_passed": true
+      },
+      {
+        "product": "tt-cpd-trans-syn-i",
+        "coordinates": 224,
+        "bonds": 38,
+        "angles": 72,
+        "torsions": 114,
+        "rank": 102,
+        "finite": true,
+        "symmetry_error": 5.134781488891349e-16,
+        "external_transform_passed": true
+      },
+      {
+        "product": "tt-cpd-trans-syn-ii",
+        "coordinates": 224,
+        "bonds": 38,
+        "angles": 72,
+        "torsions": 114,
+        "rank": 102,
+        "finite": true,
+        "symmetry_error": 1.0269562977782698e-15,
+        "external_transform_passed": true
+      }
+    ],
+    "new_electronic_calculations": 0,
+    "method_note": "Uses external OptKing Hessian transformation without gradient correction, matching ffTK generated implementation. Historical stationarity limitations remain."
+  },
+  "raw_readback": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "coordinate_count": "224",
+      "rows": "225",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "coordinate_count": "224",
+      "rows": "225",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "coordinate_count": "224",
+      "rows": "225",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    }
+  ],
+  "adapted_readback": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "coordinate_count": "224",
+      "rows": "224",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "coordinate_count": "224",
+      "rows": "224",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "coordinate_count": "224",
+      "rows": "224",
+      "nonempty_rows": "224",
+      "invalid_nonempty_rows": "0"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/prepare.py",
+      "sha256": "6f249d2097c515f1d02b0fa0d2f02730bc9bb97de1d2404ad7b2e023386110c0"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/transform.py",
+      "sha256": "74396f500aaebaf79c8f13a69c7300028f1647ede7c10d539f3c07a38f36225d"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/expectations.json",
+      "sha256": "c77552b3a71ad4c85d4b958cf975f6ea9da981e851260049f64f51512393b6a8"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback.tcl",
+      "sha256": "7c252ca0ba1a0282d215bf23f4b90bf8c5a365fccaeb7d961b103582ca2ad503"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback_v2.tcl",
+      "sha256": "61b63e87d61f4a447678e7562f84a229efbc108929182e0628ba44c73e8135e7"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback_v3.tcl",
+      "sha256": "be9041ae086017f4f98452f085f622dcdd528240a40b4afe19fc1f406038d9db"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback.log",
+      "sha256": "7b76cb052ca3a375ce8b21c17564e3ea80df6053212a10281520620f5afdc369"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback_v2.log",
+      "sha256": "f08b5e54429643ed4d3d18a29236f8dec25d5618bbc80a0034cd35da77596463"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/readback_v3.log",
+      "sha256": "f08b5e54429643ed4d3d18a29236f8dec25d5618bbc80a0034cd35da77596463"
+    }
+  ],
+  "native_qm_seconds_added": 0,
+  "upstream_sources_modified": false,
+  "parameters_fitted": false,
+  "limitations": [
+    "Graph-enumerated adapter coordinates require reconciliation with final PSF before fitting.",
+    "Capped-core evidence does not certify canonical DNA or NAMD stability.",
+    "This checks transformation, parsing and dimensions; numerical unit-conversion parity still requires separate verification before using the returned matrix for fitting.",
+    "Published-example bonded native acquisition remains incomplete; no complete ffTK fitting workflow qualification claimed."
+  ],
+  "preserved_failures": [
+    "First VMD harness inferred wrong directory; preserved header and log.",
+    "Raw ffTK reader emits empty final row; upstream source unchanged."
+  ],
+  "next": "Verify numeric conversion against upstream documented implementation, reconcile final topology and obtain external initial assignments. No repeated QM acquisition."
+}

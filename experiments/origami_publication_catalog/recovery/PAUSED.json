@@ -1,0 +1,29 @@
+{
+  "status": "paused_by_user",
+  "resume_condition": "Full feature log revamp in place; await user instruction to resume reconstruction",
+  "deleted_review_folder": "workspace/Image_Recovery_First5_20261102",
+  "deleted_files": [
+    "app_verification.json",
+    "D008_recovery.json",
+    "PROCESS.txt",
+    "D006_recovery.json",
+    "D005_recovery.json",
+    "D005_staples.csv",
+    "D007_recovery.json",
+    "D021_recovery.json",
+    "D021_Pin_pore_PARTIAL.nadoc",
+    "review.html",
+    "validation.json",
+    "nadoc_sha256.json",
+    "D007_Monolith.nadoc",
+    "D006_staples.csv",
+    "app_cleanup.json",
+    "D006_Straight_3x6.nadoc",
+    "D008_staples.csv",
+    "D007_staples.csv",
+    "D005_Right_twisted_10x6.nadoc",
+    "D006_diagnostic.json",
+    "D008_Square_nut.nadoc"
+  ],
+  "retained": "Research scripts and Archive evidence only; no further NADOC reconstruction"
+}

@@ -29,6 +29,27 @@ checks may reject a run, but do not authorize changing its solvent geometry.
 Existing packages retain their original dimensions and audit metadata.
 Surface-control and two-electrode boundary rules remain unchanged.
 
+## Selected jobs versus new preparations — 2026-10-25
+
+Selecting a prepared or completed job reads its initial box and actual ion counts
+from that job's saved package through `solvent-meta`. The card and overlay label
+this **Saved job / Prepared initial box**. These are initial dimensions, not the
+pressure-equilibrated cell of the current trajectory frame. The reference outline
+is centered on the displayed structure; face clearances are not inferred from a
+potentially different current design. Missing package data shows an unavailable
+message rather than substituting the current 6 nm default. The read-only
+View settings dialog also reads saved package dimensions, including when a
+recorded manual request differs from the box that was actually prepared.
+
+New job → Relaxation restores the design's preparation settings and labels the
+result **New preparation preview**. Merely selecting a historical run does not
+choose that run's padding for a new relaxation. Production retains its parent's
+physical package. Draft editing retains its recorded preparation choices.
+
+Previously the same card refitted the currently open geometry even while a
+historical job was selected. This could show different dimensions and only bulk
+salt estimates for a run whose package contained a different box and counterions.
+
 ## Initial padding versus measured clearance
 
 The initial padding is added to the selected envelope. The six displayed **water

@@ -166,6 +166,7 @@ def audit_photoproduct_psf(
     patch_plan: dict[str, Any],
     topology_specs: dict[str, dict[str, Any]],
     charge_tolerance: float = 1e-6,
+    experimental_mvp: bool = False,
 ) -> dict[str, Any]:
     """Compare product/reactant PSFs and prove the complete reviewed patch delta."""
 
@@ -258,7 +259,9 @@ def audit_photoproduct_psf(
                 lesion_errors.append(
                     f"{patch['product_id']} crosslinks do not match its ordered registry graph"
                 )
-        if len(impropers_added_spec) < 4:
+        if experimental_mvp and len(impropers_added_spec) < 2:
+            lesion_errors.append("MVP audit specification must declare its product planar impropers")
+        if not experimental_mvp and len(impropers_added_spec) < 4:
             lesion_errors.append(
                 "TT-CPD audit specification must declare at least four stereochemical "
                 "product impropers"
@@ -375,6 +378,7 @@ def audit_photoproduct_psf(
         errors.append("reverse design-to-PSF identity mapping is incomplete or ambiguous")
     return {
         "schema": "nadoc.photoproduct-static-topology-audit.v1",
+        "qualification": "experimental MVP exact patch audit; not release qualification" if experimental_mvp else "release topology requirements",
         "status": "passed" if not errors else "failed",
         "passed": not errors,
         "atom_count_conserved": len(product_atoms) == len(reactant_atoms),

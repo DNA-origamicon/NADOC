@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import json
 import pytest
 from tools.vr_workflows.extrude_sidebar import SidebarControls
 
@@ -23,3 +24,16 @@ def test_missing_control_stops_at_end_of_menu(monkeypatch,tmp_path):
     monkeypatch.setattr('tools.vr_workflows.extrude_sidebar.scroll_page',lambda *args:None)
     with pytest.raises(RuntimeError,match='Missing sidebar control'):
         SidebarControls(live,tmp_path,'steady_fast').click('missing')
+
+
+def test_failed_acquisition_retains_trials(monkeypatch, tmp_path):
+    live = SimpleNamespace(state={'controls': [{'id': 'tab:tools'}],
+                                 'sidebars': [{}, {'offset': 0}]})
+    def miss(live, hand, identifier, preset, trials):
+        trials.append({'control': identifier, 'hit': False, 'samples': [{'target_hover': False}]})
+        raise RuntimeError('Noisy reach missed')
+    monkeypatch.setattr('tools.vr_workflows.extrude_sidebar.click', miss)
+    with pytest.raises(RuntimeError, match='Noisy reach missed'):
+        SidebarControls(live, tmp_path, 'variable_fast').click('tab:tools')
+    assert json.loads((tmp_path / 'sidebar-reaches.json').read_text()) == [
+        {'control': 'tab:tools', 'hit': False, 'samples': [{'target_hover': False}]}]

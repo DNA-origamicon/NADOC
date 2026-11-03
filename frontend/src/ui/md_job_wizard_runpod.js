@@ -30,7 +30,7 @@ import { initRunpodSetup, volumeOptions } from './runpod_setup.js'
 import { renderPreflightRows, runpodBlockReason, runpodChipState } from './runpod_status.js'
 import { jobOptionsHeader, renderJobOptionRows } from './runpod_gpu_options.js'
 import {
-  DEFAULT_BUDGET_USD, budgetHours, budgetState, estimateRows, formatHours, formatUsd,
+  DEFAULT_BUDGET_USD, budgetHours, budgetState, selectedBudget, estimateRows, formatHours, formatUsd,
   runpodEstimateKey, runpodReadiness, selectedRow, storageRows,
 } from './md_job_wizard_runpod_model.js'
 
@@ -93,14 +93,18 @@ export function initWizardRunpod({
     _error = ''
     paint()
     try {
-      _preview = await getJobPreview?.({ ...(shape || {}), budget_usd: _budget })
+      const result = await getJobPreview?.({ ...(shape || {}), budget_usd: _budget })
+      if(key!==_key)return
+      _preview=result
       if (!_preview) _error = 'Could not price this run on RunPod.'
       else if (_preview.sized === false) _error = _preview.reason || 'Not sized.'
       else _adoptDefaults()
     } catch (err) {
+      if(key!==_key)return
       _preview = null
       _error = `Could not price this run: ${err?.message || err}`
     } finally {
+      if(key!==_key)return
       _busy = false
       paint()
       onChange()
@@ -148,7 +152,7 @@ export function initWizardRunpod({
     if (_ro()) { _paintRecorded(); return }
 
     const budget = budgetState({
-      budget: _preview?.budget, balance: _preview?.balance,
+      budget: selectedBudget(_preview,_gpuKey,_budget), balance: _preview?.balance,
       livePods: _preview?.live_pods || [],
     })
     const row = selectedRow(_preview, _gpuKey)
@@ -159,7 +163,7 @@ export function initWizardRunpod({
       + _chipHtml()
       + _gpuHtml(budget)
       + _estimateHtml(row, shape)
-      + _storageHtml()
+      + _storageHtml(row)
       + _budgetHtml(budget, row)
     _setupHost = mount.querySelector('#wiz-runpod-setup')
     _ensureSetup()
@@ -216,12 +220,16 @@ export function initWizardRunpod({
     return _sectionTitle(`This run on a ${row.label}`)
       + `<div style="font-size:11px">${rows}${sized ? _row('System size', sized, '') : ''}</div>`
       + '<div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">'
-      + 'Estimated from a conservative per-architecture rate, then refined by a benchmark on '
-      + 'the pod you actually get — the same card model can vary ~1.5× between pods.</div>'
+      + 'Compute time uses a hardware throughput estimate and the planned stages. '
+      + 'The 1.5× planning allowance is not a measured confidence bound. Startup, analysis, '
+      + 'transfers and retries can add time and cost.</div>'
   }
 
-  function _storageHtml() {
-    const st = _preview?.storage
+  function _storageHtml(row) {
+    let st = _preview?.storage
+    if (st?.staging?.minutes != null && row?.usd_per_hour != null) {
+      st = { ...st, staging: { ...st.staging, usd: st.staging.minutes / 60 * row.usd_per_hour } }
+    }
     if (!st) return ''
     const opts = volumeOptions(_volumes)
       .map(o => `<option value="${_esc(o.value)}"${o.value === _volumeId ? ' selected' : ''}>`
@@ -357,7 +365,7 @@ export function initWizardRunpod({
       busy: _busy,
       blockReason: runpodBlockReason(_preview?.preflight),
       budget: budgetState({
-        budget: _preview?.budget, balance: _preview?.balance,
+        budget: selectedBudget(_preview,_gpuKey,_budget), balance: _preview?.balance,
         livePods: _preview?.live_pods || [],
       }),
     })
@@ -370,8 +378,7 @@ export function initWizardRunpod({
     activate() { void refresh(); void _loadVolumes() },
     gpuKey: () => _gpuKey,
     estimatedCostUsd: () => {
-      const row = (_preview?.gpus || []).find(g => g.key === _gpuKey)
-      return row?.total_cost ?? _preview?.budget?.estimated_usd ?? null
+      return selectedBudget(_preview,_gpuKey,_budget).estimated_usd
     },
     quotedRateUsdPerHour: () => {
       const row = (_preview?.gpus || []).find(g => g.key === _gpuKey)

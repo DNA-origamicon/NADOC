@@ -43,6 +43,11 @@ const lmNode = (o = {}) => ({ engine: 'lammps', job_id: 'lm1', parent_job_id: nu
   current_step: 1000, ...o })
 
 describe('pure helpers', () => {
+  it.each(['queued', 'stopped', 'paused', 'failed'])('job lifecycle %s overrides a leftover running production stage', status => {
+    const text = masterStatusText(oxNode({ status, production_state: 'running' }))
+    expect(text).toContain(status)
+    expect(text).not.toContain('production running')
+  })
   it('nodeNeedsPolling excludes a job that was created but never started', () => {
     // `＋ New job → Create job` leaves a solvated package at `queued` waiting for the
     // user. It is "active" for spinner purposes but its state cannot change on its own,
@@ -439,6 +444,135 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it.each([false, true])('commits selection only when the trajectory dialog accepts it (%s)', async accepted => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode(), oxNode({ job_id: 'next', status: 'queued' })])
+    await sim.refresh()
+    sim.selectJob('ox1')
+    let resolve
+    oxdnaPanel.selectJob.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = sim.selectJob('next')
+    expect(sim.getSelected().id).toBe('ox1')
+    expect(document.querySelector('[data-job-id="next"] [data-selection-pending]')).not.toBeNull()
+    resolve(accepted)
+    await pending
+    expect(document.querySelector('[data-selection-pending]')).toBeNull()
+    expect(sim.getSelected().id).toBe(accepted ? 'next' : 'ox1')
+    if (!accepted) {
+      await sim.selectJob('next')
+      expect(sim.getSelected().id).toBe('next')
+    }
+  })
+
+  it('selects pending creation immediately and replaces it without waiting for list refresh', async () => {
+    mount()
+    const { sim, mdPanel } = make([mdNode()])
+    await sim.refresh()
+    sim.selectJob('md1')
+    const emit = detail => window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail }))
+    const pending = mdNode({ job_id: 'creating-test', status: 'preparing', creating: true })
+    emit({ node: pending })
+    expect(sim.getSelected().id).toBe('creating-test')
+    expect(document.querySelector('[data-job-id="creating-test"]')).not.toBeNull()
+    expect(mdPanel.selectJob).toHaveBeenLastCalledWith('creating-test', { explicit: false })
+    await sim.refresh() // server still only knows the old job
+    expect(sim.getSelected().id).toBe('creating-test')
+    emit({ removeJobId: 'creating-test', node: mdNode({ job_id: 'saved-new', status: 'queued' }) })
+    expect(sim.getSelected().id).toBe('saved-new')
+    expect(document.querySelector('[data-job-id="creating-test"]')).toBeNull()
+    expect(mdPanel.selectJob).toHaveBeenLastCalledWith('saved-new', { explicit: false })
+    await sim.refresh()
+    expect(sim.getSelected().id).toBe('saved-new')
+  })
+
+  it('clears pending selection on creation failure', async () => {
+    mount()
+    const { sim, mdPanel } = make([mdNode()])
+    await sim.refresh()
+    window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail: {
+      node: mdNode({ job_id: 'creating-failed', creating: true, status: 'preparing' }),
+    } }))
+    window.dispatchEvent(new CustomEvent('nadoc:sim-job-creation', { detail: {
+      removeJobId: 'creating-failed', node: null,
+    } }))
+    expect(sim.getSelected().id).toBeNull()
+    expect(mdPanel.deselectJob).toHaveBeenCalled()
+  })
+
+  it('clears immediately on close and ignores the outstanding status response', async () => {
+    mount()
+    let resolveStatus
+    const { sim } = make([], {
+      listSimJobSnapshot: vi.fn().mockResolvedValue([oxNode()]),
+      listSimJobs: vi.fn(() => new Promise(resolve => { resolveStatus = resolve })),
+    })
+    const pending = sim.refresh()
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(document.querySelector('[data-job-id="ox1"]')).not.toBeNull()
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+    expect(sim.getSelected().id).toBeNull()
+    resolveStatus([oxNode()])
+    await pending
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+  })
+
+  it('renders the new full snapshot under 100ms without waiting for old status checks', async () => {
+    mount()
+    let path = '/w/old.nadoc'
+    let resolveOld
+    const { sim, oxdnaPanel } = make([], {
+      listSimJobSnapshot: vi.fn(p => Promise.resolve([
+        oxNode({ job_id: p.includes('old') ? 'old' : 'new' }),
+        oxNode({ job_id: p.includes('old') ? 'old-child' : 'new-child',
+          parent_job_id: p.includes('old') ? 'old' : 'new' }),
+      ])),
+      listSimJobs: vi.fn().mockImplementationOnce(() => new Promise(r => { resolveOld = r }))
+        .mockResolvedValue([oxNode({ job_id: 'new' }), oxNode({ job_id: 'new-child', parent_job_id: 'new' })]),
+    }, { getWorkspacePath: () => path })
+    const old = sim.refresh()
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    const start = performance.now()
+    path = '/w/new.nadoc'
+    window.dispatchEvent(new Event('nadoc:workspace-path-change'))
+    expect(document.getElementById('simulate-jobs-list').childElementCount).toBe(0)
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(document.querySelector('[data-job-id="new-child"]')).not.toBeNull()
+    expect(document.querySelector('[data-job-id="old"]')).toBeNull()
+    expect(performance.now() - start).toBeLessThan(100)
+    sim.selectJob('old')
+    expect(oxdnaPanel.selectJob).not.toHaveBeenCalled()
+    resolveOld([oxNode({ job_id: 'old' })])
+    await old
+    expect(document.querySelector('[data-job-id="old"]')).toBeNull()
+  })
+
+  it('offers Thin job with an explanatory tooltip for completed NAMD jobs', async () => {
+    mount()
+    const { sim } = make([mdNode()])
+    await sim.refresh()
+    sim.setActiveEngine('namd')
+    document.querySelector('[data-job-id="md1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const item = [...document.querySelectorAll('.context-menu__item')].find(e => e.textContent === 'Thin job')
+    expect(item).toBeTruthy()
+    expect(item.title).toContain('Retained frame coordinates stay unchanged')
+    expect(item.classList.contains('context-menu__item--disabled')).toBe(false)
+  })
+
+  it('disables Thin job for an active NAMD job', async () => {
+    mount()
+    const { sim } = make([mdNode({ status: 'running' })])
+    await sim.refresh()
+    sim.setActiveEngine('namd')
+    document.querySelector('[data-job-id="md1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const item = [...document.querySelectorAll('.context-menu__item')].find(e => e.textContent === 'Thin job')
+    expect(item.classList.contains('context-menu__item--disabled')).toBe(true)
+  })
+
   it('refreshes a loaded job list without pulsing the loading spinner', async () => {
     mount()
     const { sim, api } = make([mdNode({ status: 'running' })])
@@ -877,6 +1011,19 @@ describe('Terminate run and download feedback', () => {
       .toContain('processing trajectory health and metrics')
   })
 
+  it('renders an Alpine queue without stale simulation progress or a retry action', async () => {
+    mount()
+    const node = mdNode({ status: 'running', execution_target: 'alpine',
+      slurm_state: 'COMPLETED', download_status: { state: 'queued' } })
+    const { sim } = make([node])
+    await sim.refresh()
+    sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('Finished on Alpine — waiting to download')
+    expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('0%')
+    expect(document.getElementById('simulate-jobs-end-download-btn').disabled).toBe(true)
+  })
+
   it('locks and greys the button immediately and repurposes the master progress bar', async () => {
     localStorage.setItem('nadoc.runDir', '/storage')
     let finish
@@ -1147,4 +1294,19 @@ it('shows last synced on a resumed Alpine progress readout', () => {
   expect(text).toContain('synced')
   expect(text).toContain('Last synced')
   expect(text).toContain('34')
+})
+
+it('shows each engine’s remembered directory when switching simulation tabs', () => {
+  mount()
+  localStorage.setItem('nadoc.runDir.oxdna', '/disk/dna-runs')
+  localStorage.setItem('nadoc.runDir.namd', '/disk/atom-runs')
+  const { sim } = make([])
+  const button = document.querySelector('#simulate-run-dir button')
+  expect(button.textContent).toContain('dna-runs')
+  sim.setActiveEngine('namd')
+  expect(button.textContent).toContain('atom-runs')
+  sim.setActiveEngine('oxdna')
+  expect(button.textContent).toContain('dna-runs')
+  localStorage.removeItem('nadoc.runDir.oxdna')
+  localStorage.removeItem('nadoc.runDir.namd')
 })

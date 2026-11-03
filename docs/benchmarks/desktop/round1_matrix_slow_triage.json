@@ -1,0 +1,248 @@
+{
+  "report": {
+    "per_test_budget_sec": 5.0,
+    "total_test_seconds": 501.2,
+    "n_tests": 14825,
+    "sim_running": false,
+    "sim_reason": "",
+    "slowest_files_15": [
+      {
+        "file": "tests/test_trajectory_thinning.py",
+        "seconds": 22.6,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_headless_oxdna_build.py",
+        "seconds": 22.5,
+        "n_tests": 45,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_oxdna_relaxation.py",
+        "seconds": 20.6,
+        "n_tests": 248,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_api.py",
+        "seconds": 20.5,
+        "n_tests": 17,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_project_revisions.py",
+        "seconds": 10.4,
+        "n_tests": 23,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_vr_representation_loading.py",
+        "seconds": 10.1,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_alpine_worker.py",
+        "seconds": 9.9,
+        "n_tests": 12,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_gold_strep_dna.py",
+        "seconds": 7.9,
+        "n_tests": 13,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_coating_evaluation.py",
+        "seconds": 7.9,
+        "n_tests": 27,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_recovery.py",
+        "seconds": 7.3,
+        "n_tests": 36,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_constraints.py",
+        "seconds": 6.9,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_headless_spec_build.py",
+        "seconds": 6.2,
+        "n_tests": 81,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_native_streptavidin_proof.py",
+        "seconds": 6.1,
+        "n_tests": 20,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_creation.py",
+        "seconds": 5.6,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_assembly_simulation_parity.py",
+        "seconds": 5.4,
+        "n_tests": 6,
+        "n_slow_marked": 0
+      }
+    ],
+    "violators": [
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[False->]",
+        "seconds": 5.79
+      },
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[True->]",
+        "seconds": 5.61
+      }
+    ],
+    "slowest_25": [
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[False->]",
+        "seconds": 5.79,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[True->]",
+        "seconds": 5.61,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_kept_records_exact_and_timing_readable[True-<]",
+        "seconds": 4.54,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_download_queue.py::test_worker_queues_second_job_and_client_cancellation_does_not_cancel_it",
+        "seconds": 3.08,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 2.85,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+        "seconds": 2.82,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+        "seconds": 2.75,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+        "seconds": 2.68,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_gold_strep_dna.py::test_job_api_builds_full_fixed_core_model[CUDA]",
+        "seconds": 2.67,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_gold_strep_dna.py::test_job_api_builds_full_fixed_core_model[CPU]",
+        "seconds": 2.62,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_trajectory_thinning.py::test_preview_actual_rmsd_and_repeat_thinning",
+        "seconds": 2.59,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_assembly_simulation_parity.py::test_fem_preparation_yields_api_event_loop[cando]",
+        "seconds": 2.35,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+        "seconds": 2.26,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_remote_cell_recovery.py::test_generated_alpine_loop_runs_only_cell_recovery[Periodic cell has become too small-0]",
+        "seconds": 2.16,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_connectivity_proof.py::test_registered_connectivity_pipeline_cold_replay_and_endpoint_edit",
+        "seconds": 2.14,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[True]",
+        "seconds": 2.08,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_runpod_script.py::TestChainScriptActuallyRuns::test_stall_watchdog_kills_a_wedged_step",
+        "seconds": 2.01,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_snupi_job.py::test_kill_pid_terminates_detached_process",
+        "seconds": 2.0,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_worker.py::test_download_outlives_client_and_new_client_reattaches",
+        "seconds": 2.0,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+        "seconds": 1.94,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_namd_vacuum.py::test_the_retired_preset_is_not_offered",
+        "seconds": 1.93,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+        "seconds": 1.89,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_oxdna_peg.py::test_production_inherits_peg_wall_and_terminal_only_field[0]",
+        "seconds": 1.85,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration.py::test_lease_is_single_writer_and_owner_can_renew_and_release",
+        "seconds": 1.85,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_headless_oxdna_build.py::test_run_oxdna_benchmark_then_apply_then_relax",
+        "seconds": 1.82,
+        "slow_marked": false
+      }
+    ]
+  },
+  "scope": "Two tiny four-atom, eleven-frame endian fixtures. Real durable file replacement + MDAnalysis import; no solver or large scientific workload. Focused rerun pending; keep fast correctness coverage unless evidence shows genuine heavy work.",
+  "focused_recheck": {
+    "result": "4 passed, 10 deselected in 3.66 s",
+    "flagged_call_seconds": [
+      0.35,
+      0.45
+    ],
+    "log": "round1_matrix_slow_recheck.txt",
+    "decision": "Keep fast coverage and existing budgets; broad delays not reproduced in focused run. Aggregate timing debt remains."
+  }
+}

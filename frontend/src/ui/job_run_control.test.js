@@ -25,8 +25,8 @@ describe('runControlState', () => {
     expect(s.label).toBe('■ Stop Relax')
   })
 
-  it('a preparing job selected → STOP (active covers preparing)', () => {
-    expect(runControlState({ status: 'preparing' }, opts).action).toBe(RUN_ACTION.STOP)
+  it('a preparing job stays disabled with a spinner', () => {
+    expect(runControlState({ status: 'preparing' }, opts)).toMatchObject({ action: RUN_ACTION.PREPARING, disabled: true, spinner: true })
   })
 
   it('a stopped job selected → RESUME', () => {

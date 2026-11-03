@@ -193,7 +193,7 @@ describe('submit guard (double-submit prevention)', () => {
                  walltime: '24:00:00', est_cost_su: 100, expected_ns_per_day: 5 },
   }
 
-  function mount(over = {}) {
+  function mount(over = {}, callbacks = {}) {
     document.body.innerHTML = ''
     let resolveSubmit
     const api = {
@@ -204,7 +204,7 @@ describe('submit guard (double-submit prevention)', () => {
     }
     const onSubmitStart = vi.fn()
     const onSubmitEnd = vi.fn()
-    const card = initMdSubmitReview({ api, onSubmitStart, onSubmitEnd, toast: () => {} })
+    const card = initMdSubmitReview({ api, onSubmitStart, onSubmitEnd, toast: () => {}, ...callbacks })
     return { card, api, onSubmitStart, onSubmitEnd, release: () => resolveSubmit?.() }
   }
 
@@ -218,6 +218,23 @@ describe('submit guard (double-submit prevention)', () => {
     expect(onSubmitStart).toHaveBeenCalled()
     expect(card.isSubmitting()).toBe(true)                   // ...but still guarded
     release()
+  })
+
+  it('keeps the guard until the submitted job status has refreshed', async () => {
+    let finishRefresh
+    const onSubmitted = vi.fn(() => new Promise(resolve => { finishRefresh = resolve }))
+    const { card, onSubmitEnd, release } = mount({}, { onSubmitted })
+    await card.open('j1')
+    document.querySelector('#mr-go').click()
+    release()
+    await vi.waitFor(() => expect(onSubmitted).toHaveBeenCalled())
+    expect(card.isSubmitting()).toBe(true)
+    expect(onSubmitEnd).not.toHaveBeenCalled()
+    await card.open('j1')
+    expect(document.querySelector('#mr-go')).toBeNull()
+    finishRefresh()
+    await vi.waitFor(() => expect(onSubmitEnd).toHaveBeenCalledWith({ ok: true }))
+    expect(card.isSubmitting()).toBe(false)
   })
 
   it('refuses to reopen while the upload is still running', async () => {

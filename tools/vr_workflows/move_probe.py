@@ -26,6 +26,13 @@ from tools.vr_workflows.audit_representation import prepare as prepare_audit_rep
 if mode != 'edit': prepare_audit_representation(live)
 preset=os.environ.get('NADOC_VR_PROFILE','steady_fast')
 controls=SidebarControls(live,out,preset);trials=[]
+def recenter_setup():
+ if os.environ.get('NADOC_VR_MOVE_SETUP_TRACKPAD')!='1':
+  return controls.click('move:recenter')
+ from tools.vr_workflows.menu_focus_check import seek,pad
+ seek(live,1,'move:recenter');live.button('trigger',hand=1);live.frame()
+ if live.state['sidebars'][1]['input_mode']=='trackpad':pad(live,1)
+ (out/'recenter-setup.json').write_text(json.dumps({'method':'production trackpad focus + trigger','noisy_recenter_acquisition_validated':False,'motion_profile':preset,'motion_seeds_and_deadlines':'unchanged'}))
 def wait(predicate):
  deadline=time.monotonic()+90
  while not predicate(live.state):
@@ -79,7 +86,7 @@ try:
    live.send('activate',tool='move_rotate');live.frame()
    (out/'activation.json').write_text(json.dumps({'method':'semantic setup','menu_acquisition_validated':False}))
   else:controls.click('tab:tools');controls.click('tool-move')
-  controls.click('move:recenter')
+  recenter_setup()
   live.frame()
   # With Move / Rotate open, grips still move the part rather than editing it.
   park()
@@ -91,7 +98,7 @@ try:
   live.send('button',hand=1,button='grip',pressed=False);live.frame()
   assert live.state['presentation']['model_to_tracking_rows']!=presentation
   assert live.state['tool_sequence']==sequence and not live.state['move_grabbing']
-  controls.click('move:recenter');live.frame()
+  recenter_setup();live.frame()
   radial_choice(0,{'cluster':(.69282,.4),'overhang':(0,-.8),'base':(-.69282,.4)}[kind],3099)
   wait(lambda s:s['selection_level']==('domain' if kind=='overhang' else kind))
   live.capture_to(out/'selection-options',discard_source=True)
@@ -147,10 +154,12 @@ try:
   center=live.state['move_handle']
   # Point at a selected molecular point, not the potentially empty group centroid.
   aim=next((p['world'] for p in live.state['move_targets'] if p['identity']==acquisitions[-1]['hover']),center)
+  visible_points=[]
   if live.state['representation'] != 'full':
    from tools.vr_workflows.move_pixels import centers
    a,selected=centers(out/'selected','left',live.state['owner_tokens'][0])
    b,_=centers(out/'selected','right',live.state['owner_tokens'][0])
+   visible_points=[*a.values(),*b.values()]
    common=a.keys() & b.keys() & selected
    assert common,'Selected molecular geometry is not visible in both eyes'
    aim=a[min(common,key=lambda i:np.linalg.norm(a[i]-center))].tolist()
@@ -160,13 +169,17 @@ try:
   eye=json.loads((out/'selected/evidence.json').read_text())['eyes'][0]
   toward=np.array(live.state['head_position'])-np.array(aim);toward/=np.linalg.norm(toward)
   toward+=np.array(rotate(eye['orientation_xyzw'],[.4,-.15,0]));toward/=np.linalg.norm(toward)
-  pointing=(np.array(aim)+toward*.45).tolist()
-  (out/'pointing-approach.json').write_text(json.dumps({'target':aim,'position':pointing,'distance_m':.45,'reason':'Observer-side hand with lateral beam visibility'}))
+  from tools.vr_workflows.move_pixels import remote_pointing_distance
+  pointing_distance=remote_pointing_distance(np.array(aim),toward,visible_points)
+  pointing=(np.array(aim)+toward*pointing_distance).tolist()
+  (out/'pointing-approach.json').write_text(json.dumps({'target':aim,'position':pointing,'distance_m':pointing_distance,'minimum_front_clearance_m':.20,'reason':'Observer-side hand beyond visible molecular extent, with lateral beam visibility'}))
   from tools.vr_workflows.move_acquisition import remote_target
   reach(pointing,aim_orientation(pointing,aim),acquired=remote_target)
   assert live.state['move_nearby'] and live.state['move_beam_end'] is not None,'selected geometry was not pointed at'
   assert np.linalg.norm(np.array(live.state['hands'][1]['position'])-live.state['move_beam_end'])>.15,'grab was not remote'
   live.capture_to(out/'pointed',discard_source=True)
+  grab_pose=dict(live.state['hands'][1])
+  grab_depth=float(np.linalg.norm(np.asarray(grab_pose['position'])-live.state['move_beam_end']))
   live.send('button',hand=1,button='trigger',pressed=True);live.frame()
   assert live.state['move_grabbing'],'trigger did not acquire target'
   start=np.array(live.state['hands'][1]['position']);q=live.state['hands'][1]['orientation_xyzw']
@@ -187,7 +200,8 @@ try:
    from tools.vr_workflows.settled_drag import run as settled_drag
    settled_drag(live,out,preset,start,q,shift,rotation)
   end=np.array(live.state['hands'][1]['position'])
-  expected_center=np.array(center)+end-start
+  from tools.vr_workflows.move_pixels import remote_drag_delta
+  expected_center=np.array(center)+remote_drag_delta(grab_pose,live.state['hands'][1],grab_depth)
   live.send('button',hand=1,button='trigger',pressed=False);live.frame()
   assert not live.state['move_grabbing'] and live.state['status']=='PREVIEW ONLY'
   live.send('button',hand=1,button='grip',pressed=True);live.frame()

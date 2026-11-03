@@ -1,0 +1,22 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-anti-v3-service/completion_wake_ack.json",
+    "sha256": "0e49973cb1f6e1f147373d4ecdfbeccb15852a6ba3f9e30e7f76a3e0152bb579"
+  },
+  "welded_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-anti-v3/completion_audit.json",
+    "sha256": "30034039ec5337873f88bf1ad3ca2bea76d38a49d6ed412db8e51eb3498e70ca"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-control-v3/launch_receipt.json",
+    "sha256": "62a458baaec83b3c37f58a352f9cc6a257e4bc43aec9b0989763c8373666d850"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-validation-control-v3/handoff.json",
+    "sha256": "1e2c5e4b421fcbe720b36589b31ba582ddcf088b05a897b985f8cc2329a91a60"
+  },
+  "audit_coverage": "All10 native logs/checkpoints and1000 hash-pinned worker frame verdicts; independent replay30 prespecified DCD frames and10 endpoints, full trajectory hashes. Not a second1000frame replay.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

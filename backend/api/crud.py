@@ -481,12 +481,18 @@ def _design_response_with_geometry(
     editor a multi-MB JSON.parse of a payload it would discard.
     """
     if should_skip_geometry():
-        return _design_response(
+        response = _design_response(
             design, report,
             preserve_feature_log_id=preserve_feature_log_id,
             full_feature_log=full_feature_log,
             normalize_legacy=normalize_legacy,
         )
+        if changed_helix_ids is not None:
+            # Preserve the existing partial-update scope across deferred VR
+            # synchronization; the follow-up GET must not expand a Nick/Ligate
+            # edit into a full-design geometry transfer.
+            response["deferred_geometry_helix_ids"] = list(changed_helix_ids)
+        return response
     # Mutation and GET feeds resolve the same baseline/candidate display policy.
     measured_positioning = measured_display_placement(requested_measured_positioning())
     if changed_helix_ids is not None:
@@ -5342,9 +5348,8 @@ def generate_sub_domain_random(
     matching them. The target's old override (if any) is dropped before the
     re-roll.
 
-    Blocks (422) when the target already has an active ``hairpin_warning`` or
-    ``dimer_warning`` — clear those upstream first (e.g. tweak the parent or
-    a neighbour) so we don't blindly regenerate into the same trap.
+    Existing structure warnings do not block regeneration. If no candidate
+    passes the screen, assign the best evaluated candidate with a warning.
 
     Body: ``{seed?: int}``. When present, seeds ``random`` for reproducible
     generation in tests / for record-and-replay.
@@ -5360,16 +5365,6 @@ def generate_sub_domain_random(
             404,
             detail=(
                 f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-            ),
-        )
-
-    # 1. Block on existing warnings — user should fix those first.
-    if sd.hairpin_warning or sd.dimer_warning:
-        raise HTTPException(
-            422,
-            detail=(
-                f"Sub-domain {sd.name!r} has an active hairpin/dimer warning; "
-                f"resolve it before regenerating."
             ),
         )
 
@@ -5398,8 +5393,8 @@ def generate_sub_domain_random(
         _random.seed(int(body.seed))
 
     # Screen the complete oligos with the neighbours locked, not just the
-    # variable fragment; no candidate is committed until every screen passes.
-    full_seq, _ = _generated_sequence(
+    # variable fragment. Exhaustion assigns the best candidate with a warning.
+    full_seq, _, warning = _generated_sequence(
         design, spec.model_copy(update={"sub_domains": temp_sub_doms}),
         sum(s.length_bp for s in temp_sub_doms),
     )
@@ -5424,7 +5419,11 @@ def generate_sub_domain_random(
         op_kind="overhang-bulk", label=f"Generate sub-domain {sd.name!r}", params=params,
         fn=lambda d: build(d, params))
     spec = _find_ovhg_or_404(updated, overhang_id)
-    return {**_design_response(updated, report), "sub_domain": next(s.model_dump() for s in spec.sub_domains if s.id == sub_domain_id)}
+    return {
+        **_design_response(updated, report),
+        "sub_domain": next(s.model_dump() for s in spec.sub_domains if s.id == sub_domain_id),
+        "sequence_generation_warnings": [warning] if warning else [],
+    }
 
 
 class TmSettingsPatchRequest(BaseModel):

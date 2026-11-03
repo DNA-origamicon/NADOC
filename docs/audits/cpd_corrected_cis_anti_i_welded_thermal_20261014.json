@@ -1,0 +1,22 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-anti-v1-service/completion_wake_ack.json",
+    "sha256": "92fb42b0229d9617ee8443a37fc53e0783dcda87b84fcb146e8badb97e1f3150"
+  },
+  "welded_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-anti-v1/completion_audit.json",
+    "sha256": "48fa224ef852ec8d568e6a2f817645412f242f6f46cb9bd5efc2151126ced842"
+  },
+  "control_launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-control-v1/launch_receipt.json",
+    "sha256": "94203c108e0c10938ecd5ad08f62bd68846379f589c8f0afb0254f8eaafbc596"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-control-v1/handoff.json",
+    "sha256": "99a7f6903e2da05ea471838ac8d1f583ae66886ccf62442bd782b15b27122470"
+  },
+  "decision": "Welded warming sufficiently approaches300K for the next preparation audit; do not repeat warming without new evidence. Match control20ps before restraint release/NPT. No ensemble or minimum certification.",
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0
+}

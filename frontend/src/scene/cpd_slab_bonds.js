@@ -18,9 +18,12 @@ export function slabBondEndpoints(a, b) {
 
 export function createCpdSlabBonds(design, slabs, resolveIndex) {
   const pairs = (design?.photoproduct_junctions ?? []).filter(p => Object.keys(p.design_coordinates ?? {}).length)
-    .map(p => [p.base_key_1, p.base_key_2].map(k => resolveIndex(parseBaseKey(k))))
-    .filter(pair => pair.every(i => Number.isInteger(i) && i >= 0))
-  if (!slabs || !pairs.length) return null
+    .map(p => ({ lesion: p, entries: [p.base_key_1, p.base_key_2].map(k => {
+      const resolved = resolveIndex(parseBaseKey(k))
+      return typeof resolved === 'number' ? { mesh: slabs, index: resolved } : resolved
+    }) }))
+    .filter(pair => pair.entries.every(e => e?.mesh && Number.isInteger(e.index) && e.index >= 0))
+  if (!pairs.length) return null
   const mesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8),
     new THREE.MeshStandardMaterial({ color: 0xe6a23c, roughness: 0.55 }), pairs.length * 2)
   mesh.name = 'cpdSlabBonds'
@@ -32,13 +35,18 @@ export function createCpdSlabBonds(design, slabs, resolveIndex) {
   const a = new THREE.Matrix4(), b = new THREE.Matrix4(), matrix = new THREE.Matrix4()
   const y = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), scale = new THREE.Vector3()
   function sync(full = true) {
-    mesh.visible = full && slabs.visible
+    mesh.visible = full && pairs.some(p => p.entries.every(e => e.mesh.visible))
     let index = 0
-    for (const [ia, ib] of pairs) {
-      slabs.getMatrixAt(ia, a); slabs.getMatrixAt(ib, b)
-      const alpha = Math.min(slabs._instanceAlpha?.getX(ia) ?? 1, slabs._instanceAlpha?.getX(ib) ?? 1)
-      const valid = Math.abs(a.determinant()) > 1e-12 && Math.abs(b.determinant()) > 1e-12
-      for (const [start, end] of valid ? slabBondEndpoints(a, b) : [[y, y], [y, y]]) {
+    for (const { entries: [ea, eb], lesion } of pairs) {
+      ea.mesh.getMatrixAt(ea.index, a); eb.mesh.getMatrixAt(eb.index, b)
+      const alpha = Math.min(ea.mesh._instanceAlpha?.getX(ea.index) ?? 1, eb.mesh._instanceAlpha?.getX(eb.index) ?? 1)
+      const valid = ea.mesh.visible && eb.mesh.visible && Math.abs(a.determinant()) > 1e-12 && Math.abs(b.determinant()) > 1e-12
+      const ga = lesion.representation_geometry?.[lesion.base_key_1]?.bond_sites
+      const gb = lesion.representation_geometry?.[lesion.base_key_2]?.bond_sites
+      const endpoints = ga && gb && lesion.display_crosslinks
+        ? lesion.display_crosslinks.map(([na, nb]) => [new THREE.Vector3(...ga[na]).applyMatrix4(a), new THREE.Vector3(...gb[nb]).applyMatrix4(b)])
+        : slabBondEndpoints(a, b)
+      for (const [start, end] of valid ? endpoints : [[y, y], [y, y]]) {
         const delta = end.clone().sub(start), length = delta.length()
         q.setFromUnitVectors(y, length > 1e-9 ? delta.divideScalar(length) : y)
         matrix.compose(start.clone().add(end).multiplyScalar(0.5), q, scale.set(0.025, length, 0.025))

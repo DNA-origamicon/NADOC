@@ -1,0 +1,54 @@
+{
+  "product": "tt-cpd-cis-syn",
+  "status": "provisional_numerical_admission_passed_physical_validation_insufficient",
+  "files": [
+    {
+      "file": "patch.rtf",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/tt-cpd-cis-syn/patch.rtf",
+      "sha256": "b0c17bb0f9bb0a6c1e29da37ade8214f915479773a8740aed54c2b6a59cfc727"
+    },
+    {
+      "file": "overlay.prm",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/tt-cpd-cis-syn/overlay.prm",
+      "sha256": "c991ca25ff2753dfb22449b54da366aa4ec09480ebe33ea6f28b5dcb8fd3b4ae"
+    },
+    {
+      "file": "transfer_records.json",
+      "source": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/tt-cpd-cis-syn/transfer_records.json",
+      "sha256": "d738505b5e4e5b7ca5dd13403c9b9b879a18212b4e126e51be5d70583a85dcab"
+    }
+  ],
+  "external_sources": [
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-return-v1/tt-cpd-cis-syn/input.str",
+    "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-return-v1/thymidine-reference/input.str"
+  ],
+  "transfer_policy": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/policy.json",
+  "required_parents": [
+    "/home/jojo/Work/NADOC/backend/data/forcefield/top_all36_na.rtf",
+    "/home/jojo/Work/NADOC/backend/data/forcefield/par_all36_na.prm",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/top_all36_cgenff.rtf",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/par_all36_cgenff.prm"
+  ],
+  "scope_restrictions": [
+    "Isolated candidate only; no production promotion.",
+    "Use ordered endpoints from the chemical definition. The XCPD patch alone does not construct or certify stereochemistry.",
+    "One isomer parameter set per system; CX aliases/XCPD names intentionally isolated and must not be mixed across these packages.",
+    "Current test fixtures have internal lesion endpoints in a six-T chain. Terminal-lesion and mixed-isomer cases are unqualified.",
+    "Transfer of matched charge differences is a provisional hypothesis, not experimentally validated electrostatics.",
+    "Photoproduct formation context restrictions remain those of the admitted roster."
+  ],
+  "required_parent_sha256": {
+    "/home/jojo/Work/NADOC/backend/data/forcefield/top_all36_na.rtf": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49",
+    "/home/jojo/Work/NADOC/backend/data/forcefield/par_all36_na.prm": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/top_all36_cgenff.rtf": "18b0f76e4d9fba1918e321327984850b1bb216403a2fe21e251d038f84b48069",
+    "/media/jojo/Archive/NADOC_archive/reference_forcefields/toppar_c36_feb26/toppar/par_all36_cgenff.prm": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183"
+  },
+  "reproducible_examples": {
+    "psfgen_input": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/tt-cpd-cis-syn/candidate.tcl",
+    "candidate_psf": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-transfer-v4/tt-cpd-cis-syn/candidate.psf",
+    "canonical_start_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-geometry-v1/tt-cpd-cis-syn",
+    "solvated_NAMD_configs_and_restart_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-cis-syn-admission-v1/tt-cpd-cis-syn"
+  },
+  "numerical_panel_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cis_syn_external_numerical_20261017.json",
+  "timestep_diagnostic_all_passed": true
+}

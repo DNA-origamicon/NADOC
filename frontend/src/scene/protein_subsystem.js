@@ -1,3 +1,4 @@
+import { isAnnotationOnlyDesignChange } from './annotation_model.js'
 // Protein subsystem — imported proteins rendered all-atom, independent of the DNA
 // atomistic mode so proteins coexist with cylinders/beads/atomistic DNA. Owns a
 // dedicated atomistic renderer instance, a transform gizmo for the selected
@@ -35,6 +36,7 @@ export function initProteinSubsystem({
   }
   const allRenderers = () => [...new Set(rendererPool.values())]
   let _representation = 'full'
+  let _oxdnaTransforms = null
   let _latestData = { atoms: [] }
   const displayMode = (rep, independent = false) => rep === 'full' || rep === 'beads' ? 'trace'
     : rep === 'cylinders' ? 'ovoid'
@@ -73,6 +75,9 @@ export function initProteinSubsystem({
       const renderer = rendererForMode(mode)
       renderer.setMode(mode)
       renderer.update(subsetData(_latestData, ids))
+      // A newly selected representation or refreshed topology starts at the
+      // native pose; retain the current simulation pose even while paused.
+      if (_oxdnaTransforms) renderer.applyOxdnaTransforms(_oxdnaTransforms)
     }
     for (const [mode, renderer] of rendererPool) {
       if (idsByMode.has(mode)) continue
@@ -96,6 +101,7 @@ export function initProteinSubsystem({
         atomisticProteinRenderer.setMode(mode)
       }
     },
+    silhouetteEntries: predicate => allRenderers().flatMap(r => r.silhouetteEntries?.(predicate) ?? []),
     getMode: () => allRenderers().find(r => r.getMode() !== 'off')?.getMode() ?? 'off',
     centroidOf: (...args) => allRenderers().map(r => r.centroidOf(...args)).find(Boolean) ?? null,
     extentOf: (...args) => allRenderers().map(r => r.extentOf?.(...args)).find(Boolean) ?? null,
@@ -108,10 +114,12 @@ export function initProteinSubsystem({
     applyLiveTransform: (...args) => allRenderers().forEach(r => r.applyLiveTransform(...args)),
     endLiveTransform: (...args) => allRenderers().forEach(r => r.endLiveTransform(...args)),
     applyOxdnaTransforms(transforms) {
+      _oxdnaTransforms = transforms
       window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: transforms }))
       allRenderers().forEach(r => r.applyOxdnaTransforms(transforms))
     },
     clearOxdnaTransforms() {
+      _oxdnaTransforms = null
       window.dispatchEvent(new CustomEvent('nadoc:coating-oxdna-transforms', { detail: null }))
       allRenderers().forEach(r => r.clearOxdnaTransforms())
     },
@@ -222,7 +230,9 @@ export function initProteinSubsystem({
     const ref = primaryRefOfKind(store.getState(), 'protein')
     const protId = ref?.id ?? null
     const c = protId ? _proteinCentroid(protId) : null
-    if (protId && c) {
+    proteinRenderer.highlight(protId && c
+      ? { type: 'protein', id: protId, data: { attachment_id: protId } } : null)
+    if (protId && c && store.getState().translateRotateActive) {
       // Switching directly between proteins implicitly cancels the previous
       // preview. cancel() restores its captured protein/DNA geometry and the
       // authoritative refresh below re-enters here for the new selection.
@@ -231,7 +241,6 @@ export function initProteinSubsystem({
         proteinGizmo.cancel?.()
         return
       }
-      proteinRenderer.highlight({ type: 'protein', id: protId, data: { attachment_id: protId } })
       const constraint = _constraints.get(protId) ?? null
       proteinGizmo.attach(protId, scene, camera, canvas, c, constraint)
       _moveRotatePanel?.setProteinController?.(proteinGizmo)
@@ -256,7 +265,6 @@ export function initProteinSubsystem({
       if (_moveRotatePanel?.getProteinController?.() === proteinGizmo) {
         _moveRotatePanel.setProteinController(null)
       }
-      proteinRenderer.highlight(null)
       const panel = document.getElementById('move-rotate-panel')
       if (panel?.dataset.proteinActive === 'true') {
         panel.style.display = 'none'
@@ -301,7 +309,9 @@ export function initProteinSubsystem({
   // Single source of truth: any change to the design (import, move, delete,
   // undo, redo, attach/detach) re-renders proteins from its attachments.
   store.subscribe((newState, prevState) => {
-    if (newState.currentDesign === prevState.currentDesign) return
+    if (newState.currentDesign === prevState.currentDesign ||
+        isAnnotationOnlyDesignChange(newState.currentDesign, prevState.currentDesign)) return
+    if (newState.currentDesign?.id !== prevState.currentDesign?.id) _oxdnaTransforms = null
     const hasProteins = (newState.currentDesign?.protein_attachments?.length ?? 0) > 0
     // Refresh when proteins exist now, or when the renderer is showing some
     // (so a removal — undo/delete — clears them).
@@ -317,7 +327,8 @@ export function initProteinSubsystem({
 
   // Selection change → update the gizmo/highlight (without a server round-trip).
   store.subscribe((newState, prevState) => {
-    if (newState.selection !== prevState.selection) _syncProteinSelectionVisual()
+    if (newState.selection !== prevState.selection
+        || newState.translateRotateActive !== prevState.translateRotateActive) _syncProteinSelectionVisual()
   })
 
   if (window.__NADOC_DBG__) {
@@ -328,6 +339,7 @@ export function initProteinSubsystem({
 
   return {
     renderer: proteinRenderer,
+    getGeometry: () => _latestData,
     gizmo: proteinGizmo,
     refresh: _refreshProteins,
     syncSelectionVisual: _syncProteinSelectionVisual,

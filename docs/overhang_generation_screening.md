@@ -9,26 +9,33 @@ screens each candidate in its design context before saving any sequences:
   and the bridge (reverse-complemented for the second dsDNA linker strand).
 
 Hairpins and self-dimers use the same primer3 calculations as the interactive
-checker: 0 mM Na+, 10 mM Mg2+, 200 nM oligo. Overhangs and linkers must have
-both Tm values at or below **30 °C**. Intended overhang–linker duplexes are not
+checker: 0 mM Na+, 10 mM Mg2+, 200 nM oligo. Overhangs and linkers pass when
+both Tm values are at or below **30 °C**. Intended overhang–linker duplexes are not
 rejected as unwanted heterodimers.
 
 Whole staples are checked against separate hairpin and self-dimer limits of
 `max(30 °C, fixed-body Tm)`, masking the variable overhang when calculating that
 baseline. This permits structures already present in bases Gen cannot change,
-but does not permit an increase in the maximum Tm for either structure type.
+but flags an increase in the maximum Tm for either structure type.
 It does not establish that every individual structure below that maximum is
 unchanged. Staple body sequences and locked overrides are preserved.
 
 Accepted staple and linker sequences are updated together in one undoable
 operation. Single-overhang, bulk, and sub-domain generation share the screen.
 Bulk generation evaluates each candidate against preceding accepted changes,
-and commits only after the entire batch succeeds.
+and commits the batch together, including any best-effort replacements.
 
 If Johnson candidates fail, bounded random exploration uses the same structural
-constraints. Exhaustion returns an explanatory error and leaves the design
-unchanged. The standalone random-sequence endpoint retains its existing behavior.
-The direct-pair UI does not update the partner after a failed generation.
+constraints. On exhaustion, generation assigns the best evaluated candidate:
+the smallest maximum temperature excess above the applicable limits, then the
+smallest total excess across all affected oligos. The response includes
+`sequence_generation_warnings`; the UI displays an amber warning with the
+remaining concern and still saves the sequence through normal autosave.
+Locked overrides remain locked. Existing hairpin/dimer warnings no longer
+disable sub-domain generation. A request that cannot evaluate any candidate
+still fails without assigning an unchecked sequence. The standalone
+random-sequence endpoint retains its existing behavior.
+The direct-pair UI does not update the partner after a request failure.
 
 ## Limits and validation
 
@@ -48,7 +55,7 @@ speed, in a disposable workspace. The saved source file's SHA256 was unchanged.
 
 Regression coverage in `tests/test_hairpin_dimer.py` checks structures formed
 only in the full staple/linker, exact committed bridge/complement sequences,
-fixed-body baselines, locked bases, screened fallback, and atomic failures.
+fixed-body baselines, locked bases, best-candidate ranking, and warning fallbacks.
 `frontend/src/ui/overhang_gen.test.js` also checks the failed-pair guard.
 
 Validation on 2026-09-21:

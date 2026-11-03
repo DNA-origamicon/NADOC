@@ -16,6 +16,7 @@ rather than OOM-ing a second time.
 from __future__ import annotations
 
 import re
+import math
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -24,8 +25,10 @@ from typing import Optional
 
 # ── Empirical VRAM model ──────────────────────────────────────────────────────
 # Peak GPU memory ≈ _MB_PER_MATOM per million atoms (NAMD 3 standard CUDA).
-# Observed ~4.0 GB at 1.31 M atoms → ~3.05 GB/M; rounded up to 3.3 for safety.
-_MB_PER_MATOM = 3300.0
+# 2026-10-31 probes: fixed overhead plus mode-specific envelopes. The legacy
+# sizing API uses the resident envelope; configuration_memory handles exact settings.
+_MB_PER_MATOM = 3500.0
+_MEMORY_FIXED_MB = 512.0
 # Leave VRAM for the display server, driver context and allocator fragmentation.
 _USABLE_FRACTION = 0.85
 # Bulk TIP3P number density (waters/nm³); see namd_solvate._WATER_NUMBER_DENSITY_NM3.
@@ -69,6 +72,7 @@ FAILURE_VRAM_OOM = "vram_oom"
 FAILURE_HOST_OOM = "host_oom"
 FAILURE_INSTABILITY = "instability"
 FAILURE_GPU_ERROR = "gpu_error"
+FAILURE_PATCH_CAPACITY = "patch_capacity"
 FAILURE_CELL_SHRINK = "cell_shrink"
 # The user PINNED a production timestep the package cannot run (4 fs on a declash build,
 # which has no HMR PSF).  Not detected from a log — it is a config conflict raised before
@@ -102,6 +106,8 @@ def classify_failure_log(text: str) -> str:
         return FAILURE_HOST_OOM if _HOST_OOM_PAT.search(text) else FAILURE_VRAM_OOM
     if _INSTABILITY_PAT.search(text):
         return FAILURE_INSTABILITY
+    if 'maximum shared memory allocation exceeded' in text.lower():
+        return FAILURE_PATCH_CAPACITY
     if _GPU_ERR_PAT.search(text):
         return FAILURE_GPU_ERROR
     if _CELL_SHRINK_PAT.search(text):
@@ -202,6 +208,11 @@ class FailureUX:
 # kind → (severity, title, message, retry_other_binary, degrade_target). Copy is a
 # sensible backend default; the frontend may enrich it (e.g. exact time estimates).
 _FAILURE_UX: dict[str, dict] = {
+    FAILURE_PATCH_CAPACITY: dict(
+        severity='hard_stop',retry_other_binary=False,degrade_target=None,
+        title='The simulation box needs a safer partition',
+        message='Reprepare this run to apply automatic patch subdivision. More total GPU memory alone does not resolve this limit.',
+    ),
     FAILURE_VRAM_OOM: dict(
         severity="hard_stop",
         retry_other_binary=False,
@@ -425,7 +436,7 @@ def gpu_contention_summary(activity: Optional[dict], own_pids=()) -> dict:
 
 def max_atoms_for_vram(vram_mb: float) -> int:
     """Largest system (atoms) expected to fit in *vram_mb* of GPU memory."""
-    return int(vram_mb * _USABLE_FRACTION / _MB_PER_MATOM * 1e6)
+    return max(0, int((vram_mb * _USABLE_FRACTION - _MEMORY_FIXED_MB) / _MB_PER_MATOM * 1e6))
 
 
 # ── Empirical HOST-RAM model ──────────────────────────────────────────────────
@@ -434,10 +445,7 @@ def max_atoms_for_vram(vram_mb: float) -> int:
 # buffers the GPU bonded kernel allocates via cudaHostAlloc (see FAILURE_HOST_OOM).
 # This is a coarse, safety-margined figure for the multicore-CUDA build under a dense
 # elastic network. It is used only to decide whether the complete system fits.
-_HOST_MB_PER_MATOM = 2500.0
-# Fraction of *currently-available* host RAM a run may claim — leaves generous room
-# for the OS, the NADOC server, and a browser/live-viewer sharing the machine.
-_HOST_USABLE_FRACTION = 0.6
+_HOST_MB_PER_MATOM = 3600.0
 
 
 def detect_host_ram_mb() -> Optional[int]:
@@ -459,12 +467,13 @@ def detect_host_ram_mb() -> Optional[int]:
 
 def max_atoms_for_host_ram(host_mb: float) -> int:
     """Largest system (atoms) expected to fit in *host_mb* of available host RAM."""
-    return int(host_mb * _HOST_USABLE_FRACTION / _HOST_MB_PER_MATOM * 1e6)
+    # Reserve a simultaneous optimized health check as well as NAMD itself.
+    return max(0, int((host_mb - 4096 - 1024) / (_HOST_MB_PER_MATOM + 1200) * 1e6))
 
 
 def estimate_vram_mb(n_atoms: int) -> int:
     """Estimated peak VRAM (MB) for an *n_atoms* explicit-solvent NAMD run."""
-    return int(round(n_atoms / 1e6 * _MB_PER_MATOM))
+    return int(round(_MEMORY_FIXED_MB + n_atoms / 1e6 * _MB_PER_MATOM)) if n_atoms > 0 else 0
 
 
 def required_vram_mb(n_atoms: int) -> int:
@@ -572,7 +581,7 @@ def clear_profile_cache() -> None:
     _PROFILE_CACHE.clear()
 
 
-def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 6.0) -> Optional[int]:
+def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 6.0,box_mode='bbox',box_size_nm=None) -> Optional[int]:
     """Fast, conservative solvated-atom estimate for interactive previews.
 
     Unlike :func:`estimate_profile_from_design`, this does not build the all-atom PDB.  That
@@ -620,7 +629,14 @@ def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 6.0) -> O
     n_phosphates = max(0, n_nt - len(strands))
     dna_radius_nm = 1.2
     extent = endpoints.max(axis=0) - endpoints.min(axis=0)
+    if box_mode=='rotation':
+        centre=(endpoints.max(axis=0)+endpoints.min(axis=0))/2
+        extent[:]=2*float(np.linalg.norm(endpoints-centre,axis=1).max())
+    elif box_mode!='bbox':return None
     box_nm = tuple(float(x) + 2.0 * (dna_radius_nm + padding_nm) for x in extent)
+    if box_size_nm is not None:
+        if len(box_size_nm)!=3 or any(d is not None and (not math.isfinite(d) or d<=0) for d in box_size_nm):return None
+        box_nm=tuple(box_nm[i] if d is None else float(d) for i,d in enumerate(box_size_nm))
     return estimate_box_atoms(box_nm, n_dna_atoms, n_phosphates)
 
 
@@ -631,6 +647,8 @@ def estimate_profile_from_design(
     atomistic_model=None,
     nacl_mM: float = 0.0,
     mgcl2_mM: float = 12.5,
+    box_mode: str = 'bbox',
+    box_size_nm=None,
 ) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
 
@@ -655,14 +673,14 @@ def estimate_profile_from_design(
     is handed back directly.
     """
     design = design.without_reference_geometry()
-    import numpy as np  # noqa: PLC0415
-    from backend.core.pdb_export import export_pdb  # noqa: PLC0415
+    from backend.core.pdb_export import export_coordinate_pdb  # noqa: PLC0415
 
     key = _profile_cache_key(design, padding_nm, atomistic_model)
+    if key is not None:key += (box_mode,tuple(box_size_nm) if box_size_nm is not None else None,float(nacl_mM),float(mgcl2_mM))
     if key is not None and key in _PROFILE_CACHE:
         return _PROFILE_CACHE[key]
 
-    pdb = export_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
+    pdb = export_coordinate_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
     dna: list[tuple[float, float, float]] = []
     n_p = 0
     for ln in pdb.splitlines():
@@ -689,9 +707,8 @@ def estimate_profile_from_design(
         ion_counts,
     )
 
-    P = np.asarray(dna, dtype=float)
-    ext = P.max(0) - P.min(0)
-    box_nm = tuple(float(e) + 2 * padding_nm for e in ext)
+    from backend.core.namd_solvate import _recenter_pdb_in_padded_box
+    _,box_nm = _recenter_pdb_in_padded_box(pdb,padding_nm,box_mode=box_mode,box_size_nm=box_size_nm)
     box_vol = box_nm[0] * box_nm[1] * box_nm[2]
 
     water_before = int(box_vol * _FULL_BOX_WATER_DENSITY_NM3)
@@ -717,6 +734,22 @@ def estimate_profile_from_design(
         "n_phosphates": n_p,
         "counterion": ions.counterion,
     }
+    # Bulk water without subtracting displaced DNA remains conservative. For
+    # canonical DNA, count the same CHARMM residue and terminal-patch atoms as
+    # preparation instead of doubling every heavy atom. Other chemistry keeps
+    # the previous allowance. Inferred axes retain 1.5 A per face for hydrogens.
+    from backend.core.namd_atom_counts import canonical_dna_atoms
+    canonical_atoms=None if getattr(design,'photoproduct_junctions',None) else canonical_dna_atoms(pdb)
+    solute_upper=canonical_atoms if canonical_atoms is not None else 2*len(dna)
+    upper_box=tuple(d if box_size_nm and box_size_nm[i] is not None else d+.3 for i,d in enumerate(box_nm))
+    upper_water=math.ceil(math.prod(upper_box)*_WATER_NUMBER_DENSITY_NM3)
+    upper_ions=ion_counts(upper_water,-float(n_p),nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM,box_nm=upper_box,mg_hexahydrate=True)
+    net_ions=upper_ions.n_mg*(MGH_ATOMS-3*MGH_WATERS_CONSUMED)-2*(upper_ions.n_na+upper_ions.n_cl)
+    profile.update(atom_upper_bound=solute_upper+3*upper_water+max(0,net_ions),
+        resource_box_nm=upper_box,atom_bound_basis='bulk-water-plus-charmm-dry-count-v2',
+        atom_components=dict(solute_atoms=solute_upper,solute_basis='CHARMM canonical DNA' if canonical_atoms is not None else 'heavy-atom allowance',
+            solvent_atoms=3*upper_water,ion_correction_atoms=max(0,net_ions),
+            solvent_basis='bulk density without subtracting solute exclusion'))
     if key is not None:
         if len(_PROFILE_CACHE) >= _PROFILE_CACHE_MAX:
             _PROFILE_CACHE.pop(next(iter(_PROFILE_CACHE)))  # evict oldest
@@ -728,67 +761,105 @@ def estimate_profile_from_design(
 
 
 def classify_vram_fit(rec: Optional[dict]) -> str:
-    """Return ``ok`` when the full solvent box fits, otherwise a hard-stop tier."""
-    if not rec:
-        return "ok"
+    """Distinguish a recommended reserve from an estimate exceeding capacity."""
+    if not rec or rec.get("current_atoms") is None or rec.get("max_atoms") is None:
+        return "unknown"
     max_atoms = rec.get("max_atoms") or 0
-    if max_atoms <= 0 or rec.get("current_atoms", 0) <= max_atoms:
+    if rec.get("current_atoms", 0) <= max_atoms:
         return "ok"
+    capacity_atoms = rec.get("capacity_atoms") or 0
+    if capacity_atoms > 0 and rec.get("current_atoms", 0) <= capacity_atoms:
+        return "headroom"
     return "a3"
 
 
 def preflight_vram_advice(
-    design, *, padding_nm: float = 6.0, devices: str = "0", atomistic_model=None
+    design, *, padding_nm: float = 6.0, devices: str = "0", atomistic_model=None,
+    gpu_resident_mode: str = "auto", box_mode="rotation", box_size_nm=None,
+    nacl_mM=0.0, mgcl2_mM=12.5, threads=16, stage_overrides=None,
 ) -> dict:
-    """Pre-flight full-solvent size verdict computed from the dry design.
+    """Pre-preparation budgets for the selected box and worst planned settings.
 
-    Returns sizing advice enriched with ``tier`` (``ok`` or ``a3``), ``bound``
-    ("GPU"/"host RAM") and ``host_mb``; or ``{"skipped": True,
-    "tier": "ok"}`` whenever sizing can't run (no GPU read / no profile / any error) so
-    the launch proceeds unchanged.
+    The atom upper estimate includes solvent and hydrogens; preparation and
+    concurrent health have separate budgets. Exact topology admission follows prep.
     """
-    skipped = {"skipped": True, "tier": "ok"}
-    host_mb = detect_host_ram_mb()
-    cpu = (devices or "").strip().lower() in ("cpu", "none")
-    if cpu:
-        if not host_mb:
-            return skipped
-        vram_mb, effective_cap, bound = (
-            None,
-            max_atoms_for_host_ram(host_mb),
-            "host RAM",
-        )
-    else:
-        vram_mb = detect_vram_mb(devices)
-        if vram_mb is None:
-            return skipped
-        vram_cap = max_atoms_for_vram(vram_mb)
-        host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
-        effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
-        bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
+    unknown={"skipped":False,"tier":"unknown","reason":"Resource requirements or available memory could not be determined."}
+    from backend.core.memory_budget import available_for_work
+    from backend.core.namd_resources import execution_options,preparation_memory_mib,preparation_expected_mib
+    from backend.core.namd_patch_grid import safe_patch_overrides,two_away_options
+    host_mb=detect_host_ram_mb()
+    if not host_mb:return unknown
+    cpu=(devices or '').strip().lower() in ('cpu','none')
+    if not cpu and not str(devices).strip().isdigit():
+        return {**unknown,'reason':'Multi-GPU memory requirements have not been characterized.'}
+    vram_mb=None if cpu else detect_vram_mb(devices)
+    if not cpu and vram_mb is None:return unknown
     try:
-        profile = estimate_profile_from_design(
-            design, padding_nm=padding_nm, atomistic_model=atomistic_model
-        )
-        if profile is None:
-            return skipped
-        current_atoms = (
-            profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
-        )
-        rec = {
-            "current_atoms": current_atoms,
-            "current_vram_mb": estimate_vram_mb(current_atoms),
-            "required_vram_mb": required_vram_mb(current_atoms),
-            "max_atoms": effective_cap,
-            "vram_mb": int(vram_mb) if vram_mb is not None else None,
-        }
-    except Exception:  # noqa: BLE001 — a preflight must never block a launch
-        return skipped
-    tier = classify_vram_fit(rec)
-    return {
-        **rec,
-        "skipped": False,
-        "tier": tier,
-        "bound": bound,
-        "host_mb": host_mb,
-    }
+        host_budget=available_for_work(available_bytes=host_mb*1024**2)/1024**2
+        profile=estimate_profile_from_design(design,padding_nm=padding_nm,atomistic_model=atomistic_model,
+            box_mode=box_mode,box_size_nm=box_size_nm,nacl_mM=nacl_mM,mgcl2_mM=mgcl2_mM)
+        if not profile:return unknown
+        atoms=profile.get('atom_upper_bound',profile['dna_atoms']+profile['full_water']*3+profile['ion_atoms'])
+        box=[10*d for d in profile.get('resource_box_nm',profile.get('box_nm',[]))] or None
+        allocations={'pairlistdist','pmegridspacing','margin','gpuresident','twoawayx','twoawayy','twoawayz'}
+        neutral={'temperature','langevintemp','langevindamping','langevinpistonperiod','langevinpistondecay',
+                 'langevinpistontarget','langevinpistontemp','langevinpiston','timestep','rigidbonds',
+                 'nonbondedfreq','fullelectfrequency','stepspercycle','outputenergies','outputtiming',
+                 'dcdfreq','restartfreq','xstfreq','seed','cutoff','switchdist','switching'}
+        overrides=stage_overrides or {}
+        global_opts={k.lower():v for k,v in (overrides.get('*') or {}).items()}
+        groups=[global_opts]+[{**global_opts,**{k.lower():v for k,v in values.items()}} for key,values in overrides.items() if key!='*']
+        stage_modes=[];patches=[]
+        for opts in groups:
+            if set(opts)-allocations-neutral:raise ValueError('Uncharacterized per-stage allocation settings: '+', '.join(sorted(set(opts)-allocations-neutral)))
+            if any(v is None for k,v in opts.items() if k in allocations):raise ValueError('Deleted allocation directives require exact package admission')
+            if float(opts.get('cutoff',10))>14:raise ValueError('Force cutoff outside the measured range')
+            pair=float(opts.get('pairlistdist',13.5));pme=float(opts.get('pmegridspacing',1.5));margin=float(opts.get('margin',3))
+            flags=two_away_options(opts)
+            if box and not cpu:
+                patch=safe_patch_overrides(atoms,box,pairlist=pair,margin=margin,threads=threads,two_away=flags)
+                flags=two_away_options({**opts,**{k.lower():v for k,v in patch.items()}});patches.append(patch)
+            modes=execution_options(atoms,box_angstrom=box,extra_bonds=2_600_000,pairlist=pair,pme_spacing=pme,margin=margin,threads=threads,two_away=flags,check_patch=not cpu)
+            forced=opts.get('gpuresident')
+            if forced is not None and str(forced).lower() not in ('on','off','yes','no','true','false','1','0'):raise ValueError('Unresolved GPUresident directive')
+            selected_name='offload' if gpu_resident_mode=='off' and not cpu else 'resident'
+            if forced is not None:selected_name='resident' if str(forced).lower() in ('on','yes','true','1') else 'offload'
+            stage_modes.append((modes,selected_name))
+        def aggregate(name):
+            values=[m[name] for m,_ in stage_modes]
+            return {**values[0],'ram_mib':max(x['ram_mib'] for x in values),'gpu_mib':max(x['gpu_mib'] for x in values),
+                    'components':values[0].get('components') if len(values)==1 else None,
+                    'components_by_stage':[x.get('components') for x in values],
+                    'supported':all(x['supported'] for x in values),'limitations':sorted({s for x in values for s in x['limitations']})}
+        modes={name:aggregate(name) for name in ('resident','offload')}
+        selected=[m[name] for m,name in stage_modes]
+        prep=preparation_memory_mib(atoms)
+        ram=max(prep,max(x['ram_mib']+x['health_ram_mib'] for x in selected))
+        gpu=max(x['gpu_mib'] for x in selected)
+        gpu_budget=None if cpu else vram_mb*_USABLE_FRACTION
+        required={'host RAM':ram};budgets={'host RAM':host_budget};capacities={'host RAM':host_mb}
+        if not cpu:required['GPU']=gpu;budgets['GPU']=gpu_budget;capacities['GPU']=vram_mb
+        bound=max(required,key=lambda k:required[k]/max(1,budgets[k]))
+        capacity_bound=max(required,key=lambda k:required[k]/max(1,capacities[k]))
+        raw_over=any(required[k]>capacities[k] for k in required)
+        reserve_over=any(required[k]>budgets[k] for k in required)
+        tier='a3' if raw_over else 'headroom' if reserve_over else 'ok'
+        limitations=sorted({s for x in selected for s in x['limitations']})
+        if not box:limitations.append('Periodic box dimensions could not be established')
+        if limitations and tier!='a3':tier='unknown'
+        return dict(skipped=False,tier=tier,reason='; '.join(limitations),current_atoms=atoms,
+            atom_estimate_kind='upper_bound',atom_components=profile.get('atom_components'),
+            atom_bound_basis=profile.get('atom_bound_basis'),
+            box_nm=profile.get('box_nm'),resource_box_nm=profile.get('resource_box_nm'),
+            current_vram_mb=gpu,required_vram_mb=math.ceil(gpu/_USABLE_FRACTION),
+            current_host_mb=ram,preparation_ram_mb=prep,
+            preparation_expected_peak_ram_mb=preparation_expected_mib(atoms),
+            preparation_estimate_basis='atom upper bound and 2.6 million restraint allowance',
+            host_mb=host_mb,host_budget_mb=int(host_budget),
+            vram_mb=vram_mb,vram_budget_mb=int(gpu_budget) if gpu_budget is not None else None,
+            max_atoms=max(0,int(atoms*min(budgets[k]/max(1,required[k]) for k in required))),
+            capacity_atoms=max(0,int(atoms*min(capacities[k]/max(1,required[k]) for k in required))),
+            bound=capacity_bound if tier=='a3' else bound,execution_modes=modes,planned_patch_overrides=patches,
+            require_reserved_budget=True,memory_basis='origami-20261101-resolved-pme-envelope-v3',memory_confidence=None)
+    except (MemoryError,OSError,ValueError,TypeError,KeyError) as exc:
+        return {**unknown,'reason':str(exc)}

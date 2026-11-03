@@ -1,0 +1,90 @@
+{
+  "grid_shift_kcal_mol": 1.801591252282565,
+  "grid_screen_passed": false,
+  "grid_screen_kcal_mol": 0.5,
+  "fine_reference": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-scf-v1/original_qm/result.json",
+    "sha256": "a7bd14435ad105613ca7a95d48dc3bbd7bf752779939c5b54dae916ca783511b"
+  },
+  "at": "2026-10-17T03:35:05+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_standard_grid_v1.py",
+    "sha256": "d512bd4cd7a63e20b05639ee49496b2c420db70d54ce443df43fab6979703665"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/assessment.json",
+    "sha256": "4c93f75bfb876dd5b26210c5911af8c6f0376f580c21f5870e7018dd32b2c9e9"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/original_qm/output.dat",
+    "sha256": "ba40f63ac0d6afd7f5183bc8181cf9e790245d009469497343ae239ef3338036"
+  },
+  "energy_hartree": -1963.9743571556853,
+  "wall_seconds": 324.9410415070015,
+  "electron_count": 250.00000000000085,
+  "wavefunction": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/original_qm/fine_wavefunction.npy",
+    "sha256": "3d8bb0ad57a914a6dec196f2fb48637a02b461f3115dff797b2f9013d8bc3250"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-grid-v1/original_qm/fine_density.npy",
+    "sha256": "a1257b66a897306bf6bf3a013d2b8b4b019742ade4a9ac35f7e4274f98b2a554"
+  },
+  "decision": "Coarse SCF execution passes but 1.80 kcal/mol same-cavity grid shift fails prospective 0.5 screen. Stop alternate-conformer energies. Diagnose density-integration versus surface sensitivity at saved converged fine density before any further SCF. Threshold is engineering screen, not universal standard.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "next_launch": {
+    "at": "2026-10-17T03:35:24.815806+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/plan.json",
+      "sha256": "600a056792b1b659fff6a9db29daadf250035e474676f66f5fcd139834d90899"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-ddx-standard-density-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=885",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1-service"
+    ],
+    "watcher": {
+      "token": "5202d0c4-96d0-43a1-9839-c6f08e5dbfda",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792208124.811306,
+      "expected_seconds": 180,
+      "supervisor_pid": 1562527,
+      "supervisor_identity": "26322011",
+      "state": "armed",
+      "watcher_pid": 1562529,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 480,
+      "active_deadline_id": "endpoint-ddx-standard-density-v1-review",
+      "active_deadline_epoch": 1792208844.731211
+    },
+    "limits": "RuntimeMaxUSec=14min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792209024.731211,
+    "review_epoch": 1792208844.731211,
+    "cloud_spending_usd": 0
+  }
+}

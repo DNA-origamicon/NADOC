@@ -161,8 +161,14 @@ def run(socket, output, action):
             reach((p+rotate(q,[0,0,.22])).tolist(),q,acquired=lambda s:s['view_tools']['hover'][0]==i)
             version=live.state['view_tools']['version']
             expected_sequence=live.state['view_tools']['sequence']+1
+            clicked_at=time.monotonic()
             live.button('trigger',hand=0);live.frame()
             wait(lambda s:s['view_tools']['ack_sequence']>=expected_sequence and not s['view_tools']['waiting'])
+            (out/'view-delivery.json').write_text(json.dumps({
+                'key':v['items'][i]['key'], 'sequence':expected_sequence,
+                'click_to_ack_ms':(time.monotonic()-clicked_at)*1000,
+                'scope':'Native acknowledgement including workflow polling; inspect after capture for visible outcome',
+            },indent=2))
         live.capture_to(out/'after',discard_source=True)
         from tools.vr_workflows.view_tools_pixels import check
         if action not in ('stow','controls'):

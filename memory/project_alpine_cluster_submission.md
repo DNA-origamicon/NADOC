@@ -187,3 +187,11 @@ production run (SLURM 30958617). ~~In-app exercise of the popup and the wizard's
 
 <a id="small_plate-restrained-wall-barostat-audit--2026-09-05"></a>
 - [small_plate restrained-wall barostat audit — 2026-09-05](details/project_alpine_cluster_submission/06-user-validated-in-app--2026-08-07.md#small_plate-restrained-wall-barostat-audit--2026-09-05)
+
+**2026-10-20 download queue:** Completion discovery and recovery no longer await
+multi-GB transfers; queued result jobs show “Finished on Alpine — waiting to download.”
+API and worker admission serialize bulk downloads, deduplicate submission-scoped
+requests, and preserve queued intent across reloads. Local indexing is scheduled
+separately. Existing authenticated workers are preserved; their own admission
+enforcement loads on the next ordinary restart. See the queue policy in
+[restart recovery](../docs/alpine_restart_recovery.md).

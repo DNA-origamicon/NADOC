@@ -1,0 +1,61 @@
+{
+  "schema": "nadoc.cpd.minimum-viable-policy.v1",
+  "date": "2026-10-17",
+  "authority": "User direction in this conversation; supersedes fragment-refinement-first scheduling, not historical verdicts.",
+  "objective": "Minimum viable, scope-qualified NAMD model for each admitted experimentally established TT photoproduct isomer.",
+  "scope": {
+    "established_TT_photoproducts_only": true,
+    "formation_evidence_required_per_isomer_and_context": true,
+    "registry_membership_is_not_admission": true,
+    "new_isomer_discovery": false,
+    "melting_studies": "user-owned"
+  },
+  "stereochemistry": {
+    "assume_noninterconversion_in_ordinary_NAMD": true,
+    "separate_model_identity_and_qualification_per_isomer": true,
+    "monitor_ring_and_sugar_configuration": true,
+    "inversion_verdict": "chemical/numerical admission failure; not accepted equilibrium interconversion",
+    "parameter_sharing": "Unchanged, compatible parent terms may be reused; success of one isomer does not qualify another."
+  },
+  "workflow": [
+    "Inventory formation-supported isomers and existing usable assets; do not automatically run all eight registry entries.",
+    "Use an externally implemented parameterization workflow; verify its version and operation on a documented example before CPD fitting.",
+    "Prepare isolated canonical fixtures and complete NAMD topology/parameter exports.",
+    "Pass identity, coverage, charge, contacts, native energy/force loading, staged equilibration, restart and integration checks.",
+    "Run a finite NAMD feasibility panel and compare prespecified relevant observables with established references.",
+    "Freeze the provisional model for the tested scope, identify a specific substantial discrepancy, or close insufficient evidence."
+  ],
+  "mandatory_admission": [
+    "Correct mapped connectivity and absolute stereochemistry",
+    "Canonical DNA sugar configuration",
+    "Complete compatible parameters and intended net charge",
+    "No invalid geometry or unphysical inversion",
+    "Native numerical stability and reproducible restart/integration"
+  ],
+  "refinement_trigger": {
+    "requires": "NAMD evidence of a substantial departure from an established observable applicable to the tested isomer, chemistry and conditions; distinguish setup errors and sampling uncertainty first.",
+    "registration_before_comparison": [
+      "Observable definition and atom selections",
+      "Independent reference and its applicability",
+      "Magnitude considered substantial and its scientific justification",
+      "Sampling/replica analysis and finite budget"
+    ],
+    "if_reference_missing": "Report provisional numerical qualification and validation gap; do not invent a reference or declare equivalence.",
+    "fragment_QM_mismatch_alone": "Retained diagnostic limitation; not an automatic veto or reason for indefinite refinement.",
+    "exception": "Bounded repairs needed to pass chemical or numerical admission remain necessary."
+  },
+  "budget": {
+    "native_hours_existing_ceiling": 48,
+    "known_native_hours_used": 0.5160566144838877,
+    "scope": "Shared ceiling, not48h per isomer; reconcile full ledger and register allocation before new native work.",
+    "first_pilot_hours_max": 2,
+    "each_chunk_hours_strictly_below": 16,
+    "concurrent_native_jobs": 1,
+    "extensions": "No automatic extensions; prior bounded stopping policy retained.",
+    "polling": false,
+    "cloud_spending_usd": 0,
+    "storage": "Mounted Archive from first byte"
+  },
+  "production_promotion": "Existing concrete review/authorization gate retained.",
+  "status": "Policy registered; isomer roster, observable references and per-isomer budgets not yet admitted; no new native jobs."
+}

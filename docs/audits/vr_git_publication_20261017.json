@@ -1,0 +1,49 @@
+{
+  "scope": "Commit remaining VR/rendering edits and synchronize master without history rewriting.",
+  "integration": {
+    "vr_commit": "95b14a17",
+    "merge_commit": "e9473990",
+    "conflicts": "Preserved both issue-log histories; renamed local Ball+Stick ISSUE-79 to ISSUE-97 because upstream already used 79.",
+    "build_fix": "Use current NADOC_SOURCE_ROOT instead of retired NADOC_QR_ROOT in shader tests and offline benchmark."
+  },
+  "frontend": {
+    "command": "just test-frontend",
+    "merged_files_passed": 722,
+    "merged_tests_passed": 8355,
+    "skipped": 1,
+    "failed": 0,
+    "prior_local_tests_passed": 7972
+  },
+  "native": {
+    "viewer_build": "passed",
+    "offline_benchmark_build": "passed",
+    "focused_ctest_passed": 6,
+    "skipped": 0,
+    "coverage": [
+      "indexed mesh CPU and OpenGL",
+      "instance groups CPU and OpenGL",
+      "opaque shader CPU and OpenGL"
+    ],
+    "initial_failure": "Conda linker/library contamination; native.log preserved. System PATH and cleared Conda/compiler search environment passed in separate native-system-build."
+  },
+  "browser": {
+    "scope": "Existing standalone harness importing running Vite renderer and Unfold modules; no autosave/API controllers or workspace saves.",
+    "nucleotides": 6,
+    "slabs": 6,
+    "refoldMaxMatrixDelta": 0,
+    "blocked": false,
+    "errors": [],
+    "screenshot_visually_inspected": true,
+    "cleanup": "Browser closed in finally; no temporary playwright profile directories remain. Retained screenshot, script and JSON live on Archive."
+  },
+  "limits": [
+    "No new physical headset, through-lens motion or full large-assembly interaction validation. ISSUE-97 and MV-44 remain open.",
+    "No scientific simulations or unrelated backend regression sweep performed."
+  ],
+  "storage": {
+    "excluded_paths_still_ignored_and_untracked": 101,
+    "new_tracked_binary": "20,160-byte exported unit-sphere test fixture with SHA256 provenance; no molecular instance/run data.",
+    "bulk_outputs": "Archive only"
+  },
+  "evidence_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-git-publication-20261017"
+}

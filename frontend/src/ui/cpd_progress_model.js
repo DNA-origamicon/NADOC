@@ -63,6 +63,15 @@ export function attachmentMetrics(atoms) {
 export function validateSnapshot(data) {
   if (data?.schema !== 1 || !Array.isArray(data.models) || !data.models.length) throw new Error('Unsupported or empty CPD progress snapshot')
   if (data.isomers != null && !Array.isArray(data.isomers)) throw new Error('Invalid isomer catalog')
+  if (data.progress) {
+    const p = data.progress
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.reviewedAt) || typeof p.summary !== 'string'
+      || !['completed', 'remaining', 'history'].every(key => Array.isArray(p[key]) && p[key].every(item =>
+        typeof item.label === 'string' && typeof item.detail === 'string' && Array.isArray(item.evidence)
+        && item.evidence.every(id => data.sources?.[id])))
+      || !Array.isArray(p.historicalModelIds) || !Array.isArray(p.historicalPreviewIds)
+      || typeof p.historicalWarning !== 'string') throw new Error('Invalid reviewed progress')
+  }
   const models = [...(data.isomers ?? []), ...data.models]
   if (new Set(models.map(m => m.id)).size !== models.length) throw new Error('Duplicate structure identity')
   for (const m of models) {

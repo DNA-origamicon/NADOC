@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+
+vi.mock('../api/overhang_endpoints.js', () => ({
+  generateOverhangRandomSequence: vi.fn(), checkHairpinDimer: vi.fn(),
+}))
+import { generateOverhangRandomSequence, checkHairpinDimer } from '../api/overhang_endpoints.js'
 
 import {
   openHairpinDimerWindow,
@@ -10,10 +15,59 @@ import { buildHairpinDimerIndex } from './hairpin_dimer_report.js'
 import { makeDesign, makeReport, makeWarningReport } from '../test-helpers/hairpin_dimer_fixture.js'
 
 afterEach(() => { document.body.innerHTML = '' })
+beforeEach(() => vi.clearAllMocks())
 
 const win = () => document.querySelector('.hd-window')
 
 describe('hairpin/dimer structure window', () => {
+  it.each(['direct', 'strand', 'badge'])('offers generation from the %s entry point and refreshes drawings', async (entry) => {
+    const design = makeDesign(), report = makeReport()
+    const check = report.checks[0]
+    generateOverhangRandomSequence.mockResolvedValue({})
+    checkHairpinDimer.mockResolvedValue({ ...report, checks: [{ ...check, hairpin: null, dimer: null, flagged: false }] })
+    if (entry === 'direct') openHairpinDimerWindow({ checks: [check] })
+    else if (entry === 'strand') openStrandHairpinDimerWindow(report, design, 's_a')
+    else {
+      const td = document.createElement('td')
+      prependStrandWarningIcon(td, buildHairpinDimerIndex(report, design), 's_a', design, report)
+      td.firstChild.click()
+    }
+    const button = win().querySelector('.hd-window__generate')
+    expect(button.textContent).toBe('Generate new sequence')
+    button.click()
+    expect(button.disabled).toBe(true)
+    await vi.waitFor(() => expect(button.disabled).toBe(false))
+    expect(generateOverhangRandomSequence).toHaveBeenCalledExactlyOnceWith(check.overhang_ids[0])
+    expect(win().querySelector('.hd-window__figure')).toBeNull()
+    expect(win().textContent).toContain('No secondary structure above the screening threshold')
+  })
+
+  it('lets a linker user choose which overhang to regenerate', async () => {
+    const design = makeDesign(), report = makeReport()
+    generateOverhangRandomSequence.mockResolvedValue({})
+    checkHairpinDimer.mockResolvedValue(report)
+    openStrandHairpinDimerWindow(report, design, '__lnk__c1__s')
+    const target = win().querySelector('.hd-window__generate-target')
+    expect(target.options.length).toBe(2)
+    expect([...target.options].map(o => o.textContent)).toEqual(['OH-A', 'OH-B'])
+    target.value = report.checks[1].overhang_ids[0]
+    win().querySelector('.hd-window__generate').click()
+    await vi.waitFor(() => expect(checkHairpinDimer).toHaveBeenCalled())
+    expect(generateOverhangRandomSequence).toHaveBeenCalledExactlyOnceWith(target.value)
+  })
+
+  it('does not reopen a dismissed window after generation completes', async () => {
+    let resolve
+    generateOverhangRandomSequence.mockReturnValue(new Promise(r => { resolve = r }))
+    const modal = openHairpinDimerWindow({ checks: [makeReport().checks[0]] })
+    win().querySelector('.hd-window__generate').click()
+    modal.close()
+    resolve({})
+    await Promise.resolve()
+    expect(win()).toBeNull()
+    expect(checkHairpinDimer).not.toHaveBeenCalled()
+  })
+
   it('shows each flagged structure with ΔG / Tm and the buffer', () => {
     const report = makeReport()
     openStrandHairpinDimerWindow(report, makeDesign(), 's_a', { title: 'S7 OH22' })

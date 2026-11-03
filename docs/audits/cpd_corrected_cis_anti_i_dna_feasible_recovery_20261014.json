@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-14T16:25:11.736134+00:00",
+  "prior_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/failure.json",
+    "sha256": "5ddc5b159dc1d6c2160ce2de55b22282f5803b232d79ae67a4b8b8d73bd0fea6"
+  },
+  "failure_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/failure_geometry_audit.json",
+    "sha256": "00288791e9b53d7a10b01d90f9c1fcdd50c028c3aeb629e4d5bd0879d3289a13"
+  },
+  "prior_service": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4-service/status.json",
+    "sha256": "af521d4673d920414421e82e631fbaa01b3241918aea490f1696e1e5f31e7259"
+  },
+  "ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4-service/completion_wake_ack.json",
+    "sha256": "1816c228d47d13c544f5b587e5c4ab143c2956b933c529c78de9d42786cf6c49"
+  },
+  "findings": {
+    "inverted_stereocenters": [
+      23,
+      89
+    ],
+    "volumes_A3": [
+      -0.8749001848276797,
+      -1.9987010527372202
+    ],
+    "maximum_atom_displacement_A": 3.7034061676613845,
+    "restart_from_failed_coordinates": false,
+    "reason": "The callback checkpoint contains the infeasible iterate which triggered the stop; restart only from pinned screened seed."
+  },
+  "decision": "Restart original screened seed; retain failed SLSQP attempt. Replace large infeasible nonlinear-constraint steps with bounded feasible Armijo L-BFGS; exact forcefield unchanged.",
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5/plan.json",
+    "sha256": "97fda83120cc6d63122a7b2b7a21cb55a0d7c239cdf1c1bc26d450a61ff88d60"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5/launch_receipt.json",
+    "sha256": "8a8be13b33f2693b5e18d1eb60078f78edaf04ffbe5d0baa3614a224657e56f6"
+  },
+  "verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v5/launch_verification.json",
+    "sha256": "cd16858db39c2c7feaa854c0d59a6602189d15cacb3b925f4fb9e7da88c06b79"
+  },
+  "times_denver": {
+    "start_epoch": "2026-10-14T10:24:52.029415-06:00",
+    "hard_deadline_epoch": "2026-10-14T12:24:52.029415-06:00",
+    "review_deadline_epoch": "2026-10-14T12:19:52.029415-06:00"
+  },
+  "wake_token": "573c5e33-41ea-46a7-b42c-c685c40fd570",
+  "tests": "2 passed in1.10s: convergence/step bound and prevention of infeasible energy calls; boundary stop is not claimed stationary.",
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0,
+  "periodic_polling": false
+}

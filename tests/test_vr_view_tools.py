@@ -69,3 +69,91 @@ def test_trajectory_update_reuses_atlas_and_still_rotates_normals():
     struct.pack_into('<I', invalid, 32, 2048)
     with pytest.raises(HTTPException):
         validate_and_rotate(invalid, np.eye(3))
+
+
+@pytest.mark.parametrize("ipc", [False, True])
+def test_opt_in_pipeline_trace_preserves_published_bytes(tmp_path, monkeypatch, capsys, ipc):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from backend.api import routes_vr, doc_context, vr_view_transport
+    from backend.api.vr_view_tools import publish
+    data = b'NADOCVT1' + struct.pack('<10I',6,23,2048,0,0,0,0,0,0,0)
+    state = {'doc_id':'trace-test', 'event_path':str(tmp_path/'event'), 'view_rotation':np.eye(3).tolist()}
+    delivered = []
+    def send(path, payload, **kwargs):
+        delivered.append(bytes(payload))
+        return ipc
+    monkeypatch.setattr(vr_view_transport, 'send_snapshot', send)
+    monkeypatch.setenv('NADOC_VR_VIEW_PIPELINE','1')
+    monkeypatch.setattr(routes_vr,'_require_local',lambda _:None)
+    monkeypatch.setattr(routes_vr,'_read_state',lambda:state)
+    monkeypatch.setattr(doc_context,'get_current_doc',lambda:'trace-test')
+    async def stream():
+        yield data
+    result = asyncio.run(publish(SimpleNamespace(stream=stream)))
+    assert result == {'published':True,'bytes':len(data),'transform_updates':False,'atlas_patches':False,'compressed_panels':False}
+    assert delivered == [data]
+    if ipc:
+        assert not (tmp_path/'event.viewtools').exists()
+    else:
+        assert (tmp_path/'event.viewtools').read_bytes() == data
+    line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith('VR_VIEW_PIPELINE_BACKEND '))
+    trace = json.loads(line.split(' ',1)[1])
+    assert trace['version'] == 23
+    assert trace['transport'] == ('ipc' if ipc else 'file')
+    assert 0 <= trace['body_end_ms'] <= trace['state_end_ms'] <= trace['validation_end_ms'] <= trace['write_start_ms'] <= trace['write_end_ms']
+
+
+def test_transport_wait_does_not_block_async_handler(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+    from backend.api import routes_vr, doc_context, vr_view_transport
+    from backend.api.vr_view_tools import publish
+    state = {'doc_id':'async-test','event_path':str(tmp_path/'event'),'view_rotation':np.eye(3).tolist()}
+    monkeypatch.setattr(routes_vr,'_require_local',lambda _:None)
+    monkeypatch.setattr(routes_vr,'_read_state',lambda:state)
+    monkeypatch.setattr(doc_context,'get_current_doc',lambda:'async-test')
+    started, release = threading.Event(), threading.Event()
+    def send(*_, **kwargs):
+        started.set()
+        assert release.wait(1), 'Transport blocked the async event loop'
+        return True
+    monkeypatch.setattr(vr_view_transport,'send_snapshot',send)
+    async def stream():
+        yield b'NADOCVT1'+struct.pack('<10I',6,1,2048,0,0,0,0,0,0,0)
+    async def scenario():
+        task=asyncio.create_task(publish(SimpleNamespace(stream=stream)))
+        while not started.is_set():
+            await asyncio.sleep(.001)
+        release.set()
+        assert (await task)['published']
+    asyncio.run(scenario())
+
+@pytest.mark.parametrize('schema',[8,9])
+def test_panel_updates_require_bounded_dimensions_and_earlier_base(schema):
+    data=b'NADOCVT1'+struct.pack('<10I',schema,12,256,0,0,0,768,768,0,17)+struct.pack('<I',11)+bytes(768*768*4)
+    assert validate_and_rotate(data,np.eye(3))==data
+    for offset,value in [(32,2048),(36,0),(48,0),(48,12)]:
+        broken=bytearray(data);struct.pack_into('<I',broken,offset,value)
+        with pytest.raises(HTTPException):validate_and_rotate(broken,np.eye(3))
+    with pytest.raises(HTTPException):validate_and_rotate(data[:-1],np.eye(3))
+
+
+def test_panel_only_rejects_geometry_and_panel_scene_update_rotates_it():
+    vertices=np.array([[1,2,3,1,.5,.2,1,-1,-1,1,0,0]]*3,dtype='<f4')
+    data=b'NADOCVT1'+struct.pack('<10I',8,12,264,3,0,0,768,768,0,17)+struct.pack('<I',11)+vertices.tobytes()+bytes(768*768*4)
+    result=validate_and_rotate(data,[[0,0,1],[0,1,0],[-1,0,0]])
+    assert np.allclose(np.frombuffer(result,dtype='<f4',offset=52,count=3),[3,2,-1])
+    invalid=bytearray(data);struct.pack_into('<I',invalid,8,9)
+    with pytest.raises(HTTPException):validate_and_rotate(invalid,np.eye(3))
+
+
+@pytest.mark.parametrize('schema',[10,11])
+def test_compressed_panel_is_lossless_bounded_and_rejects_trailing_runs(schema):
+    header=b'NADOCVT1'+struct.pack('<10I',schema,12,256,0,0,0,768,768,0,17)+struct.pack('<I',11)
+    packed=struct.pack('<II',768*768,0x7f7f7f7f)
+    assert validate_and_rotate(header+packed,np.eye(3))==header+packed
+    for bad in [packed[:-1],packed+b'trailing',packed+packed,struct.pack('<II',0,0),struct.pack('<II',768*768-1,0),struct.pack('<II',2**32-1,0)]:
+        with pytest.raises(HTTPException):validate_and_rotate(header+bad,np.eye(3))

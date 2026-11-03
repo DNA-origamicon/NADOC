@@ -1,7 +1,7 @@
 /** Consume the backend's sole molecular placement authority. Never infer a pose. */
 export const NATIVE_PLACEMENT_SOURCE = 'native-full-o5-v1'
 export const PLACEMENT_FAILURE_EVENT = 'nadoc:placement-integrity-failure'
-const acceptedSources = new Set([NATIVE_PLACEMENT_SOURCE, 'authored-residue-c1-v1', 'authored-residue-o5-v1', 'native-full-extension-v1', 'chemical-modification-v1'])
+const acceptedSources = new Set([NATIVE_PLACEMENT_SOURCE, 'authored-residue-c1-v1', 'authored-residue-o5-v1', 'manual-cpd-base-only-v1', 'manual-cpd-context-v1', 'native-full-extension-v1', 'chemical-modification-v1'])
 let lastFailure = null
 
 export function placementIntegrityFailure(nucleotide, field, actual, reason = 'Missing or invalid authoritative placement') {

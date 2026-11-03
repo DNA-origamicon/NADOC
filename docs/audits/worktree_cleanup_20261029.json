@@ -1,0 +1,172 @@
+{
+  "action": "Archive generated analysis and retain compatibility symlinks; keep top-level Python/Markdown source in Git. No scientific results deleted.",
+  "folders": [
+    {
+      "source": "analysis/cpd_lagged_rmsd_20261022",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/cpd_lagged_rmsd_20261022",
+      "files": 6,
+      "bytes": 393409,
+      "inventory_sha256": "d59424ff1c08fe2f4e7ff4f824762ac0bcc41b7d23d919ed17436bb79eb34d41",
+      "tracked_source_files": [
+        "assess.py"
+      ],
+      "linked_entries": 5
+    },
+    {
+      "source": "analysis/gerling2018_TT_boundary_comparison_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_TT_boundary_comparison_20261027",
+      "files": 8,
+      "bytes": 2581862,
+      "inventory_sha256": "17cdbd268f0358953a7259e4659a7a6b7eb2621fb97bda283ffb8b2e55d3c4ad",
+      "tracked_source_files": [
+        "compare.py"
+      ],
+      "linked_entries": 7
+    },
+    {
+      "source": "analysis/gerling2018_T_annotations_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_T_annotations_20261027",
+      "files": 11,
+      "bytes": 5403975,
+      "inventory_sha256": "5baee78c0507d562c14ad229015c5d7a18e6904111f2a0ed59222b8a3379009e",
+      "tracked_source_files": [
+        "annotate.py"
+      ],
+      "linked_entries": 10
+    },
+    {
+      "source": "analysis/gerling2018_circle_graphs_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_circle_graphs_20261027",
+      "files": 17,
+      "bytes": 7073395,
+      "inventory_sha256": "68182c1855c0675213f85750b5196db8cdad8082a0fcff32b9b0e27e248d4083",
+      "tracked_source_files": [
+        "build_graphs.py",
+        "build_revnano_graphs.py"
+      ],
+      "linked_entries": 15
+    },
+    {
+      "source": "analysis/gerling2018_graph_constraints_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_graph_constraints_20261027",
+      "files": 22,
+      "bytes": 1056325,
+      "inventory_sha256": "54a8a51f05821dac8e2922092f59a91a6dfbfb57a90234b8cc1323a6a57d2035",
+      "tracked_source_files": [
+        "joint_check.py",
+        "report.py",
+        "enumerate_graph_routes.py",
+        "analyze.py"
+      ],
+      "linked_entries": 15
+    },
+    {
+      "source": "analysis/gerling2018_lattice_completion_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_lattice_completion_20261027",
+      "files": 155,
+      "bytes": 23018293,
+      "inventory_sha256": "d5a3b1d8c373bef78a1be80dfd7825c139346590bd7f5854a033231d2111eac9",
+      "tracked_source_files": [
+        "test_connectivity.py",
+        "run_trials.py",
+        "report.py",
+        "loopout_context.py",
+        "seam_trials.py",
+        "route_seeds.py"
+      ],
+      "linked_entries": 26
+    },
+    {
+      "source": "analysis/gerling2018_reconstruction_attempt_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_reconstruction_attempt_20261027",
+      "files": 9,
+      "bytes": 110724,
+      "inventory_sha256": "72d8763b7f90544ee9642fb665888c7d8258f99a5a62c38f69a2d897bc9a4ba7",
+      "tracked_source_files": [
+        "reconstruct.py"
+      ],
+      "linked_entries": 8
+    },
+    {
+      "source": "analysis/gerling2018_revnano_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_revnano_20261027",
+      "files": 92,
+      "bytes": 10423772,
+      "inventory_sha256": "9ca72c658b5d938bb3f3445d9241923b850fa214a0e998c11c387bd58f5dc837",
+      "tracked_source_files": [
+        "validate_controls.py",
+        "run_checks.py"
+      ],
+      "linked_entries": 18
+    },
+    {
+      "source": "analysis/gerling2018_revnano_annotated_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_revnano_annotated_20261027",
+      "files": 13,
+      "bytes": 2657869,
+      "inventory_sha256": "f073da75fce107f8635fcde52c17e1b1e8be4509896de7426bc30a6bb7d043f2",
+      "tracked_source_files": [
+        "analyze.py"
+      ],
+      "linked_entries": 8
+    },
+    {
+      "source": "analysis/gerling2018_revnano_variations_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_revnano_variations_20261027",
+      "files": 2110,
+      "bytes": 514740949,
+      "inventory_sha256": "bec7f2df63ad40fc0f2518541bde539173759fd96fbb70bda64d53aa7b65ddb9",
+      "tracked_source_files": [
+        "final_refine.py",
+        "finalize_selection.py",
+        "expand_exact_candidates.py",
+        "repair_capacity.py",
+        "search.py",
+        "audit_search.py",
+        "summarize.py",
+        "resume_solver_options.py",
+        "capacity_branch_corrected.py",
+        "capacity_branch.py",
+        "validate_selected.py",
+        "global_expanded.py",
+        "apply_global_candidates.py",
+        "refine.py",
+        "write_report.py",
+        "route_prior_trials.py",
+        "solver_sensitivity.py",
+        "diagnose_best.py",
+        "occupancy_refine.py",
+        "global_candidates.py"
+      ],
+      "linked_entries": 77
+    },
+    {
+      "source": "analysis/gerling2018_sequence_comparison_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_sequence_comparison_20261027",
+      "files": 39,
+      "bytes": 5848087,
+      "inventory_sha256": "dcfac3a6534e4d7a2e712379e5d409d564b16c326fbaea30dcce14daf791a7b7",
+      "tracked_source_files": [
+        "check_brick.py",
+        "compare_brick_ligation.py",
+        "compare_reference_tabs.py",
+        "map_brick_scaffold.py",
+        "check_scaffold_start.py",
+        "scan_register.py",
+        "compare.py"
+      ],
+      "linked_entries": 29
+    },
+    {
+      "source": "analysis/gerling2018_unsolved_schematic_20261027",
+      "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/worktree-cleanup-20261029/analysis/gerling2018_unsolved_schematic_20261027",
+      "files": 12,
+      "bytes": 1329847,
+      "inventory_sha256": "93c8839946050560e2aa28008bde5f1d08e4bfb781f5e8e58d6fcd5bf952b219",
+      "tracked_source_files": [
+        "analyze.py"
+      ],
+      "linked_entries": 11
+    }
+  ]
+}

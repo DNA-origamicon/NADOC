@@ -398,7 +398,7 @@ function axes(values, topology, indices) {
   list(values, limits.helices); const seen = new Set(), coverage = new Map(); let points = 0, domainVisits = 0
   const point = p => { vec(3)(p); if (++points > limits.axisPoints) fail('axis point allowance exceeded') }
   for (const axis of values) {
-    optional(axis, { helix_id: id, start: point, end: point, samples: array(point, limits.axisPoints), segments: array(json, 512) }, { ovhg_axes: map(json) })
+    optional(axis, { helix_id: id, start: point, end: point, samples: array(point, limits.axisPoints), segments: array(json, 512) }, { ovhg_axes: map(json), residue_transformed: bool })
     if (!indices.helices.has(axis.helix_id) || axis.helix_id.startsWith('__lnk__') || seen.has(axis.helix_id)) fail('invalid axis identity')
     seen.add(axis.helix_id)
     for (const segment of axis.segments) {
@@ -425,19 +425,6 @@ function axes(values, topology, indices) {
   for (const mark of topology.flexible_segment_marks) {
     const hid = member(mark, indices.strands).helix_id
     if (!flexible.has(hid)) flexible.set(hid, new Set()); flexible.get(hid).add(mark.bp_index)
-  }
-  const primaryDirections = new Map()
-  const ordered = [...topology.strands].sort((a, b) => (a.strand_type !== 'scaffold') - (b.strand_type !== 'scaffold') || a.id.localeCompare(b.id))
-  for (const strand of ordered) for (const d of strand.domains)
-    for (let bp = Math.min(d.start_bp, d.end_bp); bp <= Math.max(d.start_bp, d.end_bp); bp++) {
-      const key = `${d.helix_id}:${bp}`
-      if (!primaryDirections.has(key)) primaryDirections.set(key, d.direction)
-    }
-  for (const p of topology.nucleotide_transforms) {
-    const moved = p.translation.some(x => Math.abs(x) > 1e-10) || p.rotation.slice(0, 3).some(x => Math.abs(x) > 1e-10)
-    if (p.kind !== 'base' || p.copy_k !== 0 || !moved || primaryDirections.get(`${p.helix_id}:${p.bp_index}`) !== p.direction) continue
-    if (!flexible.has(p.helix_id)) flexible.set(p.helix_id, new Set())
-    flexible.get(p.helix_id).add(p.bp_index)
   }
   for (const s of topology.strands) s.domains.forEach((d, ordinal) => {
     if (d.helix_id.startsWith('__lnk__')) return

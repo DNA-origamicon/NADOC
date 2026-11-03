@@ -1,5 +1,2516 @@
 # Cis-anti-I additive parity campaign
 
+**Four-isomer provisional MVP closeout — 2026-10-17.**
+Cis-syn-I external CGenFF return now passes independent identity/stereo/coverage,
+charge-conserving transfer, two canonical six-T starts and two seeds/start.
+All16admission stages and4paired1fs/2fsdiagnostics pass;916savedframe/endpoint
+checks retain22centers; restartmax0.0048kcal/mol, NVEmaxfraction0.000152906.
+Audit docs/audits/cpd_cis_syn_external_numerical_20261017.json. Legacy model untouched.
+Allfour admitted isomers now have external provisional numerical MVP packages.
+Finite campaign closes under the existing missing-reference/insufficient-evidence
+policy: physical accuracy, practical equivalence and original parameter-sensitivity
+question remain insufficient. This is not a full release or experimental validation.
+No energetic refinement trigger demonstrated. Sharednative use3131.489166s
+(52.19min)/48h; no active jobs. Archive cpd-provisional-mvp-models-v4.zip contains
+parameters, provenance, qualification limits and reproducible example pointers.
+Requirement-by-requirement audit: docs/audits/cpd_mvp_final_scope_audit_20261017.json.
+Terminal/mixedisomer contexts and equilibrium behavior remain unqualified; excluded
+orderedisomers are not silently admitted. No automatic extension or production promotion.
+
+**External assignment blocker revalidated — 2026-10-17.**
+Cis-syn-I assignment remains absent after consecutive input-preparation, NMR
+retrieval, mapping and current inventory turns. Inspected extracted and zipped
+CGenFF stream identities: only prior CAI/TSI/TSII/CAIS/TSIS/TSIIS/DTR returns.
+Prepared CSIS input awaits the user-selected CGenFF account. No authenticated
+connection/licensed executable is available locally. Completed numerical panel
+stays closed; physical validation remains explicitly insufficient. No extra MD,
+fit or repeated retrieval is justified merely to occupy this wait. Resume at
+external-return identity/stereo/coverage audit when supplied. Blocker audit:
+`docs/audits/cpd_mvp_external_assignment_blocker_20261017.json`. Native ledger
+2947.395765s unchanged; no active native jobs. Goal incomplete.
+
+**1TTD backbone reference mapping verified — 2026-10-17.**
+All22deposited epsilon quartets resolve through explicit original-to-CIF mapping.
+TTD merges originalT8/T9 into labelres8 and uses mixed sugar aliases; mapping
+is supported by component bonds and20covalent-distance checks. Independent
+MDAnalysis/numpy dihedrals agree within0.000072degrees. All72sugar centers in
+the source structure are canonical. Lesion T9pA10 epsilon−72.3683degrees lies
+in deposited−100to−70interval. Ten other source intervals have small overruns,
+maximum circular deviation2.6097degrees, retained without widening criteria.
+This is source-coordinate consistency, not force-field validation. Audit:
+`docs/audits/cpd_cis_syn_nmr_mapping_20261017.json`. Source solution conditions,
+measured-versus-assumed distance provenance and experimental forward-model
+uncertainty remain gaps; no simulation or fit launched. Cis-syn CGenFF return
+remains pending. Native ledger unchanged2947.395765s; goal remains incomplete.
+
+**Cis-syn quantitative NMR deposition recovered — 2026-10-17.**
+Archived1TTD MR/mmCIF and BMRB4415STAR with hashes. Parsed457restraints:
+28assumed hydrogen bonds,407distance records requiring measurement-provenance
+review,22dihedrals. Fifty non-Hbond records involve lesionT8/T9. Source epsilon
+T9pA10 interval−100to−70degrees is a concrete candidate observable, not an
+equilibrium-population confidence interval. BMRB conditions278±1K,pH*6.6±0.1,
+0.7mM each DNA strand. Salt and primary-method uncertainty remain unresolved.
+Current merged-TTD residue numbering differs from original author numbering;
+map explicitly before analysis. Audit docs/audits/cpd_cis_syn_nmr_reference_20261017.json.
+No new cis-syn CGenFF return identified in Downloads; legacy core(2)(2) is TSII.
+No native jobs/fit. Next: source mapping/method qualification and external return.
+
+**Cis-syn external input prepared — 2026-10-17.**
+One62atom neutral canonical dinucleoside input passes10mapped sugar/ring centers
+and MOL2 graph/stereo roundtrip. Archive cgenff-cis-syn-assignment-input-v1.zip
+is ready for user CGenFF account; no local licensed executable/account connection.
+See docs/audits/cpd_cis_syn_external_input_20261017.json. This closes input
+preparation only, not assignment or qualification. Existing legacy model untouched.
+Quantitative primary NMR data remain unregistered: retrieval failures preserved
+in experimental-reference-review-v1/quantitative_reference_readiness.json.
+Qualitative NOEs are not assigned invented numeric distance tolerances. No new
+native simulation or fit; shared ledger unchanged2947.395765s. Goal remains active.
+
+**Completion audit and formation correction — 2026-10-17.**
+Goal remains incomplete despite numerical-panel success. See
+`docs/audits/cpd_mvp_completion_gap_audit_20261017.json`. External-workflow
+provenance remains incomplete for legacy cis-syn-I; quantitative applicable
+experimental references and source-matched fixtures remain unregistered. No new
+native computation or parameter fitting is justified yet. Primary PMID8374057
+explicitly reports trans-syn-II from sensitized unmodified TpT photolysis at2%
+yield, correcting our earlier modified-precursor-only restriction. This does not
+establish ordinary genomic-DNA formation. Roster corrected; earlier closeout
+statements retained as historical. NMR reference candidates identified for the
+admitted isomers; quantitative observables/tolerances still require extraction.
+
+**Finite CGenFF numerical panel closed — 2026-10-17.**
+Downloaded sugar-bearing CGenFF assignments now yield isolated provisional v4
+DNA candidates for cis-anti-I, trans-syn-I and trans-syn-II. All three passed two
+canonical six-T starts and two independent velocity seeds per start: 10 ps
+restrained + 10 ps unrestrained + 1 ps restart at 1 fs. All 48 stages passed;
+2,748 saved-frame/endpoint checks retained all 18 sugar and four CPD centers.
+Largest restart potential discrepancy 0.0048 kcal/mol (registered limit 0.01).
+The paired 1 fs/2 fs NVE diagnostic passed all 12 one-ps runs; maximum absolute
+energy change/initial kinetic energy was 0.00023875 (limit 0.001). Paired endpoint
+solute displacements were 0.547–0.675 Å without fitting: this does not establish
+trajectory or ensemble equivalence. Ordinary masses, rigidBonds all, no geometry
+locks or production changes. Native campaign use 2947.396 s / 48 h; initial
+admission panel used 552.661 s / 3600 s. No active jobs or automatic extension.
+
+Explicit preregistered expectations and outcomes are in
+`docs/audits/cpd_cgenff_numerical_panel_20261017.json`: identity/coverage/charge,
+minimization energy decrease, finite/stereo retention, restart parity, and the
+short integration diagnostic all passed. Minimization is not minimum certification.
+Exact candidate files retained at Archive `minimum-viable-candidates-v4`, with
+source hashes and scope restrictions. Their matched-reference charge transfer
+remains provisional. Historical failed inputs/runs and v3 improper-order failure
+remain preserved. Legacy cis-syn-I retains only its separately audited scope.
+
+**Verdict:** provisional numerical qualification only. Physical validation and the
+original parameter-sensitivity question remain insufficient/inconclusive: no
+source-matched experimental DNA context, relevant basin coverage, calibrated
+parameter family or physical equivalence margin was evaluated here. Terminal
+lesions and mixed-isomer systems remain unqualified. Trans-anti I/II remain
+excluded pending resolved attachment-order evidence; trans-syn-II formation
+provenance remains context-limited. No established-observable discrepancy has
+been demonstrated to trigger energetic refinement. Stop this finite panel; retain
+these provisional candidates and require applicable observable validation before
+claiming physical qualification. Melting studies remain user-owned.
+
+**First solvated two-seed numerical admission passes — 2026-10-17.**
+Cis-anti-I start1solvated with CHARMM TIP3P in68Åcube;28NaClpairs+5Na,
+29538atoms, neutral and complete parameter coverage. Solute mapping/22center
+signs unchanged by assembly. Solvent1000step and restrainedwhole2000step
+minimization lower their own defined potentials. Twoindependent seeds35171/80239
+pass10psrestrained+10psunrestrained+1psrestart at1fs, with all22centers retained
+in every saved frame/endcoordinate. Restart potential deltas0.0030/0.0048kcal/mol
+pass the0.01computational tolerance. Initial unsupported nonbondedFrequency
+spelling failed before computation; corrected nonbondedFreq run and failure preserved.
+No physical equivalence, population convergence,2fsqualification or known-basin
+coverage claim. This is one six-T engineering start only. No active native job.
+Audit: docs/audits/cpd_cgenff_solvated_pilot_20261017.json.
+Next: remaining5registered starts/two seeds under the shared1h admission-panel
+allowance; then intended-timestep checks and finite evidence review. No new fit.
+
+**Canonical six-T engineering starts and native energy/force loading — 2026-10-17.**
+Two191atom starts per admitted isomer now pass all18sugar+4CPDcenter signs,
+including the rounded PDB coordinates consumed by NAMD. Proper-rotation heavy
+RMSD between starts: cis-anti-I2.514Å, trans-syn-I5.128Å, trans-syn-II4.685Å.
+These are distinct embeddings, not demonstrated experimental basins or equilibria.
+Initial trans-syn embeddings failed because placeholder stereotags were used before
+embedding. Bounded repair maps tags from independently audited sugar-bearing
+coordinates; corrected starts pass. Original failed attempts retained.
+NAMD caught an improper-order issue missed by permissive ParmEd matching:
+parent C4,N3,C5,O4 versus donor C4,C5,N3,O4. Isolated transfer-v4 replaces only
+that inherited tuple with exact donor ordering, retaining numerical parameters.
+Prior v3candidate and native failure retained. V4independent topology/parent-term
+comparison passes; all6GPU run-zero jobs terminate with finite energy/force arrays.
+Maximum atomic forces344–366kcal/mol/Å indicate unrelaxed seeds, not minimum
+certification or a parameter-refinement trigger. No dynamics or equivalence claim.
+Audit: docs/audits/cpd_cgenff_dna_geometry_20261017.json.
+Shared native use2394.7352s/48h. No active native job. Next: solvation, registered
+bounded preparation/thermal/restart admission. Source-matched experimental-context
+fixtures and observable registration remain required before physical validation.
+
+**Sugar returns complete; isolated DNA topology transfer passes — 2026-10-17.**
+All4external result sets copied byte-identically from Downloads to Archive;
+input bytes, returned stereo, neutral charge and CGenFF5.0coverage pass. For all3
+lesions, matched-reference charge deltas are−0.138e on bases,+0.138e on retained
+sugars, zero on terminal OH H/O caps. No arbitrary redistribution needed.
+Isolated v3policy uses native DNA q plus external lesion-minus-reference q;
+retains native sugar/backbone bonded terms and LJ, copies external base/glycosidic
+terms by atom role with isolated aliases. Original v2/production files unchanged.
+Three191atom six-T topology harnesses resolve every term and retain net−5e.
+Independent comparison confirms exactly2added crosslinks; unchanged nonbase terms
+172bonds/318angles/454dihedrals/12impropers per case, plus unchanged nonbase UB.
+Initial no-NBFIX assertion failure preserved; v2exporter retains external halogen
+exceptions under aliases. No native dynamics or physical qualification claim.
+Audit: docs/audits/cpd_cgenff_sugar_return_20261017.json.
+Next: actual canonical-coordinate admission and both starting conformations,
+finite native allocation and established-observable registration. Transfer policy
+remains a provisional hypothesis requiring NAMD evaluation, not a validated model.
+No new native simulation; shared used2392.9863s/48h unchanged.
+
+**Canonical sugar-bearing external assignment package ready — 2026-10-17.**
+Three62atom neutral dinucleoside CPDs and one31atom neutral thymidine reference
+prepared for external CGenFF. Each CPD passes4mapped ring+6CCD-referenced sugar
+centers; reference passes3sugar centers. All4pass graph/stereo MOL2 roundtrip.
+ETKDG seeds only; no optimization/minimum claim or new QM. Corrected hydrogen
+mapping and reference aromatic-MOL2 serialization failures retained. Final package
+excludes failed inputs and uses USER_CHARGES formal placeholders.
+Archive package: cgenff-sugar-assignment-inputs-v1.zip under campaign root.
+Audit: docs/audits/cpd_cgenff_sugar_inputs_20261017.json.
+Next: user CGenFF assignment of all4inputs; inspect actual glycosidic terms and
+lesion-minus-reference charge differences at every retained atom and OH cap.
+This is a proposed boundary-transfer diagnostic, not an approved charge correction.
+The neutral-base constraint remains in force; no arbitrary spreading or automatic
+promotion. Free3prime/5prime OH models do not themselves qualify phosphate transfer.
+
+**Direct CGenFF core-to-DNA transfer fails boundary admission — 2026-10-17.**
+A static mixed-type graph audit finds the same concrete gap for all3assignments.
+Each removed N1-methyl cap carries+0.133e, leaving the retained base pair−0.266e;
+the frozen DNA patch scope requires neutral bases and unchanged native sugar charges.
+Combining returned CGenFF base types with native DNA sugar types leaves2bonds,
+10angles and30dihedral instances uncovered per pair, including glycosidic terms.
+Core completeness/native loading remains valid; it does not imply DNA completeness.
+Audit: docs/audits/cpd_cgenff_dna_boundary_20261017.json.
+No charges redistributed, terms invented, coordinates changed, or simulation launched.
+Next: prepare actual canonical sugar-bearing external assignment inputs and define a
+compatible boundary transfer policy; retain the existing neutral-base constraint until
+an explicitly versioned alternative is justified. Existing two-sugar generator mixes
+legacy fitted terms and cannot be reused as external CGenFF parameter authority.
+
+**CGenFF returns admitted to capped-core native preflight — 2026-10-17.**
+User supplied all3result directories in Downloads; originals untouched, all12files
+byte-preserved on Archive at cgenff-return-intake-v1. Submitted MOL2 files match
+prepared inputs exactly. Returned graphs/stereo pass current mapped RDKit checks.
+CGenFF4.0 requires library5.0, available in Archive reference_forcefields.
+All3cores have36atoms, neutral net charge,38bonds/72angles/114dihedrals/4impropers;
+external ParmEd resolves all terms. Max parameter penalty46.1; charge42.242 for
+cis-anti-I and42.083 for both trans-syns. These are analogy scores, not energy bounds.
+All6NAMD GPU run-zero checks pass at submitted and archived-QM geometries using
+short relative output names. Two initial runs (GPU/CPU) failed during output after
+finite energies; CPU reported buffer overflow. Failures retained; shortening only
+outputName resolves GPU run. This is static loading, not dynamics stability.
+No practical equivalence, fullDNA qualification or sampling claim; no refit.
+Audit: docs/audits/cpd_cgenff_return_intake_20261017.json.
+Next: canonical DNA boundary/charge/parameter reconciliation and isolated admission
+fixtures, then registered finite NAMD dynamics. External-assignment blocker resolved.
+
+**User priority reset: minimum viable models per established TT isomer — 2026-10-17.**
+Treat named CPD configurations as non-interconverting in ordinary NAMD. Each
+formation-supported isomer requires separate model identity and qualification;
+shared compatible parent terms may be reused. Registry membership alone does not
+admit a product. No new-isomer discovery; melting remains user-owned.
+
+Aim for finite minimum viable NAMD models using externally implemented workflows.
+Correct chemistry, parameter completeness and native numerical stability remain
+mandatory. Additional energetic refinement requires NAMD evidence of a substantial
+departure from a prespecified established observable relevant to that isomer/context,
+after setup and sampling explanations are assessed. Fragment QM discrepancies alone
+are diagnostic limitations, not automatic vetoes or justification for indefinite
+refinement. Missing references or insufficient sampling remain explicit limitations;
+no invented equivalence claim. Preserve every earlier failure and verdict.
+
+Policy: `docs/cpd_minimum_viable_namd_policy_20261017.json`.
+Next: formation-supported roster, external-tool verification, reference observables
+and finite allocation within the existing shared48h ceiling (known0.5161h used).
+Do not multiply48h by isomer or silently expand scope. No new native job launched
+by this policy update; candidates isolated and production approval gate unchanged.
+
+**External reader numeric parity and assignment handoff — 2026-10-17.**
+All three224x224 matrices match ffTK2.2 conversion to <5e-16 scaled error.
+Includes harmonic half-factor,0.943^2 frequency scaling and per-stretch Bohr/Å
+conversion; angular dimensions remain radians. This proves implementation parity,
+not empirical scaling accuracy or complete parameter/model qualification.
+Audit: docs/audits/cpd_archived_fftk_numeric_20261017.json.
+Prepared Archive ZIP with all3checked CGenFF inputs and handoff instructions:
+external-core-geometry-v1/cgenff-assignment-inputs-v2.zip (under campaign root).
+User asked for local CGenFF path or account-based assignment. Initial assignments
+remain an external dependency; no credential request, submission or cloud spend.
+No new QM, fitting or NAMD job; shared native use remains2388.970s/48h.
+
+**Archived targets through external OptKing/ffTK interface — 2026-10-17.**
+All three admitted capped-core Hessians transform with unchanged external OptKing:
+224 redundant coordinates, Jacobian rank102, finite symmetric matrices. ffTK2.2
+unchanged parser reads224nonempty rows but adds an empty225th row at terminal
+newline. Separately preserved copies omit only that final newline; readback then
+returns exact224x224 matrices for all3. Native outputs and upstream code unchanged.
+Expectations and verdicts: docs/audits/cpd_archived_fftk_interface_20261017.json.
+No electronic calculation or parameter fitting. This is an explicit archived-data
+adapter, not a newly completed native QM job or a complete ffTK fit qualification.
+Numeric unit-conversion parity and reconciliation with final PSF remain required.
+Initial CGenFF assignments remain unavailable locally. No production changes.
+
+**Archived QM targets recovered and re-audited — 2026-10-17.**
+All three admitted capped-core targets (cis-anti-I, trans-syn-I, trans-syn-II)
+pass current mapped RDKit stereochemistry, element/order, provenance hash,
+finite 108x108 Hessian and symmetry checks. Atom-order invariance and reflected
+negative controls pass. Archived copies are hash-matched despite historical /tmp
+paths; historical manifests remain unchanged. Frozen-core DF-MP2/6-31G(d) targets
+are available without repeating electronic calculations. The recent cis-anti-I
+optimization attempt was avoidable; preserve its deadline failure and cost.
+Cis-anti-I retains its exact-core local harmonic minimum certification.
+Trans-syn I/II retain historical positive-frequency evidence (102 modes each),
+not a fresh independent stationarity certification. No DNA/minimum transfer claim.
+Audit: docs/audits/cpd_qm_target_reuse_20261017.json.
+Next: adapt archived targets to the external bonded interface and obtain external
+initial assignments; no new core optimization/Hessian acquisition. External
+assignment inputs already prepared; local licensed CGenFF executable unavailable.
+No native calculation, fit or production change; known cost remains2388.970s/48h.
+
+**Supported-core preparation and explicit trans-anti admission limit — 2026-10-17.**
+User requires resolved experimental attachment-order evidence for trans-antiI/II;
+class-level evidence does not admit either ordered DNA model. Roster updated.
+External ffTK geometry inputs registered for cis-anti-I/trans-syn-I/trans-syn-II.
+First cis-anti-I job reached300s deadline; panel stopped, both trans-syn jobs unrun.
+Native process group terminated; no completed geometry/minimum or NAMD claim.
+Do not repeat the same acquisition; inspect existing audited QM targets first.
+CGenFF submission package prepared for all3neutral36atom capped cores, with
+RDKit graph/stereo MOL2 roundtrip pass and atom maps. V2 fixes charge-method label
+to USER_CHARGES/formal placeholders. No external submission or fitted charges.
+Package: /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-core-geometry-v1/cgenff-inputs-v2/submission_manifest.json
+CGenFF executable absent locally; prior biotin handoff records user website access.
+Audit: docs/audits/cpd_external_core_preparation_20261017.json.
+Known native use2388.970s=0.663603h/48h.
+Next: existing-target inventory plus external initial assignments; preserve scope
+and separate capped-core preparation from canonical DNA qualification.
+
+**Cis-syn legacy evidence independently requalified for canonical configuration — 2026-10-17.**
+Existing accepted cis-syn-joint-v6 files and all4linked evidence hashes match.
+CCD-referenced heavy-neighbor sugar checks pass80starts/endpoints (4800centers).
+Independent streaming audit passes all17000saved frames in68overnight blocks,
+including mapped CPD ring configuration and crosslink graph;1054000center checks.
+Retain existing preliminary model for its adjacent internal intrastrand tested scope;
+no new refit is justified by one replica's lesion opening without an applicable
+established-observable discrepancy. Numerical evidence is reusable. Practical
+equivalence remains unestablished and lesion-opening sampling insufficient.
+This legacy published-derived model includes local fitting: do not relabel it as
+new external ffTK output or claim all-isomer external-workflow goal complete.
+Audit: docs/audits/cpd_mvp_cis_syn_reuse_20261017.json.
+No native jobs, parameter edits or production promotion; shared native cost unchanged.
+Next: other isomer formation/parameter provenance and isolated candidate preparation.
+
+**External bonded interface bounded check — 2026-10-17.**
+Upstream ffTK2.2 bonded input generation passes through GUI-backed QMtool;
+text-mode attempts and GUI old-package conflict preserved. No upstream source edit.
+Three120s-capped attempts: first fails QCEngine subprocess PATH, second fails
+missing pkg_resources, third reaches deadline during79-displacement Hessian.
+Repairs: isolated OptKing0.2.1, runtime bin on PATH, Setuptools<81. QCEngine
+version preflight now returns1.6. Last process group terminated; no active job.
+Native completion expectation FAIL; Hessian readback NOT EVALUATED. This is an
+incomplete tool check, not molecular instability or a bad CPD model verdict.
+No further identical example retry. Geometry compatibility pass remains valid.
+Audit: docs/audits/cpd_external_fftk_bonded_20261017.json.
+Shared known native use2088.957s=0.580266h/48h. Formation and candidate
+qualification work remains incomplete; no new parameters or production changes.
+
+**Supported external runtime verified — 2026-10-17.**
+Isolated upstream Psi4 1.6 installed on Archive, with Pydantic<2 dependency pin.
+Unchanged ffTK2.2 input completed in4.071s. After correct PSF
+initialization, unchanged reader imported3optimization frames. Original exactly-one
+frame expectation FAILS and is retained; reader is designed to import all3markers.
+Final14atom coordinates match native final geometry within PDB rounding
+(max component error0.0004983A). No minimum certification or fitting claim.
+Archive contains failed environment solve/import and reader harness attempts.
+Audit: docs/audits/cpd_external_fftk_supported_runtime_20261017.json.
+Working8-entry formation inventory: docs/audits/cpd_mvp_formation_roster_20261017.json;
+pending ordered anti assignments are not exclusions or qualifications.
+Known shared native use1866.646s (0.518513h/48h); no active native job.
+Next: complete ordered formation provenance and test external charge/bonded fitting
+interfaces using published assets before generating per-isomer candidate parameters.
+
+**External native interoperability check — 2026-10-17.**
+Unmodified ffTK2.2-generated pyrrolidine MP2/6-31G* input completed under
+Psi4 1.11 in4.772s (120s registered cap). Expectation1 passes. Expectation2
+fails: unmodified ffTK reader added zero coordinate frames, because it requires
+an older OptKing output marker missing from this output. Preserve native output,
+reader failure and input; no minimum certification or CPD qualification.
+Shared known native use now1862.576s=0.517382h of48h. No active native job.
+Audit: docs/audits/cpd_external_fftk_native_20261017.json.
+Next: isolate a supported upstream runtime or reader; no identical rerun or
+fabricated completion marker. Published-example fitting stages remain untested.
+
+**External workflow static preflight — 2026-10-17.**
+Author-distributed July2024 ffTK downloaded to isolated Archive; package identifies
+as2.2 and loads in VMD1.9.3 with Psi4 writer/reader procedures. Upstream source
+unchanged. Published supplementary dataset and PDF retrieved via
+https://doi.org/10.60893/figshare.jcp.c.7254565; supplied MD5 checks pass.
+Extracted unchanged14atom pyrrolidine solute from published Psi4 solvated PDB;
+external writer generated syntactically valid MP2/6-31G* input (neutral singlet,
+2threads,2GB). This proves input generation, not native QM/parser interoperability,
+minimum certification, fitting, or CPD qualification. No QM/MD job launched.
+Audit: docs/audits/cpd_external_fftk_preflight_20261017.json.
+Next: reconcile shared budget and register bounded native example; complete
+formation provenance/ordered atom mapping before per-isomer admission.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**RDKit identity recheck and established-product scope — 2026-10-17.**
+User limits work to previously established products of thymine-thymine
+photoreactions, not discovery of new isomers. A mathematically possible registry
+entry is not formation evidence or authorization to parameterize it. Require
+experimental product provenance and the applicable chemical context before
+admitting another isomer campaign. Do not assume all eight entries form in DNA.
+Taylor2023 explicitly reports no evidence for adjacent cis-syn-II in dinucleotides
+or longer DNA; adjacent trans-syn-II formation is reported for a modified
+ dinucleotide derivative. These distinctions must remain visible in future scope.
+Source: https://onlinelibrary.wiley.com/doi/full/10.1111/php.13694
+
+Fresh RDKit2026.03.5 audit:8existing capped-core coordinate structures and10recent
+canonical cis-anti-I directional-probe structures pass mapped connectivity/core
+handedness checks. Stored stereo annotations removed before 3D reperception with
+AssignStereochemistryFrom3D and recursive rdCIPLabeler. Both probe centers retain
+canonical C1'/C3'/C4' parity. All8core atom-reordering controls pass; reflected
+coordinates rejected. No new geometry, isomer enumeration, QM, MD, production
+change or experimental formation claim. A reader schema-key error was repaired
+before the successful run, with failed reader retained in Archive.
+Audit: `docs/audits/cpd_rdkit_identity_20261017.json`.
+This does not rehabilitate historical full-DNA sugar errors or qualify energetics.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Directional-energy panel audited and closed — 2026-10-17.**
+Acknowledged failure trigger `51bc37ea-2b17-4034-a46c-7584197f0fd8`.
+All10native energies succeeded in1857.80s (30.96min;0.5161/48h ceiling).
+Failure was postprocessing NumPy-Boolean JSON serialization. Preserved failed
+worker/log/failure.json; recovered report using scalar conversion only, zero new
+native calls. Independent audit re-extracts native energies, checks returned
+coordinates/canonical identity, fixed backgrounds/bonds/angles and recomputes MM.
+Audit passes provenance/calculation checks; scientific predictions below do not
+all pass. No tolerance changes, hidden retries, fit, MD or production promotion.
+
+Explicit preregistered expectations versus results:
+- E1 center reproducibility<=1e-5kcal/mol: FAIL overall. A1.03454e-5 (narrow miss),
+  B8.06280e-7 (pass). Retain failure; not a validated bound on all point errors.
+- E2 2/4degree derivative consistency<=max(10%,0.2 slope or2 curvature): FAIL
+  overall. A QM slope difference0.23709 and MM0.20964 exceed0.2kcal/mol/rad.
+  All curvature comparisons and all B comparisons pass.
+- E3 positive QM/MM curvature at both starts/steps: PASS. Directional positivity
+  does not certify a full minimum or NAMD numerical stability.
+- E4 every incremental MM-QM error<=0.25kcal/mol: FAIL. At-4degrees A-0.262579,
+  B-0.250669kcal/mol; other six displacements pass. These are diagnostic screens.
+- E5 curvature agreement<=max(20% of QM,5kcal/mol/rad^2): FAIL overall, A fails
+  at both steps; B passes. At2degrees A QM85.6183/MM52.0752 (39.18%softer MM),
+  B QM60.1901/MM53.7671 (10.67%softer MM). Units kcal/mol/rad^2.
+
+At2degrees slopes QM/MM: A-1.73462/+0.84714, B-3.34072/+0.02270kcal/mol/rad.
+These are unrelaxed path slopes, not equilibrium conformational preferences.
+Registered E1/E2 gates fail; no fully qualified local-agreement claim or parameter
+range follows. Descriptive stiffness mismatch flags background A's exocyclic
+response, conditional on its free-OH/contact geometry. Does not uniquely assign
+error to a torsion term or establish DNA materiality. Neutral49atom free-OH/N1-methyl
+chemistry only; both backgrounds and+/-4degree neighborhood. No population sampling.
+Close finite panel; no automatic additional scan or numerical retry. Any follow-up
+must distinguish exocyclic versus OH/contact response with independent precision
+qualification. No NAMD stability, DNA practical equivalence, or model-freeze claim.
+Audit: `docs/audits/cpd_directional_energy_20261017.json`.
+Archive handoff: `cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/closeout_handoff.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Selected directional-energy test active — 2026-10-17.**
+User explicitly authorized a few directional energy differences with predictions
+registered before acquisition. Ten sequential frozen-core DF-MP2/def2-TZVP energies:
+neutral canonical free-OH one-sugar/N1-methyl backgrounds A and B, each at exocyclic
+O5'-C5'-C4'-C3' offsets0,+/-2,+/-4degrees. Centers are the previously audited
+locally MM-relaxed geometries; no new optimization. All other internal coordinates
+fixed by rigid graph-defined branch rotation. Both starts and all displaced
+structures pass canonical identity, fixed-background and bond-preservation checks.
+Analytic MM path slopes agree with small finite differences within1e-4kcal/mol/rad.
+Maximum preflight atomic force40.272kcal/mol/A. Chemistry/contact limitations remain.
+
+Predictions frozen in `directional-energy-v1/expectations.json` before new coordinate
+energies: E1 center reproduction<=1e-5kcal/mol; E2 2/4degree derivative consistency
+within max(10%,0.2kcal/mol/rad for slope or2kcal/mol/rad^2 for curvature); E3 positive
+QM/MM directional curvatures; E4 every incremental MM-QM error<=0.25kcal/mol;
+E5 curvature error<=max(20% of QM,5kcal/mol/rad^2). E4/E5 are explicitly diagnostic
+screens, not DNA practical-equivalence tolerances. All points are exposed diagnostic
+data, not independent holdouts for any future fit. No calibrated uncertainty claim.
+
+Budget:10native calls maximum,600s/call,6600s service cap,4CPUs,12GiB/no swap;
+charges against existing48h ceiling. One native job at a time. Completion/failure/
+deadline watcher armed; no polling, cloud, automatic extension, fit or MD.
+Archive-only outputs/scratch. Next: independently audit returned coordinates/native
+energies and compare each expectation, including failures. Worker and sources pinned.
+Handoff: `cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/current_handoff.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Bounded sensitivity admission closed inconclusive — 2026-10-17.**
+Stage 0 registered and audited. Both canonical 49-atom endpoint conformations pass
+fresh CPD/sugar identity checks; mapped cross-bonds are C5(1)-C6(2), C6(1)-C5(2).
+Pinned baseline XML, candidate terms, native export and reference evidence remain
+isolated. These free-OH one-sugar/N1-methyl fragments are not canonical two-sugar
+DNA qualification fixtures. Historical bad-sugar DNA trajectories remain excluded.
+
+Parameter-family gate failed: frozen exocyclic trial worsens holdout RMSE
+6.24163 -> 6.63947 kcal/mol; six-point background/OH/contact confounding does not
+supply a defensible local uncertainty interval. No +/-8 kcal/mol correction and no
+artificial bias substituted for a transferable parameter family. Stop under the
+plan's indefensible-range rule. Full MD registration (tolerances, DNA selections,
+windows and measured-throughput job allocation) remains incomplete; no variant
+force/curvature panel, native preflight or MD admitted. Zero native jobs/hours;
+48-hour ceiling unused. No stability, equivalence, population or freeze claim.
+
+Next discriminating evidence: controlled local directional-force/curvature reference
+with explicit OH/phosphate chemistry and independent holdouts sufficient to justify
+a transferable variant range, followed by canonical two-sugar DNA fixture admission.
+No automatic QM sweep or continuation. User retains system-specific melting studies.
+Audit: `docs/audits/cpd_bounded_sensitivity_admission_20261017.json`.
+Archive: `cpd-cis-anti-i-bounded-sensitivity-v1/registration.json` and `closeout.json`.
+Historical evidence and all production parameters/geometry preserved.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Next-work priority: bounded parameter sensitivity — 2026-10-17.**
+The user requested a written plan and fresh-session launch prompt to determine
+whether the unresolved sugar/exocyclic discrepancy matters for NAMD stability and
+local DNA behavior. See [bounded sensitivity plan](cpd_bounded_parameter_sensitivity_plan.md)
+and [launch prompt](cpd_bounded_sensitivity_session_prompt.txt).
+This supersedes the proposed matched-QM-reference work below as the next priority;
+the six-point results and archived closeout remain unchanged. Planning only: no
+new calculation launched, no parameters promoted. Numerical qualification,
+practical equivalence and insufficient sampling have separate outcomes. Further
+QM refinement should target demonstrated sensitivity, not proceed indefinitely.
+System-specific melting studies remain user-owned.
+
+**Six-point panel audited and closed; matched QM-reference design next — 2026-10-17 14:32 Denver.**
+Acknowledged `8cb8d6b0-cacb-4e26-8081-790d734389ac`. Two midpoint energies completed
+in367.57s. Independent source/native MP2 energies, returned geometries, canonical
+identity and recalculated MM audit passed. Midpoint background contrast QM-18.60992,
+MM-26.27041,residual-7.66049kcal/mol. This is not resolution of main discrepancy.
+
+Midpoint above endpoint chord: backgroundA QM21.47171/MM20.13991,error-1.33181;
+backgroundB QM4.34960/MM1.02988,error-3.31972kcal/mol. These are three-point chord
+deviations, NOT transition-state barriers or fitted derivatives. Six-point descriptor
+audit shows OH5 torsions varying substantially, OH3 differing across backgrounds,
+and O5-baseO4 distances2.47–4.14A. MidpointA has O5-O4=2.475A/HO5-O4=1.660A;
+midpointB2.909/1.999A. These contact/cap differences accompany coupled geometry;
+no unique attribution to sugar pucker, torsion or LJ is possible from this panel.
+
+Close bounded six-point MM-selected geometry diagnostic with failures preserved.
+No new job/timer and no scalar/2D fit. Next needs matched QM-constrained local
+references, with explicit cap/OH branch controls and corresponding MM constraints,
+rather than further vertical energies on MM-selected points. geomeTRIC is a
+candidate independent optimizer; not yet installed/validated/admitted. Review
+historical optimizer failures and analytic-gradient support before a bounded pilot;
+no automatic repeated12-step continuations or full scan. Do not replace the
+reference method silently or claim QM-relaxed/global minima from completed jobs.
+Original neutral endpoint mismatch remains unresolved; production parameters unchanged.
+Archive-only evidence,no polling/cloud spending.
+Handoff: `endpoint-ring-exocyclic-midpoint-v1/closeout_handoff.json`.
+Audit: `docs/audits/cpd_ring_exocyclic_panel_closeout_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Crossed diagnostic audited; two midpoint tests active — 2026-10-17 14:25 Denver.**
+Acknowledged `e6da73ce-14a7-4b74-9ac6-465f27e9d068`. Crossed QM energies completed
+in373.57s. Independent source/native energy, returned geometry, canonical identity
+and recalculated MM audit passed; conditional contrasts recomputed directly from
+Hartree differences. Fixed-exocyclic background residuals-6.75458/-4.59057kcal/mol;
+fixed-background exocyclic residuals-3.55127/-1.38726. Coupling double difference
+QM-10.11637,MM-7.95236,error+2.16401. Diagonal residual remains-8.14185.
+An exocyclic-angle-only correction cannot eliminate residual at fixed angle.
+This does NOT isolate pure sugar pucker: background includes other atoms, and
+MM-selected branch/cap basins can contribute. No parameter fit or minimum claim.
+
+Launched `endpoint-ring-exocyclic-midpoint-v1`: exactly two111.058096deg midpoint
+orientations, one on each existing fixed background. Same independent SLSQP setup,
+exact torsion and covalent bounds, then unchanged fixed MP2/def2-TZVP energy method.
+Both pass independent fixed-atom/bond/torsion/projected-force preflight; inactive
+bond inequalities,projected forces1.74e-5/5.81e-5kcal/mol/A. No fitted correction.
+Compare midpoint energies with endpoint chords and conditional background residual;
+inspect cap/contact changes before attributing curvature. These two points complete
+a bounded six-point diagnostic, not a full surface or license to fit arbitrary2D
+terms. Close panel for target/method decision after audit;no automatic extra sweep.
+60min/energy,125min service cap,four CPUs,12GiB/no swap;completion/failure/deadline
+watcher armed. Archive-only output/scratch,no periodic polling/cloud spending.
+Historical failures retained; no production changes.
+Handoff: `endpoint-ring-exocyclic-midpoint-v1/handoff.json`.
+Audit: `docs/audits/cpd_ring_exocyclic_cross_review_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Crossed background/exocyclic tests active — 2026-10-17 14:17 Denver.**
+User authorized next discriminating tests. Build two missing cells of a2x2 panel:
+original fixed endpoint background with alternate exocyclic orientation, and vice
+versa. Reuse audited relaxed diagonal QM/MM energies. Background includes ring
+pucker AND other fixed-atom differences; do not interpret contrast as pure ring
+energy. New conditional contrasts/double difference diagnose coupled residuals;
+not another attempt to repair main mismatch by repeating local relaxation.
+
+V1 Cartesian0.5A displacement box hit its limit on first crossed point, despite
+optimizer success; projected force8.58kcal/mol/A. Rejected before QM; file preserved.
+V2 replaces that local displacement box with covalent lengths90–110percent of input,
+keeping exact torsion/fixed-atom/stereochemistry and low-force gates. Both inequalities
+are inactive at accepted geometries. Independent recomputation verifies fixed atoms,
+torsions and projected gradients1.42e-5/2.35e-5kcal/mol/A. Actual bond ratios range
+0.985–1.017. Cartesian components move up to1.52/1.06A after large orientation swap;
+this is recorded, not concealed as a small perturbation. No global minimum claim.
+Existing diagonal displacements were inactive; references remain local MM-selected
+geometries. Cap/branch basins and selection bias limit interpretation of coupling.
+
+Launched `endpoint-ring-exocyclic-cross-v2`: two sequential frozen-core DF-MP2/
+def2-TZVP energies with unchanged proven energy method.60min each,125min service
+cap,four CPUs,12GiB/no swap;completion/failure/deadline watcher armed. Audit native
+energies,identity,fixed atoms and recomputed contrasts before any fit or further
+panel. No production geometry/parameter change. Archive-only bulk/scratch,no
+periodic polling/cloud spending. Earlier failed fits and relaxation routes retained.
+Handoff: `endpoint-ring-exocyclic-cross-v2/handoff.json`.
+Audit: `docs/audits/cpd_ring_exocyclic_cross_admission_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Local-contact route closed: main discrepancy persists — 2026-10-17 13:48 Denver.**
+Acknowledged `da04f2a9-96aa-4735-812c-e244b492be60`. Alternate fixed QM energy
+completed in185.04s. Independent native energy/source hashes, returned coordinates,
+canonical identity, fixed-ring/core atoms, torsion and recalculated MM audit passed.
+Relaxed alternate-minus-original:QM-1.78519,MM-9.92703,residual-8.14185kcal/mol.
+Prior residual-7.73658: absolute error WORSE by0.40527. This diagnostic did not
+solve the conformer mismatch. Preserve all relaxed and rigid failures; no refit.
+
+Enforce planned stop on local exocyclic-relaxation route; no new native job/timer.
+The crowded holdout improved but the main endpoint discrepancy did not. Do not
+infer a solution from optimizer success or from the smaller holdout error.
+Computed existing-geometry descriptor panel: chi equal105.65946deg, whereas five
+ring torsions and exocyclic orientation differ markedly. Local relaxation preserved
+all five ring torsions exactly. Relaxed MM difference partitions into torsion-4.024,
+nonbonded-4.255,angle-1.732kcal/mol plus small terms. This is not a QM decomposition
+and cannot uniquely assign the mismatch to one parameter group.
+
+Next investigation must distinguish coupled ring/exocyclic effects via a small,
+matched constrained panel or directional-force evidence, using an independent
+constraint optimizer if needed. Review against prior endpoint optimization failures
+before launch. No more basis/cap/local-contact sweeps or single-torsion fitting.
+The original full CPD readiness task remains incomplete; parameter discrepancy and
+chemical-transfer qualifications remain. No production changes/minimum claim.
+Archive evidence and failures retained; no polling/cloud spending.
+Handoff: `endpoint-contact-relax-alternate-v1/closeout_handoff.json`.
+Audit: `docs/audits/cpd_contact_relax_closeout_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Contact relaxation partly improves holdout; direct conformer test active — 2026-10-17 13:43 Denver.**
+Acknowledged `708ffb22-1cee-4641-9021-e3b76f0d596c`. Two QM energies completed
+in369.68s. Independent audit verifies source/native energies, returned geometries,
+canonical identity, fixed atoms, torsion constraints and recalculated MM energies.
+First reviewer regex incorrectly matched SCS Total Energy; failure recorded and
+reviewer v2 anchors the unscaled Total Energy line. Native results unchanged.
+
+Relaxed holdout increment:QM11.74713,MM7.36790,error-4.37923kcal/mol. Prior rigid
+error+12.17178. Absolute discrepancy decreased but reversed sign: partial progress,
+not a solved torsion/contact model. MM-selected geometries are biased and not QM
+stationary points. Preserve both rigid and relaxed evidence; no parameter refit.
+
+Apply identical independent SLSQP local branch relaxation to canonical alternate
+endpoint:20 iterations, exact torsion equality, fixed core/ring, canonical identity
+preserved;max displacement component0.093A,projected gradient7.17e-5kcal/mol/A.
+Launched `endpoint-contact-relax-alternate-v1`: ONE new fixed MP2/def2-TZVP energy,
+reusing audited relaxed-original energy to directly test main7.74kcal/mol conformer
+residual. Frozen worker computes this contrast explicitly, not generic basis-check
+interpretation. If no improvement, stop/review this local-relaxation route rather
+than extend a sweep. No production parameters/geometry changed, no minimum claim.
+60min native/65min service cap,four CPUs,12GiB/no swap;completion/failure/deadline
+watcher armed. Archive-only bulk/scratch,no periodic polling,no cloud spending.
+Handoff: `endpoint-contact-relax-alternate-v1/handoff.json`.
+Audit: `docs/audits/cpd_contact_relax_review_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Sugar/contact discrepancy: new constrained-relaxation diagnostic active — 2026-10-17 13:35 Denver.**
+User requests resolution without repeating failed methods; pursue alternative solvers
+where useful. Review confirms failed single-torsion fit, surviving cap-cross error
+and crowded rigid holdout. PySCF DF-MP2 analytic gradients are NotImplemented;
+conventional MP2 gradient memory not admitted. Do not substitute HF gradients and
+call them MP2. Independent SLSQP chosen for cheap, localized MM relaxation with
+analytic OpenMM Reference gradient, instead of retrying long whole-endpoint QM
+optimization or fitting the rejected torsion correction.
+
+Two isolated geometries: original and its existing minus30 holdout. Freeze core
+and sugar ring, hold O5-C5-C4-C3 torsion exactly; relax only graph-defined five-atom
+C5/O5/HO5/H5/H5 branch. SLSQP500iteration limit,0.5A component displacement bounds;
+both converged without active displacement bounds, projected gradient<1e-3
+kcal/mol/A, torsion error<1e-6deg, canonical identity preserved. Crowded O5-O4
+contact improves2.194->2.511A. All failed rigid holdout evidence retained.
+These are MM-selected local geometries, not QM minima or unbiased fit targets.
+
+Launched `endpoint-contact-relax-v1`: two fixed-geometry frozen-core DF-MP2/
+def2-TZVP energies using previously validated Psi4 method. The changed optimizer
+addresses geometry selection; reusing the energy evaluator keeps comparison with
+prior rigid energies meaningful. Frozen runtime worker explicitly computes the
+relaxed holdout increment and matching MM residual; it overrides the generic
+basis-check worker's original conformer interpretation. Source preparation script
+constructs geometry/plan; preserve frozen worker as exact executed artifact.
+Audit relaxed-versus-rigid residual before choosing any further constrained QM
+optimization, geomeTRIC trial or coupled fit. Never infer unique LJ error from
+MM decomposition alone. No production geometry or parameter changes.
+60min per energy,125min service cap,four CPUs,12GiB/no swap. Archive-only bulk/
+scratch;completion/failure/deadline triggers,no periodic polling,no cloud spend.
+Handoff: `endpoint-contact-relax-v1/handoff.json`.
+Audit: `docs/audits/cpd_contact_relax_admission_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Future-workflow preference — 2026-10-17:** user requests independent solver first. Start analogous charged CPD solvent-reference work with tested PySCF IEF-PCM, retaining explicit cavity, numerical and memory gates. See `memory/feedback_cpd_qm_solver_choice.md`. This does not replace proven gas-phase QM methods or imply universal solvent validation.
+
+**Independent solver paired screen passed; numerical pilot closed — 2026-10-17 02:43 Denver.**
+Acknowledged `363283e9-cef2-4479-89cb-65908b4c1c58`. Original350 converged in
+2732.52s (45.54min),29 cycles plus extra cycle; total-1963.9735539925232Eh,
+solvent-0.151033471721709Eh. Independent source/native/checkpoint/density/restart/
+geometry/settings audit passed;250-electron trace, gap0.48124Eh, gradient5.89e-10.
+Original350-minus302=-0.031503kcal/mol;alternate shift=-0.021071. Paired
+alternate-minus-original is-0.047194 at302 and-0.036762 at350: relative sensitivity
+0.010432kcal/mol PASSES predeclared0.2 screen. Individual0.5 screens also pass.
+Verified matched charge/elements/basis/auxbasis/cavity/epsilon across paired jobs.
+
+This completes planned independent numerical pilot (five SCFs,3.87h total native
+time). No further job or timer launched.302/350 near-degeneracy is only for fixed
+charged terminal HF proxies; no solution populations, weld occupancy, thermal
+stability, chemical-transfer validation or minimum certificate. Original434 is
+supporting evidence only;alternate434/590 memory exclusions retained. No claim of
+asymptotic grid convergence. Original neutral MP2/MM discrepancy remains unresolved.
+
+Continued with no-QM target reconciliation: consolidated existing core-round1 cap
+crosses, all four rigid holdouts and paired solvent results into provenance-linked
+JSON/CSV. No missing solvent MM residual invented. Heavy-geometry discrepancy
+persists at fixed caps; rejected torsion trial remains rejected. Crowded holdout's
+MM response is LJ-dominated, but no QM decomposition uniquely assigns its error.
+Next attach exact method/basis and sugar/contact descriptors to the existing neutral
+panel before selecting new constrained-relaxed tests. Do not repeat cap/basis scans
+or fit rigid contact repulsion into torsions. Production parameters unchanged.
+Archive evidence/failures retained; no polling/cloud spend.
+Handoff: `independent-pcm-pair-closeout-v1/handoff.json`.
+Audits: `docs/audits/cpd_independent_pcm_pair_closeout_20261017.json` and
+`docs/audits/cpd_target_reconciliation_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Alternate350 screen passes; final paired original350 active — 2026-10-17 01:56 Denver.**
+Acknowledged `121ce2f5-baf3-4616-a18b-cd30707f2875`. Alternate350 converged in
+2422.56s (40.38min),33 cycles plus extra cycle. Total-1963.973612577216Eh,
+solvent-0.156033357893613Eh. Independent native/checkpoint/density/restart/geometry
+and settings audit passed;250-electron trace, gap0.48198Eh, final gradient6.18e-10.
+Alternate350-minus302=-0.021071kcal/mol PASSES0.5 engineering screen. No minimum
+certificate, physical validation or reliable conformer preference inferred.
+
+Launched `endpoint-pyscf-pcm-original350-v1`, last planned calculation in paired
+302/350 check, from audited original302 density. Same basis,auxiliary basis,
+geometry,charge,UFF1.1/epsilon and SWIG settings;only surface order31/350 changes.
+Original350 conservative estimate6.074GiB admitted under unchanged8GiB working
+screen. Four CPUs,12GiB/no swap,65-minute hard cap;60-minute review and completion/
+failure watcher armed. All bulk/scratch Archive-only;no periodic polling/cloud.
+After completion audit compute both conformer shifts and paired relative change
+against0.2kcal/mol. Original434 supports original-only sensitivity;alternate434
+remains excluded for memory. Close this paired diagnostic with its limitations,
+not automatic grid escalation or fitting. Near-degenerate302 comparison remains
+unranked until paired test; original neutral MP2/MM mismatch remains unresolved.
+Handoff: `endpoint-pyscf-pcm-original350-v1/handoff.json`.
+Audit: `docs/audits/cpd_independent_pcm_alternate350_review_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Alternate302 audited; alternate350 active — 2026-10-17 01:15 Denver.**
+Acknowledged `d811343f-f0c1-43d2-9449-4e122a7d4a4f`. Alternate302 converged in
+3043.95s (50.73min),43 cycles plus extra cycle; total-1963.9735789985798Eh,
+solvent-0.155995583047468Eh. Independent source/native/checkpoint/density/geometry
+and cavity audit passed. Electron trace250, orbital orthonormality verified;
+final native gradient6.35e-10, gap0.48202Eh.
+
+At matched302 resolution, alternate-minus-original=-0.047194kcal/mol. This is
+near-degeneracy of these fixed proxy geometries, NOT reliable conformer preference,
+solution populations or evidence that the neutral MP2/MM discrepancy is resolved.
+Paired numerical sensitivity remains pending; cap preparation and chemistry
+limitations remain in force. No fitting, optimization or minimum certification.
+
+Launched `endpoint-pyscf-pcm-alternate350-v1`: alternate350 (order31), same basis,
+auxiliary basis,charge,UFF1.1 cavity and epsilon, from pinned same-engine302 density.
+Memory preflight6.359GiB within unchanged8GiB working screen;alternate434 excluded.
+After native/restart audit and individual0.5kcal/mol screen, run original350 one at
+a time to assess paired relative-energy sensitivity against0.2kcal/mol. A pass
+would be a limited resolution check, not proof of asymptotic grid convergence.
+65-minute cap, four CPUs,12GiB/no swap;60-minute review and completion/failure
+watcher armed. Archive-only bulk/scratch, no periodic polling or cloud spend.
+Handoff: `endpoint-pyscf-pcm-alternate350-v1/handoff.json`.
+Audit: `docs/audits/cpd_independent_pcm_alternate_review_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Independent PCM original surface screen passes; alternate302 active — 2026-10-17 00:24 Denver.**
+Acknowledged `a320a61a-b39f-42ef-b05d-2e7955240f48`. PySCF434 converged in
+2882.32s (48.04min),34 cycles plus extra cycle; total-1963.9736363441589Eh,
+solvent-0.151136651108997Eh. Native/checkpoint/density/restart/geometry audit passed.
+Final gradient6.4e-10,250-electron trace, gap0.48123Eh. Original434-minus302 total
+energy shift -0.083179kcal/mol PASSES existing0.5 engineering screen. This is local
+numerical evidence, not a complete grid limit, physical validation or minimum.
+
+Alternate preflight:302 retains5352 points,5.415GiB conservative estimate admitted;
+434 retains7247,8.261GiB FAILS unchanged8GiB working screen.350 retains6047,
+6.359GiB admitted. Preserve failed admission; no memory limits raised. Planned
+relative-energy comparison becomes paired302/350, with original434 providing
+additional evidence only for original conformer. This narrower comparison cannot
+be represented as alternate434 validation or proof of asymptotic convergence.
+
+Launched `endpoint-pyscf-pcm-alternate-v1`: alternate canonical charged-terminal
+proxy, independent MINAO guess, matched original302 HF/basis/auxbasis/UFF1.1/
+epsilon/IEF-PCM settings. After audit, evaluate alternate350 and original350 one
+at a time; predeclared relative numerical sensitivity0.2kcal/mol. Preserve the
+independently prepared cap-conformer limitations; these are diagnostic proxy
+energies, not neutral MP2/MM fit residuals. No production parameter changes.
+65-minute hard cap, four CPUs,12GiB/no swap;60-minute review and completion/failure
+watcher armed. Archive-only bulk/scratch, no periodic polling or cloud spend.
+Handoff: `endpoint-pyscf-pcm-alternate-v1/handoff.json`.
+Audit: `docs/audits/cpd_independent_pcm_grid_review_20261017.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Independent PCM SCF audited;434 surface refinement active — 2026-10-16 23:35 Denver.**
+Acknowledged `1aa3e0db-7df5-4f0a-b07f-331bc706acb7`. PySCF302 SCF converged in
+2854.03s (47.57min),45 cycles plus final extra cycle. Total energy
+-1963.9735037900928Eh, solvent energy-0.150963220628633Eh. Independent audit verifies
+native convergence, source/output hashes, saved checkpoint/density consistency,
+250-electron trace, orbital orthonormality, unchanged geometry and explicit cavity
+settings. Final native gradient6.18e-10; HOMO–LUMO gap0.48127Eh. This is SCF
+feasibility, not minimum certification or numerical/parameter qualification.
+
+Surface-only resource preflight:350 retains5846 points, conservative6.074GiB;
+434 retains7023,7.880GiB. Both meet unchanged8GiB working screen. Selected434 as
+stronger admitted refinement;590 remains excluded at12.070GiB estimated. No
+memory limit raised or failed preflight discarded.
+Launched `endpoint-pyscf-pcm-grid-v1`: same geometry/charge/basis/auxiliary basis,
+UFF1.1 cavity,epsilon78.3553,IEF-PCM/SWIG; surface434 (Lebedev order35). Starts from
+pinned audited same-engine302 density; no cross-engine AO mapping. Preserve exact
+1e-9 convergence settings and0.5kcal/mol same-model numerical screen. Failure
+stops blind grid refinement; pass still requires relative-conformer sensitivity.
+Four CPUs,12GiB/no swap,65-minute hard cap,60-minute review/completion/failure
+triggers armed. All outputs/scratch Archive-only; no polling or cloud spending.
+Sugar/conformer work stays deferred per user priority. Historical failures retained.
+Handoff: `endpoint-pyscf-pcm-grid-v1/handoff.json`.
+Audit: `docs/audits/cpd_independent_pcm_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**User-prioritized independent solver pilot active — 2026-10-16 22:46 Denver.**
+User explicitly requested independent solver before sugar/conformer reconciliation.
+Installed PySCF2.14.0 and missing h5py into isolated Archive target; existing QM
+runtime unchanged. Initial missing-h5py test failure preserved. Exact upstream
+IEF-PCM reference test passes (energy error1.28e-13Eh), source/version pinned.
+
+Target preflight: unchanged56 atoms,-1 charge,250 electrons,866 AO basis functions;
+coordinate roundtrip below1e-15A. Explicit UFF1.1 radii in Bohr and water epsilon
+78.3553. SWIG surface302 retains5201 points, conservative16-matrix-plus2GiB estimate
+5.225GiB, passes8GiB working screen. Surface590 retains9191 points and estimates
+12.070GiB, fails screen: NOT launched or treated as optional evidence to discard.
+
+Launched `endpoint-pyscf-pcm-v1`: one independent DF-RHF/def2-SVPD IEF-PCM SCF,
+SWIG302, def2-universal-jkfit auxiliary basis, independent MINAO guess (no unverified
+Psi4 AO matrix import). Energy and orbital-gradient criteria1e-9,150-cycle maximum.
+PySCF orbital-gradient criterion is not identical to Psi4 density RMS criterion.
+SCF checkpoint and DF scratch are on Archive. Verified native startup settings.
+Four CPUs,12GiB/no swap,65-minute hard cap;60-minute review trigger and completion/
+failure watcher armed. No periodic polling, no cloud spending. Native completion
+still requires independent audit and a resource-safe surface-refinement check.
+Default cavity radii were explicitly overridden; cross-engine energies remain
+numerical diagnostics, not directly interchangeable fit targets or minima.
+Handoff: `endpoint-pyscf-pcm-v1/handoff.json`.
+Audit: `docs/audits/cpd_independent_pcm_admission_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Methodological review complete — 2026-10-16 Denver.**
+Review: `docs/audits/cpd_methodological_review_20261016.md`.
+Keep failed DDX/PCMSolver retry routes closed. Priority returns to the original
+matched intramolecular QM–MM discrepancy: reconcile existing canonical endpoint,
+cap-cross and holdout data before selecting new computations. Charged-proxy HF/PCM
+energies cannot repair or be directly compared as fit residuals to neutral MP2/MM
+endpoints. The rejected exocyclic correction stays rejected; failed contacts remain.
+
+Independent PySCF Gaussian-surface IEF-PCM is a conditional solvent cross-check,
+not a readiness requirement or guaranteed cure. Runtime is absent from active QM
+Python; dense surface matrices require explicit memory preflight before SCF.
+No new simulation, runtime installation, timer or parameter change in this review.
+Literature supports matched QM surfaces, water targets and separate transfer
+validation. Escaped-charge effects remain a hypothesis, not our established cause.
+Review records bounded pilot limits, numerical screens and stop criteria.
+Handoff: `methodological-review-v1/handoff.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**DDX numerical-refinement route closed; methodological handoff — 2026-10-16 21:42 Denver.**
+Acknowledged `9e8db4c1-b184-44a2-824e-6a5dea79e8c1`. Two direct fixed-density
+solvent evaluations completed in98.03s. Independent audit verifies native
+FMM=False for both, exact grid/radii settings, source hashes, saved density,
+finite symmetric potential matrices and recomputed orbital response.
+
+Direct surface12-to14 energy shift is+1.28567kcal/mol; gap0.24408 ->0.00569Eh
+and occupied-subspace loss3.75474 in one diagonalization. Direct-minus-FMM energy
+differences are+0.000563/-0.020304kcal/mol at surfaces12/14. Acceleration affects
+results but is not the sole cause of the persistent surface sensitivity. These
+are fixed-density diagnostics, not optimized wavefunctions, physical excited-state
+assignments, minima or parameter certificates. The 1.80kcal/mol self-consistent
+grid-screen failure remains unresolved. All raw outputs and failures preserved.
+
+As prospectively specified, STOP this charged-fragment DDX numerical-refinement
+route. No new job or timer launched; do not continue SCF/grid/radius tuning or
+use these solvent energies as fit targets. The overall CPD campaign remains
+incomplete, with the original approximately7.74kcal/mol QM–MM discrepancy and
+chemical-transfer qualification unresolved. Production parameters unchanged.
+
+Next work requires methodological review before compute: assess an independent
+continuum implementation and treatment of diffuse anionic density/cavity
+integration, then define a bounded pilot on exactly the same canonical terminal
+fragment with explicit numerical-convergence criteria. This is a candidate
+investigation, not an asserted diagnosis or a selected/available new engine.
+Preserve charge/geometry and do not tune chemistry to force QM–MM agreement.
+No alternate-conformer matrix until numerical sensitivity is controlled. Historical
+bad-sugar DNA context remains excluded; user owns system-specific melting studies.
+Archive-only evidence; no polling or cloud spend.
+Handoff: `endpoint-ddx-standard-direct-v1/closeout_handoff.json`.
+Audit: `docs/audits/cpd_ddx_standard_direct_closeout_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Surface sensitivity persists; bounded direct-solver comparison active — 2026-10-16 21:39 Denver.**
+Acknowledged `5202d0c4-96d0-43a1-9839-c6f08e5dbfda`. Five fixed-density
+solvent evaluations completed in205.48s. Independent source/native/radii/settings,
+saved-density and finite symmetric matrix audit passed; recomputed orbital gaps
+and occupied-subspace responses match. Baseline solvent energy reproduces SCF
+within4.23e-8Eh. These are fixed-density diagnostics, not new SCF or minima.
+
+Relative to surface12/590,integration75x302: coarse surface shift+1.73812kcal/mol;
+coarse integration+1.18231; higher integration110x434 -0.07685; higher surface14/770
++1.30654. Higher integration response remains small, but higher surface gap falls
+0.24408 to0.00847Eh with occupied-subspace loss3.968 in one Fock diagonalization.
+This is not proof of a converged unstable electronic state, but does NOT justify
+another higher-grid SCF. The 1.80kcal/mol SCF grid-screen failure remains in force.
+
+Launched `endpoint-ddx-standard-direct-v1`: only two fixed-density solvent
+calculations at surfaces12/590 and14/770 with FMM disabled, unchanged integration,
+cavity and saved density. Compare energies/potential matrices with accelerated
+results. If surface sensitivity and orbital disruption reproduce, close this
+numerical-refinement route for methodological review; no further blind grid,
+cavity or SCF tuning. If acceleration is responsible, independently verify direct
+numerical convergence before energy targets. Alternate-conformer work stays held.
+15-minute hard cap, four CPUs,12GiB/no swap; event watcher armed. Archive-only
+bulk/scratch, no polling or cloud spend. No production parameters or certification.
+Original7.74kcal/mol QM–MM discrepancy remains unresolved.
+Handoff: `endpoint-ddx-standard-direct-v1/handoff.json`.
+Audit: `docs/audits/cpd_ddx_standard_density_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Same-cavity grid screen failed; fixed-density decomposition active — 2026-10-16 21:35 Denver.**
+Acknowledged `0bc0d5e4-2b66-43cf-8f7f-0215042c2261`. Coarse SCF converged in
+324.94 s, -1963.9743571556853 Eh. Independent native/restart/radii/geometry/density
+and source-hash audit passed. Native surface9/302, integration35x110, solvent
+tolerance1e-9 verified. Saved density has 250 electrons and orthonormal orbitals.
+Coarse-minus-fine total energy is +1.801591 kcal/mol at identical geometry and
+UFF1.1 cavity: FAILS the predeclared 0.5 kcal/mol engineering screen. Execution
+completion is not numerical qualification. Neither result is a minimum certificate.
+Do not reinterpret the screen after seeing the result or proceed to alternate
+conformer energies yet. Failure and native outputs retained.
+
+Launched `endpoint-ddx-standard-density-v1`: five solvent evaluations at the
+saved converged fine density: baseline, coarse surface alone, coarse integration
+alone, higher integration110x434, higher surface14/770. Standard UFF1.1 cavity
+unchanged. Recompute solvent potentials and orbital response, reproduce baseline,
+and audit numerical sensitivity before deciding whether another SCF is useful.
+No automatic repeated refinement, no fit or production changes. This diagnostic
+cannot by itself establish self-consistent energy accuracy or resolve the original
+7.74 kcal/mol QM–MM discrepancy. User-owned melting studies remain out of scope.
+15-minute hard cap, four CPUs,12 GiB/no swap; event completion/failure/deadline
+watcher armed. All bulk/scratch on Archive; no periodic polling or cloud spending.
+Handoff: `endpoint-ddx-standard-density-v1/handoff.json`.
+Audit: `docs/audits/cpd_ddx_standard_grid_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Standard-cavity fine-grid SCF audited; same-model grid check active — 2026-10-16 21:29 Denver.**
+Acknowledged `85dcee37-af88-4d0a-abd2-ab55f028f5bf`. Native SCF converged in
+535.40 s (11 iterations), energy -1963.977228174095 Eh. Independent audit verifies
+actual orbital READ/no projection, standard UFF1.1 radii, fine surface settings,
+unchanged coordinates, source/output hashes, saved wavefunction and density,
+250-electron trace and orbital orthonormality. No observed surface-matrix warning.
+This establishes SCF feasibility, not a minimum, energy accuracy or a parameter fit.
+The original 7.74 kcal/mol QM–MM interconformer discrepancy remains unresolved.
+
+Launched `endpoint-ddx-standard-grid-v1`: one original-conformer coarse-grid SCF
+from the audited fine wavefunction, with unchanged geometry, basis and UFF1.1
+cavity. Compare only within this physical model. Prospectively screen absolute
+coarse/fine energy shift at 0.5 kcal/mol before alternate-conformer work; this is
+an engineering screen, not a universal accuracy criterion. A pass still requires
+paired conformer sensitivity before interpreting relative energies. No radius sweep.
+Native timeout 30 min; total hard cap 35 min; four CPUs, 12 GiB, no swap.
+Admission passed; completion/failure/deadline watcher armed. Archive-only bulk and
+scratch, no periodic polling, no cloud spending, no production parameter changes.
+Handoff: `endpoint-ddx-standard-grid-v1/handoff.json`.
+Audit: `docs/audits/cpd_ddx_standard_scf_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Standard-cavity frozen-density check audited; one SCF feasibility attempt active — 2026-10-16 21:17 Denver.**
+Acknowledged `8fd3caff-6044-456f-a6fb-f010b46b33b5`. Two fixed-density evaluations
+completed in59.55s. Independent audit verifies source/output hashes, saved density,
+native radii exactly1.1xUFF, unchanged coordinates, surface9/12 settings and
+recomputed orbital spectra from finite symmetric saved Fock matrices. Both solves
+converged; no observed solver failure warning. No minimum or parameter certificate.
+
+Standard cavity preserves positive gaps0.46485/0.23556Eh at surfaces9/12 and
+occupied-subspace losses0.000383/0.000834, versus~3 for the unscaled fine surface.
+Frozen-density solvent energy changes-0.43258kcal/mol between surfaces. This is
+promising for avoiding the observed collapse but not complete numerical accuracy,
+SCF stability, or agreement with experiment. It is a distinct physical cavity,
+not a rescue/relabeling of prior unscaled energies.
+
+Launched `endpoint-ddx-standard-scf-v1`: one original-conformer HF/def2-SVPD SCF
+with standardUFF1.1, unchanged fine-grid and convergence criteria, and saved
+orbitals as starting guess. Native READ/no-projection verification remains required;
+save resulting wavefunction/density. Old unscaled energy is NOT an accuracy
+baseline. On failure stop this solvent route for methodological review; no radius
+sweep. On success assess within-model grid sensitivity before any energy targets.
+No production parameters, fitting, melting simulations or cloud spending.
+30min native/35min total cap,12GiB/no swap,four CPUs;admission passed,event-driven
+completion/failure/deadline watcher armed. All bulk/scratch on Archive;no polling.
+Handoff:`endpoint-ddx-standard-scf-v1/handoff.json`.
+Audit:`docs/audits/cpd_ddx_standard_cavity_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Restart genuinely read but SCF unstable; standard-cavity static check active — 2026-10-16 21:15 Denver.**
+Acknowledged `c3437568-2860-4fb6-a523-6d400194439f`. Native restart log confirms
+orbital READ with no projection and no SAD fallback. Iteration0=-1963.99860008Eh
+matches the frozen-density expectation; first update drops~11Eh, followed by
+hundreds/thousands-Eh excursions and ADIIS failure after iteration3 (254.49s).
+No converged fine-grid result, no minimum or accuracy certificate. All native
+failure evidence preserved. Do not keep changing SCF iteration counts/DIIS blindly.
+
+Cheap saved-matrix audit: C^TSC identity and coarse Fock/eigenvalue agreement
+verified. Frozen surface-resolution change nearly collapses the gap0.45033 ->
+0.00304Eh and gives occupied-subspace loss~3.02; combined~3.01. Integration-only
+retains gap0.45150 and loss0.000066. These are fixed-density one-diagonalization
+measurements, not new SCF energies. Surface change is the problematic component
+at this density; analysis does not prove underlying physical versus numerical cause.
+
+Current cavity used unscaledUFF1.0. Installed ddx data declares standardUFF scale1.1.
+Launched `endpoint-ddx-standard-cavity-v1`: two fixed-density evaluations using
+that declared standard cavity at surface9/302 and12/590; both use75x302 integration
+and1e-10solver tolerance. No SCF or fitting. This changes the physical cavity and
+must not be relabeled a numerical-only continuation or tuned to fix prior energies.
+If instability persists, stop solvent refinement and review methodological scope;
+no further radius sweep. Even stable spectra do not establish converged accuracy.
+
+10min hard cap,12GiB/no swap,four CPUs;resource admission passed. Event-driven
+completion/failure/deadline watcher armed. Archive-only bulk/scratch,no periodic
+polling,cloud spending or production parameter changes.
+Handoff:`endpoint-ddx-standard-cavity-v1/handoff.json`.
+Audit:`docs/audits/cpd_ddx_restart_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Frozen-density audit passed; saved-orbital fine-grid attempt active — 2026-10-16 21:09 Denver.**
+Acknowledged `478bd6c3-4de4-4e93-b18d-9ffffe91e49e`. Diagnostic completed
+in529.44s. Independent audit verifies native coarse SCF convergence/energy,
+source/result hashes, saved wavefunction density equality, electron count,
+unchanged geometry, finite symmetric Fock matrices and recorded norms.
+Coarse energy reproduced within~1.3e-11Eh. Baseline solvent recovery differs by
+only2.81e-9Eh. Saved full density and wavefunction are retained for reuse.
+
+At this frozen density, integration-only solvent shift=-0.87116kcal/mol,
+surface-only=+0.35102,combined=-0.72725. All forward/adjoint solves converged in
+33–44iterations; none reproduced the prior runaway. These are frozen-density
+solvent shifts, NOT converged fine-minus-coarse total energies. They do not identify
+one proven cause or certify fine-grid accuracy/global SCF stability. The changes
+are large enough that the registered numerical-accuracy checks remain necessary.
+
+Launched `endpoint-ddx-restart-v1`: exactly one original-conformer fine-grid SCF
+from the audited coarse orbitals. Psi4's supported restart_file path installs
+GUESS READ; native log must confirm actual orbital read with no projection and
+no SAD fallback. Same fine grid, method, SCF and solvent convergence criteria as
+failed run; no damping/iteration-limit change or relaxed gate. Save final density
+and wavefunction. Compare to original0.5kcal/mol absolute-shift screen; alternate
+and0.2relative screen remain outstanding. Stop for review on failure, no automatic
+repeat. No minimum or parameter certification.
+
+30min native/35min total hard cap,12GiB/no swap,four CPUs; admission passed.
+Completion/failure/deadline triggers armed;Archive-only bulk/scratch,no polling,
+production changes or cloud spending. Prior solver failures remain preserved.
+Handoff:`endpoint-ddx-restart-v1/handoff.json`.
+Audit:`docs/audits/cpd_ddx_density_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Fine-grid SCF failure audited; frozen-density isolation active — 2026-10-16 20:59 Denver.**
+Acknowledged `bc19a558-13ad-452b-a9f8-90c9eff7de15`. First fine-grid conformer
+failed after504.38s in ADIIS minimization, before a converged energy. Iterates
+fell from~-1963 to-4847Eh by iteration9. No completed point/alternate calculation;
+these iterates are not physical energies or evidence of a minimum. Native settings
+show intendedlmax12/Lebedev590,solute75x302 and1e-10solvent tolerance. Raw outputs,
+solver failure and scratch retained. No iteration-limit increase or blind retry.
+
+A cheap fixed-CHARMM-point-charge solver test on the same original geometry passed:
+coarse9/302=-0.1441303352Eh;fine12/590 FMM=-0.1443439887Eh;fine direct=-0.1443439344Eh.
+Fine FMM/direct difference5.4295e-8Eh (~0.000034kcal/mol); forward solves41/44/44
+iterations. This weakens a simple FMM-only explanation for that fixed charge input,
+not proof that full electronic density or coupled SCF is stable. No parameter fit.
+
+Launched `endpoint-ddx-density-diagnostic-v1`: reproduce one coarse-grid solution
+within1e-8Eh, save wavefunction and full density, freeze that density for four
+solvent-response evaluations: baseline, finer integration only, finer surface only,
+and both changes. Verify baseline solvation recovery and exact unchanged density;
+save solvent energies and Fock matrices. No fine-grid SCF. This isolates numerical
+response before further expensive iterations and retains reusable restart evidence.
+35min total hard limit,12GiB/no swap,four CPUs,Archive-only outputs/scratch.
+Admission passed and completion/failure/deadline watcher armed; no polling/cloud.
+Grid accuracy and prior energy discrepancy remain unresolved; no minimum certificate.
+Handoff:`endpoint-ddx-density-diagnostic-v1/handoff.json`.
+Audit:`docs/audits/cpd_ddx_grid_failure_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**DDX pilot independently audited; paired grid check active — 2026-10-16 20:49 Denver.**
+Acknowledged `f5e37355-6128-4d87-b22b-16e6112e8310`. Both fixed56atom/-1e
+singlet HF/def2-SVPD calculations completed in838.97s total. Independent audit
+checks every source/result pin, native energy/solvation values, convergence, actual
+UFF radii and geometry, dielectric78.3553,lmax9,Lebedev302,solute35x110 and1e-9
+solvent tolerance. No observed solver failure warnings. Coordinate error<1e-10A.
+Reviewer first compared Bohr-tabulated radii with native Angstrom radii; that
+reviewer failure is preserved and the corrected review uses engine conversion.
+No native result was changed.
+
+Alternate-minus-original HF/PCM energy=-3.85791kcal/mol. This is for independently
+prepared charged cap conformers at HF; it does NOT resolve or directly measure
+the prior neutral-fragment MP2/MM discrepancy. No fit or minimum certification.
+
+Launched `endpoint-ddx-grid-v1`: paired numerical sensitivity check with same
+chemistry/method/basis/radii/coordinates and lmax12,Lebedev590,solute75x302,
+solvent tolerance1e-10. Registered engineering screens: each absolute energy
+shift<=0.5kcal/mol and relative difference shift<=0.2kcal/mol. Not universal
+literature limits or proof of complete convergence. Report both shifts; failure
+requires cost/necessity review, not automatic grid escalation. Passing supports
+only this HF numerical setup; chemically matched correlated/MM-solvent targets
+remain to be designed before any fitting.
+
+30min/point,65min total hard cap,12GiB/no swap,four CPUs; admission passed.
+Completion/failure/deadline triggers armed;Archive-only output/scratch,no polling,
+cloud spending or production changes. PCMSolver failures remain rejected.
+Handoff:`endpoint-ddx-grid-v1/handoff.json`.
+Audit:`docs/audits/cpd_ddx_pilot_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**PCMSolver branch closed; reference-tested ddx pilot active — 2026-10-16 20:33 Denver.**
+Acknowledged `4baf532a-3df8-4aaa-bff4-725fc1fb8541`. V2 SCF completed in412.72s,
+energy-1963.9944991263894Eh,charge-1,singlet,866orbital functions. Independent
+native audit verifies0.2A² cavity,convergence and8.882e-16A coordinate error.
+The two non-positive-definite S-matrix warnings recurred; strict gate rejected
+result and prevented alternate-conformer execution. Both PCMSolver energies remain
+unaccepted. No more cavity-mesh retries. All outputs/failures preserved.
+
+Installed pyddx1.0.0 only under Archive `cpd-ddx-runtime-v1/site-v3`, leaving
+existing environment unchanged. Initial wheel probe unavailable; metadata missing
+pybind11 and two import-incompatible builds retained. Explicit matching Python
+3.12.14 headers/library and pybind11 2.13.6 resolved the build/API mismatch.
+Upstream Psi4 tests reproduced: NH3 DF energy error1.209e-5Eh against1e-4 gate;
+fluorochloromethane PCM error8.049e-11Eh against1e-8 gate. These validate tested
+runtime functionality, not CPD accuracy. Test logs and package/source pins retained.
+Reference:https://psicode.org/psi4manual/master/ddx.html
+
+Launched `endpoint-ddx-pilot-v1`: same two fixed56atom/-1e conformers and
+HF/def2-SVPD,DDX PCM water,UFF radius scaling1.0,lmax9,Lebedev302,solute35x110,
+solvent-solver tolerance1e-9. Different cavity implementations are not assumed
+identical. Native feasibility only; no fit, vacuum-MM comparison or acceptance
+of prior PCMSolver results. Further grid sensitivity needed before energy targets.
+15min/point,35min hard limit,12GiB/no swap,four CPUs; resource admission passed.
+Completion/failure/deadline triggers armed; no periodic polling or cloud spend.
+Handoff:`endpoint-ddx-pilot-v1/handoff.json`.
+Audit:`docs/audits/cpd_pcm_branch_closeout_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**PCM pilotV1 failure audited; one finer-mesh retry active — 2026-10-16 20:23 Denver.**
+Acknowledged `773f251d-48a1-48bb-b62f-a67a27921230`. Native original-conformer
+DF-RHF converged in354s,charge-1,multiplicity1,866orbital/2913auxiliary functions,
+IEFPCM water,area0.3A²,energy-1963.9948553785655Eh. No accepted point or alternate
+conformer result. The wrapper failed its coordinate check: campaign conversion
+0.529177210903 differs from Psi4's0.52917721067A/Bohr. Apparent4.183e-9A motion
+is uniform conversion scaling; corrected residual1.776e-15A. This is a wrapper
+unit bug, not molecular displacement. V2 uses the engine constant with unchanged
+1e-10A acceptance, not a relaxed tolerance.
+
+Separately, PCMSolver twice reported S matrix not positive-definite, commuted to
+warning by its installed patch. Native completion does not make this result
+acceptable. Raw output, coordinates, warning and failure retained. Issue reference:
+https://github.com/PCMSolver/pcmsolver/issues/206 . No minimum or accuracy certificate.
+
+Launched `endpoint-pcm-pilot-v2`: one finer cavity-area0.2A² attempt with all
+geometry/method/basis/solvent fixed. Explicitly reject surface-matrix warnings;
+second conformer runs only if first passes. Save raw result before warning gate.
+If warning recurs, stop this PCMSolver branch rather than repeat mesh variations.
+This remains HF/PCM numerical feasibility, not MP2 fitting or vacuum-MM comparison.
+15min/point,35min total hard limit,12GiB/no swap,four CPUs; resource admission
+passed. Completion/failure/deadline watcher armed; Archive-only bulk/scratch,
+no periodic polling, cloud spend or production parameter changes.
+Handoff:`endpoint-pcm-pilot-v2/handoff.json`.
+Audit:`docs/audits/cpd_pcm_pilot_failure_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Mixed-site coordinate preflight passed; PCM pilot awaits one admission retry — 2026-10-16 Denver.**
+Completed graph, valence/formal-charge, parent-coordinate identity, canonical CPD/
+sugar identity and bond/contact screens for both original/alternate conformers
+of all four reference classes. Parent coordinates stayed exact; only added cap
+atoms relaxed. No full minimum certification. ETKDG constrained embeddings failed
+for phosphate cases and remain archived. Direct internal-coordinate cap seeds
+passed terminal checks; a bounded1500-step continuation of the least problematic
+internal seed passed both internal cases. Other failed/clashing seeds are retained.
+
+Mapping audit corrected generic P to DNA P2 per native DEOX/DEOS. Native methyl
+caps lack CN9-ON2-P2 angle/UB entries; v2/v3 failures preserved. V4 explicitly
+transfers only those missing methyl-cap angle/UB analogs from P; existing P2 sugar
+parameters remain unchanged. This is a surrogate approximation, not native DNA
+validation or a new fitted CPD model. Earlier statement that ON5/ON2 versions of
+the tested exocyclic torsion differ is corrected: their four coefficients are
+identical here; charges and adjacent phosphate terms differ. No user-design or
+production parameters modified; failed frozen torsion trial remains excluded.
+
+Prepared two56atom/-1e5′terminal fixed-coordinate DF-RHF/def2-SVPD IEFPCM-water
+energies. UFF cavity, scalingfalse,area0.3; PCM package present. HF/diffuse-basis
+pilot explicitly checks charged-reference numerical feasibility/cost, not MP2
+accuracy, vacuum-MM agreement, free energies or melting. Independently selected
+cap conformers are not paired fitting targets. No cross-chemistry absolute-energy
+comparison. Continuum water does not represent specific ions or salt effects.
+Reference:https://psicode.org/psi4manual/master/pcmsolver.html
+
+Initial launch rejected before service creation:MemAvailable~17.6GiB below the
+unchanged18GiB admission gate. One20minute systemd admission retry is armed,
+`nadoc-endpoint-pcm-pilot-admit.timer`; no periodic retries. Runner checks pause,
+current handoff, source hashes and duplicate launch. Failure sends a wake; success
+arms native completion/failure/deadline watcher. Native budget15min/point,35min
+total,12GiB/no swap,four CPUs,Archive-only outputs/scratch. No QM running yet.
+No cloud spending. Handoff:`endpoint-pcm-pilot-v1/deferred_handoff.json`.
+Audit:`docs/audits/cpd_mixed_chemistry_preflight_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Mixed internal/terminal scope confirmed; reference topology matrix prepared — 2026-10-16 Denver.**
+User confirmed a mixture of internal and terminal weld sites. This resolves the
+reference-chemistry question; do not ask it again or restrict coverage to one class.
+Native topology distinguishes free5′OH ON5/C5′charge+0.05 from phosphate-linked
+ON2/C5′charge-0.08. The failed OH trial must not be applied to internal sites.
+
+Prepared isolated one-sugar/N1-methyl reference topologies on Archive: double-OH
+control49atoms/0e;5′OH-terminal with3′methyl-phosphodiester56atoms/-1e;
+3′OH-terminal with5′methyl-phosphodiester56atoms/-1e; internal two-phosphodiester
+proxy63atoms/-2e. Native3POM/5POM patches supply phosphate chemistry. All four
+pass exact PSF graph, corrected CPD crosslink, charge, and complete OpenMM
+parameter-coverage checks without warnings. No fitted trial term is installed.
+These are topology fixtures, not geometries, two-sugar validation or NAMD-ready
+packages. Prior two-sugar62atom fixture has both3′/5′OH on both ends and cannot
+substitute for internal or singly terminal chemistry qualification.
+
+Next: isolated canonical coordinate/cap-conformer preparation with stereochemistry,
+valence, contact and parameter mapping audits. Register electrostatic environment
+for charged references before one bounded pilot; compare conformers within each
+chemistry, never absolute energies across different atom counts/net charges.
+Geometry-dependent gates and native QM are not yet run. No active job or polling;
+all new artifacts on Archive, no cloud or production/user-design modification.
+Frozen trial remains rejected and original energy discrepancy unresolved.
+Handoff:`endpoint-chemistry-matrix-v1/handoff.json`.
+Audit:`docs/audits/cpd_endpoint_chemistry_matrix_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Prospective holdouts reject torsion trial; reference chemistry needed — 2026-10-16 11:49 Denver.**
+Acknowledged `c22ce499-fb91-4e5a-a918-e376ae5116f4`. All four native energies
+completed in749.59s; independently verified convergence, method/basis/occupations,
+exact rotations and returned coordinates, bond lengths, canonical identity and
+fresh MM increments. Execution completion is separate from scientific acceptance.
+
+Frozen local-only trial FAILED its registered screen. Corrected errors for original
+-30/+30 and alternate-30/+30 are +13.06349,-0.13173,-1.26734,-2.01298kcal/mol.
+Two exceed1.5kcal/mol; pooled RMSE worsens6.24163 ->6.63947. Preserve all four
+holdouts, reject the trial without retuning or exporting it. Earlier1.06kcal/mol
+interconformer agreement was exploratory and does not survive this broader screen.
+
+Independent static MM decomposition of original-minus30 reproduces native force
+groups: nonbonded+37.72861 (LJ+41.86573,Coulomb-4.13712),torsions-1.37216kcal/mol.
+O5′–other-base O4 compresses2.83668 ->2.19436A; HO5′–O4 compresses1.93660 ->1.25595A.
+This identifies a crowded fragment contact, not a unique QM error attribution or
+permission to discard a holdout. Alternate-plus30 also fails, so excluding the
+crowded point would not rescue the registered trial. No LJ/charge/torsion change.
+
+Stop this capped-fragment fit branch instead of adding harmonics or more points
+until it passes. User clarification requested on intended weld-site chemistry:
+internal phosphate-connected nucleotides, terminal free OH, or mixed. That answer
+selects a representative reference for a topology/stereochemistry and parameter-
+mapping review before any further QM. No active calculation or periodic polling;
+this is a scientific decision boundary, not a user-requested pause or readiness
+certificate. Existing candidate remains scientifically provisional;7.74kcal/mol
+original diagonal discrepancy unresolved. User owns system/melting simulations;
+old invalid-sugar DNA context remains excluded. All failures/raw outputs retained
+on Archive. No cloud spending.
+Handoff:`endpoint-exocyclic-holdout-v1/review_handoff.json`.
+Audit:`docs/audits/cpd_endpoint_exocyclic_holdout_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Exocyclic response audited; frozen trial tested on prospective holdouts — 2026-10-16 11:36 Denver.**
+Acknowledged `b8f4d724-ee39-494a-a200-83ee830f3deb`. All four native
+DF-MP2/def2-TZVP energies completed in746.16s. Independent review verifies native
+convergence, energies, occupations/bases, exact requested rotations and returned
+coordinates, preserved bond lengths/stereochemistry, and fresh MM increments.
+Local MM increment errors range -1.21826 to +0.66437kcal/mol. Original local
+QM/MM slopes are -4.28910/-3.55463kcal/mol/radian; alternate slopes are
++0.78190/+4.37746. These finite-difference responses are not minimum certificates.
+
+Static exploratory identifiability check: adjusting only the n1 phase-pi
+O5′–C5′–C4′–C3′ coefficient using four local increments gives delta-k=-5.21507
+kcal/mol, local residual RMSE0.41776, and predicts interconformer error+1.05998
+instead of-7.73658. The separate conformer contrast was already inspected, so this
+is diagnostic support, not blind validation. The trial would reverse the existing
+term preference (k2.5 -> -2.71507, equivalent phase reversal plus constant).
+No XML, NAMD parameter, standard sugar term or production model was changed.
+
+Launched `endpoint-exocyclic-holdout-v1`: four new +/-30degree geometries,
+frozen trial coefficient, same native method; no retuning to holdouts. Registered
+screen: every corrected local increment error <=1.5kcal/mol and pooled RMSE
+lower than unchanged MM. This is an engineering screen, not a literature standard
+or full force-field qualification. A pass requires further chemical/transfer review;
+a failure is retained and cannot be hidden by dropping a point. Original-minus30
+has maxMM gradient260.79kcal/mol/A (others38.23–40.52), within the predeclared500
+severe-clash screen; retain that demanding case and inspect native evidence.
+
+Four sequential energies,15min per point,65min total hard limit;12GiB/no swap,
+four CPUs,Archive-only outputs/scratch. Resource admission passed and completion/
+failure/deadline watcher armed. No periodic polling, MD, cloud spend or melting
+study. Invalid archived DNA context remains excluded; user owns chosen systems.
+Handoff:`endpoint-exocyclic-holdout-v1/handoff.json`.
+Audit:`docs/audits/cpd_endpoint_exocyclic_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Cap comparison audited; local exocyclic response diagnostic active — 2026-10-16 11:22 Denver.**
+Acknowledged `6f984521-aa66-44d9-86ce-bce2237aec47`. Both native frozen-core
+DF-MP2/def2-TZVP energies converged in a combined 396.85 seconds. Independently
+verified native energies, basis/occupation inventory, unchanged returned coordinates,
+canonical stereochemistry, cap-only changes, preserved bond lengths, and fresh MM
+energies for all four geometries. Fixed-cap heavy-conformer errors remain -9.28066
+and -7.76627 kcal/mol; cap-only increment errors are +0.02969 and +1.54408.
+Thus cap orientation does not explain away the discrepancy. This does not establish
+phosphate/solvent transfer or uniquely assign the error to a force-field term.
+Stop further basis/cap repeats. All failures and raw evidence retained.
+
+Next diagnostic: four frozen-geometry energies at +/-15 degrees of
+O5′–C5′–C4′–C3′ about each canonical conformer. This isolates the local response
+of the coordinate with the largest individual MM torsion energy change; existing
+boundary scans primarily address glycosidic rotation. All preflight stereochemistry
+and bond-preservation gates pass; maximum MM gradients 38.43–40.42 kcal/mol/A.
+Compare local increments/slopes/curvatures before attributing or fitting an error.
+If increments agree while the conformer discrepancy persists, stop targeting this
+coordinate. Any later fit requires broader registered training and untouched
+holdouts; these diagnostic points cannot be claimed as independent validation.
+
+Launched `endpoint-exocyclic-check-v1`: four sequential energies, 15 minutes each,
+65-minute total hard limit, four CPUs, 12 GiB/no swap; admission checked memory,
+Archive mount/free space and absence of another active campaign job. Completion,
+failure and deadline triggers armed. Bulk/scratch on Archive; no periodic polling,
+MD, melting campaign or cloud spend. User owns chosen-system simulations.
+No optimization or minimum certificate; scientific qualification remains provisional.
+Handoff: `endpoint-exocyclic-check-v1/handoff.json`.
+Audit: `docs/audits/cpd_endpoint_cap_review_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Larger-basis comparison audited; cap-orientation diagnostic active — 2026-10-16 11:11 Denver.**
+Acknowledged `abac3a7a-109a-4613-a332-4487b59fceea`. Both native DF-MP2 energies,
+SCF convergence, frozen-core occupations27/101/74/868/868/0,969/2443/2382 basis
+functions and exact canonical geometries independently verified. Actual JK algorithm
+is Core; both calculations completed in391.18s. The reviewer's initial wording-only
+assertion failure is retained; native convergence was present and the corrected
+review uses its actual marker. EarlierV1 timeout/scratch remain untouched.
+
+Alternate-minus-original QM energy is-2.14430kcal/mol versus-2.72472 with6-31G(d),
+a+0.58042 shift. Unchanged MM gives-9.88087; discrepancy remains-7.73658kcal/mol.
+No minimum/free-energy certificate; stop basis escalation rather than repeat it.
+
+Launched `endpoint-cap-check-v1`: two crossed OH-cap orientations, changing ONLY
+HO3′ andHO5′ on each of the two canonical fragment heavy geometries. Same larger-
+basis method/options; reuse both audited diagonal energies for a four-point
+conditional comparison. No fitting or claim that cap changes represent phosphate
+or solvent. Chemistry and bond lengths preserved; candidate maxMM gradients39.52
+and38.56kcal/mol/A pass the prospective severe-clash screen. Perpoint15min,
+total35min,12GiB/no swap/four CPUs. Completion/failure/deadline triggers armed;
+all output/scratch on Archive. User owns melting/system studies; no MD/cloud.
+Current handoff:`endpoint-cap-check-v1/handoff.json`.
+Audit:`docs/audits/cpd_endpoint_basis_review_20261016.json`.
+
+Earlier active-state entries are retained history, superseded above.
+
+**Basis-checkV1 timeout audited; revised energy-onlyV2 active — 2026-10-16 11:02 Denver.**
+Acknowledged `80f1f06f-0025-439b-861c-2b266b5fca71`. V1 stopped at its3600s
+first-point boundary during DF-RHF iteration19, before an MP2 energy existed.
+Native log reports DiskDFJK with3072MiB allocation; scratch integral file6.4GiB.
+No point/minimum certification. Failure and6.6GiB scratch preserved on Archive.
+
+New `endpoint-basis-check-v2` retains the exact two canonical geometries,
+frozen-core DF-MP2/def2-TZVP and auxiliary-basis inventory. Psi4 memory10GiB,
+service12GiB/no swap/four CPUs after verifying>18GiB available. SCF E/D thresholds
+are prospectively1e-10 for this energy-only diagnostic (V1 used1e-12). This does
+not relax geometry/forcefield acceptance or certify gradients. V1 last iterations
+show energy changes~1e-11Hartree; do not equate that with a completed energy.
+Perpoint1h,total2h5m,completion/failure/deadline watcher armed. Inspect actual
+algorithm/cost/convergence on completion rather than assume speedup. No MD/cloud.
+Current handoff:`endpoint-basis-check-v2/handoff.json`.
+Audit:`docs/audits/cpd_endpoint_basis_timeout_20261016.json`.
+
+Earlier active-state entries below are retained history, superseded above.
+
+**Pre-simulation refinement resumed; canonical-fragment basis check active — 2026-10-16 10:01 Denver.**
+User clarified that they own melting studies and have specific systems in mind.
+Focus here on tractable sugar/reference and energy discrepancies. Handoff readiness
+will not require agent-run melting or extended system-specific MD; scientific
+limits must remain explicit. Prior temperature/occupancy simulation plans are
+superseded as agent-run work.
+
+Source trace: the parent job151b6da69fe5 packaged PDB already has the same6 C3′
+and2 C4′ mismatches across98residues. This is an archived DNA-context defect,
+not evidence of incorrect canonical QM endpoint1 sugar. That context remains
+excluded; no user design, historical output or production geometry changed.
+
+Exact MM decomposition reproduces force-group energies: alternate-minus-original
+Coulomb=-4.33710,LJ=-0.35067,torsions=-4.28153kcal/mol. Cap-hydrogen-involving
+Coulomb contributions sum to-12.16293 and cancel other contributions; this is not
+an independently additive physical error or a solvent correction. Largest individual
+torsion contribution is O5′–C5′–C4′–C3′=-4.21690kcal/mol. Do not refit CPD core or
+standard sugar terms from this decomposition alone.
+
+Admitted `endpoint-basis-check-v1`: exactly two frozen canonical49atom conformer
+DF-MP2/def2-TZVP energies, unchanged coordinates and frozen core,969orbital functions.
+Compare their difference with MP2/6-31G(d) and unchanged candidate MM. No optimization,
+fit, new DNA model or MD. Perpoint3600s;total7500s (2h5m),8GiB/no swap/four CPUs,
+Archive-only output/scratch. Completion/failure/deadline watcher armed. Audit actual
+native methods/bases/geometry/energies before interpreting basis sensitivity.
+Audit: `docs/audits/cpd_pre_simulation_refinement_20261016.json`.
+
+The following entries are history and superseded where scope or active state differs.
+
+**Scientific hold: DNA sugar-reference mismatch discovered during authorized uncertainty work — 2026-10-16 Denver.**
+User authorized a robust stabilization range with separate sampling, parameter and
+weld-occupancy uncertainties. Prospective study: `docs/cpd_stabilization_uncertainty_plan.md`.
+A rigid-chi fragment transfer failed preflight with severe nonbonded strain; no QM
+launched. Actual DNA-frame extraction then failed the endpoint sugar-identity gate.
+Independent ordered heavy-neighbor determinants confirm C3′ mismatches at both
+sites and C4′ at endpoint2 in the initial welded/control seeds and all four final
+trajectories. Both ideal and model coordinates of freshly archived PDB CCD DT
+agree with the original/alternate QM endpoint1 reference, not the formation seeds.
+
+Earlier audits remain true as seed-relative execution/integrity checks, but do NOT
+qualify canonical DNA chemistry. All40ns retained as engineering history; exclude
+from stabilization inference pending source correction. The7.15616kcal/mol fragment
+discrepancy is not resolved, and prior sample-to-fragment relevance comparisons cannot
+validate parameters in this context. No fit, new QM, new MD or cloud spend.
+Current handoff: `sugar-stereo-reference-audit-v1/handoff.json`. Source-wide audit now complete:98DNA residues,6 C3′ and2 C4′ mismatches in
+the precursor frame, source package PDB and equilibrated checkpoint. The issue
+predates corrected CPD placement. Next: trace upstream construction and prepare
+an isolated corrected-context A/B review; do not simply change expected signs. This scientific
+hold is not a user pause and does not revoke authorization for corrective work.
+Audit: `docs/audits/cpd_stabilization_sugar_reference_20261016.json`.
+
+The following completion and readiness statements are historical, superseded above.
+
+**Two matched10ns replica pairs audited; attachment-reference review completed — 2026-10-16 Denver.**
+Acknowledged `61bfebae-29e2-43d8-ab79-17aa94151f89`. Control replica2 completed10ns
+in8.23h. Ten native terminal/checkpoint chains,1000 pinned frame verdicts,
+30 independently replayed frames and10 endpoints pass. All failures retained.
+
+Endpoint whole-solute aligned RMSD: welded1/control1=7.125/13.386Å;
+welded2/control2=11.396/9.827Å. Ordering reverses; RMSD is not a stability metric.
+Initial cross-strand base-centroid contact proxy (141pairs,<8Å): final126/120
+and119/116 respectively. This is exploratory geometry, not basepair or melting evidence.
+
+Read-only analysis of120 prespecified frames across four runs records both
+attachment chi and five sugar torsions. Explicit common-atom/sign mapping shows
+both original/alternate QM endpoint1 conformers have chi105.65946degrees, whereas
+all60 sampled welded endpoint1 configurations differ by at least71.58degrees.
+No sampled frame matches either six-torsion reference within a descriptive20degree
+screen. This does not rule out accessibility, validate parameters, or establish an
+energy correction; terminal OH caps also differ from DNA phosphodiesters.
+
+Decision: defer third replicas and broad temperature runs while preparing a small
+sampled-geometry QM/MM relevance/energy-decomposition diagnostic. Do not refit a
+torsion simply to cancel the7.15616kcal/mol difference. Native jobs are currently
+idle; campaign is not user-paused. Current handoff is
+`replica-attachment-qm-relevance-v1/handoff.json`; precise next work recorded there.
+All analysis retained on Archive; no cloud or new dynamics. Qualification remains
+provisional. Audit: `docs/audits/cpd_corrected_cis_anti_i_two_pairs_20261016.json`.
+
+The following active-state statements are retained history, superseded above.
+
+**Control replica2 preparation audited;10ns validation active — 2026-10-15 20:40 Denver.**
+Wake `bf2e803d-595f-49b0-baf2-771ca2f12924` acknowledged. Preparation completed
+1.15ns in3509.58s (58.49min). All27 native terminal logs/restart bundles and250
+pinned frame verdicts verified;81 sampled frames and27 endpoints independently
+replayed. Initial seed614032; subsequent coordinate/velocity/cell lineage intact.
+No scientific gates changed; all historical failures retained.
+
+Launched `formation-replica2-validation-control-v1` from its own575000-step
+checkpoint:10ns in ten1ns audited segments, validation seed614532,15h hard cap,
+8GiB/no swap/four CPUs,5400s native segment timeout and unchanged20% slowdown gate.
+Expected8–10h; completion/failure/deadline triggers armed, no periodic polling.
+All large output/scratch on Archive; no cloud spending. Current handoff points
+to the new validation job. Next: audit all ten segments and compare both matched
+replica pairs before deciding on a third pair. Provisional parameters and same-
+geometry seed replicas do not establish equilibrium, minimum or production readiness.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_replica2_control_preparation_20261015.json`.
+
+The following active-state statements are retained history, superseded above.
+
+**Welded replica2 audited; matched control replica2 preparation active — 2026-10-15 19:40 Denver.**
+Wake `1f62f294-c6ff-4672-9508-990d8273383d` acknowledged. Resumed6ns completed
+in5.30h; combined with preserved segments1–4, replica2 has10ns validation and
+11.15ns total. All ten native terminal logs/checkpoint hashes, restart continuity,
+1000 pinned worker-frame verdicts,30 independently replayed frames and10 endpoints
+pass. Endpoint density1.02207–1.02471g/mL; final heavy-atom aligned RMSD11.3964Å
+versus replica1 7.12488Å. This illustrates seed sensitivity, not convergence.
+An audit-script variable collision was corrected in a versioned reviewer; original
+script/failure retained. No native output or scientific gate was altered.
+
+Admitted `formation-replica2-preparation-control-v1`: new initial velocity seed614032,
+same minimized control geometry, established five sequential preparation stages,
+1.15ns total,3h hard bound,8GiB/no swap/four CPUs. Watcher completion/failure/deadline
+triggers armed; expected about1h. All bulk output/scratch on Archive; no cloud.
+Audit preparation before admitting control10ns validation. Current handoff points
+to this new control job. Parameter/transfer gates remain open; no production or
+minimum certification. Audit: `docs/audits/cpd_corrected_cis_anti_i_replica2_validation_20261015.json`.
+
+The following active/paused statements are retained history, superseded above.
+
+**RESUMED — 2026-10-15 14:20 Denver, explicit user command.**
+Welded replica2 continues from verified step2575000 (4/10ns validation),
+using a new `formation-replica2-validation-anti-resume-v2` job/service and
+six logical segments5–10. Original partial segment5 is preserved unchanged.
+Every pinned input reverified; no duplicate CPD service. Resource limits:
+8GiB RAM, no swap, four CPU cores, 15h hard stop including stop grace.
+Completion/failure/deadline watcher armed; no periodic polling. Outputs and
+scratch remain on Archive. Audit: `docs/audits/cpd_corrected_cis_anti_i_replica2_resume_20261015.json`.
+Next: review all ten segments together, then assess matched control replica2.
+This remains provisional validation, not parameter or minimum certification.
+
+**Historical pause — superseded by the explicit resume below (2026-10-15).**
+Campaign `pause.json` is set. Active welded replica2 validation service and its
+completion/deadline watcher were stopped; both are inactive, and no CPD native
+service or NAMD process remains running. No automatic continuation is authorized
+until the user explicitly commands resume. Late wakes must not launch work.
+
+Replica2 validation segments1–4 are complete: **4ns validation /5.15ns total**.
+All four native terminal logs and checkpoint/velocity/cell/physical-audit hashes
+verified; recorded physical/frame verdicts pass. Last reliable checkpoint:
+`formation-replica2-validation-anti-v1/segment-04/result.{coor,vel,xsc}` at
+**step2575000**. Segment5 partial output is preserved through loggedstep2779500
+(about0.409ns further); it has no new coordinate/velocity restart checkpoint.
+Resume must repeat segment5 from segment4, not infer velocities from the DCD.
+Remaining validation **6ns**, segments5–10, targetstep5575000. Nothing deleted.
+
+Archive `pause-handoff-20261015-replica2/resume_plan.json` pins the restart bundle,
+original plan/progress, and a syntax-checked six-segment resume worker. Future launch
+must create a new job/service, use seed614535 (original segment5 seed), fresh resource
+admission and time bounds below16h, and fresh event triggers. Do not relaunch the
+original10segment worker or overwrite partial outputs. Original sources and scientific
+limitations remain: provisional parameter model; no minimum/production certificate.
+Current handoff: `current_handoff.json` → `pause-handoff-20261015-replica2/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_pause_20261015.json`.
+
+The following entries are retained history; their active-run statements are superseded.
+
+**Welded replica2 preparation audited;10ns diagnostic validation active — 2026-10-15 Denver.**
+Acknowledged `cbf958d5-da36-4f95-857e-fe2a3c338260`. Five preparation stages
+completed **1.15ns in3531.58s (58.86min)**. Audit verifies all27 native segments,
+source/worker/assessment/checkpoint hashes,250 pinned worker frame verdicts,
+new initial seed614031, and continuous coordinates/velocities/cells thereafter.
+Independent replay of first/middle/last frames persegment (**81 frames**) and all
+27 endpoints agrees, including actual-cell NPT checks and restraint-corrected
+restart continuity. Initial velocities were generated once; no later reset. All
+stereo, contact, bond, ring, water and image checks pass under reviewedV2 policy.
+
+Final conditioning endpoint densities **1.02273–1.02639g/mL**. Heavy-atom aligned
+RMSD reaches **7.59081Å**, geometric Rg **29.25443Å**, compared with replica1
+conditioning endpoint4.59984Å/28.01623Å. This is seed sensitivity, not convergence
+or a quantified weld effect. Replica2 shares the same minimized starting structure;
+it is not an independently sampled structural conformer. Parameter gaps, including
+7.15616kcal/mol conformer-energy discrepancy, remain unresolved. No formal parameter-
+qualified structural release, endpoint minimum or production certification implied.
+
+Admitted `formation-replica2-validation-anti-v1` **07:45:59 Denver**:
+10ns provisional welded replica2 NPT from its own audited1.15ns checkpoint,
+validation seed614531 (replica1 used514531), unchanged native settings. Ten1ns
+restart/audit boundaries, physical saved-frame checks every10ps. Four CPUs/GPU,
+8GiB/no swap,5400-second native segment timeout,**15-hour total bound**.
+Stop on failed physical acceptance or native runtime>3914.06s/ns; preserve completed
+checkpoints. Expected8–10hours. Completion/failure watcher
+`7117ff25-ad41-4116-9839-a5830dbb5153` armed; review **22:30:59**, hard stop
+**22:45:59 Oct15 Denver**. No periodic simulation polling, duplicate jobs, new QM,
+cloud spending or deletion. Bulk outputs/scratch remain on Archive.
+Next event audits replica2 validation and compares seed sensitivity before matched
+control replica2 preparation/validation; no automatic long extension or promotion.
+Original failed services and versioned gate review remain preserved.
+Current handoff: `current_handoff.json` → `formation-replica2-validation-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_replica2_preparation_20261015.json`.
+
+The following entries are retained history, superseded above.
+
+**First matched10ns pair audited; replica2 diagnostic preparation active — 2026-10-15 Denver.**
+Acknowledged `b49a0fd2-4635-4ba0-9a31-7d5db9952d97`. Control10ns completed in
+**30074.88s (8.35h)**. Every native log/checkpoint and1000 pinned worker frame
+verdicts verified; independent first/middle/last-frame replay persegment (30 frames)
+and all10 endpoints agree. Full DCD hashes recorded. All294 stereo sentinels and
+physical integrity checks pass under documentedV2; original failed stages remain.
+Control endpoint density1.02236–1.02521g/mL, mean temperatures299.18–299.26K,
+group pressures−0.53–3.43bar. No minimum or ensemble-convergence claim follows.
+
+Control aligned endpoint RMSD reaches **13.3859Å**, compared with welded7.1249Å;
+this alone does not establish a weld effect. Read-only exploratory structural review
+tracks all141 cross-strand base-centroid pairs initially within8Å in the common
+control seed. Final retained counts **126 welded /120 control**; these are geometric
+contact proxies, not assigned Watson–Crick pairs or a melting statistic. Per-strand
+aligned RMSD shows internal rearrangement, not just relative rigid strand motion.
+Both cases need replication; one trajectory pair cannot support quantitative stability,
+stiffness or thermal conclusions. The analysis's first script failed on OpenMM mass
+units before writing results; retained original script, corrected version uses daltons.
+
+**Scope remains diagnostic:** preliminary protocolv2 requires parameter gates before
+formal structural qualification. Those gates are not claimed passed:7.15616kcal/mol
+QM/MM alternate-conformer discrepancy, sugar/charge transfer and holdout qualification
+remain open. Additional seed diagnostics cannot waive them. No app/registry promotion.
+
+Admitted **welded replica2 preparation** from the same original minimized context,
+new velocity seed **614031** (replica1 used514031), at **06:44:54 Denver**.
+`formation-replica2-preparation-anti-v1` batches the established10ps startup,
+20ps300K approach,20ps restraint release,100ps NPT and1ns conditioning into one
+bounded1.15ns job. Each stage retains its own frozen worker/plan/native outputs;
+per-frame/segment gates and terminal assessment must pass before the next stage.
+Only one native process runs at a time. Same starting geometry means independent
+velocity-seed evidence, not independently sampled starting conformations. No10ns
+replica2 validation automatically follows completion. Versioned startup/thermal/
+release workers use the already-reviewedV2 dynamics predicate; no new thresholds.
+
+Four CPUs/GPU,8GiB/no swap,900-second native segment timeout, **three-hour cap**.
+Event watcher `cbf958d5-da36-4f95-857e-fe2a3c338260` armed; review **09:39:54**,
+hard stop **09:44:54 Oct15 Denver**. Expected roughly65–75minutes. Batching avoids
+unnecessary manual wakeups between already-established short preparation stages;
+completion/failure trigger and audits remain. No polling, duplicate jobs, new QM,
+cloud spending or deletion; bulk artifacts/scratch on Archive.
+Next event audits seed lineage and all stage evidence before deciding10ns replica2
+validation and matched control replica2. Remaining parameter gates stay separate.
+Current handoff: `current_handoff.json` → `formation-replica2-preparation-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_matched_validation_20261015.json`.
+
+The following entries are retained history, superseded above.
+
+**First welded10ns validation audited; matched control validation active — 2026-10-14 Denver.**
+Acknowledged `3ba51c92-7aa5-467c-b845-aa15472f0a6e`. Welded10ns completed in
+**30100.61s (8.36h)**, total trajectory11.15ns. All ten native segments completed
+normally. Reviewed every native log/checkpoint, all1000 hash-pinned worker frame
+verdicts, and source/configuration/restart evidence. Independent replay of first,
+middle and last frame persegment (**30 frames**) plus all10 endpoints agrees with
+the worker; full DCD hashes are recorded. This is explicitly not a second full
+1000frame replay. All298 stereo sentinels and physical integrity checks pass;
+maximum restart energy difference0.0356kcal/mol. No slowdown stop: native throughput
+**29.26ns/day**, individual1ns runtimes2935.80–3072.18s.
+
+Endpoint density **1.02177–1.02454g/mL**, segment mean temperatures299.18–299.28K,
+group pressures−0.43–2.42bar. Void witnesses3.17–3.58Å remain comparable to
+initial solvent; no growing sampled cavity. Heavy-atom aligned endpoint RMSD
+**5.76–7.30Å** and geometric Rg27.32–29.69Å continue fluctuating. Native integrity
+and these physical summaries support matched validation; they do not establish
+structural convergence, weld-induced stiffness, melting, minimum certification,
+or force-field accuracy. Unresolved7.15616kcal/mol conformer-energy discrepancy,
+transfer/holdout qualifications and independent replicas remain separate gaps.
+
+Launched matched `formation-validation-control-v3`, **21:56:53 Oct14 Denver**:
+10ns provisional NPT validation from audited control1.15ns checkpoint, same
+worker/seed/settings. Ten1ns audit/restart boundaries; saved-frame physical checks
+every10ps. Four CPUs/GPU,8GiB/no swap,5400-second native segment timeout,
+**15-hour total bound**. Retain checkpoints and stop on physical failure or runtime
+above3914.06s/ns. Expected8–10hours from actual native timings.
+Completion/failure watcher `b49a0fd2-4635-4ba0-9a31-7d5db9952d97` armed;
+review **12:41:53 Oct15**, hard stop **12:56:53 Oct15 Denver**. No periodic
+simulation polling, duplicate jobs, new QM, cloud spending or deletion. Archive
+has3.8TiB free; all bulk outputs/scratch stay there. Prior failures remain intact.
+
+Next event audits the matched10ns pair, reviews structural trends and remaining
+independent-replica/parameter requirements before further compute. No registry,
+application or production promotion. Current handoff: `current_handoff.json` →
+`formation-validation-control-v3/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_welded_validation_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Matched1ns conditioning audited; bounded10ns welded validation active — 2026-10-14 Denver.**
+Acknowledged `4059bbaa-cabd-4cbe-b628-569b38e695ed`. Control additional1ns
+completed in **3329.87s (55.50min)**; both cases now have1.15ns preparation.
+Independent replay verified ten native segments and all100 saved frames, source/
+checkpoint hashes, actual-cell physical checks and structural descriptors. All294
+sugar stereo sentinels and bond/contact/ring/water/image checks pass. Maximum
+restart energy error0.0309kcal/mol. Control native runtime3261.72s/ns, about10.2%
+slower than welded2960.08s/ns, within the existing20% material-slowdown criterion.
+
+Control endpoint densities **1.02177–1.02483g/mL**, temperature means299.06–299.35K,
+pressure means−6.82–7.23bar; void witnesses3.19–3.43Å. Physical trends resemble
+the welded case. Control aligned heavy-atom RMSD rises4.31→6.45Å, geometric
+Rg29.36→29.78Å (maximum30.03Å); welded final RMSD4.60Å/Rg28.02Å. Different
+single trajectories are not a stiffness, melting, or weld-effect estimate. Ongoing
+structural motion warrants longer validation, not a convergence claim. The unresolved
+7.15616kcal/mol conformer-energy discrepancy and transfer/holdout gaps remain.
+
+Admitted **one10ns provisional welded NPT validation**,
+`formation-validation-anti-v3`, **13:33:55 Denver**. It starts from the audited
+welded1.15ns checkpoint; no initial preparation rerun. Ten1ns restart boundaries,
+physical/geometry frame audits every10ps, endpoint density/void/temperature/pressure,
+aligned RMSD/Rg and checkpoint continuity at every boundary. Retain all failure
+artifacts; stop after a completed segment if native runtime exceeds **3914.06s/ns**
+(20% above recent matched reference3261.72s/ns), or immediately on failed physical
+acceptance. Existing15h/10ns validation workflow is the scheduling comparator.
+No production, force-field accuracy or ensemble-convergence certification implied.
+
+Four CPUs/GPU,8GiB/no swap,5400-second native segment timeout, **15-hour total
+bound**, below the user16h limit. Measured expected runtime roughly9hours; native
+conditioning gave8.2–9.1hours per10ns before audit overhead. Completion/failure
+watcher `3ba51c92-7aa5-467c-b845-aa15472f0a6e` armed; review **04:18:55 Oct15**,
+hard stop **04:33:55 Oct15 Denver**. Event-driven, no periodic simulation polling,
+duplicate jobs, new QM, cloud spending or deletion. Bulk files remain on Archive.
+Next event reviews physical/structural trends, necessity/performance, matched control
+validation and independent replica requirements. Parameter gaps remain separate;
+no automatic registry/application promotion. Historical failed services preserved.
+Current handoff: `current_handoff.json` → `formation-validation-anti-v3/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_validation_admission_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Welded1ns conditioning audited; matched control continuation active — 2026-10-14 Denver.**
+Acknowledged `d1f82c76-290a-439f-8aff-be3e1379a09e`. Additional welded1ns
+completed in **3027.77s (50.46min)**; total trajectory preparation now1.15ns.
+Independent reread/replay verifies ten native segments, all100 saved frames,
+actual-cell physical and structural diagnostics, native/checkpoint hashes and
+restart energy continuity (maximum0.0457kcal/mol). All298 stereo sentinels and
+bond/contact/ring/water/image checks pass under the documentedV2 dynamics policy.
+Native runtime2960.08s, **29.19ns/day**,100ps segments295.60–296.26s; no material
+slowdown and no reason to tune or repeat this run for speed.
+
+Endpoint density1.02259–1.02528g/mL; segment mean temperatures299.05–299.41K
+and group pressures−10.00–10.96bar. Void witnesses3.13–3.40Å; endpoint image
+clearance lower bounds36.96–44.79Å. Solute-heavy aligned RMSD3.57–4.60Å, geometric
+Rg28.02–29.08Å; final RMSD4.60Å and Rg28.02Å. These descriptors show ongoing
+structural motion, not demonstrated convergence. Physical preparation is progressing;
+minimum certification, sampling convergence and parameter accuracy remain distinct.
+The7.15616kcal/mol QM/MM conformer discrepancy and transfer/holdout gaps remain.
+
+Launched matched `formation-npt-condition-control-v2` **12:36:31 Denver**:
+additional1ns NPT, ten100ps segments from audited control150ps checkpoint, same
+worker/seed/native settings and diagnostics. Four CPUs/GPU,8GiB/no swap,
+900-second segment cap,**two-hour total bound**. Completion/failure watcher
+`4059bbaa-cabd-4cbe-b628-569b38e695ed` armed; review **14:31:31**, hard stop
+**14:36:31 Denver**. Expected runtime about51minutes from actual welded timing.
+No intermittent simulation polling, duplicate jobs, new QM, cloud spending or
+deletion. Bulk outputs/scratch stay on Archive; historical failed services remain.
+
+Next event: audit matched conditioning, compare physical/structural trends, and
+assess longer validation/independent replicas against the remaining parameter
+requirements. No automatic full-production claim or promotion follows from1ns.
+Current handoff: `current_handoff.json` → `formation-npt-condition-control-v2/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_welded_conditioning_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Matched NPT pilots audited; bounded1ns welded conditioning active — 2026-10-14 Denver.**
+Acknowledged `05d16185-0626-4b2a-813c-a1401748016f`. Control100ps NPT completed
+in **317.23s**. Independent native/physical replay verified all20 frames, actual
+cells, checkpoint hashes, restart energies and all294 stereo sentinels; no severe
+contacts/ring piercings or bond/water/image failures. Endpoint densities
+**1.02262,1.02555,1.02465,1.02562g/mL**, comparable to welded1.02245–1.02536.
+Control segment mean temperatures299.01–299.67K; final box137.87804Å, added-salt
+concentration0.15711M, water O–O2.46298Å, image-clearance lower bound38.29128Å.
+Void witnesses3.20–3.30Å show no growing sampled cavity. Final true-base displacement
+4.49129Å remains diagnostic under reviewedV2; absolute displacement is not hidden.
+Neither pilot alone establishes ensemble convergence or adequate structural sampling.
+
+**Parity inventory:** isolated/full-DNA native export and restart engineering have
+passed. Corrected context now has150ps total percase, including100ps NPT. Historical
+`gpu_cube_preparation_v6.py` specifies1ns NPT, and `gpu_cube_validation_v6.py`
+specifies subsequent10ns runs with1ns boundaries; these are workflow comparators,
+not claims that every prior isomer passed every gate. Longer sampling/independent
+replicas remain open. Certified36atom core minimum does not certify sugar endpoints.
+The **7.15616kcal/mol alternate-conformer QM/MM discrepancy**, incomplete sugar/charge
+transfer and holdout qualification remain separate unresolved parameter gates.
+Native MD stability cannot fix or waive these. No registry/application promotion.
+
+Admitted `formation-npt-condition-anti-v2`, **11:44:01 Denver**: **additional1ns
+NPT**, ten100ps segments from the audited welded150ps endpoint, same physical
+settings. Audit frame geometry/water/cell every10ps and restart/physical trends at
+each100ps boundary. Add aligned solute-heavy RMSD to prepared seed and geometric
+radius of gyration as structural diagnostics; neither is given a post-hoc pass
+threshold. Density, void witnesses, water counts, temperature/pressure and salt
+concentration continue to be recorded. Initial physical audit precedes native work.
+No repeat100ps pilot or new QM launched. Measured pilots imply roughly53minutes
+for1ns, with bounded margin rather than repeated tiny admissions.
+
+Four CPUs/GPU,8GiB/no swap,900-second native segment cap,**two-hour total bound**.
+Completion/failure watcher `d1f82c76-290a-439f-8aff-be3e1379a09e` armed;
+review **13:39:01**, hard stop **13:44:01 Denver**. No polling, duplicates, cloud
+spending or deletion; bulk data/scratch stay on Archive. Checkpoint audits stop on
+physical failure; the next event reviews necessity, efficiency and matched control
+conditioning before longer validation. All historical failed verdicts remain intact.
+Current handoff: `current_handoff.json` → `formation-npt-condition-anti-v2/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_matched_npt_parity_20261014.json`.
+Minimum/parameter/production qualification remains limited as stated above.
+
+The following entries are retained history, superseded above.
+
+**Initial welded NPT audited; matched control NPT active — 2026-10-14 Denver.**
+Acknowledged `64981a14-0d8d-4a97-99dc-dc4c2536028a`. Welded100ps NPT
+completed in **316.39s**. Independent output replay verified all four native logs,
+20 saved frames with actual-cell physical checks, coordinates/velocities/cell pins,
+piston configuration/restart inputs, native volume agreement and restart energy
+continuity (maximum **0.0251kcal/mol**). All298 stereo sentinels, bond/contact/ring,
+water and image checks pass under the documented V2 dynamics policy.
+
+Initial density **0.97968g/mL**;25ps endpoints **1.02536,1.02382,1.02470,1.02245**.
+Final cubic side **138.02028Å**, added-salt concentration **0.15663M**.
+Segment mean temperatures **299.81,299.26,298.95,299.66K**; group-pressure
+means **−16.32,−11.07,5.56,4.87bar**. These are finite preparation summaries,
+not uncertainty estimates or a stationarity/convergence certificate.2Å-grid
+nearest-atom void witnesses **3.36,3.44,3.25,3.38Å**, versus initial3.43Å, show
+no growing sampled large cavity. Water spatial counts remain comparable; these
+coarse witnesses do not certify universal solvent uniformity. Final minimum water
+O–O **2.46417Å**, image-clearance lower bound **38.11793Å**. Actual-base absolute
+displacement reaches **6.42134Å** at the endpoint, retained as a dynamics diagnostic;
+local/whole-DNA structural sampling and parameter accuracy still require assessment.
+
+Launched matched `formation-npt-control-v1`, **11:37:24 Denver**: same100ps in
+four25ps segments, same seed/native settings, from the audited control50ps endpoint.
+No prior segments rerun. Four CPUs/GPU,8GiB/no swap,600-second segment timeout,
+20-minute total bound. Event watcher `05d16185-0626-4b2a-813c-a1401748016f`
+armed; review **11:55:24**, hard stop **11:57:24 Denver**. No polling, duplicates,
+cloud spending or deletion; bulk files/scratch remain on Archive. Historical
+failures and the policy-review trail remain intact.
+Next audit compares matched physical/structural trends and inventories remaining
+sampling/parameter/export requirements for parity with the developed isomers,
+rather than assuming100ps is equilibration or automatically extending identical pilots.
+Current handoff: `current_handoff.json` → `formation-npt-control-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_welded_npt_20261014.json`.
+Minimum certification and production readiness remain unestablished.
+
+The following entries are retained history, superseded above.
+
+**Matched release complete under reviewed dynamics policy; initial welded NPT active — 2026-10-14 Denver.**
+Acknowledged `d6861060-6021-4d2f-8959-de3b19c436c5`. Remaining control5ps
+completed in **18.03s**. Independent replay verified all10 frames, final294 sugar
+stereo sentinels, contacts/rings/bonds, rigid-water coordinates, and restart energy
+error **0.0187kcal/mol**. Final temperature **299.618K**, bond ratios
+**0.90691–1.08888**, image clearance **42.49820Å**. Both matched systems now have
+50ps total preparation, including10ps unrestrained. Existing welded20ps and
+control15ps release outputs were reused, not repeated. Original failed services
+remain failed; progression relies on the separately documented V2 dynamics review,
+not a retrospective claim that the original displacement gate passed.
+
+Admitted `formation-npt-anti-v1`, **11:31:07 Denver**: initial **100ps isotropic
+NPT at300K/1.01325bar**, four25ps native segments from the reviewed welded50ps
+checkpoint. No restraints or velocity reset. Existing native piston settings:
+period200fs, decay100fs, group pressure, fixed cell shape. Ordinary masses/2fs,
+rigid hydrogen bonds/water, existing PME/force switching. Checkpoints retain
+coordinates/velocities/cell and piston state through extendedSystem files.
+
+Every5ps trajectory frame uses its actual DCD cell for image clearance and
+periodic water contacts. At each25ps endpoint, audit stereo/contact/bond integrity,
+rigid-water error after storage precision, water O–O>2Å and image clearance>=12Å.
+Record density from actual PSF mass/volume, added-salt concentration, temperature/
+pressure means, water spatial counts, and a2Å-grid nearest-atom void witness.
+Void/density trends require review; completing100ps does not certify equilibrated
+solvent or structural sampling. Initial physical audit must pass before native work.
+
+Four CPUs/GPU,8GiB/no swap,600-second native segment timeout,20-minute service
+bound. Event watcher `64981a14-0d8d-4a97-99dc-dc4c2536028a` armed;
+review **11:49:07**, hard stop **11:51:07 Denver**. No polling, duplicate jobs,
+cloud spending or deletion. All large outputs/scratch remain on Archive.
+Next: audit NPT physical trends and engine restart evidence before matched control
+NPT or any longer equilibration. Minimum certification, parameter qualification and
+production readiness remain open. The historical old1×T hold remains unaffected.
+Current handoff: `current_handoff.json` → `formation-npt-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_npt_admission_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Matched failures audited; placement/dynamics gate separation reviewed — 2026-10-14 Denver.**
+Acknowledged `8154118e-4895-4e52-acf3-b2bdfba68f04`. Control native release
+completed15ps normally, stopping after the first unrestrained5ps because four
+trajectory frames exceeded3.5Å. Independent replay verifies all30 frames and
+native restart/coordinate/velocity/cell evidence; endpoint itself passes the old
+gate. Maximum true-base displacement **4.14632Å**, dominated by thymine methyl
+hydrogens H52/H53, not phosphate-selector contamination. Both welded and control
+release retain stereo, bond/contact/ring integrity despite absolute displacement.
+This comparison is diagnostic, not evidence that the candidate force field is accurate.
+
+**Explicit versioned policy correction:** `placement_review_v2.py` establishes
+3.5Å as an initial static CPD placement screen. Existing native dynamics
+`solvated_engine_v3.geometry_passed` checks stereo, bond integrity, severe clashes
+and ring piercing; its periodic checks add image/water integrity, not absolute
+positions relative to a pre-reaction frame. The new release worker had incorrectly
+extended that static screen to every unrestrained frame. V2 retains the initial
+seed3.5Å gate, fixes base selection to the explicit28 thymine atoms (no OP1/OP2),
+and reports subsequent absolute displacement as a diagnostic. Dynamic stereo,
+contact, bond-ratio and image thresholds are unchanged. This is a documented
+change in gate applicability, not a claim that either original failed gate passed.
+Original services/failures and frozen workers remain unchanged. Application
+placement rules and the rejected15Å old1×T route remain untouched.
+
+Read-only V2 replay of **40 welded +30 control frames** passes dynamic integrity,
+with water O–O endpoint minima **2.44672/2.45131Å** (last respective segments),
+above the existing2Å check. Initial placements pass unchanged3.5Å. No new dynamics
+were needed for this review; a minimum or ensemble certificate does not follow.
+
+Admitted only the missing **5ps unrestrained control** from its existing45ps
+checkpoint: `formation-release-control-finish-v2`, **11:28:42 Denver**. Same final
+seed as the originally planned segment, preserved velocities/cell; no welded or
+completed control segments rerun. V2 structural integrity audits every0.5ps,
+unchanged restart/water checks. Four CPUs/GPU,8GiB/no swap,300-second native cap,
+20-minute service bound. Event watcher `d6861060-6021-4d2f-8959-de3b19c436c5`
+armed; review **11:46:42**, hard stop **11:48:42 Denver**. No polling or cloud.
+All bulk evidence remains on Archive. Next audit combines existing15ps +new5ps
+control release, then assesses matched50ps endpoints for bounded NPT with density,
+void/water-uniformity and image checks. No NPT launched in this transition.
+Current handoff: `current_handoff.json` → `formation-release-control-finish-v2/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_release_gate_review_20261014.json`.
+Production readiness, minimum certification and parameter qualifications remain open.
+
+The following entries are retained history, superseded above.
+
+**Welded release fails displacement gate; matched control diagnostic active — 2026-10-14 Denver.**
+Acknowledged failed token `f0421dd6-2235-4197-9312-ffb552f4240e`. Native NAMD
+completed all four5ps segments normally; the worker failed the final geometry
+acceptance, not integration or restart. Independent replay verifies all40 frames,
+coordinate/velocity/cell evidence, restraint removal and restraint-corrected restart
+energies. First15ps passes. In the last5ps, four saved frames fail the inherited
+3.5Å displacement gate; endpoint **3.61646Å**, trajectory maximum **3.88535Å**.
+All298 stereocenters, bond ratios, water geometry, severe-contact and ring-piercing
+checks pass throughout. Final temperature298.48K. Original failure and all native
+outputs remain unchanged; no failed endpoint is promoted or continued.
+
+Read-only attribution found a real selector defect: the nominal base selector
+excludes `O1P/O2P`, but this topology uses `OP1/OP2`, so it includes four phosphate
+oxygens. Atom `2:OP2` dominates all four failed frames. Correctly excluding these
+oxygens resolves three failures; the last frame still has **3.58763Å actual-base
+displacement**, exceeding3.5Å. Thus fixing the selector alone cannot rescue this
+run. Global alignment gives3.89021Å and local sugar alignment4.22024Å for that
+last frame; simple rigid drift is not established as the explanation. These
+aligned metrics are diagnostic only, not replacement thresholds. Placement-screen
+semantics during unrestrained dynamics need review against matched control and
+local structural evidence before any NPT. No threshold is relaxed post hoc.
+
+Admitted `formation-release-control-v1` independently from its passing30ps thermal
+checkpoint, **11:25:47 Denver**: same frozen20ps release protocol/seed and geometry
+gates, including the disclosed selector defect for matched raw comparison. This
+is a diagnostic to distinguish common motion from weld-specific behavior, not a
+retry of the failed welded trajectory. Correct base-only attribution must accompany
+its output audit. No additional welded dynamics or NPT admitted.
+
+Four CPUs/GPU,8GiB/no swap,300-second native segment cap,20-minute total bound.
+Completion/failure watcher `8154118e-4895-4e52-acf3-b2bdfba68f04` armed;
+review **11:43:47**, hard stop **11:45:47 Denver**. No polling, duplicate jobs,
+cloud spending or deletion. Bulk evidence remains on Archive. Next review compares
+control/welded release, fixes selector in a versioned audit implementation, and
+assesses structural/gate meaning before further progression; no fishing for a pass.
+Current handoff: `current_handoff.json` → `formation-release-control-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_release_failure_20261014.json`.
+No minimum, ensemble or production-readiness certification.
+
+The following entries are retained history, superseded above.
+
+**Matched thermal approach audited; welded restraint release active — 2026-10-14 Denver.**
+Acknowledged `9e043bc2-473a-4256-a713-f39c5a096b01`. Control20ps continuation
+completed in **72.64s**. Independent output replay verified all four native segments,
+40 trajectory frames, all294 sugar stereo sentinels, finite/checkpoint restart
+energy continuity, rigid-water geometry and fixed140Å cell. No severe heavy
+clashes or ring piercings. Final bond ratios **0.92132–1.08929**, base displacement
+**2.36674Å**, image clearance **44.01003Å**. Final temperature **298.8863K**;
+last segment early/late means **298.34/298.78K**. Both matched systems now approach
+300K sufficiently for the next preparation step; no further initial warming is
+admitted. The inherited control replay next_action is superseded by this decision.
+Neither temperature approach nor successful dynamics certifies a local minimum,
+density/ensemble equilibration, parameter accuracy or production readiness.
+
+Launched `formation-release-anti-v1` at **11:22:47 Denver**: four5ps NVT segments
+at300K with restraint strengths **0.5,0.1,0,0**, preserving coordinates, velocities
+and cell from the welded30ps checkpoint. Final10ps has no restraint directives.
+Pressure coupling remains off to isolate release behavior. Geometry audited every
+0.5ps with unchanged thresholds; endpoint water/restart checks remain. Restart
+potential-energy comparison explicitly subtracts the known restraint-energy
+change when strength changes, rather than misidentifying that change as a restart
+failure. No tolerance increase. Early/late temperature means are recorded.
+
+One local20ps job: four CPUs/GPU,8GiB/no swap,300-second native segment cap,
+20-minute total bound. Completion/failure watcher
+`f0421dd6-2235-4197-9312-ffb552f4240e` armed; review **11:40:47**, hard stop
+**11:42:47 Denver**. No periodic polling, duplicates or cloud spending. Bulk files
+remain on Archive; all prior failures are preserved. If successful, audit before
+matched control release, then NPT preparation with density, solvent-uniformity and
+periodic-cell checks. No automatic production promotion.
+Current handoff: `current_handoff.json` → `formation-release-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_matched_thermal_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Welded temperature approaches 300 K; matched control continuation active — 2026-10-14 Denver.**
+Acknowledged `9d753ffa-6e8a-4db8-b8f5-0471ba86d7fb`. Welded20ps continuation
+completed in **71.93 s**. Independent output replay verifies all four native logs,
+40 trajectory frames, coordinate/velocity/cell pins, every restart including the
+initial10ps checkpoint, rigid-water geometry and unchanged140Å cell. All **298
+stereo sentinels** pass, with no severe heavy clashes or ring piercings. Final bond
+ratios **0.92202–1.08969**, base displacement **2.75226Å**, image clearance
+**44.69614Å**. Maximum restart potential-energy error **0.0190kcal/mol**.
+
+Temperature second-half means per5ps segment: **278.06,293.76,297.80,299.23K**;
+final instantaneous **299.5534K**. Final segment early/late means298.68/299.23K
+show substantially reduced heating drift. This is sufficient thermal approach to
+proceed with the next preparation assessment; no repeated welded warming is
+justified now. It is not a density/ensemble-equilibration, unrestrained-stability,
+force-field-accuracy, local-minimum or production certificate.
+
+Matched unwelded `formation-thermal-control-v1` launched **11:20:36 Denver**:
+same20ps at300K, four5ps segments, preserved velocities/cell, restraint coefficient1,
+identical seed and geometry/restart/water gates. Four CPUs/GPU,8GiB/no swap,
+300-second native timeout,20-minute total bound. Completion/failure watcher
+`9e043bc2-473a-4256-a713-f39c5a096b01` armed; review **11:38:36**, hard stop
+**11:40:36 Denver**. No periodic polling, duplicate jobs or cloud spending;
+bulk files stay on Archive and prior failures remain preserved.
+Next: audit matched temperature/geometry response and then admit restraint release
+and NPT preparation with explicit density/solvent-uniformity/periodic-cell checks.
+Provisional force-field limitations remain. No automatic production promotion.
+Current handoff: `current_handoff.json` → `formation-thermal-control-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_welded_thermal_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Matched restrained startup audited; welded300K continuation launched — 2026-10-14 Denver.**
+Acknowledged `57acbcf8-efab-4376-a8a9-7813d1364f66`. Control completed10ps in
+**54.59s**. Independent output replay verified all five native segments and
+**50 frames**, all294 sugar stereo sentinels, no severe heavy clashes or ring
+piercings, rigid-water geometry, restart inputs and fixed140Å cell. Final bond
+ratios **0.91133–1.10333**, base displacement **2.67519Å**, image clearance
+**44.25685Å**. Maximum restart energy difference **0.0119kcal/mol**, final
+same-target difference **0.0057kcal/mol**. Final temperature **245.0486K** versus
+**245.7941K** welded: both short pilots have comparable incomplete heating.
+The control replay's inherited generic next-action text is superseded here:
+matched startup is complete; no repeat10ps initial-velocity pilot is needed.
+Neither restrained startup establishes equilibration, a minimum or production readiness.
+
+Launched `formation-thermal-anti-v1` at **11:18:31 Denver**: **20ps additional
+restrained NVT at300K**, four5ps segments from the welded10ps checkpoint,
+retaining binary velocities/cell and restraint coefficient1. No velocity reset,
+pressure coupling or restraint release. Audit geometry every0.5ps, water geometry
+and restart continuity at each5ps endpoint, and record early/late temperature
+means per segment to assess thermal approach. Existing geometry gates unchanged.
+
+One local job, four CPUs/GPU,8GiB/no swap,300-second native segment cap,
+20-minute total bound. Completion/failure watcher
+`9d753ffa-6e8a-4db8-b8f5-0471ba86d7fb` armed; review **11:36:31**, hard stop
+**11:38:31 Denver**. No periodic polling, duplicates or cloud spending. Bulk
+outputs and scratch remain on Archive. Failures remain preserved.
+Next audit decides matched control20ps and then restraint release/NPT preparation;
+thermal/density/solvent-uniformity qualification and provisional force-field
+limitations remain open. No automatic production or minimum certification.
+Current handoff: `current_handoff.json` → `formation-thermal-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_matched_startup_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Welded restrained startup audited; matched control running — 2026-10-14 Denver.**
+Acknowledged `f35c66f2-a50d-457a-8abe-785e38fa5b53`. The welded10ps pilot
+completed in **55.24 s**. Independent output replay verified pinned native logs,
+coordinates/velocities/cell, all **50 trajectory frames**, preserved restart inputs,
+finite energies/temperatures, rigid-water OH geometry and fixed140Å periodic cell.
+All **298 stereo sentinels** pass; no severe heavy clashes or ring piercings.
+Final bond ratios **0.92410–1.10056**, base displacement **2.16617Å**, conservative
+image clearance **44.79110Å**. Maximum restart potential-energy difference is
+**0.0189kcal/mol**; final same-target restart difference **0.0105kcal/mol**.
+Final instantaneous temperature **245.7941K** shows that this10ps pilot has not
+completed heating to300K. It establishes only restrained startup/restart behavior,
+not thermal/density equilibration, unrestrained stability, a minimum, or production
+readiness. No geometry/force-field gate was relaxed; prior failures are retained.
+
+Matched unwelded `formation-startup-control-v1` launched **11:16:31 Denver** with
+the same worker, seed,10ps protocol and restraint coefficient1. Five2ps segments,
+thermostat targets50/100/200/300/300K,294 sugar stereo sentinels, all original
+geometry/restart/water checks. One local job: four CPUs/GPU,8GiB/no swap,
+300-second native segment cap,20-minute total bound. Completion/failure watcher
+`57acbcf8-efab-4376-a8a9-7813d1364f66` armed; review **11:34:31**, hard stop
+**11:36:31 Denver**. No periodic polling, duplicate jobs or cloud spending.
+Bulk data and scratch remain on Archive.
+
+Next: audit matched control, compare heating behavior, then admit additional300K
+conditioning, restraint release and NPT preparation in bounded stages. Density,
+solvent uniformity and thermal stationarity must be measured before treating the
+context as equilibrated. Existing provisional parameter limitations remain.
+Current handoff: `current_handoff.json` → `formation-startup-control-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_welded_startup_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Native PME mode comparison audited; restrained welded startup launched — 2026-10-14 Denver.**
+Acknowledged `dd45f221-5cd1-4cef-88cc-005ff003afd1`. All four native static jobs
+terminated normally. Independent replay checked source/evidence hashes, exact
+checkpoint use, requested/actual GPU mode, zero-step logs and binary force files.
+Welded energy/maximum-force differences were **0.46770 kcal/mol / 0.00125263
+kcal/mol/Å**; control **0.47980 / 0.00123306**. Both pass the existing full-system
+relative1e-4/absolute0.001 policy. This compares native offload (CPU bonded terms,
+GPU nonbonded) against resident mode, not an independent all-CPU reference or
+force-field accuracy test. No dynamics were run for the comparison.
+
+Launched `formation-startup-anti-v1` at **11:14:29 Denver**: five sequential **2 ps**
+NVT segments, thermostat targets **50, 100, 200, 300, 300 K**, ordinary masses and
+2 fs timestep, rigid water/H bonds. Heavy-solute restraint coefficient1 is retained
+throughout. The final segment is a same-target restart using binary coordinates,
+velocities and cell. Initial velocities are generated once; later segments retain
+them. Check every100-step frame against the unchanged stereochemistry/contact/bond/
+displacement/image gates, finite native energy/temperature, endpoint rigid-water
+OH error<1e-4 Å, and restart energy continuity max(0.01,1e-6*previous |energy|).
+Temperature0..600 K is an instability screen, not equilibration acceptance.
+
+One job, **10 ps maximum**, four CPUs/GPU, **8 GiB/no swap**, 300-second native
+segment timeout, **20-minute total bound**. Event watcher
+`f35c66f2-a50d-457a-8abe-785e38fa5b53` armed; review **11:32:29**, hard stop
+**11:34:29 Denver**. No periodic polling, cloud spending or duplicate jobs.
+All bulk outputs and scratch remain on Archive. A failed audit stops continuation
+and preserves native evidence. If successful, audit before matched control startup
+and subsequent unrestrained/NPT preparation. This short restrained pilot cannot
+establish density equilibration, unrestrained stability, melting behavior, a local
+minimum, or production readiness. Provisional force-field limitations remain.
+Current handoff: `current_handoff.json` → `formation-startup-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_pme_startup_20261014.json`.
+
+The following entries are retained history, superseded above.
+
+**Matched solvent conditioning audited; native PME mode qualification launched — 2026-10-14 Denver.**
+Acknowledged control completion `fa4ed815-9d0f-40d2-b399-135859779371`.
+Control completed **2,500 minimization steps / zero MD in 64.22 s**. Independent
+reread/replay with the frozen geometry predicate verifies all ten terminal logs,
+checkpoint hashes, fixed-solute invariance and all **40 mobile-solute frames**.
+All **294 sugar stereo sentinels** pass; no severe heavy clashes or ring piercings.
+Final bond ratios **0.96418–1.05127**, base displacement **1.66358 Å** and conservative
+image clearance **43.91559 Å** pass the unchanged gates. The welded counterpart
+already passed its corresponding replay. Neither finite minimization establishes
+stationarity, a local minimum, thermal equilibration or production readiness.
+
+Launched `formation-pme-qualification-v1` at **11:12:21 Denver**: four sequential
+native `run 0` evaluations, welded/control final checkpoints each evaluated with
+GPU offload/CPU bonded terms and GPU-resident mode. The comparison uses the
+existing full-system tolerance `max(0.001, 1e-4*reference magnitude)` for energy
+and maximum force component. This is a same-coordinate native mode comparison,
+**not an independent all-CPU or cross-engine reference**; no dynamics are run.
+Any failure stops progression and preserves its outputs. No tolerance relaxation.
+
+Four CPUs, GPU, **8 GiB/no swap**, 300-second per-evaluation timeout, **20-minute
+total bound**. Completion/failure watcher `dd45f221-5cd1-4cef-88cc-005ff003afd1`
+is armed; review **11:30:21**, hard stop **11:32:21 Denver**. Event-driven follow-up,
+no periodic polling, no duplicate jobs, no cloud spending. Bulk outputs stay on Archive.
+Next: audit the numerical comparison, then prepare bounded matched solvent startup
+and restart qualification. Provisional parameter limitations and the old 1×T hold
+remain; no application or production promotion.
+Current handoff: `current_handoff.json` → `formation-pme-qualification-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_matched_conditioning_20261014.json`.
+
+The following entries are retained history, superseded by the current state above.
+
+**Welded solvent conditioning audited; matched control launched — 2026-10-14 Denver.**
+Acknowledged token `bae35099-9d0d-4c95-a9f7-246c10e8d01c` after native completion.
+The welded pilot completed **2,500 minimization steps, zero MD, in 65.44 seconds**.
+A separate replay verified all ten native terminal logs, checkpoint hashes and
+coordinates, exact solute invariance during the first two segments, and all
+**40 mobile-solute trajectory frames** using the frozen geometry predicate.
+Final geometry retains **298 stereo sentinels**, zero severe heavy clashes or
+ring piercings, bond ratios **0.93762–1.07436**, maximum lesion-base displacement
+**2.70071 Å**, and conservative periodic-image clearance **43.89163 Å**.
+Both final segments are unrestrained. These checks establish finite solvent
+conditioning success; they do **not** establish stationarity, a local minimum,
+thermal equilibration or production readiness. Parameter-transfer limitations
+and all prior failed branches remain preserved.
+
+The matched unwelded control began **11:10:09 Denver**, using the same ten
+250-step stages and geometry thresholds (294 sugar stereo sentinels; no CPD
+core centers). Four CPUs/GPU offload, 8 GiB, no swap, 300-second segment limit;
+**20-minute total bound**, review **11:28:09**, hard stop **11:30:09**. The shorter
+budget follows the measured welded runtime. Completion/failure watcher
+`fa4ed815-9d0f-40d2-b399-135859779371` is armed. No periodic polling, duplicate
+jobs, new QM, cloud spending or production launch. All bulk files stay on Archive.
+
+Next: audit control evidence, then conditioned native PME/GPU numerical agreement
+and bounded startup/restart qualification, one admitted job at a time. The old
+1×T ensemble hold remains in place; this is the authorized new compatible context.
+Current handoff: `current_handoff.json` →
+`formation-solvent-minimize-control-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_solvent_minimization_20261014.json`.
+
+The following entry records the preceding transition and is superseded above.
+
+**Stationary 1×T placement rejected on displacement; formation-compatible solvent pilot active — 2026-10-14 Denver.**
+Acknowledged completion token `cd4f6ed7-aacd-49d3-95ed-aa6c0d0cafac`.
+V6 stopped early after **1,589 iterations / 1,651 force evaluations / 833.73 s**.
+Independent force replay confirms **0.00971452 kcal/mol/Å** on the 322 mobile
+atoms. All 292 stereo sentinels, bond ratios **0.96112–1.05830**, clashes/piercings
+and fixed-coordinate checks pass. Conditioned full-DNA NAMD equivalence passes:
+energy error **0.02511 kcal/mol**, force error **0.002372 kcal/mol/Å** under the
+existing engineering policy. This is fixed-outer stationarity, not a minimum.
+
+**A separate structural gate fails:** maximum lesion-base displacement is
+**15.0073 Å** from the minimized unwelded control, versus the existing **3.5 Å**
+screen. The initially grafted v3/v4 seeds already required 8.65/9.37 Å; subsequent
+unsolvated relaxation increased the displacement. Native numerical agreement
+and low local force do not qualify this placement. Preserve the entire branch;
+no further vacuum relaxation, solvent promotion or application integration of
+that 1×T endpoint. The source site was inherited from the old 1×T route, not
+selected for corrected cis-anti-I precursor compatibility.
+
+A read-only audit of existing corrected formation screens identified exactly
+**seven compatible intended-weld samples** in the smaller 2HB-2×T job
+`029a76c6a59f`, pair **D000:9~D001:15**. Their screened-base rigid-placement maximum
+displacements are 1.22–1.76 Å. Selected the smallest displacement deterministically:
+**sample180, DCD frame45225, time904520.0027 ps**. One full frame was read by direct
+DCD seek, checked against cached coordinates and file size/mtime. No trajectory
+was generated or multi-GB file copied. This selects a conditional engineering
+context, not an unbiased population, reaction rate or formation yield.
+
+Built fresh **3,107-atom / 98-residue** paired DNA fixtures from the archived
+ordinary-mass PSF, adding only the corrected crosslinks and base assignments.
+The new placement moves all lesion-base atoms by at most **2.65353 Å**; all
+**298** stereo sentinels pass, there are no severe clashes or ring piercings,
+and initial bond ratios are **0.91880–1.28732**. Parameter coverage passes.
+The original full PSF had only solute-length zero NNB pointers; psfgen rejected
+it. That failed attempt is preserved. A local copy pads the zero-exclusion
+pointer table to the full atom count; atom/bond/parameter records are unchanged.
+No archived source was modified. Source trajectory HMR4fs/magnesium conditions
+are disclosed; only precursor geometry is reused, not its masses or solvent model.
+
+Prepared matched **140 Å cubic**, ordinary-mass CHARMM TIP3P/NaCl systems:
+**265,508 atoms**, **87,270 waters**, **343 Na / 248 Cl** (95 neutralizing Na,
+248 added pairs ≈150mM in the initial box). Common solvent excludes both solutes;
+independent binary comparison confirms identical solvent coordinates. Existing
+empty-cube oxygen packing was reused with reconstructed TIP3P geometry, without
+new Gromacs work. Actual post-equilibration concentration remains to be measured.
+
+**Welded solvent-minimization pilot launched 11:04:03 Denver**, one native job:
+500 steps with solute fixed, 1,000 with heavy-atom restraint coefficient5, 500 at1,
+and 500 unrestrained — **2,500 minimization steps, zero MD**. Every250-step endpoint
+and each50-step mobile-solute frame must retain stereo, bond ratios0.7–1.3,
+no severe clashes/piercings, base displacement≤3.5 Å and image clearance≥12 Å.
+Fixed-solute stages instead verify exact solute invariance. No stationary/minimum
+claim follows from completing this finite pilot.
+
+Four CPUs with GPU offload, **8 GiB/no swap**, 600-second native segment timeout,
+**one-hour hard cap**. Completion/failure watcher
+**bae35099-9d0d-4c95-a9f7-246c10e8d01c** is armed; one review **11:59:03**, hard stop
+**12:04:03 Denver**. Actual first native segment completed normally during the
+single startup verification. No periodic polling. Next audit decides matched
+control conditioning and native PME/GPU/startup/restart qualification; no automatic
+MD or production promotion. No new QM, parameter fit, cloud spending or deletion.
+
+Current handoff: `current_handoff.json` → `formation-solvent-minimize-anti-v1/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_formation_context_20261014.json`.
+All failures and superseded active-state records below remain preserved.
+
+**Feasible relaxation made progress; bounded continuation active — 2026-10-14 Denver.**
+Acknowledged failed wake `573c5e33-41ea-46a7-b42c-c685c40fd570`.
+This terminal status means the **1,500-iteration cap** was reached, not a geometry
+failure: 1,514 force evaluations, **775.47 seconds**, no stereo/contact rejection,
+all **292** stereo sentinels intact, zero severe clashes/piercings, unchanged
+fixed atoms, and bond ratios **0.96112–1.05548**. The minimum oriented volume is
+7.7908 Å³, far from the 0.1 path boundary. The failed verdict remains preserved.
+
+Energy decreased **14,747.016 kcal/mol** from the strained seed. It continued to
+fall by **12.656 kcal/mol in the final 250 iterations**. Independent Reference
+re-evaluation reproduces final energy **43,849.094427 kcal/mol** and maximum
+mobile force **4.661775 kcal/mol/Å** exactly. The best transient maximum force was
+0.7090; neither meets the unchanged **0.01** acceptance threshold. The largest
+remaining forces are on nearby ordinary bases, not evidence of a new core
+chemistry failure. This is useful conditioning progress, not stationarity.
+
+Admitted **dna-placement-v6** from the exact valid final coordinates, retaining
+the force field, 322 mobile atoms, fixed outer DNA, 0.05 Å step cap, Armijo descent
+and pre-acceptance geometry guards. Allocation: **6,000 iterations / 9,000 force
+evaluations or two hours**, whichever stops first. The stopping target is now
+exactly the existing **0.01** acceptance threshold; v5 unnecessarily targeted
+0.001 internally. This does not relax the acceptance criterion. No fresh seed,
+QM, fitting or native dynamics was launched. L-BFGS memory restarts; no optimizer
+history preservation is claimed. The new seed gradient finite-difference check
+passes with **2.54e-5** error. Earlier focused solver tests cover the unchanged
+algorithm; this continuation changes checkpoint, budget and stopping target only.
+
+Started **10:39:23 Denver**, one CPU, 4 GiB/no swap. Completion/failure watcher
+**cd4f6ed7-aacd-49d3-95ed-aa6c0d0cafac** is armed; one review **12:34:23**, hard stop
+**12:39:23 Denver**. Startup and force preflight verified; no periodic polling.
+At completion audit actual force and geometry, retain application displacement
+screens separately, then conditioned native parity and matched solvent/restart
+validation. Parameter qualification and minimum certification remain incomplete.
+All outputs stay on Archive; no cloud spending or data deletion.
+
+Current handoff: `current_handoff.json` → `dna-placement-v6/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_dna_continuation_20261014.json`.
+Earlier active-state descriptions below are historical snapshots.
+
+**SLSQP path failure audited; feasible-step recovery active — 2026-10-14 Denver.**
+Acknowledged failed wake `b4885ed6-a80c-4ea2-9234-dfb8c310fa37`.
+The v4 job stopped in less than one second, after **four energy/gradient calls
+and two callback iterates**. Its second iterate moved atoms by up to **3.7034 Å**
+and inverted two sugar sentinels (oriented volumes **−0.8749 / −1.9987 Å³**).
+The stop guard worked; nonlinear constraints did not keep that intermediate
+SLSQP iterate feasible. The file named `last_accepted.npy` contains the failing
+iterate and **must not be used as a valid restart**. Original outputs, traceback,
+service status and an explicit failure-geometry audit remain preserved.
+
+Restarted from the unchanged, screened v4 seed under **dna-placement-v5**.
+No parameters, atoms, mobile region, final force criterion or chemistry threshold
+changed. The revised L-BFGS line search caps every per-atom trial displacement at
+**0.05 Å**, requires Armijo energy descent and checks all 292 oriented stereo
+volumes (>0.1 Å³), severe heavy contacts and ring piercing **before** force
+evaluation/acceptance. Failed line search stops for audit instead of extending
+blindly. Checkpoints contain only feasible accepted geometries. Double-precision
+OpenMM Reference forces avoid CPU precision noise; seed directional finite
+differences agree to **4.37e-5 kcal/mol/Å**. These are coordinate-construction
+checks, not an endpoint or full-DNA minimum certificate.
+
+Two focused solver tests passed: an independent anisotropic quadratic checks
+convergence, energy descent and the displacement cap; an infeasible-boundary
+test proves no energy call crosses the allowed region and no false convergence
+is reported. No broader regression suite was run.
+
+**Started 10:24:52 Denver.** One CPU, 4 GiB/no swap, 1,500 iterations or 6,000
+energy/gradient calls, **two hours hard limit** with early convergence/stall stops.
+Completion/failure watcher **573c5e33-41ea-46a7-b42c-c685c40fd570** is armed;
+one review **12:19:52**, hard stop **12:24:52 Denver**. Startup limits and the
+actual force preflight were verified. No periodic polling. At termination,
+audit actual force/geometry and fixed coordinates, report existing application
+displacement screens separately, then advance to conditioned static parity and
+matched solvent startup only if warranted. No QM, fit, cloud spending or deletion.
+
+Current handoff: `current_handoff.json` → `dna-placement-v5/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_dna_feasible_recovery_20261014.json`.
+Earlier active-state descriptions below are superseded historical records.
+
+**Corrected two-sugar/DNA transfer passed; local construction active — 2026-10-14 Denver.**
+The user authorized continuing through parity with the other developed isomers.
+This means the preliminary-research NAMD workflow and its actual evidence gates;
+it does not authorize relabeling legacy anti trajectories or automatic registry
+promotion. Parameter-accuracy limits remain visible throughout.
+
+Built a fresh **62-atom, two-sugar corrected cis-anti-I model** with ten retained
+stereocenters. Exact frozen core charge/equilibrium corrections transfer without
+another fit; the second sugar uses the same native NA atom-role assignments.
+The neutral N1 methyl cap is removed explicitly, and both sugars carry neutral
+3′/5′ OH caps. Parameter coverage is complete. OpenMM export/reload errors are
+below 7e-13 kcal/mol and 2e-13 kcal/mol/Å; native static errors **0.0008965
+kcal/mol / 0.0004862 kcal/mol/Å** pass the existing 0.001 limits. The first build
+failed on the CCD's phosphate atom; the versioned retry explicitly prunes atoms
+outside the capped fragment, following the established endpoint graph procedure.
+
+Transferred the candidate to the frozen **3,043-atom, 96-residue, three-segment**
+origami topology: exactly the corrected C5–C6/C6–C5 crosslinks, two removed C5
+planar impropers, 28 reassigned base atoms, unchanged **−93e net charge**, and
+unchanged nonlesion atoms/bonds and native sugar/phosphate parameters. Complete
+parameter coverage includes the explicit 1–4 NBFIX coefficients. An unused
+ParmEd import failed before construction; its journal is preserved separately.
+
+Coordinate preparation rejected a base-only graft for sugar stereochemistry
+and clashes. Whole-nucleoside grafts retained stereochemistry but had clashes,
+including a **0.206 Å H3–H5″ contact** missed by the heavy-atom screen. Static
+OpenMM/NAMD checks at these extreme-overlap geometries failed and remain
+preserved. No threshold was relaxed. The source was changed from unminimized
+to previously minimized **unwelded control** coordinates, and one bounded,
+six-degree-of-freedom rigid placement search used all-atom clash penalties and
+backbone attachments. This is geometric construction, not QM or an MM minimum.
+The selected seed has **all 292 monitored stereocenters preserved, zero severe
+heavy-atom clashes and zero detected ring piercings**. The control source's
+historical product-displacement-screen failure remains documented; no source
+production qualification is implied.
+
+Full-DNA static equivalence now passes the existing relative/absolute engine
+policy: energy error **0.018995 kcal/mol** and maximum force error **0.044343
+kcal/mol/Å**. This seed is strained: maximum reference force **2535.96
+kcal/mol/Å**. Native agreement is an implementation check, not permission to
+start dynamics at those forces. Final conditioned geometry must be checked again.
+
+**Local relaxation launched 10:20:34 Denver**, `dna-placement-v4-service`:
+322 mobile atoms within two residues of each lesion endpoint; outer coordinates
+fixed. SLSQP uses analytic signed-volume constraints, then L-BFGS-B removes
+those temporary constraints if the constrained stage passes. Limits: 1,000
+constrained iterations, 1,500 release iterations, 6,000 energy/gradient calls,
+**two hours total**, two CPUs, **4 GiB/no swap**. Accepted inversion or detected
+ring piercing stops the attempt; checkpoints every 25 accepted iterations.
+Final audit requires the unchanged 0.01 kcal/mol/Å mobile-force threshold,
+0.7–1.3 bond-ratio screen and geometry integrity. Optimizer success alone is
+insufficient, and no minimum certificate is claimed.
+
+Completion/failure watcher **b4885ed6-a80c-4ea2-9234-dfb8c310fa37** is armed.
+One review trigger **12:15:34**, hard stop **12:20:34 Denver**. Startup verified
+worker execution and systemd limits; no periodic polling. Next audit must also
+report base displacement/glycosidic attachment metrics against the existing
+application placement screens, separately from isolated construction; no
+silent application geometry promotion. Then prepare matched solvent systems,
+qualify startup/restarts and undertake sequential bounded context validation.
+No new QM, fit round, cloud spending, data deletion or relocation.
+
+Focused validation: **2 chirality-derivative tests and 6 native-log tests passed**.
+The initial combined test command was rejected by the single-target wrapper;
+both files were subsequently run separately through `just test-focused`.
+Current handoff: `current_handoff.json` → `dna-placement-v4/handoff.json`.
+Audit: `docs/audits/cpd_corrected_cis_anti_i_dna_transfer_20261014.json`.
+All preceding failures and their native outputs remain on Archive.
+
+**Restart smoke recovered and complete — 2026-10-14 Denver.**
+Acknowledged failure token `2926a2a7-c4df-4019-94b7-823fb7d9ba08` and resumed
+on the user's instruction. The first native chunk had finished normally at
+step 5500; its audit failed because RDKit rejected NumPy float32 coordinates
+from DCD. A separately versioned worker promotes those recorded values to
+float64, preserving all geometry thresholds and the original failure evidence.
+All 55 first-chunk frames passed before reusing its exact binary checkpoint.
+Only the remaining 5000 steps were run, under a one-CPU, 4 GiB/no-swap,
+10-minute hard limit; native execution took 1.38 seconds.
+
+The second native chunk also finished normally, at step 10500. Its initial
+audit encountered restart ENERGY rows before the first ETITLE header. Reusing
+the existing `native_log_v3` completed-log parser resolved this without more
+simulation. The separate final audit passes **all 105 recorded frames**, both
+final geometries, finite coordinates/velocities/energies, exact checkpoint
+references and restart potential continuity: **0.0002 kcal/mol**, below the
+unchanged 0.001 limit. Total dynamics remains **10 ps**, plus 500 minimization
+steps; the 55 first-chunk frames include minimization frames. Both failed audit
+attempts and all native outputs remain preserved. No QM or fitting was added.
+
+This closes isolated endpoint integration/restart engineering only. It does
+not establish parameter accuracy, DNA thermal behavior or an endpoint minimum.
+The 7.15616 kcal/mol QM/MM conformer discrepancy remains unresolved.
+
+The next DNA-context transfer inventory/plan is recorded under
+`dna-context-transfer-preparation-v1/plan.json`. The verified export contains
+one sugar and an N1 methyl cap, with no second sugar or phosphate: it cannot
+be inserted directly as a full DNA patch. Next work must explicitly map the
+corrected two-sugar topology, cap removal, charges and boundary parameters,
+then check geometry and static engine equivalence before DNA dynamics. Legacy
+anti fitted patches and trajectories are not corrected cis-anti-I evidence.
+No automatic extra vacuum sampling, QM grid or second fit is scheduled.
+
+**No native job or pending wake is active.** Current handoff:
+`current_handoff.json` → `provisional-native-restart-smoke-audit-v3/handoff.json`.
+Completion audit: `provisional-native-restart-smoke-audit-v3/completion_audit.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_native_restart_recovery_20261014.json`.
+All new outputs and scratch remain on Archive; no cloud spending, no deletion
+or relocation of existing data. Earlier entries below are historical snapshots.
+
+**Alternate endpoint stationary; provisional NAMD export verified — 2026-10-14 Denver.**
+Acknowledged completion token `dcf69bad-3abf-4037-9fd5-1ec816a09a77`.
+Independent native/hash/trajectory/chemistry replay passes for all **five accepted
+states**, including the reused checkpoint. The continuation stopped after
+**four new gradients and 12.54 service minutes**. Both native optimizer and
+independent single-chi stationarity pass: maximum projected atom gradient
+**1.41843e-5 au**, RMS **4.87100e-6 au**, below the unchanged **1.5e-5 / 1e-5 au**
+limits. All seven stereocenters remain intact. The alternate endpoint is
+**2.72472 kcal/mol below** the original stationary same-chi reference. This is
+an electronic-energy comparison, not a free energy or endpoint minimum
+certificate. Stop this QM optimization; the unused 26-gradient allowance is
+not a reason to continue. Uphill steps and earlier failures remain preserved.
+
+The final candidate review uses only **two new static MM evaluations**, reusing
+the four unchanged original/historical evaluations. The round-one candidate
+favors the alternate geometry by **9.88087 kcal/mol**, an excess of **7.15616
+kcal/mol** versus QM. Its remaining squared gradient residual is **50.33% on
+base/methyl atoms and 49.67% on sugar/OH atoms**. Another core-only correction
+cannot resolve the whole discrepancy. Keep the parameters provisional; no
+second fit, new QM grid or endpoint Hessian is admitted by this result.
+
+Advanced the independent engineering work: exported isolated **36-atom core and
+49-atom endpoint** fixtures with full-precision charges, unique atom-role types,
+bond/angle corrections and explicit 1–4 nonbonded parameters. OpenMM reloads
+of the PSF/parameter exports match the original candidate to **2.5e-13 kcal/mol
+in energy and 1.8e-13 kcal/mol/Å in force** at the three existing QM geometries.
+Three native NAMD `run 0` checks pass the existing **0.001 kcal/mol and
+0.001 kcal/mol/Å** engineering limits; worst observed errors are **0.0007001**
+and **0.0006686**, respectively. No QM, minimization, dynamics or fitting was
+needed for these checks. An initial exporter attempt failed on an OpenMM
+Improper-object API assumption before any native call; v1 and its partial
+files remain preserved. V2 reads the named atom fields and passes. These are
+isolated fixture exports, not a full DNA patch or qualified production model.
+
+**Next bounded job launched at 01:09:54 Denver:**
+`provisional-native-restart-smoke-v1`, one unrestrained capped endpoint at 300 K,
+500 minimization steps followed by **two 5 ps chunks at 1 fs**. Each chunk saves
+native checkpoints and audits all recorded frames, stereocenters and endpoint
+geometry before proceeding. The second chunk reuses binary coordinates,
+velocities and timestep, with an explicitly declared new Langevin seed; no
+bitwise stochastic-continuity claim. Restart potential must agree within the
+existing 0.001 kcal/mol numerical limit. This tests integration/restart behavior
+only, not DNA thermal stability, parameter accuracy or minimum certification.
+
+One CPU, **4 GiB service cap/no swap**, 240-second native timeout per chunk and
+**10-minute total hard limit**. Startup verified the resource limits and armed
+completion/failure watcher `2926a2a7-c4df-4019-94b7-823fb7d9ba08`. Single review
+trigger **01:18:54**, hard stop **01:19:54 Denver**. No periodic polling or
+automatic extension of vacuum sampling. Archive-only output/scratch; no cloud.
+
+Audits: `alternate-sugar-qm-release-v3/completion_audit.json`,
+`stationary_candidate_review.json`, and `provisional-native-export-v2/completion_audit.json`.
+Current handoff: `current_handoff.json` → `provisional-native-restart-smoke-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_stationary_native_export_20261014.json`.
+
+**Resumed: alternate-sugar core release running — 2026-10-14 Denver.**
+The user's resume instruction authorizes continuing the existing target. Memory
+headroom is restored: **23.37 GiB available at admission**, above the unchanged
+12 GiB requirement. One native calculation is running under
+`alternate-sugar-qm-release-v3`, from the exact accepted release-v1 checkpoint.
+
+The first resume attempt safely failed before service creation because a shared
+helper's source hash had changed. The only difference in
+`corrected_mm_endpoint_profile.py` was splitting two semicolon-separated
+statements onto separate lines. Full-module Python AST comparison is identical.
+The original source, current source, diff and failed attempt are preserved. A new
+v3 manifest records the reviewed hash in both optimizer and native-gradient
+source lists; previous manifests remain unchanged. The optimizer run code,
+native evaluator, scientific settings, seed coordinates/gradient and allocation
+are unchanged. Both native contexts and the checkpoint force calculation pass
+preflight without acquiring new QM data. The separate repaired launcher retains
+the service-identifier guard and all original resource checks.
+
+Started **00:37:18 Denver**. Startup verification confirms the original chi
+target **105.65946347935468°**, no fixed Cartesian atoms, the expected constraint
+rank, and **four CPUs / 4 GiB Psi4 / 8 GiB service / no swap**. Allocation remains
+**30 new gradients or two hours maximum**, with a 600-second per-gradient timeout
+and immediate stop at convergence. Full-allocation estimate: **02:24:47**;
+single review trigger: **02:32:18**; hard stop: **02:37:18**, all October 14 Denver.
+Completion/failure watcher token `dcf69bad-3abf-4037-9fd5-1ec816a09a77` is armed.
+No periodic polling or further admission retry timer is running.
+
+At the next trigger, audit actual accepted native evidence and single-chi
+stationarity before deciding the smallest useful parameter-candidate correction.
+No new angular grid, endpoint Hessian or fit round is automatically admitted.
+The endpoint remains uncertified as a minimum and the combined candidate remains
+provisional. All output/scratch stays on mounted Archive; no cloud spending.
+
+Current handoff: `current_handoff.json` →
+`alternate-sugar-qm-release-v3/active_handoff.json`.
+Source review and startup evidence: `source_revision_review.json` and
+`launch_verification.json` in that job directory.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_resume_20261014.json`.
+
 **Admission helper misidentified as a calculation; ready pending RAM — 2026-10-11 Denver.**
 Acknowledged failed wake `677f42af-107e-4e3e-a31d-33d2b58c8ae4`.
 The single timed attempt failed at the exclusive-job check, **before the memory

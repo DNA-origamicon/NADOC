@@ -1746,6 +1746,57 @@ def _ion_seg_info(ii: int) -> tuple[str, int]:
 
 # PSF atom line format (same extended layout as pdb_export.export_psf):
 # %10d %-8s %-8s %-8s %-8s %-6s %14.6f%14.6f%9d
+class _TextLines:
+    """Compact line assembly without one Python string object per solvent atom."""
+    def __init__(self):
+        self.buffer = io.StringIO()
+        self.count = 0
+
+    def append(self, line):
+        self.buffer.write(line)
+        self.buffer.write('\n')
+        self.count += 1
+
+    def extend(self, lines):
+        for line in lines:
+            self.append(line)
+
+    def __len__(self):
+        return self.count
+
+    def __iter__(self):
+        self.buffer.seek(0)
+        for line in self.buffer:
+            yield line[:-1]
+
+    def finish(self):
+        return self.buffer.getvalue()
+
+
+class _IndexRows:
+    """Compact unsigned index tuples; slices materialize only a formatted row."""
+    def __init__(self, width):
+        from array import array
+        self.values = array('Q')
+        self.width = width
+
+    def append(self, row):
+        if len(row) != self.width:
+            raise ValueError('Invalid PSF index row width')
+        self.values.extend(row)
+
+    def extend(self, rows):
+        for row in rows:
+            self.append(row)
+
+    def __len__(self):
+        return len(self.values) // self.width
+
+    def __getitem__(self, span):
+        return [tuple(self.values[i * self.width:(i + 1) * self.width])
+                for i in range(*span.indices(len(self)))]
+
+
 def _psf_atom_line(
     serial: int,
     segid: str,
@@ -1769,22 +1820,22 @@ def _psf_atom_line(
     )
 
 
-def _psf_bond_lines(bonds: list[tuple[int, int]]) -> list[str]:
-    """Format PSF NBOND data lines (4 pairs per line, 8-char serial cols)."""
-    lines = []
+def _iter_psf_bond_lines(bonds):
     for i in range(0, len(bonds), 4):
-        chunk = bonds[i : i + 4]
-        lines.append("".join(f"{a:8d}{b:8d}" for a, b in chunk))
-    return lines
+        yield ''.join(f'{a:8d}{b:8d}' for a, b in bonds[i:i + 4])
+
+
+def _psf_bond_lines(bonds: list[tuple[int, int]]) -> list[str]:
+    return list(_iter_psf_bond_lines(bonds))
+
+
+def _iter_psf_angle_lines(angles):
+    for i in range(0, len(angles), 3):
+        yield ''.join(f'{a:8d}{b:8d}{c:8d}' for a, b, c in angles[i:i + 3])
 
 
 def _psf_angle_lines(angles: list[tuple[int, int, int]]) -> list[str]:
-    """Format PSF NTHETA data lines (3 triplets per line, 8-char serial cols)."""
-    lines = []
-    for i in range(0, len(angles), 3):
-        chunk = angles[i : i + 3]
-        lines.append("".join(f"{a:8d}{b:8d}{c:8d}" for a, b, c in chunk))
-    return lines
+    return list(_iter_psf_angle_lines(angles))
 
 
 def _find_last_atom_serial(psf_text: str) -> int:
@@ -1826,9 +1877,9 @@ def _extend_psf(
     base_serial = _find_last_atom_serial(dna_psf)
 
     # ── Build new atom lines and bond/angle tables ────────────────────────────
-    new_atom_lines: list[str] = []
-    new_bonds: list[tuple[int, int]] = []
-    new_angles: list[tuple[int, int, int]] = []
+    new_atom_lines = _TextLines()
+    new_bonds = _IndexRows(2)
+    new_angles = _IndexRows(3)
 
     serial = base_serial
 
@@ -1932,7 +1983,7 @@ def _extend_psf(
     nbond_re = re.compile(r"^(\s*)(\d+)(\s+!NBOND.*)")
     ntheta_re = re.compile(r"^(\s*)(\d+)(\s+!NTHETA.*)")
 
-    out: list[str] = []
+    out = _TextLines()
     lines = dna_psf.splitlines()
     i = 0
     n = len(lines)
@@ -1951,6 +2002,7 @@ def _extend_psf(
                 i += 1
             # Append new atoms
             out.extend(new_atom_lines)
+            new_atom_lines.buffer.close()
             out.append("")  # blank separator
             continue
 
@@ -1964,7 +2016,7 @@ def _extend_psf(
                 out.append(lines[i])
                 i += 1
             # Append new bonds
-            out.extend(_psf_bond_lines(new_bonds))
+            out.extend(_iter_psf_bond_lines(new_bonds))
             out.append("")
             continue
 
@@ -1978,14 +2030,14 @@ def _extend_psf(
                 out.append(lines[i])
                 i += 1
             # Append new angles
-            out.extend(_psf_angle_lines(new_angles))
+            out.extend(_iter_psf_angle_lines(new_angles))
             out.append("")
             continue
 
         out.append(line)
         i += 1
 
-    return "\n".join(out) + "\n"
+    return out.finish()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2102,7 +2154,9 @@ def _build_solvated_pdb(
         if not ln.startswith("CRYST1") and not ln.startswith("END")
     ]
 
-    out: list[str] = [cryst1] + dna_lines
+    out = _TextLines()
+    out.append(cryst1)
+    out.extend(dna_lines)
 
     serial = base_serial
 
@@ -2265,7 +2319,7 @@ def _build_solvated_pdb(
         )
 
     out.append("END")
-    return "\n".join(out) + "\n"
+    return out.finish()
 
 
 def _mgh_extrabonds(
@@ -2978,6 +3032,7 @@ def build_namd_solvated_package(
     )
     namd_conf = inject_photoproduct_parameters(namd_conf, design)
     hmr_psf = None
+    hmr_receipt = None
     fast_conf = None
     n_hmr = 0
     if not has_photoproducts:
@@ -2987,6 +3042,13 @@ def build_namd_solvated_package(
             hmr_path = hmr_tmp / f"{name}_hmr.psf"
             psf_path.write_text(solvated_psf)
             n_hmr = write_hmr_psf(psf_path, hmr_path)
+            import hashlib
+            with psf_path.open('rb') as source, hmr_path.open('rb') as prepared:
+                hmr_receipt = dict(
+                    schema=1, factor=3.0, hydrogens_repartitioned=n_hmr,
+                    source_sha256=hashlib.file_digest(source, 'sha256').hexdigest(),
+                    hmr_sha256=hashlib.file_digest(prepared, 'sha256').hexdigest(),
+                )
             hmr_psf = hmr_path.read_text()
         fast_conf = _render_solvated_fast_namd_conf(
             name,
@@ -3098,6 +3160,7 @@ def build_namd_solvated_package(
         zf.writestr(prefix + f"{name}.psf", solvated_psf)
         if hmr_psf is not None:
             zf.writestr(prefix + f"{name}_hmr.psf", hmr_psf)
+            zf.writestr(prefix + f"{name}.hmr.json", json.dumps(hmr_receipt))
         zf.writestr(prefix + "charge_audit.json", json.dumps(audit_json, indent=2))
         zf.writestr(prefix + "namd.conf", namd_conf)
         if fast_conf is not None:
@@ -3113,11 +3176,20 @@ def build_namd_solvated_package(
             if ff_path.exists():
                 zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())
         if photoproduct_assets:
+            from backend.core.cpd_mvp_simulation import uses_mvp
+            experimental_mvp = uses_mvp(design)
+            if experimental_mvp:
+                zf.writestr(prefix + "EXPERIMENTAL_CPD_README.txt",
+                    "Provisional CPD MVP force field for the reviewed six-residue 1xT starting geometry.\n"
+                    "Not a physically validated or generally released parameter set.\n"
+                    "One isomer parameter set per system. Use ordinary masses and at most 2 fs.\n"
+                    "Monitor CPD stereochemistry, attachments and local geometry during relaxation and dynamics.\n")
             if any(record["kind"] == "preliminary_review" for record in photoproduct_assets):
                 from backend.core.cpd_preliminary import PACKAGE_NOTICE
                 zf.writestr(prefix + "PRELIMINARY_CPD_README.txt", PACKAGE_NOTICE)
             packaged_manifest = {
                 "schema": "nadoc.packaged-photoproduct-forcefield.v1",
+                "qualification": "experimental-mvp" if experimental_mvp else "registry-qualified",
                 "timestep_fs": 2.0,
                 "hmr_4fs_enabled": False,
                 "lesions": [
@@ -3173,6 +3245,10 @@ def get_solvation_stats(
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
 ) -> dict:
+    # Deletion candidate (approval pending): no application callers. The only
+    # remaining experiment reference is an unused import in exp22. Maintained
+    # estimates live in md_vram.estimate_profile_from_design; actual counts in
+    # md_vram.package_solvation_profile. See docs/audits/cpd_visualization_legacy.md.
     """Return a dict with estimated system size without building the package.
 
     Runs gmx editconf + solvate to count water molecules, then returns

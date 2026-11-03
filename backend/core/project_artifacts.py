@@ -96,8 +96,9 @@ class ProjectArtifactCatalog:
         _atomic_json(path, merged)
         return merged
 
-    def project_metadata(self, project_id: str) -> list[dict]:
-        self.publish_local_jobs(project_id)
+    def project_metadata(self, project_id: str, *, refresh_local: bool = True) -> list[dict]:
+        if refresh_local:
+            self.publish_local_jobs(project_id)
         root = self.revisions._project(project_id) / "jobs"
         records = []
         for path in sorted(root.glob("*/*.json")):

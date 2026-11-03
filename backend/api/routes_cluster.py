@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import cluster_config, cluster_ssh
@@ -81,14 +81,33 @@ def _start_post_connect_reconciliation(mgr) -> None:
     task.add_done_callback(_POST_CONNECT_TASKS.discard)
 
 
+from backend.core.namd_planning import PlanningStage
+
+
 class SlurmPreviewRequest(BaseModel):
     cluster_name: str = "alpine"
     partition: str | None = None  # None → auto-pick
     gres_type: str | None = None  # typed whole GPU or MIG profile
     total_ns: float = 0.0
+    parent_job_id: str | None = None
+    prepared: bool = False
+    upload_mbps: float = Field(11,gt=0,allow_inf_nan=False)
+    download_mbps: float = Field(50,gt=0,allow_inf_nan=False)
+    relax_ns: float = Field(0,ge=0)
+    relax_timestep_fs: float = Field(4,gt=0)
+    gpu_resident_mode: str = "auto"
+    production_ns: float = Field(0,ge=0)
+    production_timestep_fs: float = Field(4,gt=0)
     n_atoms: int | None = None  # None → estimate from the active design
     job_name: str = "nadoc_job"
     safety_factor: float = 1.5
+    padding_nm: float = Field(6.0, gt=0)
+    box_mode: str = 'rotation'
+    box_size_nm: tuple[float | None,float | None,float | None] | None = None
+    salt_mode: str = 'screening'
+    ion_conc_mM: float = Field(0,ge=0)
+    mg_conc_mM: float = Field(12.5,ge=0)
+    stages: list[PlanningStage] | None = None
 
 
 class ConnectRequest(BaseModel):
@@ -372,23 +391,8 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
             status_code=404, detail=f"unknown cluster '{req.cluster_name}'"
         )
 
-    n_atoms, source = req.n_atoms, "provided"
-    if not n_atoms:
-        source = "estimated"
-        try:
-            from starlette.concurrency import run_in_threadpool  # noqa: PLC0415
-
-            from backend.api import state as design_state  # noqa: PLC0415
-            from backend.core.md_vram import estimate_profile_from_design  # noqa: PLC0415
-
-            design = design_state.get_or_404()
-            prof = await run_in_threadpool(estimate_profile_from_design, design)
-            if prof:
-                n_atoms = prof["dna_atoms"] + prof["full_water"] * 3 + prof["ion_atoms"]
-        except HTTPException:
-            raise
-        except Exception:  # noqa: BLE001 — no design / un-buildable: fall through
-            logger.exception("slurm-preview: atom estimate failed")
+    from backend.api.routes_md_runtime import resolve_size,work_for
+    n_atoms, box_nm, source = await resolve_size(req)
     if not n_atoms:
         # Without a size there is no honest walltime; say so rather than invent one.
         return {
@@ -400,11 +404,15 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
     try:
         resources = cluster_resources.recommend(
             profile,
+            workspace_dir=_WORKSPACE_DIR,
+            upload_mbps=req.upload_mbps,download_mbps=req.download_mbps,
             n_atoms=int(n_atoms),
             total_ns=float(req.total_ns),
             safety_factor=req.safety_factor,
             partition=req.partition,
             gres_type=req.gres_type,
+            stages=work_for(req,int(n_atoms))[0] if req.stages or req.production_ns or req.relax_ns else None,
+            box_nm=box_nm,prepared=req.prepared or bool(req.parent_job_id),
         )
     except ValueError as exc:  # unknown forced partition
         raise HTTPException(status_code=400, detail=str(exc)) from exc

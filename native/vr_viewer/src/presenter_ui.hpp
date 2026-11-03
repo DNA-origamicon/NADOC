@@ -87,10 +87,10 @@ class PresenterUI {
     void shutdown(){for(auto& texture:textures_)texture.shutdown();}
     template<class Vertex,class Sidebars,class Views,class Surface,class Desktop>
     void write(std::ostream& out,const std::vector<Vertex>& guides,size_t count,Sidebars& sidebars,Views& views,
-        Desktop& screen,const DesktopPanel& detached,Surface& desktopFrame) {
+        Desktop& screen,const DesktopPanel& detached,Surface& desktopFrame,size_t skipBegin=0,size_t skipEnd=0) {
         out<<",\"ui\":{\"lines\":[";bool comma=false;
         auto vertex=[&](glm::vec3 p,glm::vec3 c){if(comma)out<<',';comma=true;out<<p.x<<','<<p.y<<','<<p.z<<','<<c.r<<','<<c.g<<','<<c.b;};
-        for(size_t i=0;i<std::min(count,guides.size());++i)vertex(guides[i].position,guides[i].color);
+        for(size_t i=0;i<std::min(count,guides.size());++i)if(i<skipBegin || i>=skipEnd)vertex(guides[i].position,guides[i].color);
         if(views.open)for(int i:views.hover)if(i>=0){const auto c=views.cell(i);const glm::vec2 d{180.F/768,50.F/768};
             const std::array<glm::vec2,4> corners{{c-d,c+glm::vec2(d.x,-d.y),c+d,c+glm::vec2(-d.x,d.y)}};
             for(int j=0;j<4;++j)for(int k:{j,(j+1)%4})vertex(views.world(corners[k])+views.orientation*glm::vec3(0,0,.001F),{1,.7F,.1F});}

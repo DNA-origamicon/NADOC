@@ -44,3 +44,21 @@ def test_full_frame_extracts_real_terminal_ring_and_same_display_rotation(monkey
     assert out.shape == (2,12)
     np.testing.assert_allclose(out[:,9:], [[0,0,-.3],[0,1,-.3]], atol=1e-7)
     np.testing.assert_allclose(abs(out[:,6:9]), [[1,0,0],[1,0,0]], atol=1e-7)
+
+
+def test_named_ring_direction_ignores_topology_order_and_out_of_plane_sugar():
+    from backend.core.md_base_frames import ordered_ring_indices
+
+    # CHARMM thymine stores N1,C6,C2,...; its sugar direction need not lie in
+    # the base plane. The measured frame must use the chemical N1→C4 span.
+    atoms = {'N1': 1, 'C6': 6, 'C2': 2, 'N3': 3, 'C4': 4, 'C5': 5}
+    indices = ordered_ring_indices(atoms)
+    np.testing.assert_array_equal(indices, np.arange(1, 7))
+    theta = np.arange(6) * np.pi / 3
+    raw = np.vstack([[0, 0, 1], np.column_stack([np.cos(theta), np.sin(theta), np.zeros(6)])])
+    inward = np.array([[1e-7, 0., 1.]])
+    center, plane = measured_base_frames(raw, np.array([0]),
+        [(np.array([0]), indices[None, :])], raw[:1], None, None, inward_out=inward)
+    np.testing.assert_allclose(center, [[0, 0, 0]], atol=1e-12)
+    np.testing.assert_allclose(inward, [[-1, 0, 0]], atol=1e-12)
+    np.testing.assert_allclose(plane, [[0, 0, 1]], atol=1e-12)

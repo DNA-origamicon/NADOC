@@ -45,6 +45,16 @@ def test_fallback_is_never_counted_as_submitted_fps():
     assert case['fallback_or_unfocused_frames']==2
 
 
+def test_gpu_status_description_is_not_a_dropped_record_event():
+    status='VR_GPU_PASS_STATUS phase=initialized status={"record_delivery":"existing bounded TraceSink; VR_TRACE_DROPPED invalidates coverage"}\n'
+    result=report(status+line(1,0)+line(2,10))
+    assert result['valid']
+    assert not result['trace_dropped']
+    dropped=report(status+line(1,0)+'VR_TRACE_DROPPED epoch_ms=10 count=2\n')
+    assert not dropped['valid']
+    assert dropped['trace_dropped']
+
+
 def test_adaptive_runtime_period_does_not_hide_fixed_refresh_budget_misses():
     text=''.join(line(i,i*40).replace('period_ms=10','period_ms=40').replace('total_ms=9','total_ms=39') for i in range(1,4))
     case=report(text,target_budget_ms=1000/90)['cases'][0]

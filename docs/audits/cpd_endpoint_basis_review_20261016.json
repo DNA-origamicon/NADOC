@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-16T17:11:39.332462+00:00",
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2-service/completion_wake_ack.json",
+    "sha256": "078e1a6dfbde5ec675cf4264d28a39482e7322608806b229f9a80e24995bf4f8"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/completion_audit.json",
+    "sha256": "de531f0ca76ba8fcbd845e86db0a8f5d425d527d002912af17732b3a9e694c37"
+  },
+  "basis_shift_kcal_mol": 0.5804213380667584,
+  "qm_delta_kcal_mol": -2.1442965901453563,
+  "candidate_error_kcal_mol": -7.736577609524118,
+  "elapsed_seconds": 391.1769712899986,
+  "decision": "Stop basis escalation; discrepancy remains. Two-point cap-orientation diagnostic admitted after unchanged-heavy-coordinate and chemical-identity preflight.",
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/launch_receipt.json",
+    "sha256": "3b273a412ec0b2f006e76cb7912f33f5c2e50aa661eca95354683a5e8b612eb6"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-cap-check-v1/handoff.json",
+    "sha256": "43d94328a125bd2d798de3e5c5d00cf00ab0e97080a671b05ccebbef3819f970"
+  },
+  "reviewer_format_failure_preserved": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/reviewer_v1_failure.json",
+    "sha256": "e2d10fd5914a1acc92a32df80a30f63678efde966b8e1463041ab708ba5e199e"
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

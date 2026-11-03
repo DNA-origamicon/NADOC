@@ -20,6 +20,8 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   const el = key => dialog.querySelector(`[data-${key}]`), host = doc.defaultView
   let active = false, starting = false, startPending = false, disposed = false, inFlight = false, generation = 0, room = null, lease = '', revision = '', identity = null
   let cameraOn = true, visualsOn = true, sentCamera = '', sentVisual = '', candidate = '', candidateSince = 0, checkedAt = -Infinity, exportedAt = -Infinity, heartbeatAt = 0
+  let tickDone = Promise.resolve()
+  let cameraProvider = null, cameraHeld = false, cameraTickAt = -Infinity
   let capabilities = []
   let title = '', dragging = false, gestureAt = -Infinity
   function message(value) { el('status').textContent = value; label.textContent = value }
@@ -50,20 +52,32 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   }
   async function tick() {
     if (!active || inFlight || disposed) return
+    if (now() - cameraTickAt < (cameraProvider ? 100 : 250)) return
+    cameraTickAt = now()
     if (!sameDocument()) { stop('Broadcast stopped because the open file changed.'); return }
     inFlight = true; const ticket = generation
+    let finishTick
+    tickDone = new Promise(resolve => { finishTick = resolve })
     try {
-      const source = prepared.captureView()
       if (visualsOn && now() - checkedAt >= 1000 && !dragging && now() - gestureAt > 400) {
         checkedAt = now()
-        const signature = broadcastFingerprint(source)
+        const signature = broadcastFingerprint(prepared.captureView())
         if (signature !== candidate) { candidate = signature; candidateSince = now() }
         if (signature !== sentVisual && now() - candidateSince >= 600 && now() - exportedAt >= 3000) await publishVisual(ticket, signature)
       }
       if (!active || ticket !== generation) return
       if (cameraOn) {
-        const current = prepared.captureView(), pose = { ...current.pose, near: current.camera.near, far: current.camera.far }, encoded = JSON.stringify(pose)
-        if (encoded !== sentCamera) { await send('camera', JSON.stringify({ revision, camera: pose })); sentCamera = encoded; heartbeatAt = now() }
+        const current = cameraProvider ? null : prepared.captureView()
+        const pose = cameraProvider ? await cameraProvider() : { ...current.pose, near: current.camera.near, far: current.camera.far }
+        if (!active || ticket !== generation || !sameDocument()) return
+        if (!pose) {
+          if (!cameraHeld) { await send('hold'); cameraHeld = true; sentCamera = '' }
+          if (now() - heartbeatAt > 4000) { await send('heartbeat'); heartbeatAt = now() }
+          return
+        }
+        cameraHeld = false
+        const encoded = JSON.stringify(pose)
+        if (cameraProvider || encoded !== sentCamera) { await send('camera', JSON.stringify({ revision, camera: pose })); sentCamera = encoded; heartbeatAt = now() }
       }
       if (now() - heartbeatAt > 4000) { await send('heartbeat'); heartbeatAt = now() }
       if (active && ticket === generation) message(`Broadcasting ${cameraOn && visualsOn ? 'perspective + visualizations' : cameraOn ? 'perspective' : 'visualizations'} · ${title}`)
@@ -75,7 +89,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
         } else stop(error.message)
       }
     }
-    finally { inFlight = false }
+    finally { inFlight = false; finishTick() }
   }
   async function start() {
     if (starting || active || disposed) return
@@ -88,7 +102,7 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
     const startRoom = room
     title = el('room').selectedOptions[0]?.textContent ?? 'Presentation'; el('start').disabled = true
     try {
-      prepared.captureView() // Reject unsupported host modes before acquiring authority.
+      if (!cameraProvider || visualsOn) prepared.captureView() // Scene readiness is not a prerequisite for headset tracking.
       const options = visualsOn ? {} : { cameraOnly: true, sourceHash: await prepared.sourceHash() }
       if (ticket !== generation || disposed || !sameDocument()) return
       const result = await send('start', JSON.stringify(options), '')
@@ -126,8 +140,12 @@ export function initEditorBroadcast({ prepared, store, document: doc = document,
   doc.addEventListener('pointerdown', pointerDown, true); doc.addEventListener('pointerup', pointerUp, true); doc.addEventListener('wheel', wheel, { capture: true, passive: true })
   host?.addEventListener('nadoc:workspace-path-change', changed); host?.addEventListener('nadoc:document-reset', changed)
   host?.addEventListener('offline', offline); host?.addEventListener('pagehide', offline)
-  const timer = repeat(tick, 250); paint()
-  return { show, start, stop, tick, async present(share, { refreshScene = false, capabilities: hostCapabilities = [] } = {}) {
+  const timer = repeat(tick, 50); paint()
+  return { show, start, stop, tick, async present(share, { refreshScene = false, capabilities: hostCapabilities = [], getCamera = null } = {}) {
+    const epoch = generation
+    await tickDone
+    if (disposed || epoch !== generation) throw new Error('Presentation changed while switching cameras')
+    cameraProvider = getCamera; cameraHeld = false; cameraTickAt = -Infinity
     capabilities = hostCapabilities
     const option = doc.createElement('option'); option.value = share.id; option.textContent = share.title
     el('room').replaceChildren(option); el('camera').checked = true; el('visuals').checked = refreshScene

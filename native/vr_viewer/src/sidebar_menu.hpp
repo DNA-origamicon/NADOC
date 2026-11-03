@@ -23,6 +23,7 @@ struct SidebarControl {
     bool enabled = true, active = false, vertical = false;
     std::string icon{};
     std::optional<MenuPanelBounds> drawingBounds{}, viewport{};
+    std::optional<float> surfaceDepth{}; // Explicit rendered face for modal controls.
 };
 #include "sidebar_sets.hpp"
 class SidebarMenu {
@@ -105,7 +106,7 @@ class SidebarMenu {
         return customTab && tab().key=="sweep" && std::any_of(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id=="sweep:free-draw";});
     }
     bool raisedAction(const SidebarControl& c) const {
-        return c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id==tab().key+":apply"));
+        return c.surfaceDepth.has_value() || c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id==tab().key+":apply"));
     }
     float footerY() const {
         return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:(tab().key=="move" || tab().key=="join")?-.54F:tab().key=="bend"?-.54F:-.51F;
@@ -264,7 +265,7 @@ class SidebarMenu {
                 const std::string id=tab().key+":"+(back?"back":(tab().key=="move" || tab().key=="join")?"apply":"confirm");
                 const auto row=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& r){return r.id==id;});
                 if(row==tab().rows.end())continue;
-                out.push_back({id,back?"BACK":(tab().key=="move" || tab().key=="join")?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
+                out.push_back({id,back?(tab().key=="sweep"?row->label:"BACK"):(tab().key=="move" || tab().key=="join")?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
                     {{back?left:middle+gap,footerY()-ui_style::footerHalfHeight},{back?middle-gap:right,footerY()+ui_style::footerHalfHeight}},available(row->action)});
             }
         }
@@ -279,10 +280,15 @@ class SidebarMenu {
         std::vector<SidebarControl> out;
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=toolFooter()?0.F:hand==0 ? .058F : -.058F;
-        float tabTop=.647F;
+        const auto panel=bounds();
+        constexpr float tabInset=.088F;
+        float tabTop=panel.maximum.y-tabInset;
+        std::vector<size_t> tabLetters;
+        for(auto index:tabs)tabLetters.push_back(kSidebarTabs[index].label.size());
+        const auto tabLengths=compactTabs.lengths(tabLetters,panel.maximum.y-panel.minimum.y-2*tabInset);
         for(size_t i=0;!customTab && i<tabs.size();++i) {
             const auto& t=kSidebarTabs[tabs[i]];
-            const float length=compactTabs.length(i,t.label.size());
+            const float length=tabLengths[i];
             const float width=.09F;
             const float left=hand==0?tx+.05F-width:tx-.05F;
             const float right=hand==0?tx+.05F:left+width;
@@ -512,6 +518,7 @@ class SidebarMenu {
         return out;
     }
     float controlDepth(const SidebarControl& c) const {
+        if(c.surfaceDepth)return *c.surfaceDepth;
         if(const auto wheel=extrudeWheelIndex(c.id))return extrudeWheelFront(*wheel).z;
         return c.id.starts_with("sim:j:")?.018F:raisedAction(c) ? (pressed==c.id?.026F:.035F) : 0.F;
     }

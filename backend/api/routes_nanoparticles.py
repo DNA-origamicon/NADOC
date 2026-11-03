@@ -56,6 +56,7 @@ class GizmoMove(BaseModel):
 
 
 class NanoparticlePatch(BaseModel):
+    visible: Optional[bool] = None
     diameter_nm: Optional[float] = Field(default=None, gt=0.0, le=1000.0)
     pose: Optional[list[float]] = None
     gizmo_move: Optional[GizmoMove] = None
@@ -173,6 +174,15 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch, expected_r
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    if body.visible is not None:
+        if body.model_fields_set != {"visible"}:
+            raise HTTPException(422, detail="Change visibility separately from particle geometry.")
+
+        def set_visibility(design: Design) -> None:
+            _particle_or_404(design, nanoparticle_id).visible = body.visible
+
+        updated, report = design_state.mutate_and_validate(set_visibility)
+        return _design_response(updated, report)
     from backend.api.part_asset_routes import enabled, start, coating_patch
     if particle.kind == 'gold_nanosphere' and enabled('streptavidin-coating') and (particle.coating is not None or body.coating is not None):
         return coating_patch(nanoparticle_id, body, expected_revision=expected_revision, expected_design_id=expected_design_id)

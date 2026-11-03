@@ -1,0 +1,259 @@
+{
+  "at": "2026-10-17T19:35:40+00:00",
+  "rows": [
+    {
+      "name": "original",
+      "source": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/original_qm_bohr.npy",
+        "sha256": "86ed1878086e2634bbf6778102a45cbbdfa3db82515c34bc72e91dcf69967959"
+      },
+      "success": true,
+      "message": "Optimization terminated successfully",
+      "iterations": 20,
+      "target_degrees": 175.7117093182877,
+      "torsion_error": 1.9383605831535533e-11,
+      "moving_atoms": [
+        "1:O5'",
+        "1:C5'",
+        "1:HO5'",
+        "1:H5'",
+        "1:H5''"
+      ],
+      "max_displacement_component": 0.1258620065517868,
+      "projected_gradient_max": 3.663648921065077e-05,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0398568100525385
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "before_energy": -12.515825867125642,
+      "after_energy": -13.203460639125712,
+      "before_parts": {
+        "0:HarmonicBondForce": 2.8349744446760594,
+        "1:HarmonicAngleForce": 40.69447406487549,
+        "2:HarmonicBondForce": 0.7476926526212017,
+        "3:PeriodicTorsionForce": 85.91403779820925,
+        "4:CustomTorsionForce": 0.1573837836784025,
+        "5:CMAPTorsionForce": 0.0,
+        "6:NonbondedForce": -142.86438861118606
+      },
+      "after_parts": {
+        "0:HarmonicBondForce": 2.765492501285543,
+        "1:HarmonicAngleForce": 41.07308944208564,
+        "2:HarmonicBondForce": 0.6604120079602125,
+        "3:PeriodicTorsionForce": 85.90338966973921,
+        "4:CustomTorsionForce": 0.1573837836784025,
+        "5:CMAPTorsionForce": 0.0,
+        "6:NonbondedForce": -143.7632280438747
+      },
+      "before_O5_O4": 2.836683108711096,
+      "after_O5_O4": 2.805971069445397
+    },
+    {
+      "name": "minus30",
+      "source": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-exocyclic-holdout-v1/original_qm_minus30_bohr.npy",
+        "sha256": "8bc72961c75afcb9dc5138dceba6782a2d3b13515642109bb2df77d634d57368"
+      },
+      "success": true,
+      "message": "Optimization terminated successfully",
+      "iterations": 28,
+      "target_degrees": 145.7117093182885,
+      "torsion_error": 2.6943780540023e-11,
+      "moving_atoms": [
+        "1:O5'",
+        "1:C5'",
+        "1:HO5'",
+        "1:H5'",
+        "1:H5''"
+      ],
+      "max_displacement_component": 0.3803393342044956,
+      "projected_gradient_max": 4.259560010666519e-05,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.040415414689731
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "before_energy": 23.840624075080278,
+      "after_energy": -5.835560571670191,
+      "before_parts": {
+        "0:HarmonicBondForce": 2.834974444676063,
+        "1:HarmonicAngleForce": 40.69447406487549,
+        "2:HarmonicBondForce": 0.7476926526212014,
+        "3:PeriodicTorsionForce": 84.54187696442976,
+        "4:CustomTorsionForce": 0.1573837836784025,
+        "5:CMAPTorsionForce": 0.0,
+        "6:NonbondedForce": -105.13577783520066
+      },
+      "after_parts": {
+        "0:HarmonicBondForce": 3.0249705229820525,
+        "1:HarmonicAngleForce": 45.8552912846826,
+        "2:HarmonicBondForce": 1.2575010295401834,
+        "3:PeriodicTorsionForce": 85.1610956135777,
+        "4:CustomTorsionForce": 0.1573837836784025,
+        "5:CMAPTorsionForce": 0.0,
+        "6:NonbondedForce": -141.29180280613113
+      },
+      "before_O5_O4": 2.1943594086909943,
+      "after_O5_O4": 2.5111868740971195
+    }
+  ],
+  "passed": true,
+  "method": "Independent SLSQP exact torsion equality; core/sugar ring fixed, graph-defined exocyclic branch free. Analytic OpenMM Reference gradient; finite-difference constraint normal. No parameter change.",
+  "script": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/endpoint_contact_relax_v1.py",
+    "sha256": "1b0e52fad919a9505d32c920461423b3cc142fa395360fe2f2f3e7312bc317bf"
+  },
+  "minimum_certified": false,
+  "launch": {
+    "at": "2026-10-17T19:35:55.521738+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/plan.json",
+      "sha256": "7edc874a8d8464d599d9b9cdf9f9d8aa79442f6a38c18192bb1fb0262caa6b60"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-contact-relax-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=7485",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1-service"
+    ],
+    "watcher": {
+      "token": "708ffb22-1cee-4641-9021-e3b76f0d596c",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792265755.5185013,
+      "expected_seconds": 900,
+      "supervisor_pid": 3061864,
+      "supervisor_identity": "32085084",
+      "state": "armed",
+      "watcher_pid": 3061866,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-contact-relax-v1-review",
+      "active_deadline_epoch": 1792272655.4658763
+    },
+    "limits": "RuntimeMaxUSec=2h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792273255.4658763,
+    "review_epoch": 1792272655.4658763,
+    "cloud_spending_usd": 0
+  },
+  "solver_review": {
+    "pyscf_dfmp2_gradient": "NotImplemented in installed implementation; not selected for optimization",
+    "conventional_mp2": "Full occupied t2 estimate7.83GiB at6-31G(d) before frozen-core reduction; no complete gradient memory admission, not launched",
+    "selected": "Independent SLSQP local MM optimizer, exact torsion equality plus analytic OpenMM gradients. Retain proven Psi4 fixed-energy method to isolate geometry effects.",
+    "next_optimizer_candidate": "geomeTRIC constrained QM if this contact diagnostic justifies further relaxation; not yet installed/launched"
+  }
+}

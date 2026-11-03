@@ -99,6 +99,29 @@ describe('initProteinSubsystem', () => {
     expect(deps.designRenderer.applyClusterTransform.mock.calls[1][2].toArray()).toEqual([1, 2, 3])
   })
 
+  it('annotation edits leave simulated protein geometry and transforms intact', async () => {
+    const design = { id: 'd', protein_attachments: [{ id: 'p1' }], annotations: [] }
+    const deps = makeDeps({ currentDesign: design })
+    const sub = initProteinSubsystem(deps)
+    sub.renderer.applyOxdnaTransforms({ p1: [1, 0, 0, 4, 0, 1, 0, 2, 0, 0, 1, 0, 0, 0, 0, 1] })
+    vi.clearAllMocks()
+    deps.store.setState({ currentDesign: { ...design, annotations: [{ id: 'a', highlight_type: 'silhouette' }] } })
+    deps.store.setState({ currentDesign: { ...deps.store.getState().currentDesign, annotations_enabled: false } })
+    await flush()
+    expect(fetch).not.toHaveBeenCalled()
+    for (const renderer of [_lastRenderer, _lastTraceRenderer]) {
+      expect(renderer.update).not.toHaveBeenCalled()
+      expect(renderer.clearOxdnaTransforms).not.toHaveBeenCalled()
+    }
+    // A genuine attachment change must still refresh the protein.
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [] }) })
+    deps.store.setState({ currentDesign: { ...design, protein_attachments: [] } })
+    // getMode is off in the mock, so add another protein to trigger a refresh.
+    deps.store.setState({ currentDesign: { ...design, protein_attachments: [{ id: 'p2' }] } })
+    await flush()
+    expect(fetch).toHaveBeenCalled()
+  })
+
   it('returns the renderer + gizmo + refresh + syncSelectionVisual api', () => {
     const deps = makeDeps()
     const sub = initProteinSubsystem(deps)
@@ -146,6 +169,35 @@ describe('initProteinSubsystem', () => {
       detail: { representation: 'surface' },
     }))
     expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('off')
+    sub.dispose()
+  })
+
+  it('preserves a paused trajectory pose across representation changes and atom refreshes', async () => {
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }) })
+    const sub = initProteinSubsystem(makeDeps())
+    await sub.refresh()
+    const pose = { p1: [1,0,0,10, 0,1,0,20, 0,0,1,30, 0,0,0,1] }
+    sub.renderer.applyOxdnaTransforms(pose)
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'ballstick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(pose)
+    _lastRenderer.applyOxdnaTransforms.mockClear()
+    await sub.refresh()
+    expect(_lastRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(pose)
+    sub.renderer.clearOxdnaTransforms()
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'stick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).not.toHaveBeenCalled()
+    sub.dispose()
+  })
+
+  it('does not carry a protein pose into another document', async () => {
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }) })
+    const deps = makeDeps({ currentDesign: { id: 'first' } })
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+    sub.renderer.applyOxdnaTransforms({ p1: [1,0,0,10, 0,1,0,0, 0,0,1,0, 0,0,0,1] })
+    deps.store.setState({ currentDesign: { id: 'second' } })
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', { detail: { representation: 'ballstick' } }))
+    expect(_lastRenderer.applyOxdnaTransforms).not.toHaveBeenCalled()
     sub.dispose()
   })
 
@@ -208,7 +260,7 @@ describe('initProteinSubsystem', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('attaches the gizmo at the centroid when a protein is selected', () => {
+  it('highlights selection without activating Move/Rotate, and attaches only on explicit activation', () => {
     const deps = makeDeps()
     initProteinSubsystem(deps)
     deps.store._emit({ selection: {
@@ -216,8 +268,13 @@ describe('initProteinSubsystem', () => {
       items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
     } })
     expect(_lastTraceRenderer.centroidOf).toHaveBeenCalled()
+    expect(_lastGizmo.attach).not.toHaveBeenCalled()
+    deps.store._emit({ translateRotateActive: true })
     expect(_lastGizmo.attach).toHaveBeenCalledWith('p1', deps.scene, deps.camera, deps.canvas, [1, 2, 3], null)
     expect(_lastRenderer.highlight).toHaveBeenCalledWith({ type: 'protein', id: 'p1', data: { attachment_id: 'p1' } })
+    deps.store._emit({ translateRotateActive: false })
+    expect(_lastGizmo.cancel).toHaveBeenCalledOnce()
+    expect(_lastRenderer.highlight).toHaveBeenLastCalledWith({ type: 'protein', id: 'p1', data: { attachment_id: 'p1' } })
   })
 
   it('anchors a conjugated protein gizmo at the protein centroid', async () => {
@@ -230,7 +287,7 @@ describe('initProteinSubsystem', () => {
       json: async () => ({ atoms: [{ helix_id: '__protein__p1' }], protein_constraints: [constraint] }),
     })
     document.body.innerHTML = '<div id="move-rotate-panel" style="display:none"></div><div id="mr-current-selection"></div><div id="mr-session-hint"></div>'
-    const deps = makeDeps()
+    const deps = makeDeps({ translateRotateActive: true })
     deps.rightSidebar = { open: vi.fn() }
     const sub = initProteinSubsystem(deps)
     await sub.refresh()
@@ -331,7 +388,7 @@ describe('initProteinSubsystem', () => {
 
   it('implicitly cancels and restores the preview when selection leaves a protein', () => {
     document.body.innerHTML = '<div id="move-rotate-panel" data-protein-active="true"></div>'
-    const deps = makeDeps()
+    const deps = makeDeps({ translateRotateActive: true })
     initProteinSubsystem(deps)
     deps.store._emit({ selection: {
       context: 'design', level: 'default',

@@ -112,7 +112,7 @@ export function createContextMenu(opts = {}) {
       className: 'context-menu__item'
         + (item.disabled ? ' context-menu__item--disabled' : '')
         + (item.danger ? ' context-menu__item--danger' : ''),
-      attrs: { role: 'menuitem' },
+      attrs: { role: 'menuitem', title: item.title },
       children,
       on: !item.disabled ? {
         click: (e) => {

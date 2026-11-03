@@ -556,6 +556,63 @@ def protein_display_transforms(
     return out
 
 
+from collections import OrderedDict
+import threading
+_TRAJECTORY_PROTEIN_SOURCES = OrderedDict()
+_TRAJECTORY_PROTEIN_LOCK = threading.Lock()
+
+
+def _trajectory_protein_sources(design):
+    import hashlib
+    from backend.api.routes_oxdna import _seed_geometry
+    key = hashlib.blake2b(design.model_dump_json().encode(), digest_size=16).digest()
+    with _TRAJECTORY_PROTEIN_LOCK:
+        if key not in _TRAJECTORY_PROTEIN_SOURCES:
+            attachments, blocks = build_protein_blocks(design, _seed_geometry(design))
+            _TRAJECTORY_PROTEIN_SOURCES[key] = [
+                (att.id, np.asarray([bead.pos_nm for bead in beads]))
+                for att, beads in zip(attachments, blocks)
+            ]
+        _TRAJECTORY_PROTEIN_SOURCES.move_to_end(key)
+        while len(_TRAJECTORY_PROTEIN_SOURCES) > 8:
+            _TRAJECTORY_PROTEIN_SOURCES.popitem(last=False)
+        return _TRAJECTORY_PROTEIN_SOURCES[key]
+
+
+def trajectory_protein_frames(design, reference_path):
+    """Fit per-frame protein poses; compact rows travel with DNA in either wire format."""
+    from backend.physics.oxdna_interface import read_protein_bead_positions, _strand_nucleotide_order
+
+    sources = _trajectory_protein_sources(design)
+    n_protein = sum(len(source) for _, source in sources)
+    keys = [("__protein_transform__", attachment_id, row) for attachment_id, _ in sources for row in range(3)]
+
+    def fit(positions):
+        if len(positions) != n_protein:
+            raise ValueError("Trajectory protein particle count differs from the frozen design")
+        out, cursor = {}, 0
+        for attachment_id, source in sources:
+            target = np.asarray(positions[cursor:cursor + len(source)])
+            cursor += len(source)
+            if len(source) >= 3:
+                rotation, translation = _kabsch(source, target)
+            else:
+                rotation = np.eye(3)
+                translation = target.mean(axis=0) - source.mean(axis=0)
+            for row in range(3):
+                out[("__protein_transform__", attachment_id, row)] = {
+                    "backbone_position": rotation[row],
+                    "a1": np.array([translation[row], 0., 0.]),
+                    "a3": np.zeros(3),
+                }
+        return out
+
+    seed = read_protein_bead_positions(reference_path, len(_strand_nucleotide_order(design)))
+    if len(seed) != n_protein:
+        seed = [pos for _, source in sources for pos in source]
+    return fit, keys, fit(seed)
+
+
 def protein_forces_text(
     design: Design,
     attachments: list,

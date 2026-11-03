@@ -47,7 +47,7 @@ describe('sizing', () => {
     const { res, getSlurmPreview } = setup()
     await res.refresh()
     expect(getSlurmPreview).toHaveBeenCalledWith({
-      cluster_name: 'alpine', partition: 'ah200', total_ns: 12, job_name: 'nadoc_job',
+      cluster_name: 'alpine', partition: 'ah200', total_ns: 12, job_name: 'nadoc_job', stages: null,
     })
   })
 
@@ -157,4 +157,16 @@ describe('overrides', () => {
     field(mount, 'cores').dispatchEvent(new Event('input'))
     expect(onChange).toHaveBeenCalled()
   })
+})
+
+it('resizes the same run when solvent padding changes',async()=>{
+ const mount=document.createElement('div')
+ let padding_nm=6
+ const getSlurmPreview=vi.fn(async()=>SIZING)
+ const res=initWizardResources({mount,getSlurmPreview,getPartition:()=> 'ah200',getPreparation:()=>({padding_nm})})
+ await res.refresh()
+ padding_nm=3.5
+ await res.refresh()
+ expect(getSlurmPreview).toHaveBeenCalledTimes(2)
+ expect(getSlurmPreview.mock.calls.at(-1)[0].padding_nm).toBe(3.5)
 })

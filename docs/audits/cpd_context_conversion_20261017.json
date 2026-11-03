@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-17",
+  "feature": "Updated existing Convert to CPD context-menu action",
+  "isomers": ["cis-syn-I", "trans-syn-I", "trans-syn-II", "cis-anti-I"],
+  "geometry_source": {
+    "portable_asset": "backend/data/cpd_conversion_cores.json",
+    "reproduction_script": "scripts/export_cpd_conversion_cores.py",
+    "provenance": "Four archived MVP canonical starts, with PDB and graph source digests and ordered residue indices in the portable asset. No parameter assets are promoted.",
+    "endpoint_mapping": "Read from each archived graph.json; cis-anti-I uses residues 2/5, the syn cases use 3/4.",
+    "identity_check": "All four signed-volume stereocenter checks pass for each extracted core."
+  },
+  "behavior": [
+    "Exactly two unused ordinary or junction extra thymines, including crossover selections whose inserts total two thymines.",
+    "Selection order defines endpoint 1/2 and is displayed in the popup.",
+    "One proper rigid fit of the MVP base pair to the selected ring coordinates. Only base atoms are overridden; no nucleotide transforms, sugar atoms or phosphate atoms are moved.",
+    "Preview and conversion use the same placement function. Preview includes real bonded flanking residues, strand colors, same/different-strand label, orbit/zoom and original/product toggle.",
+    "Crosslinks come from the chemical definition, including anti C5-C6/C6-C5 connectivity. Full slabs derive their poses from the same base coordinates.",
+    "Preview revisions are checked at commit. A stale preview cannot convert; the user can explicitly refresh it.",
+    "Removal restores original ordinary slabs and atom coordinates. Legacy full-residue conversion/relaxation remains available through its existing API for compatibility."
+  ],
+  "limits": [
+    "Manual visual construction only; simulation remains blocked for this placement method.",
+    "Backbone-fixed construction can stretch sugar-base attachments or create clashes. No local backbone relaxation is performed.",
+    "The tested trans-syn-II different-strand fixture has attachment lengths approximately 4.05 and 4.12 angstrom. A subsequent physically connected preparation should consider local backbone relaxation with explicit user authorization.",
+    "Other ordered isomers lack admitted MVP authoring cores and are not offered.",
+    "The new bases-only feature records undo/history snapshots; native recipe regeneration certification is not added by this change."
+  ],
+  "verification": {
+    "backend": {"test_cpd_conversion": "13 passed", "test_cpd_design": "9 passed", "test_cpd_representation": "3 passed"},
+    "frontend_unit": "36 passed across popup, selection, crosslinks, extra placement and properties",
+    "desktop_playwright": "3 contextual conversion cases and 3 compatibility cases passed in focused runs",
+    "visual_evidence": ".development-artifacts/cpd-conversion-review/",
+    "observation_adjustments": "Preview auto-framing and a closer desktop camera centered on the selected molecular coordinates; no molecular coordinates changed for observation.",
+    "pixel_check": "Original versus product preview canvas screenshots differ; rendered preview, Full and Ball-and-stick screenshots inspected.",
+    "retries": "A longer screenshot check exposed stale-preview rejection during background metadata saves; added explicit refresh and verified it. Narrowed the test status locator to the dialog. A compatibility run interrupted by development hot reload was rerun successfully without source edits.",
+    "ruff_and_diff_check": "passed",
+    "vr_used": false
+  }
+}

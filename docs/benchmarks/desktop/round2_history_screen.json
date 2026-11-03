@@ -1,0 +1,346 @@
+{
+  "python": "3.12.3",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "gate": "Fail when median increases by both >5% and >0.05 ms",
+  "timing": "Warmed alternating A/B batches; cyclic GC disabled only during timing; p95 across batch means",
+  "repeats": 5,
+  "iterations": 5,
+  "results": [
+    {
+      "case": "empty",
+      "baseline_ms": 0.0080812,
+      "optimized_ms": 0.0103994,
+      "ratio": 1.2868633371281493,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.009109200000000001,
+      "optimized_p95_ms": 0.012766,
+      "baseline_samples_ms": [
+        0.005925,
+        0.009109200000000001,
+        0.0059632,
+        0.0080812,
+        0.009309399999999999
+      ],
+      "optimized_samples_ms": [
+        0.012766,
+        0.009838399999999999,
+        0.0103994,
+        0.009004799999999999,
+        0.0131486
+      ]
+    },
+    {
+      "case": "poses-1",
+      "baseline_ms": 0.012210799999999999,
+      "optimized_ms": 0.0182122,
+      "ratio": 1.4914829495200972,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.013226799999999999,
+      "optimized_p95_ms": 0.0187372,
+      "baseline_samples_ms": [
+        0.0149782,
+        0.0114876,
+        0.0089166,
+        0.012210799999999999,
+        0.013226799999999999
+      ],
+      "optimized_samples_ms": [
+        0.0187372,
+        0.0182122,
+        0.0152766,
+        0.0172122,
+        0.021308
+      ]
+    },
+    {
+      "case": "poses-4",
+      "baseline_ms": 0.0104134,
+      "optimized_ms": 0.0182802,
+      "ratio": 1.7554497090287515,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.011818200000000001,
+      "optimized_p95_ms": 0.0187952,
+      "baseline_samples_ms": [
+        0.0145454,
+        0.011818200000000001,
+        0.0099968,
+        0.0104134,
+        0.0104016
+      ],
+      "optimized_samples_ms": [
+        0.0182802,
+        0.0187952,
+        0.016967799999999998,
+        0.017236400000000002,
+        0.020606799999999998
+      ]
+    },
+    {
+      "case": "poses-1000",
+      "baseline_ms": 0.24399120000000002,
+      "optimized_ms": 0.1544274,
+      "ratio": 0.632922007023204,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.2517356,
+      "optimized_p95_ms": 0.15573579999999998,
+      "baseline_samples_ms": [
+        0.24399120000000002,
+        0.253024,
+        0.2424282,
+        0.2517356,
+        0.242821
+      ],
+      "optimized_samples_ms": [
+        0.15379420000000002,
+        0.1544274,
+        0.1564172,
+        0.154273,
+        0.15573579999999998
+      ]
+    },
+    {
+      "case": "poses-1000-mid",
+      "baseline_ms": 0.23831660000000002,
+      "optimized_ms": 0.14296979999999998,
+      "ratio": 0.5999154066481309,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.2439432,
+      "optimized_p95_ms": 0.1438576,
+      "baseline_samples_ms": [
+        0.2294418,
+        0.2474876,
+        0.23831660000000002,
+        0.2439432,
+        0.2319186
+      ],
+      "optimized_samples_ms": [
+        0.1438576,
+        0.140311,
+        0.14489760000000002,
+        0.14296979999999998,
+        0.13919879999999998
+      ]
+    },
+    {
+      "case": "patches-1",
+      "baseline_ms": 0.9261714,
+      "optimized_ms": 0.9799561999999999,
+      "ratio": 1.0580721883659978,
+      "regression": true,
+      "equivalent": true,
+      "baseline_p95_ms": 0.9976534,
+      "optimized_p95_ms": 1.1619874,
+      "baseline_samples_ms": [
+        0.9976534,
+        1.0501978,
+        0.9261714,
+        0.8636444,
+        0.8768912
+      ],
+      "optimized_samples_ms": [
+        0.9096084,
+        1.167686,
+        0.9799561999999999,
+        1.1619874,
+        0.875168
+      ]
+    },
+    {
+      "case": "snapshot-1",
+      "baseline_ms": 0.8724328,
+      "optimized_ms": 0.8751578000000001,
+      "ratio": 1.0031234497373323,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 1.1038663999999998,
+      "optimized_p95_ms": 0.9581031999999999,
+      "baseline_samples_ms": [
+        0.8724328,
+        1.1334878000000002,
+        0.8224652,
+        1.1038663999999998,
+        0.8416692
+      ],
+      "optimized_samples_ms": [
+        0.8533108,
+        0.8388418000000001,
+        0.8751578000000001,
+        0.999595,
+        0.9581031999999999
+      ]
+    },
+    {
+      "case": "patches-4",
+      "baseline_ms": 0.9394904000000001,
+      "optimized_ms": 0.9914678,
+      "ratio": 1.0553250996497676,
+      "regression": true,
+      "equivalent": true,
+      "baseline_p95_ms": 0.9592856,
+      "optimized_p95_ms": 1.0028232,
+      "baseline_samples_ms": [
+        0.8966702,
+        0.9394904000000001,
+        0.9592856,
+        0.932936,
+        1.004997
+      ],
+      "optimized_samples_ms": [
+        0.9914678,
+        0.9596382,
+        1.0028232,
+        0.9522042,
+        1.0280804000000001
+      ]
+    },
+    {
+      "case": "snapshot-4",
+      "baseline_ms": 0.8466704,
+      "optimized_ms": 0.8317824,
+      "ratio": 0.9824158255680132,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.874098,
+      "optimized_p95_ms": 0.8381225999999999,
+      "baseline_samples_ms": [
+        0.874098,
+        0.8232946,
+        1.0211414,
+        0.8188424,
+        0.8466704
+      ],
+      "optimized_samples_ms": [
+        0.8629912,
+        0.8381225999999999,
+        0.8275665999999999,
+        0.8317824,
+        0.8254968
+      ]
+    },
+    {
+      "case": "patches-100",
+      "baseline_ms": 2.6484486,
+      "optimized_ms": 1.6314348,
+      "ratio": 0.6159963987973941,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 2.674403,
+      "optimized_p95_ms": 1.6669053999999999,
+      "baseline_samples_ms": [
+        2.6106356,
+        2.7590376,
+        2.6484486,
+        2.674403,
+        2.6424292
+      ],
+      "optimized_samples_ms": [
+        1.6669053999999999,
+        2.2075024,
+        1.616477,
+        1.6264316,
+        1.6314348
+      ]
+    },
+    {
+      "case": "snapshot-100",
+      "baseline_ms": 0.825633,
+      "optimized_ms": 0.830967,
+      "ratio": 1.0064604975818554,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 0.8449511999999999,
+      "optimized_p95_ms": 0.8408174,
+      "baseline_samples_ms": [
+        0.825633,
+        0.8228078000000001,
+        0.8449511999999999,
+        0.8059482,
+        0.8623878
+      ],
+      "optimized_samples_ms": [
+        0.8252464,
+        0.9001728,
+        0.8304501999999999,
+        0.8408174,
+        0.830967
+      ]
+    },
+    {
+      "case": "compact-one",
+      "baseline_ms": 1.401466,
+      "optimized_ms": 1.3960778,
+      "ratio": 0.9961553116522269,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 1.4100401999999999,
+      "optimized_p95_ms": 1.4483358,
+      "baseline_samples_ms": [
+        1.4115108,
+        1.3599862,
+        1.401466,
+        1.3775572,
+        1.4100401999999999
+      ],
+      "optimized_samples_ms": [
+        1.4536276000000001,
+        1.4483358,
+        1.3922148,
+        1.3814706,
+        1.3960778
+      ]
+    },
+    {
+      "case": "compact-frames",
+      "baseline_ms": 4.1357334,
+      "optimized_ms": 4.2877242,
+      "ratio": 1.0367506280748173,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 4.136595,
+      "optimized_p95_ms": 4.3530086,
+      "baseline_samples_ms": [
+        4.1174212,
+        4.1357334,
+        4.1695728,
+        4.136595,
+        4.0858018
+      ],
+      "optimized_samples_ms": [
+        4.2877242,
+        4.9053274,
+        4.2380712,
+        4.3530086,
+        4.1190762
+      ]
+    },
+    {
+      "case": "compact-end-aliases",
+      "baseline_ms": 4.0700664,
+      "optimized_ms": 2.2896242,
+      "ratio": 0.5625520507478698,
+      "regression": false,
+      "equivalent": true,
+      "baseline_p95_ms": 4.0763542,
+      "optimized_p95_ms": 2.3035922,
+      "baseline_samples_ms": [
+        4.0700664,
+        4.093253799999999,
+        4.0411362,
+        4.0404748,
+        4.0763542
+      ],
+      "optimized_samples_ms": [
+        2.2766178,
+        2.279417,
+        2.2896242,
+        2.3587778,
+        2.3035922
+      ]
+    }
+  ]
+}

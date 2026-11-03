@@ -39,6 +39,40 @@ const callout = id => container.querySelector(`[data-annotation-id="${id}"]`)
 const highlight = id => scene.getObjectByName(`Annotation highlight ${id}`)
 
 describe('annotation overlay', () => {
+  it('uses cluster glow geometry, configurable style and live target positions', () => {
+    const a = controller.add({ text: 'Glow', highlight: true, glowColor: '#00ff00', glowIntensity: 1.5,
+      refs: [{ kind: 'strand', id: 's1' }] })
+    overlay.update()
+    const glow = scene.getObjectByName(`Annotation glow ${a.id}`)
+    expect(glow.isInstancedMesh).toBe(true)
+    expect(glow.count).toBe(3)
+    expect(glow.material.blending).toBe(THREE.AdditiveBlending)
+    expect(glow.material.opacity).toBeCloseTo(0.675)
+    expect(glow.material.color.getHexString()).toBe('00ff00')
+    expect(highlight(a.id).visible).toBe(false)
+    entries[0].pos.x = 7
+    overlay.update()
+    const matrix = new THREE.Matrix4()
+    glow.getMatrixAt(0, matrix)
+    expect(matrix.elements[12]).toBe(7)
+    controller.update(a.id, { glowColor: '#ff0000', glowIntensity: 0 })
+    overlay.update()
+    expect(glow.material.color.getHexString()).toBe('ff0000')
+    expect(glow.material.opacity).toBe(0)
+    controller.update(a.id, { highlight: false })
+    overlay.update()
+    expect(scene.getObjectByName(`Annotation glow ${a.id}`)).toBeUndefined()
+    expect(highlight(a.id).material.opacity).toBe(0)
+    expect(callout(a.id).hidden).toBe(false)
+    expect(overlay.getRecord(a.id).hasAnchor).toBe(true)
+    controller.update(a.id, { color: '#123456', transparency: 0.5 })
+    overlay.update()
+    expect(highlight(a.id).material.opacity).toBe(0)
+    controller.update(a.id, { highlight: true, visible: false })
+    overlay.update()
+    expect(scene.getObjectByName(`Annotation glow ${a.id}`)).toBeUndefined()
+  })
+
   it('draws nothing until the entry has text or an icon', () => {
     const a = controller.add({ refs: [{ kind: 'strand', id: 's1' }] })
     overlay.update()
@@ -54,13 +88,15 @@ describe('annotation overlay', () => {
     expect(highlight(a.id)).toBeUndefined()
   })
 
-  it('highlights exactly the target beads in the entry colour, above depth', () => {
+  it('retains target positions for shared anchors without drawing a fallback highlight', () => {
     const a = controller.add({ text: 'hi', color: '#ff0000', refs: [{ kind: 'strand', id: 's1' }] })
     overlay.update()
     const pts = highlight(a.id)
     expect(pts.geometry.attributes.position.count).toBe(3)
     expect([...pts.geometry.attributes.position.array]).toEqual([-2, 0, 0, 0, 0, 0, 2, 0, 0])
     expect(pts.material.color.getHexString()).toBe('ff0000')
+    expect(pts.material.opacity).toBe(0)
+    expect(pts.material.depthWrite).toBe(false)
     expect(pts.material.depthTest).toBe(false)
     expect(pts.renderOrder).toBeGreaterThan(1000)
     expect(callout(a.id).style.getPropertyValue('--anno-color')).toBe('#ff0000')
@@ -160,8 +196,8 @@ describe('annotation overlay', () => {
       container, scene, controller, getCamera: () => camera, getEntries: () => entries, getDesign: () => ({}), getViewport: () => VIEW,
       resolveExternal: ref => spheres[ref.id] ?? null, getOccluders: () => Object.values(spheres),
     })
-    const n = controller.add({ text: 'gold', color: '#ffd700', refs: [{ kind: 'nanoparticle', id: 'n1' }] })
-    const p = controller.add({ icon: 'info', refs: [{ kind: 'protein', id: 'p1' }] })
+    const n = controller.add({ text: 'gold', highlight: true, color: '#ffd700', refs: [{ kind: 'nanoparticle', id: 'n1' }] })
+    const p = controller.add({ icon: 'info', highlight: true, refs: [{ kind: 'protein', id: 'p1' }] })
     overlay.update()
     for (const [id, s] of [[n.id, spheres.n1], [p.id, spheres.p1]]) {
       const halo = scene.getObjectByProperty('name', `Annotation halo ${id} ${id === n.id ? 'nanoparticle:n1' : 'protein:p1'}`)
@@ -175,6 +211,10 @@ describe('annotation overlay', () => {
       expect(rec.g.style.display).toBe('')
     }
     expect(scene.getObjectByName(`Annotation halo ${n.id} nanoparticle:n1`).material.color.getHexString()).toBe('ffd700')
+    controller.update(n.id, { highlight: false })
+    overlay.update()
+    expect(scene.getObjectByName(`Annotation halo ${n.id} nanoparticle:n1`).material.opacity).toBe(0)
+    expect(overlay.getRecord(n.id).hasAnchor).toBe(true)
     // A vanished element hides its halo and drops the leader.
     delete spheres.n1
     overlay.update()
@@ -186,12 +226,12 @@ describe('annotation overlay', () => {
     expect(scene.getObjectByName(`Annotation halo ${p.id} protein:p1`)).toBeUndefined()
   })
 
-  it('applies size and transparency to the callout, leader and highlight', () => {
+  it('applies size and transparency to the callout without reviving target shading', () => {
     const a = controller.add({ text: 'hi', refs: [{ kind: 'strand', id: 's1' }], size: 2, transparency: 0.5 })
     overlay.update()
     expect(callout(a.id).style.opacity).toBe('0.5')
     expect(callout(a.id).querySelector('.nadoc-anno__box').style.fontSize).toBe('26px')
-    expect(highlight(a.id).material.opacity).toBeCloseTo(0.425, 5)
+    expect(highlight(a.id).material.opacity).toBe(0)
   })
 
   it('hidden entries and disabled overlays draw nothing; removal cleans up', () => {

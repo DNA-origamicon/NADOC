@@ -1,0 +1,862 @@
+{
+  "title": "Gerling 2018 \u00b7 Table S1 \u00b7 42hb (1)-(3)",
+  "sheet": "42hb (1)-(3)",
+  "doi": "10.1126/sciadv.aau1157",
+  "source_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6097813/supplementaryFiles",
+  "workbook_sha256": "f2b31457717417ec2fcaeed65a2074f048ae6fb5c3f9f123127e14fc9fcffcf6",
+  "count": 213,
+  "sequences": [
+    {
+      "index": 1,
+      "sequence": "TTTTTTAGTTATGATATTTATAAATATTACGTAGATTTTACCAGCGCCAAATTAACGAACT"
+    },
+    {
+      "index": 2,
+      "sequence": "TTTTTGCGGTTAACAAACGGCGGATTGATTAAGCAAATAT"
+    },
+    {
+      "index": 3,
+      "sequence": "TTTTTCATCGTTGATGAATATACAGTAACATTATCAATATAT"
+    },
+    {
+      "index": 4,
+      "sequence": "TTTTTAATGTTTCTTTAGGAGCACTAACTTACGAATATAT"
+    },
+    {
+      "index": 5,
+      "sequence": "TTTTTAACTTTGTATCACCGTACTCAGGTTCCGTAATCAT"
+    },
+    {
+      "index": 6,
+      "sequence": "TTTTGCCATTACGACGATTCACTATCATAACCCTTCACATTCTTTTGCCCTT"
+    },
+    {
+      "index": 7,
+      "sequence": "TTTTCAGCGGAGTGAGTTAATCTCCTTAAGACAGTTTTAGACTCCT"
+    },
+    {
+      "index": 8,
+      "sequence": "TTTTAACGTCATTATGGCTTAGAGCTTAATT"
+    },
+    {
+      "index": 9,
+      "sequence": "TTTTAAATTTTACGGAGGATCCCCGGGTTTACCACAGACT"
+    },
+    {
+      "index": 10,
+      "sequence": "TTTGTATCATTAAAGCCAGAATGGAATTACAAATAAT"
+    },
+    {
+      "index": 11,
+      "sequence": "TTTCATAATTTGACGAGAAACACCAGAATTGAAGCCCGAT"
+    },
+    {
+      "index": 12,
+      "sequence": "TTTAGGCATTATATTTATTTAAGAAATTAATAACGTTCGGAAATTATTCATTTCCATTTGT"
+    },
+    {
+      "index": 13,
+      "sequence": "TTTACCCTGATTAATCCCCCTCAAATGCTTTGGAGACAGT"
+    },
+    {
+      "index": 14,
+      "sequence": "TTTACAGGTATTATAGAAAATTCATATGGTTTAAATACATAT"
+    },
+    {
+      "index": 15,
+      "sequence": "TTTAATGCCCCCTGCCTATTTCGGAATTTTGCTCAGTAT"
+    },
+    {
+      "index": 16,
+      "sequence": "TTTAATCATTGCGCGTTTTAACCGCCTTCTCCATGTTACTTATTGCGATTAT"
+    },
+    {
+      "index": 17,
+      "sequence": "TTTAAGAGTTCGAGTAGTTTCATCAGTTAGGAGCCTTAAACAACTTTCAACAGT"
+    },
+    {
+      "index": 18,
+      "sequence": "TTTAAAGGCCTTGTATCGGTTTATCAGCTTTTACAACATTAT"
+    },
+    {
+      "index": 19,
+      "sequence": "TTGTGAGTGATTTTGAAAGGAATTGAGGAAT"
+    },
+    {
+      "index": 20,
+      "sequence": "TTGCTGAATTTTTTCATTTGGGGCGCGTTAGCATGTAT"
+    },
+    {
+      "index": 21,
+      "sequence": "TTGATGAAATTGAAGTATTAGACTTTACTTCTGGAGTGAT"
+    },
+    {
+      "index": 22,
+      "sequence": "TTGAGGCGGTCAGTATTGCCAGCATTAACCTCATTTGGCAAATTCTGATTAT"
+    },
+    {
+      "index": 23,
+      "sequence": "TTGAGAAGTGTTTTTATTTTGCCCTTTTACTCGTCTTCAGGGCTTTAAATTTTT"
+    },
+    {
+      "index": 24,
+      "sequence": "TTGAATGGCTATTAGTTTTACCTCTTAGTGCGGTTCATTTGATTTTTGCCCT"
+    },
+    {
+      "index": 25,
+      "sequence": "TTCTGTATGGGATTTTGCTTTTTTAATTTTGCTTTTGT"
+    },
+    {
+      "index": 26,
+      "sequence": "TTCTGGAGCAAACAAGATTGGTCATTGCCTGAGAGT"
+    },
+    {
+      "index": 27,
+      "sequence": "TTCGTCTTTCCAGACGTTTAGGTGAATTCGGTCGCTTCCGTCGAT"
+    },
+    {
+      "index": 28,
+      "sequence": "TTCGAATTTTCAGGAAGTTGTCAATCTTTGAACGGTAATCGTTTAGAGATCTTTATGACCT"
+    },
+    {
+      "index": 29,
+      "sequence": "TTCCAGACGATTGTAGGTAAAACATGTAATTTATAGCTTT"
+    },
+    {
+      "index": 30,
+      "sequence": "TTCATATGCGTTATACAAATTTTGGGTTAT"
+    },
+    {
+      "index": 31,
+      "sequence": "TTCAGGCTGCTTGCCAGGGTTTTCCCAGTCTTGAACGTTATT"
+    },
+    {
+      "index": 32,
+      "sequence": "TTCACTGCCCGCTTTCCATTCTGAAAGT"
+    },
+    {
+      "index": 33,
+      "sequence": "TTCAAGAGAAGGATTATTTGCCATCTTT"
+    },
+    {
+      "index": 34,
+      "sequence": "TTCAAATCACTTATCATAATTACTAGAAATTCAAATCCAT"
+    },
+    {
+      "index": 35,
+      "sequence": "TTCAAAAATTCGATTTTTTGGGAAGATTTACCGATTTCGATCTAAAGTTTTGT"
+    },
+    {
+      "index": 36,
+      "sequence": "TTCAAAAAAGACGCTGAGATTAAAAATCTAAAATCATTTT"
+    },
+    {
+      "index": 37,
+      "sequence": "TTATTTTTGTTAATTAATGGTTTGAAATTTTCTTCTGACT"
+    },
+    {
+      "index": 38,
+      "sequence": "TTATAACTATATGTAAATTTAACGCCAT"
+    },
+    {
+      "index": 39,
+      "sequence": "TTAGATAATATTCCCTGCCATCTGTAAGCATTCACCGCCTGT"
+    },
+    {
+      "index": 40,
+      "sequence": "TTAATTTTAATTACGAGCACGTATAACGTGTTCCAGAATCCT"
+    },
+    {
+      "index": 41,
+      "sequence": "TTAATTGCTTCCCAGCATTTCAGGCCGATTAAAGGGT"
+    },
+    {
+      "index": 42,
+      "sequence": "TTAATGCAGTTATATATTTTAAATGCAATTCTGTAGCCAT"
+    },
+    {
+      "index": 43,
+      "sequence": "TTAAGTTTATTGAAACGCAAAGACACGTTTACCAGT"
+    },
+    {
+      "index": 44,
+      "sequence": "TTAAGAATTAGCAAATTCCAACAGTTGCGTTTTTTATAAGGCTTAACTAATT"
+    },
+    {
+      "index": 45,
+      "sequence": "TTAAACAGTTTACCAAGCGCGAAACAAAGTACAATTTCGAAATCCT"
+    },
+    {
+      "index": 46,
+      "sequence": "TTAAACAGGAATTACTATTAAAGAACGTGGT"
+    },
+    {
+      "index": 47,
+      "sequence": "TGTTTTTTTTCCATCATTCCGCGCTTTCGGGGAAAGCCGGCGAACT"
+    },
+    {
+      "index": 48,
+      "sequence": "TGTTTGCCTTTAGCCCGTTTCGCCCACGCATAACCGATATATTTTTTTCTTAAAT"
+    },
+    {
+      "index": 49,
+      "sequence": "TGTTAAATAATTAAACTTTTTCAAATATATTTTAGTTTTTTAATATT"
+    },
+    {
+      "index": 50,
+      "sequence": "TGTGGCGAGAAAGGATTACGCTGCTTCATATTCTTTCAACAGTTATAACCTTTCATAGCGT"
+    },
+    {
+      "index": 51,
+      "sequence": "TGTAGCGACATTGGCTCATTAAAATCACCATTTAGCTATCTTACGAATGAT"
+    },
+    {
+      "index": 52,
+      "sequence": "TGGTTTAATTTAGCAAAGCGGATTGCATCTTCAATACTGCT"
+    },
+    {
+      "index": 53,
+      "sequence": "TGGTGTAATTTTCGCCATTAAAAATACCTTCACACGACCT"
+    },
+    {
+      "index": 54,
+      "sequence": "TGGTCAATAATTCTTTCCTTATCATTCCAATTTTTGAATACT"
+    },
+    {
+      "index": 55,
+      "sequence": "TGGGGCCTTTTCCAGTGAGACGGGCAACTTCCAACGCT"
+    },
+    {
+      "index": 56,
+      "sequence": "TGGGCGCGTATTGAGGCCACCGAGTAAAAGAGTCTGTTCTTTTCATTGAATCGGT"
+    },
+    {
+      "index": 57,
+      "sequence": "TGGGCGCAGAACAATATTACCGCCAGTTCGTCTGAT"
+    },
+    {
+      "index": 58,
+      "sequence": "TGGCCTTCTTTGCCTGATTAAAGGCCTTTTAAACATTTAAGACTTTCAACCGATTGAGGGT"
+    },
+    {
+      "index": 59,
+      "sequence": "TGGCAAAATTGGAACCGAACTGACCAATTATCACCGGT"
+    },
+    {
+      "index": 60,
+      "sequence": "TGGATTCTTTCAAGAAATTAAATCGCTTAAGCGCCATTCGCCATT"
+    },
+    {
+      "index": 61,
+      "sequence": "TGGATTAGTTCGGGATCGTCACCCTCAGCAGCGATTAAAAAAAAGT"
+    },
+    {
+      "index": 62,
+      "sequence": "TGGATAAAAATTAGCGAGTAACAACCCGTCTTTTTGTTAAAT"
+    },
+    {
+      "index": 63,
+      "sequence": "TGGACGTTTTAAGAACTTTGAATCAATTGCCGCCATTCCTGATAAATTGTGT"
+    },
+    {
+      "index": 64,
+      "sequence": "TGGAATCGTCTTTCAACCGTTCTAGCTGATTTAAATAAGGCT"
+    },
+    {
+      "index": 65,
+      "sequence": "TGCTTTCATTTTCAGCTCATTTTTTAACTTCTCCTGGTTT"
+    },
+    {
+      "index": 66,
+      "sequence": "TGCTGGCGAAAGGGGTTCTCTTCGTTTTACATCTTCGAGAACTTAAACAACTTAACAAAGT"
+    },
+    {
+      "index": 67,
+      "sequence": "TGCTCCAAATTTTGAGATTTAGGAATACTTTCCACGGAAT"
+    },
+    {
+      "index": 68,
+      "sequence": "TGCGGGGAGAGGCGGTTTTTCACCAGTT"
+    },
+    {
+      "index": 69,
+      "sequence": "TGCGACCTGTTACCCTCAGAGCCACCACTTTTCCAGAGCT"
+    },
+    {
+      "index": 70,
+      "sequence": "TGCGACATTTTCCTTATTACGCAGTATGTTAGCAATTTTCATTGT"
+    },
+    {
+      "index": 71,
+      "sequence": "TGCCCTGAGATTAACCTGTCGTGCCAGCTGCATTAATT"
+    },
+    {
+      "index": 72,
+      "sequence": "TGCCCGTATTGAGGGTTGATATAAGTATTTTTAGCGTT"
+    },
+    {
+      "index": 73,
+      "sequence": "TGCCCAATTTGAGCCAGCATACCAGTCATTAGGGAAGGTAAATATTGAT"
+    },
+    {
+      "index": 74,
+      "sequence": "TGCAGCCTTTTAATATCCCATCCTAATTTTCTGTAATACT"
+    },
+    {
+      "index": 75,
+      "sequence": "TGCACTCATTTGGGAGAAACAATAACGGTTAATTACCTTT"
+    },
+    {
+      "index": 76,
+      "sequence": "TGCAAGGCGATTTTATCATTTTGCGGAACTTCCGCTACAT"
+    },
+    {
+      "index": 77,
+      "sequence": "TGAGGGGGTTAAATATCTTGTCAAAAATGAAAATAT"
+    },
+    {
+      "index": 78,
+      "sequence": "TGAGCCGCCATTAACAGCCATATTATTTATTTCATAAAAACT"
+    },
+    {
+      "index": 79,
+      "sequence": "TGACCCCCATTGCCGGAACGAGGCGCAGATTCCTCCCTCAT"
+    },
+    {
+      "index": 80,
+      "sequence": "TGAATACCCAAAAGAACTGGCATGATTTGTTCAGAT"
+    },
+    {
+      "index": 81,
+      "sequence": "TGAATACATTTTCTGAAACATGAAAGTATTAT"
+    },
+    {
+      "index": 82,
+      "sequence": "TGAACGAACCACCAGTTCTCCGAATTCTGACGCTTGGTTATCTTCCACCAGT"
+    },
+    {
+      "index": 83,
+      "sequence": "TGAAAGATTTTAAATTGTTCCCTTATTTGGAACCGTTCGGTCAATCATAAGT"
+    },
+    {
+      "index": 84,
+      "sequence": "TGAAACCAATTTCGAATTATTCATTTT"
+    },
+    {
+      "index": 85,
+      "sequence": "TCTTTGAAAGAGGACTTAAGGCACTTTGAGGAAT"
+    },
+    {
+      "index": 86,
+      "sequence": "TCTTGCTGTTGCAAATGTTAGAGTCATTGCTTAGGTTTTCTTACCAGTATAT"
+    },
+    {
+      "index": 87,
+      "sequence": "TCTTACCAACTTGTAATTGAGCGCTAATATTTGTAATTCTGT"
+    },
+    {
+      "index": 88,
+      "sequence": "TCTCTGACTTCAATAGGTTGCTGATGTTAAGCCTGTTTAGTATTGGGTGAGTTGTAATGTT"
+    },
+    {
+      "index": 89,
+      "sequence": "TCTCTATGATTGGTCCACGCTGGTTTGCTTGTTGCGCT"
+    },
+    {
+      "index": 90,
+      "sequence": "TCTCACATTTGGAAGCATTCACAATTCCACACATTACCGAGCTTGCTCGCCT"
+    },
+    {
+      "index": 91,
+      "sequence": "TCTATTATTTCGGGAGATTCCAGTTATTAAGTACGGTGTCTGGAT"
+    },
+    {
+      "index": 92,
+      "sequence": "TCTATTACGCAGGGTTAGAACCTACCTTACTTCTGT"
+    },
+    {
+      "index": 93,
+      "sequence": "TCTAATTTGTTATTAACTGAACACCCTGTTATGTTCAGCT"
+    },
+    {
+      "index": 94,
+      "sequence": "TCTAAATAACTAGCATTTATTGTATTTCCGTAATTTTTTGAGCAAAAGAAGAT"
+    },
+    {
+      "index": 95,
+      "sequence": "TCGGTACGTTCTTTCCTTTGGGCGAAAAACCGTCTATT"
+    },
+    {
+      "index": 96,
+      "sequence": "TCGGGGTTTTCCTATTATTCTAAAACACTCATCTTTT"
+    },
+    {
+      "index": 97,
+      "sequence": "TCGGAGATTTGTGCCTTGAGTAACAGTT"
+    },
+    {
+      "index": 98,
+      "sequence": "TCGCGAGATTGAATAAACACCGGATTCATCAATTTAACCCTCT"
+    },
+    {
+      "index": 99,
+      "sequence": "TCGCGAACTGTTCCAACAGAGATAGAACCCTTCTGACTTGTCGGGATTGAGTTGCT"
+    },
+    {
+      "index": 100,
+      "sequence": "TCGACAATTTAAGCAAGTTCCCAATTCTGCGAATTTCCATATTTAGCGTCTTTCCTCAGAT"
+    },
+    {
+      "index": 101,
+      "sequence": "TCCTTCATTTAGAGTACCTTTAATTGCTCT"
+    },
+    {
+      "index": 102,
+      "sequence": "TCCTGTTTAGCTATATTTATAATGTTCAAATAATTCACCACCTTTAGCGTTT"
+    },
+    {
+      "index": 103,
+      "sequence": "TCCGTGGGTTGAGAAGCTTTGCCGGATTGACTGGATTTATAAAATTTTTTGTCACAATCAT"
+    },
+    {
+      "index": 104,
+      "sequence": "TCCGGAAATTCGACGGCCAGTGCCAAGTTAATTCGACT"
+    },
+    {
+      "index": 105,
+      "sequence": "TCCCTCAGTTTTCATCGTTATAAGTGTTTGAGGCTTGCAGGGAGT"
+    },
+    {
+      "index": 106,
+      "sequence": "TCCCAATCTTCTGTAGCTCAACATGTTTTAAATATTTTTCGCAAATT"
+    },
+    {
+      "index": 107,
+      "sequence": "TCCATAAATTTCAGAGGTTGCTAACGTTAACAGTTGATTTTAGCGAT"
+    },
+    {
+      "index": 108,
+      "sequence": "TCCAGGCGGTTGCATTTTCGGTCATAGCCTTGGCTTGAGATT"
+    },
+    {
+      "index": 109,
+      "sequence": "TCCACACCCGTTCGCAAATTAACCGTTGTAGCAATACTTGGCCTTGT"
+    },
+    {
+      "index": 110,
+      "sequence": "TCATTAGATTAGTCAGATTTTCAACTTTTAACGGATTGCTTTCGTTTAGTAAATGAATTTT"
+    },
+    {
+      "index": 111,
+      "sequence": "TCATTACCTTCATCGATTTCAGCATTTTCTTGATATTCACAAT"
+    },
+    {
+      "index": 112,
+      "sequence": "TCATGACAAGAACCGTTAGACTTTTTCATCGGAT"
+    },
+    {
+      "index": 113,
+      "sequence": "TCATAAAGGTGGCAACATTTAGCGTCTTAAAAAGATTAGAATAAT"
+    },
+    {
+      "index": 114,
+      "sequence": "TCAGCTTGATTAAAATCTACGTTAATAATTGACAAAAGGT"
+    },
+    {
+      "index": 115,
+      "sequence": "TCAGACTGTATTTTGTGAATTACCTTATGTTTCAGGTCTT"
+    },
+    {
+      "index": 116,
+      "sequence": "TCAGAAGATAAAACAGAGGTTAATGGATTT"
+    },
+    {
+      "index": 117,
+      "sequence": "TCAATTTTTTCCGCCGCTTAGCAGCATTAGGTTTATTCACCCTCATTTTCT"
+    },
+    {
+      "index": 118,
+      "sequence": "TCAATTACCTGTTCGGCACCGCTTCTGGTGT"
+    },
+    {
+      "index": 119,
+      "sequence": "TCAAGTTACATTACAAAATTAATTACATTTTTAGCCGTCAAT"
+    },
+    {
+      "index": 120,
+      "sequence": "TCAACTAAATCGGAATTTGCTTTGTTAAGTTTGTTAGATTAGTTAACAATTTTAAATGTGT"
+    },
+    {
+      "index": 121,
+      "sequence": "TATTTTAGACAGGAATTAGCAAGCTTTACCGACTTGATAAAGTTGTAAACGTTAATTTCAT"
+    },
+    {
+      "index": 122,
+      "sequence": "TATTTCACATAAGCATCACTTCTGGTAATATCCCAGGGTGT"
+    },
+    {
+      "index": 123,
+      "sequence": "TATTTAGAGCTTGATTTAATGCGTTAAAGAAATTTAAAATATTGAAACAGT"
+    },
+    {
+      "index": 124,
+      "sequence": "TATTTACATTGGCAGATTTTGCGTATTT"
+    },
+    {
+      "index": 125,
+      "sequence": "TATTGTTTGGATTATTTATATCAATTAACGTCATTTAGGAATTTAGGTAAATTCAGAGAGT"
+    },
+    {
+      "index": 126,
+      "sequence": "TATTCTGGTTATAGCCCTAAAACATTGAGTAAATTGGTGGGCTTAACTAATT"
+    },
+    {
+      "index": 127,
+      "sequence": "TATTCGCCTTTTGGGAAGGGCGATCGGTGCGGGCTTGATGTGCTT"
+    },
+    {
+      "index": 128,
+      "sequence": "TATTCGCATTTTTAAGCTACGTGGTGCTTGTTTCTTTAATGT"
+    },
+    {
+      "index": 129,
+      "sequence": "TATCGCAAGACAAAGAATTTGTTAAATTCAACATTTTTCATTTGT"
+    },
+    {
+      "index": 130,
+      "sequence": "TATCCTCATCGTTCCAGAACCACCACCAGAGTTATCCTGAATT"
+    },
+    {
+      "index": 131,
+      "sequence": "TATAGCAATTGTAGCACTTGGAATTATTAGGAACCTTCATTCCACAGACAGCCCTCATT"
+    },
+    {
+      "index": 132,
+      "sequence": "TAGTTTCATTTCGAGTAGATTTAGTTTGTTCCAAGTACCT"
+    },
+    {
+      "index": 133,
+      "sequence": "TAGTTAGCGTAATTAGTTGCGCCGACAAGCAAT"
+    },
+    {
+      "index": 134,
+      "sequence": "TAGTAATAAAAGGGACTTGAATCGGTTAGCTGATT"
+    },
+    {
+      "index": 135,
+      "sequence": "TAGTAACATTTTAAGTTGGGTAACTTGCAACTGTTTGATTGCTTGAACGGGTTCTGTTTAT"
+    },
+    {
+      "index": 136,
+      "sequence": "TAGGGATATGACAACAACCATTGAATAGGTTGGGGTCAT"
+    },
+    {
+      "index": 137,
+      "sequence": "TAGGGAAGCGTTTCAACAATAGATAAGTCCTTTCAACGCAAT"
+    },
+    {
+      "index": 138,
+      "sequence": "TAGGAGAATTAGCTTTCTTAGGGGACTTCAGGCAAGGCAACGT"
+    },
+    {
+      "index": 139,
+      "sequence": "TAGCTGAAAAGGTGGTTTTTGCGGTTGGATTAGTTCAAGAGTAATCTAAT"
+    },
+    {
+      "index": 140,
+      "sequence": "TAGCGCAGTTGAGTGTACTGGTAATAAGT"
+    },
+    {
+      "index": 141,
+      "sequence": "TAGATTATAATTCGCGTCTTTTACATAATTGTACCTTT"
+    },
+    {
+      "index": 142,
+      "sequence": "TAGAGTCCTTAAGAATATTCTTAAGTGTCCTACTTCTTTCTCT"
+    },
+    {
+      "index": 143,
+      "sequence": "TAGAGGCTGCATTCAACCTAAAACGAAAGAT"
+    },
+    {
+      "index": 144,
+      "sequence": "TACGACGTTGTAAAATTCCAGGCATTGCAGAGGTTCAATAATTTGAAAAATTTTACAGAGT"
+    },
+    {
+      "index": 145,
+      "sequence": "TACCTCCCTTCTAAGAACGCGAGGCGTTTTCCGTTTTTAT"
+    },
+    {
+      "index": 146,
+      "sequence": "TACCGACCGTGTGATTTAAATTAATTCTTTATTTTTGAACAATTCGGCTGTT"
+    },
+    {
+      "index": 147,
+      "sequence": "TAATCGCCTTGAGGCATTTCGACAAATTCATTACCTTGCTTATCCGGTATTTTGACTTGCT"
+    },
+    {
+      "index": 148,
+      "sequence": "TACTCCAACGTCAAATTCGTTAGATTTAAATCCTTGGATTTATTCAAACATT"
+    },
+    {
+      "index": 149,
+      "sequence": "TAATCAGTTTCTATGGTTTCCCTAAAGGGAGCCCCCGT"
+    },
+    {
+      "index": 150,
+      "sequence": "TAATATTTTTTCGTAAGAATACGTGGATACGAGCCT"
+    },
+    {
+      "index": 151,
+      "sequence": "TAATAGTGCTGAATTTTCTGCCAGTTGGGATAGTTAAAACATTTTACAAAGT"
+    },
+    {
+      "index": 152,
+      "sequence": "TAATAATGGACATTAAGGAGCGGAATTATCATTTGCGTAACCAT"
+    },
+    {
+      "index": 153,
+      "sequence": "TAAGACTTCTTTAATAGTAAAATGTTTATTGAGGGTAGCT"
+    },
+    {
+      "index": 154,
+      "sequence": "TAACTCGTATTTATCAGAGCGGGAGCT"
+    },
+    {
+      "index": 155,
+      "sequence": "TAACGCGCTTTATTAAATTACCATTAGATACATTTGCAACTATTCAAAATAT"
+    },
+    {
+      "index": 156,
+      "sequence": "TAACCAGAGCTTGAAACGATTTTTTGT"
+    },
+    {
+      "index": 157,
+      "sequence": "TAAACGACGAAGCCCTTTTTTACAACGCCAGATTCAAAAT"
+    },
+    {
+      "index": 158,
+      "sequence": "TTTCTTTGTTAGCGGTCTTAGGGAAGAAAGCGAAAGGAGCGGGCGTTTTTTTTTT"
+    },
+    {
+      "index": 159,
+      "sequence": "TTGTACCATTGTCACGTTGGTGTAGATGGTTTTTTTTTT"
+    },
+    {
+      "index": 160,
+      "sequence": "TTGCTTCTTTCAGGTTTTTAATTATTTGCACGTAAAACAGAAATATTTTTTTTTT"
+    },
+    {
+      "index": 161,
+      "sequence": "TTCTAATCTTATCCTGTTTGATGGTGGTTTTTTTTTTTT"
+    },
+    {
+      "index": 162,
+      "sequence": "TTCAGTGATTAATTCGAGCTTCAAAGCGATTTTTTTTTT"
+    },
+    {
+      "index": 163,
+      "sequence": "TGTTTCCATTAAACGGGTAATTTTTTTTTT"
+    },
+    {
+      "index": 164,
+      "sequence": "TGTACCGCTTGATACAGTTTCTCTGAATTTACCGTTCCAGTAAGCTTTTTTTTTT"
+    },
+    {
+      "index": 165,
+      "sequence": "TGAATCGATTATATGTACCCCGGTTGATATTTTTTTTTT"
+    },
+    {
+      "index": 166,
+      "sequence": "TCGTTGAATTAATAGAAAGGAACAACTAAAGGAATTTTTTTTTTTT"
+    },
+    {
+      "index": 167,
+      "sequence": "TCGCACGATTGCCCGAGATAGGGTTGAGTTTTTTTTTTT"
+    },
+    {
+      "index": 168,
+      "sequence": "TATCCGCTTTTAAAGTGTAAAGCCTGGGGTTTTTTTTTT"
+    },
+    {
+      "index": 169,
+      "sequence": "TATAACCCTTCCAGCTATTGGGAGGTTTTGAAGCCTTAAATCAAGTTTTTTTTTT"
+    },
+    {
+      "index": 170,
+      "sequence": "TAGAGCAATTTAAAAACCAAAATAGCGAGTTTTTTTTTT"
+    },
+    {
+      "index": 171,
+      "sequence": "TACGAGGGTAGCAACGGCTATTTTTTTTTT"
+    },
+    {
+      "index": 172,
+      "sequence": "TAATCATATTGACGACAGTATCGGCCTCATTTTTTTTTT"
+    },
+    {
+      "index": 173,
+      "sequence": "TTTTTTTTTTTGGTTGTGAATTCATGTTTGGATGTTCTTCTAAGTTTTTTTTTT"
+    },
+    {
+      "index": 174,
+      "sequence": "TTTTTTTTTTTGCCTAATGAGTGAGCTAAT"
+    },
+    {
+      "index": 175,
+      "sequence": "TTTTTTTTTTTCAATATCTGGTCAGTTTAATATCAAACCCTCAATTTTTTTTTT"
+    },
+    {
+      "index": 176,
+      "sequence": "TTTTTTTTTTTAATTTTCCCTTAGAATCCTTATTTATCAAAATCATAGGTTTTTTTTTTT"
+    },
+    {
+      "index": 177,
+      "sequence": "TTTTTTTTTTTAACAAAGCTGCTCATTTATTACCCAAATCAACGTTTTTTTTTT"
+    },
+    {
+      "index": 178,
+      "sequence": "TTTTTTTTTTGTTGTTCCAGTTTGGAACAT"
+    },
+    {
+      "index": 179,
+      "sequence": "TTTTTTTTTTGTCATACATGGCTTTTGATTTCACCCTCAGAACCGCCACCTTTTTTTTTT"
+    },
+    {
+      "index": 180,
+      "sequence": "TTTTTTTTTTGTAGGGCTTAATTGAGTTAAGCCAACGCTCAACATTTTTTTTTT"
+    },
+    {
+      "index": 181,
+      "sequence": "TTTTTTTTTTGGAAGATCGCACTCCAGCCTTGCCAGGGT"
+    },
+    {
+      "index": 182,
+      "sequence": "TTTTTTTTTTGCGCATCGTAACCGTGCATTTGTCAACCT"
+    },
+    {
+      "index": 183,
+      "sequence": "TTTTTTTTTTGCGAATAATAATTTTTTCATTGCAGATAT"
+    },
+    {
+      "index": 184,
+      "sequence": "TTTTTTTTTTGCCTGAGTAGAAGAACTCATTAACAGGAAAAACGCTCATGTTTTTTTTTT"
+    },
+    {
+      "index": 185,
+      "sequence": "TTTTTTTTTTGCATTAACATCCAATATTTCTACTAATAGTAGTATTTTTTTTTT"
+    },
+    {
+      "index": 186,
+      "sequence": "TTTTTTTTTTGAAATACCTACATTTTGACGCTCAATTTCCATTGCTTAACTATCT"
+    },
+    {
+      "index": 187,
+      "sequence": "TTTTTTTTTTCTTTTGATAAGAGGTCATTTTCATCAATT"
+    },
+    {
+      "index": 188,
+      "sequence": "TTTTTTTTTTCTGAGAGACTACCTTTTTAACCTCCGTTATAGTGATTTTGAAAAT"
+    },
+    {
+      "index": 189,
+      "sequence": "TTTTTTTTTTCTCAGAACCGCCACCCTCATTCGTAACACTGAGTTTCGTCTTTTTTTTTT"
+    },
+    {
+      "index": 190,
+      "sequence": "TTTTTTTTTTCTAGGGCGCTGGCAAGTGTTTATTAGTAATAACATCACTTTTTTTTTTTT"
+    },
+    {
+      "index": 191,
+      "sequence": "TTTTTTTTTTCGCATAGGCTGGCTGATTCGGTGTACAGACCAGGTTTTTTTTTT"
+    },
+    {
+      "index": 192,
+      "sequence": "TTTTTTTTTTCCTGTGTGAAATTGTTTTATGGTCATAGCTGTTTTTTTTTTTTT"
+    },
+    {
+      "index": 193,
+      "sequence": "TTTTTTTTTTCCGTCACCGACTTGAGTTTAAAGGTGAATTATCATTTTTTTTTT"
+    },
+    {
+      "index": 194,
+      "sequence": "TTTTTTTTTTCCGAAATCGGCAAAATCCCTTATAAATTGGCGAAATTTATTTACT"
+    },
+    {
+      "index": 195,
+      "sequence": "TTTTTTTTTTCCAGAAGGAAACCGAGGAAACGCAATTTAGTAAGCTTCAATGAAT"
+    },
+    {
+      "index": 196,
+      "sequence": "TTTTTTTTTTCCAAAATAACCCCGCTTTTTATGACAATGTCCCGTTTTTTTTTT"
+    },
+    {
+      "index": 197,
+      "sequence": "TTTTTTTTTTCATCAATATAATCCTGTTTCAGATGATGGCAATTTTTTTTTTTT"
+    },
+    {
+      "index": 198,
+      "sequence": "TTTTTTTTTTCAGTGCCACGCTGAGATTTTAACACCGCCTGCAATTTTTTTTTT"
+    },
+    {
+      "index": 199,
+      "sequence": "TTTTTTTTTTCAGAGGCTTTGAGGACTAATTGATATTCT"
+    },
+    {
+      "index": 200,
+      "sequence": "TTTTTTTTTTCAATAATAAGAGCAAGAAATTAGATAGCCGAACAAAGTTATTTTTTTTTT"
+    },
+    {
+      "index": 201,
+      "sequence": "TTTTTTTTTTATTAGTTGCTATTTTGCACTTACAAGAATTGAGTTAAGCCTTTTTTTTTT"
+    },
+    {
+      "index": 202,
+      "sequence": "TTTTTTTTTTATTACGAGGCATAGTATTCATAACGCCAAAAGGATTTTTTTTTT"
+    },
+    {
+      "index": 203,
+      "sequence": "TTTTTTTTTTATCAGAAAAGCCCCAAAAATTCGTAATCT"
+    },
+    {
+      "index": 204,
+      "sequence": "TTTTTTTTTTATAAAGCTAAATCGGTTTAATAAAGCCTCAGAGCTTTTTTTTTT"
+    },
+    {
+      "index": 205,
+      "sequence": "TTTTTTTTTTAGGTCAGACGATTGGCTTGACAGGAGGTTGAGGCTTTTTTTTTT"
+    },
+    {
+      "index": 206,
+      "sequence": "TTTTTTTTTTAGGCTTTTGCAAAAGAAGTTTGCTATCAT"
+    },
+    {
+      "index": 207,
+      "sequence": "TTTTTTTTTTAGAGAATATAAAGTACTTTTTCGAGCCAGTAATATTTTTTTTTT"
+    },
+    {
+      "index": 208,
+      "sequence": "TTTTTTTTTTACGTCACCAATGAAACTTATTAGCAAGGCCGGAATTTTTTTTTT"
+    },
+    {
+      "index": 209,
+      "sequence": "TTTTTTTTTTACCAGTACAAACTACAACGCCTGTAGTTCATGTACTTGAGCCACT"
+    },
+    {
+      "index": 210,
+      "sequence": "TTTTTTTTTTACCAGACCGGAAGCAAACTTTATTAAGCT"
+    },
+    {
+      "index": 211,
+      "sequence": "TTTTTTTTTTAATACGTAATGCCACTACGTTAGATGAAT"
+    },
+    {
+      "index": 212,
+      "sequence": "TTTTTTTTTTAAGAAATTGCGTAGATTTTTTGTAAATCGTCGCTATTAATTTTTTTTTTT"
+    },
+    {
+      "index": 213,
+      "sequence": "TTTTTTTTTTAAATCAGATATAGAAGTTGCGCCCAATAGCAAGCTTTTTTTTTT"
+    }
+  ]
+}

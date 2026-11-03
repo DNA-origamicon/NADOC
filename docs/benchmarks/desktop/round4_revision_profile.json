@@ -1,0 +1,63 @@
+{
+  "scope": "CPU profile and compression screening; synthetic 24 helices / 1000 retained history entries. Compression alternatives are not implemented gains.",
+  "compression": [
+    {
+      "level": 9,
+      "compressed_bytes": 70188,
+      "raw_bytes": 6544259,
+      "median_ms": 10.573718987870961,
+      "samples_ms": [
+        10.639982006978244,
+        10.632107965648174,
+        10.573718987870961,
+        10.556718043517321,
+        10.519338015001267,
+        10.495662980247289,
+        10.465656989254057,
+        10.534966015256941,
+        11.174042010679841,
+        10.832041036337614,
+        13.869803980924189
+      ]
+    },
+    {
+      "level": 6,
+      "compressed_bytes": 70253,
+      "raw_bytes": 6544259,
+      "median_ms": 11.335533985402435,
+      "samples_ms": [
+        13.745100994128734,
+        13.733650033827871,
+        13.733609986957163,
+        11.113388987723738,
+        10.382961016148329,
+        10.386217967607081,
+        11.32195902755484,
+        12.132555013522506,
+        11.704272998031229,
+        11.335533985402435,
+        11.268288013525307
+      ]
+    },
+    {
+      "level": 3,
+      "compressed_bytes": 74235,
+      "raw_bytes": 6544259,
+      "median_ms": 4.946501983795315,
+      "samples_ms": [
+        5.256572971120477,
+        4.8727450193837285,
+        5.248847999610007,
+        4.856434999965131,
+        5.231826973613352,
+        4.991746973246336,
+        5.159871943760663,
+        4.946501983795315,
+        4.879947984591126,
+        4.661839979235083,
+        4.6066269860602915
+      ]
+    }
+  ],
+  "profile": "         66191 function calls (66187 primitive calls) in 0.981 seconds\n\n   Ordered by: cumulative time\n   List reduced from 262 to 30 due to restriction <30>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        5    0.000    0.000    0.981    0.196 project_revisions.py:213(commit)\n       15    0.865    0.058    0.865    0.058 {built-in method posix.fsync}\n        5    0.000    0.000    0.557    0.111 project_revisions.py:88(_atomic_bytes)\n       10    0.000    0.000    0.312    0.031 project_revisions.py:75(_atomic_json)\n        5    0.000    0.000    0.157    0.031 project_revisions.py:284(advance_branch)\n        5    0.000    0.000    0.054    0.011 gzip.py:602(compress)\n        5    0.054    0.011    0.054    0.011 {built-in method zlib.compress}\n        5    0.000    0.000    0.026    0.005 main.py:481(model_dump_json)\n        5    0.021    0.004    0.021    0.004 {method 'to_json' of 'pydantic_core._pydantic_core.SchemaSerializer' objects}\n        5    0.000    0.000    0.014    0.003 project_revisions.py:184(stage_design_inputs)\n        5    0.002    0.000    0.014    0.003 part_input_sources.py:154(portable_sources)\n       10    0.012    0.001    0.012    0.001 {built-in method _hashlib.openssl_sha256}\n     5000    0.001    0.000    0.010    0.000 part_overlay_commands.py:23(command_input)\n    15039    0.002    0.000    0.008    0.000 {built-in method builtins.getattr}\n     5000    0.003    0.000    0.007    0.000 main.py:999(__getattr__)\n       14    0.005    0.000    0.005    0.000 {method 'decode' of 'bytes' objects}\n     5007    0.002    0.000    0.004    0.000 {built-in method builtins.hasattr}\n     5000    0.002    0.000    0.002    0.000 part_input_sources.py:150(command_sources)\n     5001    0.001    0.000    0.002    0.000 _model_construction.py:284(__getattr__)\n        5    0.001    0.000    0.001    0.000 part_document_io.py:72(check_text)\n       50    0.001    0.000    0.001    0.000 {method 'encode' of 'str' objects}\n      135    0.000    0.000    0.001    0.000 pathlib.py:447(__fspath__)\n      139    0.000    0.000    0.001    0.000 pathlib.py:437(__str__)\n       15    0.000    0.000    0.001    0.000 tempfile.py:460(mkstemp)\n       15    0.000    0.000    0.001    0.000 tempfile.py:382(_mkstemp_inner)\n        5    0.000    0.000    0.001    0.000 project_revisions.py:563(read_revision)\n       15    0.001    0.000    0.001    0.000 {built-in method posix.replace}\n       88    0.000    0.000    0.001    0.000 pathlib.py:551(drive)\n       44    0.000    0.000    0.001    0.000 pathlib.py:407(_load_parts)\n       20    0.000    0.000    0.001    0.000 pathlib.py:1338(unlink)\n\n\n"
+}

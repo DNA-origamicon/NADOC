@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-22",
+  "reported_sequence": "Stick trajectory playback, Flex map, visualization Off; user observed retained displacement on desktop and VR",
+  "changes": [
+    "Reapply cached native atom data when returning to an unchanged representation",
+    "Retain design-invalidated native cache across simulation teardown instead of forcing a backend rebuild",
+    "Prevent a pending native fetch from repainting after another simulation takes ownership"
+  ],
+  "validation": {
+    "baseline": "Four new tests fail against HEAD atom_surface_display.js: three retain displaced coordinates and one permits late native repaint",
+    "fixed": "574 tests pass across atom_surface_display, atomistic_renderer, oxdna_display, md_jobs_panel, md_panel, vr_simulations and vr_simulation_trajectory",
+    "visual": {
+      "native_equals_restored": true,
+      "flex_differs": true,
+      "fetches": 1,
+      "positions": [
+        0,
+        0,
+        0,
+        0.30000001192092896,
+        0,
+        0,
+        0.15000000596046448,
+        0.44999998807907104,
+        0,
+        -0.10000000149011612,
+        0.25,
+        0,
+        0.44999998807907104,
+        0.30000001192092896,
+        0
+      ]
+    }
+  },
+  "artifact": ".development-artifacts/native-restore-review.png",
+  "limits": [
+    "Small synthetic model with production atom renderer and native restore module; full live-job UI sequence not replayed",
+    "No submitted-eye or physical headset validation"
+  ],
+  "prior_commit": "7332b277 pushed to origin/master; this follow-up remains uncommitted"
+}

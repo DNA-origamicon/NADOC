@@ -43,7 +43,12 @@ export function initDimensionPersistence({ store, transport, onRecords, onError 
     if (!ctx.id) return
     loading = true
     try { await transport.load(ctx.kind, ctx.id); receive() }
-    catch (error) { onError(error) }
+    catch (error) {
+      // A read started before close may finish after the backend was cleared.
+      // It says nothing about saving the current document.
+      const current = context()
+      if (!stopped && current.kind === ctx.kind && current.id === ctx.id) onError(error)
+    }
     finally { loading = false }
   }
   const unsubscribe = store.subscribe(receive)

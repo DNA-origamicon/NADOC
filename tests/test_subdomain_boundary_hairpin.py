@@ -23,9 +23,9 @@ Specifically:
        generate-random on the 5'-most. Asserts the middle's sequence is
        byte-identical before/after.
 
-4. ``test_regenerate_blocked_by_warning``
+4. ``test_regenerate_allowed_with_warning``
        Induces a hairpin_warning on a target sub-domain via an override,
-       then asserts POST /sub-domains/{sd_id}/generate-random returns 422.
+       then asserts regeneration replaces it instead of blocking the user.
 
 5. ``test_boundary_detection_clears_on_unrelated_patch``
        Induces a boundary hairpin, then patches the offending sub-domain to
@@ -192,8 +192,8 @@ def test_single_sub_domain_regenerate_preserves_locked_neighbors() -> None:
     assert len(sd_5p_after.sequence_override) == 8
 
 
-def test_regenerate_blocked_by_warning() -> None:
-    """generate-random must 422 when the target has an active warning."""
+def test_regenerate_allowed_with_warning() -> None:
+    """An existing warning must not prevent trying a replacement sequence."""
     design, ovhg_id = _extrude_overhang(_make_6hb(), length_bp=24)
     _load(design)
 
@@ -216,16 +216,13 @@ def test_regenerate_blocked_by_warning() -> None:
         "test fixture broken: expected sd_a to have an active warning"
     )
 
-    # generate-random on sd_a must now 422.
+    # Regeneration is allowed even while the existing sequence is flagged.
     resp = _post(
         f"/design/overhang/{ovhg_id}/sub-domains/{sd_a_now.id}/generate-random",
         {"seed": 7},
     )
-    assert resp.status_code == 422, resp.text
-    assert (
-        "hairpin" in resp.json().get("detail", "").lower()
-        or "dimer" in resp.json().get("detail", "").lower()
-    )
+    assert resp.status_code == 200, resp.text
+    assert _get_subdoms(ovhg_id)[0].sequence_override != sd_a_hairpin
 
 
 def test_boundary_detection_clears_on_unrelated_patch() -> None:

@@ -1,0 +1,4244 @@
+{
+  "date": "2026-10-21",
+  "implementation": "Lossless absolute Float32 display transforms against immutable full snapshot; persistent native mesh/index/group buffers and two fenced instance buffers. Source Float64, topology, molecular geometry and staging budget unchanged.",
+  "main_js_task_delta": 0,
+  "conditions": {
+    "saved_frames": true,
+    "smooth": false,
+    "desktop_3d_drawing": false,
+    "cpd_selection": "default 200 selected frames",
+    "24hb_selection": "four resident exact frames, loop enabled",
+    "streaming_defaults_rebenchmarked": false,
+    "headset_evidence": "submitted application stereo only; physical comfort pending MV-50",
+    "comparison": "Prior completed run in cpd_vr_hitches_20261021.json, not randomized simultaneous A/B",
+    "window_revision": "cpd-matrix ends before pause command; earlier attempts include pause acknowledgment in end timestamp. Threshold remains125ms."
+  },
+  "attempts": {
+    "cpd-probe": {
+      "note": "Failed transform-use gate for ballstick/VDW: equivalent cached vertex arrays had different identities. Corrected with exact bit comparison. Also corrected delta opaque eligibility before final native build.",
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599487275,
+            "end": 1792599499380,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 128,
+              "callbacks": 999,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 128,
+              "callbacks": 1732,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.3779296875,
+              "p95": 89.552734375,
+              "max": 100.52294921875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 146.717041015625,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.162292,
+              "p95": 11.451162,
+              "max": 13.815584
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.748544,
+              "p95": 0.887808,
+              "max": 4.088832
+            },
+            "native_transform_packets": 0,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 1105048,
+              "p95": 1105048,
+              "max": 1105048
+            },
+            "browser_transform_packets": 0,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.56701,
+              "p95": 1.755653,
+              "max": 1.816166
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.264916,
+              "p95": 0.344023,
+              "max": 0.468175
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.800048828125,
+              "max": 2.199951171875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.60009765625,
+              "p95": 11.199951171875,
+              "max": 32.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.10009765625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599508745,
+            "end": 1792599520853,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 128,
+              "callbacks": 2276,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 128,
+              "callbacks": 3009,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.466552734375,
+              "p95": 89.553955078125,
+              "max": 111.589111328125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 162.317138671875,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.158476,
+              "p95": 11.490386,
+              "max": 13.890033
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.449536,
+              "p95": 0.510976,
+              "max": 3.434496
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.788013,
+              "p95": 1.003125,
+              "max": 1.26189
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.041538,
+              "p95": 0.068618,
+              "max": 0.117409
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.400146484375,
+              "max": 1.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.699951171875,
+              "p95": 10.0,
+              "max": 38.10009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599530212,
+            "end": 1792599542318,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 128,
+              "callbacks": 3564,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 128,
+              "callbacks": 4296,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.4072265625,
+              "p95": 89.681640625,
+              "max": 111.821533203125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 158.69189453125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1083,
+              "p50": 11.158144,
+              "p95": 11.472512,
+              "max": 21.03357
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1083,
+              "p50": 0.80896,
+              "p95": 0.883712,
+              "max": 3.377152
+            },
+            "native_transform_packets": 0,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 572128,
+              "p95": 572128,
+              "max": 572128
+            },
+            "browser_transform_packets": 0,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.863845,
+              "p95": 1.136024,
+              "max": 1.310119
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.194003,
+              "p95": 0.275605,
+              "max": 0.488142
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 0.900146484375,
+              "p95": 1.300048828125,
+              "max": 1.60009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.5,
+              "p95": 10.300048828125,
+              "max": 38.599853515625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.900146484375,
+              "max": 1.2001953125
+            }
+          }
+        ]
+      },
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-_hlruufz",
+        "removed": true
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "85700608",
+            "memory.peak": "142880768",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "1147658240",
+            "memory.peak": "3640016896",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=8764\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=6595"
+          }
+        }
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2928467,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-95ug0ciu",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-1p4f1ujx"
+          ]
+        }
+      ],
+      "submitted_stereo": [
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3890,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 3,
+          "full_snapshots": 154,
+          "left_design_pixels": 92624,
+          "left_png_sha256": "07d45caba2698017e184c2f282a517b1f9f66240d71de0d9fe6df87b6678914e",
+          "right_design_pixels": 92599,
+          "right_png_sha256": "7c9598cc70455f1d5102a63fa038b15bc94dc667d2f9b6cd2ef19593d9d9ad42"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": false,
+            "eligibility_reason": "no_surface_geometry",
+            "last_color_opaque": false,
+            "opaque_color_scene_calls": 3910,
+            "legacy_color_scene_calls": 3756,
+            "ineligible_color_scene_calls": 3756,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 154,
+          "full_snapshots": 155,
+          "left_design_pixels": 55279,
+          "left_png_sha256": "621c46ea9e6d8907edd887e4ef38fe7706610a7c135255f2bef135a712a20fc0",
+          "right_design_pixels": 54762,
+          "right_png_sha256": "ccf3fb9718435159e0d88a21aebc713dfcc40c2460a7dd307899592eef6f4db8"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7676,
+            "legacy_color_scene_calls": 3768,
+            "ineligible_color_scene_calls": 3768,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 154,
+          "full_snapshots": 306,
+          "left_design_pixels": 135054,
+          "left_png_sha256": "90cf7ef815a5d17e054f9744f88a84dcfd90fff9835380cee0f08d962761878e",
+          "right_design_pixels": 137652,
+          "right_png_sha256": "a237bf5ac644bda1d1e29afc2cf897507a27360864e711868a685345853b3bd4"
+        }
+      ]
+    },
+    "cpd-final": {
+      "note": "First CPD app passed all3styles then wrapper metrics crashed on Steam startup output interleaving timestamp. New parser records invalid rows conservatively; recovered metrics retained. Final source audit not written by aborted wrapper.",
+      "metrics": {
+        "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599714553,
+            "end": 1792599726661,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 142,
+              "callbacks": 921,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 142,
+              "callbacks": 1654,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 84,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.345703125,
+              "p95": 89.533203125,
+              "max": 111.470703125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 153.644287109375,
+            "malformed_records": {
+              "frames": 2,
+              "gpu": 3,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.147018,
+              "p95": 11.459399,
+              "max": 13.476473
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.726016,
+              "p95": 0.86016,
+              "max": 3.068928
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.040958,
+              "p95": 1.249316,
+              "max": 1.281355
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.057307,
+              "p95": 0.089627,
+              "max": 0.11261
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.800048828125,
+              "max": 2.199951171875
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 1.0
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.89990234375,
+              "p95": 10,
+              "max": 32.599853515625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.099853515625,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599736033,
+            "end": 1792599748242,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 142,
+              "callbacks": 2209,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 142,
+              "callbacks": 2948,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.366943359375,
+              "p95": 89.639404296875,
+              "max": 91.0126953125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 187.052490234375,
+            "malformed_records": {
+              "frames": 2,
+              "gpu": 3,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1093,
+              "p50": 11.153223,
+              "p95": 11.473429,
+              "max": 13.648837
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1093,
+              "p50": 0.402432,
+              "p95": 0.52736,
+              "max": 2.89792
+            },
+            "native_transform_packets": 146,
+            "wire_bytes": {
+              "count": 147,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 147,
+            "parse_ms": {
+              "count": 146,
+              "p50": 0.830086,
+              "p95": 1.007797,
+              "max": 1.073028
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.047268,
+              "p95": 0.068968,
+              "max": 0.108301
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.099853515625,
+              "p95": 1.300048828125,
+              "max": 1.60009765625
+            },
+            "encode_ms": {
+              "count": 147,
+              "p50": 0.39990234375,
+              "p95": 0.599853515625,
+              "max": 0.900146484375
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 6.699951171875,
+              "p95": 10.699951171875,
+              "max": 22.900146484375
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.39990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792599757613,
+            "end": 1792599769719,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 142,
+              "callbacks": 3504,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 142,
+              "callbacks": 4237,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.360107421875,
+              "p95": 89.50927734375,
+              "max": 89.750244140625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 152.366455078125,
+            "malformed_records": {
+              "frames": 2,
+              "gpu": 3,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.156141,
+              "p95": 11.416366,
+              "max": 12.614176
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.78848,
+              "p95": 0.86528,
+              "max": 3.086336
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.226692,
+              "p95": 0.288608,
+              "max": 0.395165
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.024445,
+              "p95": 0.034234,
+              "max": 0.053941
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.5
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.599853515625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.10009765625,
+              "p95": 9.199951171875,
+              "max": 37.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.800048828125,
+              "max": 1.0
+            }
+          }
+        ]
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "85913600",
+            "memory.peak": "143433728",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "759463936",
+            "memory.peak": "3234553856",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2935098,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-rtuwrwxh",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-tyh4q0jl"
+          ]
+        }
+      ],
+      "submitted_stereo": [
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3798,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 152,
+          "full_snapshots": 5,
+          "left_design_pixels": 92752,
+          "left_png_sha256": "38236e880b5b05ada91da69db9de998c6de605dde5459dcf717fb720957168be",
+          "right_design_pixels": 92757,
+          "right_png_sha256": "5c88d85502e49b715012e68b1ec46ac6e2fedf4e36ac5612b0ecfc57ea1904a6"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7596,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 304,
+          "full_snapshots": 6,
+          "left_design_pixels": 54747,
+          "left_png_sha256": "c4510c028d1ab20b0df1c29ed19f7dce59989bbaea15f94634a18f258f364be0",
+          "right_design_pixels": 54325,
+          "right_png_sha256": "997a054b222f74e78f6bc7d256dc6a11a1e00b0e6735e4ab8592cc82a0f0dd7c"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 11372,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 454,
+          "full_snapshots": 7,
+          "left_design_pixels": 135305,
+          "left_png_sha256": "e60258237c9e89f74d9f09a66821492eaefd2910bac09bd3cfe56aecf05f7d41",
+          "right_design_pixels": 137859,
+          "right_png_sha256": "29a40bfdef56df246072432d468042e1b8d825cae582c9cf0e9e62adb727a05d"
+        }
+      ]
+    },
+    "cpd-validated": {
+      "note": "Single-job retry failed before playback: compositor initialization VRInitError_Init_NoServerForBackgroundApp. Private workspace cleaned.",
+      "metrics": {
+        "d6bcdef3d59f": []
+      },
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-00vcc_by",
+        "removed": true
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "82984960",
+            "memory.peak": "141025280",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "688861184",
+            "memory.peak": "2024660992",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "runtime_cleanup": [],
+      "submitted_stereo": []
+    },
+    "cpd-matrix": {
+      "note": "Final all-four-isomer run; corrected pause timing.",
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600532155,
+            "end": 1792600544156,
+            "pauseAcknowledged": 1792600544261,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 134,
+              "callbacks": 954,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 134,
+              "callbacks": 1687,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 102,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.436279296875,
+              "p95": 89.62890625,
+              "max": 179.272216796875
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 179.272216796875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.15618,
+              "p95": 11.438818,
+              "max": 12.509478
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.700416,
+              "p95": 0.828416,
+              "max": 3.105792
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.043388,
+              "p95": 1.377562,
+              "max": 1.553892
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.05361,
+              "p95": 0.06963,
+              "max": 0.106559
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.900146484375,
+              "max": 2.400146484375
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.699951171875,
+              "max": 0.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.89990234375,
+              "p95": 9.89990234375,
+              "max": 98.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.099853515625,
+              "max": 1.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600555141,
+            "end": 1792600567142,
+            "pauseAcknowledged": 1792600567247,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 134,
+              "callbacks": 2333,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 134,
+              "callbacks": 3066,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.467529296875,
+              "p95": 89.63330078125,
+              "max": 90.009765625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.009765625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.150891,
+              "p95": 11.472613,
+              "max": 13.910434
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.397312,
+              "p95": 0.44544,
+              "max": 2.8928
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.828467,
+              "p95": 1.025676,
+              "max": 1.304105
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.043521,
+              "p95": 0.063138,
+              "max": 0.095057
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.099853515625,
+              "p95": 1.400146484375,
+              "max": 1.800048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.39990234375,
+              "p95": 0.60009765625,
+              "max": 0.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.699951171875,
+              "p95": 9.89990234375,
+              "max": 12.300048828125
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600577127,
+            "end": 1792600589128,
+            "pauseAcknowledged": 1792600589233,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 134,
+              "callbacks": 3652,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 134,
+              "callbacks": 4385,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.3828125,
+              "p95": 89.606201171875,
+              "max": 100.56298828125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 100.56298828125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.147446,
+              "p95": 11.4282,
+              "max": 13.004644
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.779264,
+              "p95": 0.85504,
+              "max": 2.572288
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.227204,
+              "p95": 0.283339,
+              "max": 0.354251
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.025939,
+              "p95": 0.035836,
+              "max": 0.0536
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 0.900146484375,
+              "p95": 1.2998046875,
+              "max": 2.10009765625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.5,
+              "max": 0.699951171875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.199951171875,
+              "p95": 8.699951171875,
+              "max": 20.400146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.800048828125,
+              "max": 1.10009765625
+            }
+          }
+        ],
+        "972af34aa9c5": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600622729,
+            "end": 1792600634730,
+            "pauseAcknowledged": 1792600634836,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 46,
+              "callbacks": 1500,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 46,
+              "callbacks": 2233,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 88,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.384033203125,
+              "p95": 89.499267578125,
+              "max": 89.841552734375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.841552734375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.159339,
+              "p95": 11.423132,
+              "max": 13.880611
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.705536,
+              "p95": 0.83968,
+              "max": 2.855936
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.046414,
+              "p95": 1.316549,
+              "max": 1.44608
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.058519,
+              "p95": 0.090198,
+              "max": 0.110736
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.60009765625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 0.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.900146484375,
+              "p95": 9.60009765625,
+              "max": 10.5
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7998046875,
+              "p95": 1.0,
+              "max": 1.10009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600644181,
+            "end": 1792600656182,
+            "pauseAcknowledged": 1792600656290,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 46,
+              "callbacks": 2788,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 46,
+              "callbacks": 3520,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.428955078125,
+              "p95": 89.50732421875,
+              "max": 91.63525390625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 91.63525390625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.149882,
+              "p95": 11.472775,
+              "max": 19.389209
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.402432,
+              "p95": 0.45056,
+              "max": 3.514368
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.825632,
+              "p95": 1.027268,
+              "max": 1.05992
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.047849,
+              "p95": 0.069549,
+              "max": 0.091711
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.099853515625,
+              "p95": 1.400146484375,
+              "max": 2.60009765625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.39990234375,
+              "p95": 0.599853515625,
+              "max": 0.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.7001953125,
+              "p95": 9.699951171875,
+              "max": 10.89990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.199951171875,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600666177,
+            "end": 1792600678177,
+            "pauseAcknowledged": 1792600678284,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 46,
+              "callbacks": 4107,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 46,
+              "callbacks": 4840,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.483642578125,
+              "p95": 89.512939453125,
+              "max": 90.427734375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.427734375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.153489,
+              "p95": 11.450474,
+              "max": 13.578368
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.78336,
+              "p95": 0.856064,
+              "max": 3.436544
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.231613,
+              "p95": 0.287097,
+              "max": 0.439801
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.028373,
+              "p95": 0.038843,
+              "max": 0.065563
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.2001953125,
+              "max": 1.5
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.699951171875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.0,
+              "p95": 9.199951171875,
+              "max": 10.89990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.800048828125,
+              "max": 1.7001953125
+            }
+          }
+        ],
+        "37d39cc6b88f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600711531,
+            "end": 1792600723532,
+            "pauseAcknowledged": 1792600723639,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 1474,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 2207,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.517333984375,
+              "p95": 89.524658203125,
+              "max": 89.850830078125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.850830078125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.149002,
+              "p95": 11.470863,
+              "max": 12.907366
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.699392,
+              "p95": 0.82944,
+              "max": 2.85184
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.056523,
+              "p95": 1.288477,
+              "max": 1.554233
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.057277,
+              "p95": 0.073418,
+              "max": 0.116979
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.89990234375,
+              "max": 2.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.7998046875,
+              "max": 1.10009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.89990234375,
+              "p95": 9.60009765625,
+              "max": 29.800048828125
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7998046875,
+              "p95": 1.2001953125,
+              "max": 1.599853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600733015,
+            "end": 1792600745016,
+            "pauseAcknowledged": 1792600745122,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 2763,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 3496,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.390869140625,
+              "p95": 89.71240234375,
+              "max": 111.947998046875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 111.947998046875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.154683,
+              "p95": 11.458321,
+              "max": 13.201465
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.40448,
+              "p95": 0.451584,
+              "max": 2.778112
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.827605,
+              "p95": 1.048709,
+              "max": 1.161529
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.046116,
+              "p95": 0.058489,
+              "max": 0.099235
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.099853515625,
+              "p95": 1.300048828125,
+              "max": 1.7001953125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.39990234375,
+              "p95": 0.5,
+              "max": 0.60009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.800048828125,
+              "p95": 9.7001953125,
+              "max": 33.599853515625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 0.900146484375,
+              "max": 1.2001953125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600755000,
+            "end": 1792600767001,
+            "pauseAcknowledged": 1792600767109,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 4082,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 4815,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.416015625,
+              "p95": 89.622314453125,
+              "max": 90.0185546875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.0185546875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.157559,
+              "p95": 11.443072,
+              "max": 13.897176
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.795648,
+              "p95": 0.866304,
+              "max": 3.325952
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.227474,
+              "p95": 0.28883,
+              "max": 0.393565
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.026059,
+              "p95": 0.036208,
+              "max": 0.069449
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.2001953125,
+              "max": 1.599853515625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.2998046875,
+              "p95": 9.300048828125,
+              "max": 24.900146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.89990234375,
+              "max": 1.10009765625
+            }
+          }
+        ],
+        "9b08bed08561": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600801068,
+            "end": 1792600813069,
+            "pauseAcknowledged": 1792600813175,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 47,
+              "callbacks": 1478,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 47,
+              "callbacks": 2211,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.439208984375,
+              "p95": 89.54150390625,
+              "max": 100.489013671875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 100.489013671875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.155817,
+              "p95": 11.466037,
+              "max": 13.40615
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.694272,
+              "p95": 0.822272,
+              "max": 2.817024
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.070088,
+              "p95": 1.327048,
+              "max": 1.510432
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.05901,
+              "p95": 0.089427,
+              "max": 0.136565
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2,
+              "max": 2.60009765625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.800048828125,
+              "max": 1.0
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.89990234375,
+              "p95": 10.39990234375,
+              "max": 13.199951171875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.800048828125,
+              "p95": 1.10009765625,
+              "max": 1.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600822027,
+            "end": 1792600834027,
+            "pauseAcknowledged": 1792600834133,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 47,
+              "callbacks": 2736,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 47,
+              "callbacks": 3468,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.396484375,
+              "p95": 89.51171875,
+              "max": 89.912353515625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.912353515625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.154976,
+              "p95": 11.45183,
+              "max": 13.725496
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.410624,
+              "p95": 0.475136,
+              "max": 2.061312
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.827075,
+              "p95": 1.021158,
+              "max": 1.303615
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.047188,
+              "p95": 0.067877,
+              "max": 0.091681
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.10009765625,
+              "p95": 1.5,
+              "max": 2.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.39990234375,
+              "p95": 0.60009765625,
+              "max": 1.0
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.60009765625,
+              "p95": 9.599853515625,
+              "max": 11.60009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 0.900146484375,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792600844485,
+            "end": 1792600856486,
+            "pauseAcknowledged": 1792600856593,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 47,
+              "callbacks": 4083,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 47,
+              "callbacks": 4816,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.43359375,
+              "p95": 89.519775390625,
+              "max": 90.33935546875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.33935546875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 1,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.148965,
+              "p95": 11.474072,
+              "max": 17.138051
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.782336,
+              "p95": 0.857088,
+              "max": 2.981888
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.239087,
+              "p95": 0.289231,
+              "max": 0.302035
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.030547,
+              "p95": 0.03753,
+              "max": 0.054341
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.39990234375,
+              "max": 1.699951171875
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.60009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.300048828125,
+              "p95": 8.599853515625,
+              "max": 11.60009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.900146484375,
+              "max": 1.2001953125
+            }
+          }
+        ]
+      },
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        },
+        {
+          "job": "972af34aa9c5",
+          "passed": true
+        },
+        {
+          "job": "37d39cc6b88f",
+          "passed": true
+        },
+        {
+          "job": "9b08bed08561",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792518029911711961
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+            5671532276,
+            1792518021769776761
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+            5671712276,
+            1792519017247410041
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-fgm125n3",
+        "removed": true
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "82071552",
+            "memory.peak": "139771904",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "1138348032",
+            "memory.peak": "3740905472",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        },
+        "972af34aa9c5": {
+          "before": {
+            "memory.current": "1184714752",
+            "memory.peak": "3740905472",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "2443452416",
+            "memory.peak": "5164949504",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        },
+        "37d39cc6b88f": {
+          "before": {
+            "memory.current": "2448232448",
+            "memory.peak": "5164949504",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "3677351936",
+            "memory.peak": "6444380160",
+            "memory.events": "low 0\nhigh 9\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=276\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=276"
+          }
+        },
+        "9b08bed08561": {
+          "before": {
+            "memory.current": "3720847360",
+            "memory.peak": "6444380160",
+            "memory.events": "low 0\nhigh 9\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=276\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=276"
+          },
+          "after": {
+            "memory.current": "3950641152",
+            "memory.peak": "6444445696",
+            "memory.events": "low 0\nhigh 671\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=6352\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=6352"
+          }
+        }
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2994082,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-fe3up4lb",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-0xyy0mca"
+          ]
+        },
+        {
+          "pid": 2990934,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-8xgdu_0_",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-sa485rnr"
+          ]
+        },
+        {
+          "pid": 2984550,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-shhuitee",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-57ou_t38"
+          ]
+        },
+        {
+          "pid": 2987758,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-k3gqja7v",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-xa1xvs75"
+          ]
+        }
+      ],
+      "submitted_stereo": [
+        {
+          "path": "9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3912,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 152,
+          "full_snapshots": 5,
+          "left_design_pixels": 86765,
+          "left_png_sha256": "54e1482098b8a86792bfb6b8045f7fa54e108edf4a0e570e3cbf7be0d94c7c7e",
+          "right_design_pixels": 90225,
+          "right_png_sha256": "61f8c8017d82e732eafa7c2a1faab5eba75d9070e7c6f6d379b5c8194e523681"
+        },
+        {
+          "path": "9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7600,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 303,
+          "full_snapshots": 6,
+          "left_design_pixels": 52935,
+          "left_png_sha256": "f661dad9982b40fd43041f8466cf4d72776714f86694ee958f32b20832ad48ee",
+          "right_design_pixels": 54167,
+          "right_png_sha256": "bf49632e5d2cb7405a838cdcebb807a9b18f865c2072feadb5e7005d3154359a"
+        },
+        {
+          "path": "9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 11558,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 453,
+          "full_snapshots": 7,
+          "left_design_pixels": 129769,
+          "left_png_sha256": "3ffb56cdcd2553c47550ea618587f2ab68388c28616475bec1b9ec912c7e4377",
+          "right_design_pixels": 134222,
+          "right_png_sha256": "e19919c2d69f7f814ed5d82f13914ec60eb0003a12bce41a033da1261c7c66a3"
+        },
+        {
+          "path": "37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3970,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 152,
+          "full_snapshots": 5,
+          "left_design_pixels": 90733,
+          "left_png_sha256": "d599385c92d4f5fe3dbafa8f04871358ccd4caff082f06a701f630243dc6fa94",
+          "right_design_pixels": 93154,
+          "right_png_sha256": "3dd5291d9c8dbba883fbd1cd13aab2487215ebe4eb0880124698de89eadb967b"
+        },
+        {
+          "path": "37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7752,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 303,
+          "full_snapshots": 6,
+          "left_design_pixels": 55954,
+          "left_png_sha256": "48c2ff013efedf1ab98c0a0061be72e626a5144945c45fa256827ddd5904fde3",
+          "right_design_pixels": 56717,
+          "right_png_sha256": "29a8909ebe5f5a95541c59bac075a31489e3c5beb7c4b5f9524901fa98c270db"
+        },
+        {
+          "path": "37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 11620,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 453,
+          "full_snapshots": 7,
+          "left_design_pixels": 123438,
+          "left_png_sha256": "bc661502ff8300e949eecd941d01b948d693ef927a402ca562a324112f3a9e09",
+          "right_design_pixels": 128504,
+          "right_png_sha256": "656c83f9420503785c4537825cd10ae7ba710c5da5c2bbdfaa18221c324f4e18"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3822,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 152,
+          "full_snapshots": 5,
+          "left_design_pixels": 92734,
+          "left_png_sha256": "7360ede3dea22748a9c76ffe9da5c3270ffcb8d4af3f64a4ad6aeb308b4e5caf",
+          "right_design_pixels": 92677,
+          "right_png_sha256": "9fbd1b5ff7d8adb6e1a7afd4c95223d6008ed949e28cf925b7847bf43ed6758a"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7872,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 303,
+          "full_snapshots": 6,
+          "left_design_pixels": 55447,
+          "left_png_sha256": "5714c5bf542b73be3f81f983920302a04479c1cb8089e78b27210cefd9c9f1ac",
+          "right_design_pixels": 54806,
+          "right_png_sha256": "faebfe43702d89b2b924a47812430f7759e511a71a215a7657ef2d2a45f7418f"
+        },
+        {
+          "path": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 11740,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 453,
+          "full_snapshots": 7,
+          "left_design_pixels": 135251,
+          "left_png_sha256": "81c5a33786fa2698ab51f28dce6002a54214b0a108995d52a7dc126a9741eeb1",
+          "right_design_pixels": 137825,
+          "right_png_sha256": "22e1f59d8ed5c7596571e0b2d46e1b9f67215c6fad0ddaf63af271310d83e938"
+        },
+        {
+          "path": "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 3854,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 152,
+          "full_snapshots": 5,
+          "left_design_pixels": 90889,
+          "left_png_sha256": "79ea4c1c2db842a48038ee28228dbf130ab7d36e26f35541b2e109d9c9d946ed",
+          "right_design_pixels": 94897,
+          "right_png_sha256": "65e9781f80ea50d27f1ee0c6a82ee8d9ac13d491ab185228d0845ad3e944dbb2"
+        },
+        {
+          "path": "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7628,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 303,
+          "full_snapshots": 6,
+          "left_design_pixels": 55902,
+          "left_png_sha256": "e3d48880ec008a4258f94bb4f2b834a4efe747b9c5ec8f4e53a9b2b746030ed3",
+          "right_design_pixels": 57093,
+          "right_png_sha256": "b353ea9f8af66b852eed6fdb2cc30f441da74573361a537407e2ba5fa7b85e50"
+        },
+        {
+          "path": "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 11498,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 453,
+          "full_snapshots": 7,
+          "left_design_pixels": 125162,
+          "left_png_sha256": "61679f6b14e5c4104581d68db9645f247be79f2017211b6642b95829b434a96c",
+          "right_design_pixels": 132374,
+          "right_png_sha256": "fb74d32318582e68d8226fcfe9419f058ae907f0dcf4d04cf57ff63f89180670"
+        }
+      ]
+    },
+    "large-resident": {
+      "note": "Both24HBjobs passed app gates; allsixwindows resident; old pause-inclusive boundary timestamps retained.",
+      "metrics": {
+        "2f281ba1a83a": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599931143,
+            "end": 1792599943295,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 116,
+              "callbacks": 1240,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 116,
+              "callbacks": 1779,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 120,
+            "gap_p50": 98,
+            "gap_p95": 148,
+            "gap_max": 163,
+            "coordinateRequests": 0,
+            "viewUploads": 67,
+            "submitted_scene_gap_ms": {
+              "count": 67,
+              "p50": 167.646484375,
+              "p95": 234.490966796875,
+              "max": 234.731201171875
+            },
+            "scene_gaps_over_125ms": 66,
+            "scene_window_max_gap_ms": 234.731201171875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 362,
+              "p50": 33.494518,
+              "p95": 33.785388,
+              "max": 39.504752
+            },
+            "native_frames_over_16_67ms": 362,
+            "gpu_ms": {
+              "count": 362,
+              "p50": 27.44832,
+              "p95": 28.947456,
+              "max": 31.00672
+            },
+            "native_transform_packets": 67,
+            "wire_bytes": {
+              "count": 68,
+              "p50": 23855400,
+              "p95": 23855400,
+              "max": 23855400
+            },
+            "browser_transform_packets": 68,
+            "parse_ms": {
+              "count": 67,
+              "p50": 73.597179,
+              "p95": 78.369917,
+              "max": 82.554973
+            },
+            "upload_gl_ms": {
+              "count": 67,
+              "p50": 2.915144,
+              "p95": 4.237229,
+              "max": 4.704798
+            },
+            "long_tasks_ms": [
+              75,
+              70,
+              73,
+              65,
+              71,
+              65,
+              65,
+              69,
+              71,
+              68,
+              68,
+              67,
+              61,
+              76,
+              57,
+              72,
+              70,
+              73,
+              74,
+              80,
+              75,
+              70,
+              72,
+              57,
+              77,
+              66,
+              73,
+              68,
+              68,
+              67,
+              69,
+              66,
+              68,
+              69,
+              66,
+              71,
+              69,
+              69,
+              69,
+              67,
+              60,
+              78,
+              57,
+              74,
+              65,
+              72,
+              66,
+              65,
+              66,
+              68,
+              66,
+              58,
+              73,
+              66,
+              70,
+              66,
+              68,
+              70,
+              57,
+              74,
+              58,
+              73,
+              67,
+              69,
+              68,
+              68,
+              69,
+              87
+            ],
+            "capture_ms": {
+              "count": 68,
+              "p50": 48.10009765625,
+              "p95": 58.0,
+              "max": 62.89990234375
+            },
+            "encode_ms": {
+              "count": 68,
+              "p50": 18.89990234375,
+              "p95": 23.0,
+              "max": 38.099853515625
+            },
+            "upload_ms": {
+              "count": 68,
+              "p50": 108.89990234375,
+              "p95": 150.7998046875,
+              "max": 170.39990234375
+            },
+            "apply_ms": {
+              "count": 121,
+              "p50": 21.0,
+              "p95": 30.60009765625,
+              "max": 32.89990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599956481,
+            "end": 1792599968713,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 116,
+              "callbacks": 2463,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 116,
+              "callbacks": 2978,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 111,
+            "gap_p50": 109,
+            "gap_p95": 127,
+            "gap_max": 133,
+            "coordinateRequests": 0,
+            "viewUploads": 111,
+            "submitted_scene_gap_ms": {
+              "count": 112,
+              "p50": 111.740234375,
+              "p95": 133.9462890625,
+              "max": 145.192138671875
+            },
+            "scene_gaps_over_125ms": 11,
+            "scene_window_max_gap_ms": 145.192138671875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1081,
+              "p50": 11.158741,
+              "p95": 12.770004,
+              "max": 22.533743
+            },
+            "native_frames_over_16_67ms": 15,
+            "gpu_ms": {
+              "count": 1081,
+              "p50": 4.729856,
+              "p95": 6.792192,
+              "max": 7.278592
+            },
+            "native_transform_packets": 112,
+            "wire_bytes": {
+              "count": 112,
+              "p50": 22205452,
+              "p95": 22205452,
+              "max": 22205452
+            },
+            "browser_transform_packets": 112,
+            "parse_ms": {
+              "count": 112,
+              "p50": 57.983103,
+              "p95": 64.80688,
+              "max": 76.479468
+            },
+            "upload_gl_ms": {
+              "count": 112,
+              "p50": 2.526318,
+              "p95": 3.126568,
+              "max": 3.377616
+            },
+            "long_tasks_ms": [
+              54,
+              52,
+              64,
+              58,
+              55,
+              52,
+              53,
+              58,
+              51,
+              60,
+              55,
+              77,
+              62,
+              64,
+              62,
+              61,
+              59,
+              60,
+              65,
+              53,
+              60,
+              53,
+              50,
+              52,
+              55,
+              52,
+              59,
+              53,
+              50,
+              58,
+              58,
+              58,
+              59,
+              52,
+              59,
+              56,
+              52,
+              54,
+              60,
+              54,
+              62,
+              54,
+              56,
+              52,
+              58,
+              51,
+              53,
+              61,
+              60,
+              61,
+              64,
+              57,
+              59,
+              57,
+              54,
+              54,
+              59,
+              51,
+              59,
+              52,
+              51,
+              60,
+              61,
+              59,
+              63,
+              53,
+              61,
+              55,
+              51,
+              54,
+              56,
+              50,
+              59,
+              53,
+              52,
+              61,
+              59,
+              59,
+              61,
+              57,
+              61,
+              61,
+              56,
+              57,
+              54,
+              54,
+              53,
+              57,
+              52,
+              62,
+              55,
+              52,
+              59,
+              60,
+              64,
+              59,
+              54
+            ],
+            "capture_ms": {
+              "count": 112,
+              "p50": 38.60009765625,
+              "p95": 46.7998046875,
+              "max": 48.900146484375
+            },
+            "encode_ms": {
+              "count": 112,
+              "p50": 15.5,
+              "p95": 20.2998046875,
+              "max": 40.699951171875
+            },
+            "upload_ms": {
+              "count": 112,
+              "p50": 60.699951171875,
+              "p95": 65.800048828125,
+              "max": 68.5
+            },
+            "apply_ms": {
+              "count": 112,
+              "p50": 23.900146484375,
+              "p95": 30.10009765625,
+              "max": 33.099853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599975080,
+            "end": 1792599987187,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 116,
+              "callbacks": 3307,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 116,
+              "callbacks": 4040,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 85,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 67.080078125,
+              "p95": 100.824951171875,
+              "max": 134.367431640625
+            },
+            "scene_gaps_over_125ms": 3,
+            "scene_window_max_gap_ms": 134.367431640625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 361,
+              "p50": 33.489581,
+              "p95": 33.736902,
+              "max": 33.986621
+            },
+            "native_frames_over_16_67ms": 361,
+            "gpu_ms": {
+              "count": 361,
+              "p50": 22.508544,
+              "p95": 23.400448,
+              "max": 24.669184
+            },
+            "native_transform_packets": 146,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 1650288,
+              "p95": 1650288,
+              "max": 1650288
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 146,
+              "p50": 15.049225,
+              "p95": 15.761052,
+              "max": 18.08849
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.634573,
+              "p95": 0.955491,
+              "max": 1.364223
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 11.900146484375,
+              "p95": 13.39990234375,
+              "max": 16.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 2.39990234375,
+              "p95": 3.5,
+              "max": 6.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 11.300048828125,
+              "p95": 15.300048828125,
+              "max": 20.199951171875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 11.39990234375,
+              "p95": 13.599853515625,
+              "max": 15.10009765625
+            }
+          }
+        ],
+        "8466ccc17eff": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599837813,
+            "end": 1792599849948,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 264,
+              "callbacks": 1473,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 264,
+              "callbacks": 2019,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 112,
+            "gap_p50": 102,
+            "gap_p95": 156,
+            "gap_max": 479,
+            "coordinateRequests": 0,
+            "viewUploads": 67,
+            "submitted_scene_gap_ms": {
+              "count": 66,
+              "p50": 167.640380859375,
+              "p95": 234.533203125,
+              "max": 335.1689453125
+            },
+            "scene_gaps_over_125ms": 66,
+            "scene_window_max_gap_ms": 335.1689453125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 361,
+              "p50": 33.489805,
+              "p95": 33.754118,
+              "max": 66.828777
+            },
+            "native_frames_over_16_67ms": 361,
+            "gpu_ms": {
+              "count": 361,
+              "p50": 26.48576,
+              "p95": 27.8272,
+              "max": 50.59072
+            },
+            "native_transform_packets": 66,
+            "wire_bytes": {
+              "count": 67,
+              "p50": 23855400,
+              "p95": 23855400,
+              "max": 23855400
+            },
+            "browser_transform_packets": 67,
+            "parse_ms": {
+              "count": 66,
+              "p50": 72.830706,
+              "p95": 78.184131,
+              "max": 98.581035
+            },
+            "upload_gl_ms": {
+              "count": 66,
+              "p50": 2.933725,
+              "p95": 3.862474,
+              "max": 4.619765
+            },
+            "long_tasks_ms": [
+              70,
+              68,
+              55,
+              75,
+              65,
+              56,
+              70,
+              70,
+              73,
+              69,
+              75,
+              71,
+              75,
+              96,
+              68,
+              101,
+              67,
+              65,
+              68,
+              68,
+              58,
+              76,
+              73,
+              76,
+              79,
+              63,
+              66,
+              56,
+              74,
+              72,
+              65,
+              67,
+              71,
+              57,
+              75,
+              66,
+              68,
+              71,
+              65,
+              66,
+              66,
+              65,
+              67,
+              67,
+              66,
+              70,
+              66,
+              65,
+              67,
+              69,
+              68,
+              65,
+              68,
+              66,
+              67,
+              69,
+              58,
+              75,
+              57,
+              76,
+              66,
+              76,
+              65,
+              67,
+              68,
+              69,
+              66
+            ],
+            "capture_ms": {
+              "count": 67,
+              "p50": 47.199951171875,
+              "p95": 57.0,
+              "max": 60.5
+            },
+            "encode_ms": {
+              "count": 67,
+              "p50": 19.39990234375,
+              "p95": 24.39990234375,
+              "max": 54.699951171875
+            },
+            "upload_ms": {
+              "count": 67,
+              "p50": 108.39990234375,
+              "p95": 153.199951171875,
+              "max": 390.300048828125
+            },
+            "apply_ms": {
+              "count": 119,
+              "p50": 20.199951171875,
+              "p95": 30.300048828125,
+              "max": 34.10009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599862682,
+            "end": 1792599875144,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 264,
+              "callbacks": 2676,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 264,
+              "callbacks": 3207,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 107,
+            "gap_p50": 111,
+            "gap_p95": 129,
+            "gap_max": 349,
+            "coordinateRequests": 0,
+            "viewUploads": 105,
+            "submitted_scene_gap_ms": {
+              "count": 107,
+              "p50": 111.802001953125,
+              "p95": 134.152099609375,
+              "max": 368.708984375
+            },
+            "scene_gaps_over_125ms": 13,
+            "scene_window_max_gap_ms": 368.708984375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1116,
+              "p50": 11.157938,
+              "p95": 11.510866,
+              "max": 16.590181
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1116,
+              "p50": 4.948992,
+              "p95": 6.99392,
+              "max": 7.65952
+            },
+            "native_transform_packets": 107,
+            "wire_bytes": {
+              "count": 106,
+              "p50": 22205452,
+              "p95": 22205452,
+              "max": 22205452
+            },
+            "browser_transform_packets": 106,
+            "parse_ms": {
+              "count": 107,
+              "p50": 57.351141,
+              "p95": 60.736055,
+              "max": 68.952132
+            },
+            "upload_gl_ms": {
+              "count": 107,
+              "p50": 2.290518,
+              "p95": 2.995931,
+              "max": 3.198079
+            },
+            "long_tasks_ms": [
+              62,
+              55,
+              59,
+              56,
+              51,
+              55,
+              61,
+              53,
+              52,
+              55,
+              55,
+              52,
+              59,
+              53,
+              52,
+              56,
+              59,
+              59,
+              62,
+              53,
+              60,
+              60,
+              64,
+              64,
+              59,
+              56,
+              59,
+              55,
+              50,
+              54,
+              60,
+              50,
+              60,
+              54,
+              55,
+              51,
+              58,
+              58,
+              57,
+              61,
+              62,
+              54,
+              51,
+              57,
+              52,
+              51,
+              59,
+              58,
+              60,
+              59,
+              62,
+              61,
+              57,
+              51,
+              61,
+              64,
+              50,
+              58,
+              61,
+              58,
+              59,
+              56,
+              57,
+              54,
+              51,
+              54,
+              62,
+              57,
+              52,
+              53,
+              55,
+              51,
+              293,
+              54,
+              52,
+              59,
+              58,
+              61,
+              60,
+              54,
+              58,
+              55,
+              50,
+              53,
+              56,
+              50,
+              59,
+              53,
+              51,
+              61,
+              59
+            ],
+            "capture_ms": {
+              "count": 106,
+              "p50": 38.400146484375,
+              "p95": 46.10009765625,
+              "max": 48.599853515625
+            },
+            "encode_ms": {
+              "count": 106,
+              "p50": 15.300048828125,
+              "p95": 20.2998046875,
+              "max": 248.800048828125
+            },
+            "upload_ms": {
+              "count": 106,
+              "p50": 61.599853515625,
+              "p95": 69.099853515625,
+              "max": 230.60009765625
+            },
+            "apply_ms": {
+              "count": 110,
+              "p50": 23.300048828125,
+              "p95": 30.199951171875,
+              "max": 33.89990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792599881961,
+            "end": 1792599894068,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 264,
+              "callbacks": 3565,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 264,
+              "callbacks": 4297,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 86,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 67.534912109375,
+              "p95": 100.731689453125,
+              "max": 134.028076171875
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 134.028076171875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 361,
+              "p50": 33.489832,
+              "p95": 33.702981,
+              "max": 34.742947
+            },
+            "native_frames_over_16_67ms": 361,
+            "gpu_ms": {
+              "count": 361,
+              "p50": 22.193152,
+              "p95": 23.47008,
+              "max": 25.295872
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 1650288,
+              "p95": 1650288,
+              "max": 1650288
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 15.102712,
+              "p95": 15.970007,
+              "max": 16.499255
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.636666,
+              "p95": 1.074933,
+              "max": 1.305072
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 11.89990234375,
+              "p95": 13.2998046875,
+              "max": 13.7001953125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 2.39990234375,
+              "p95": 3.39990234375,
+              "max": 20.599853515625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 11.10009765625,
+              "p95": 16.300048828125,
+              "max": 19.89990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 11.300048828125,
+              "p95": 13.599853515625,
+              "max": 15.0
+            }
+          }
+        ]
+      },
+      "result": [
+        {
+          "job": "8466ccc17eff",
+          "passed": true
+        },
+        {
+          "job": "2f281ba1a83a",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/job.json": "8f2d26cce68f09d3109b72ed881238940e393a7522f47af37b24c4dab6a55f67",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/design.json": "4389e67244cc95b7c27cc6cfc2ef7b384a2b15eb7e951f9db48a04e01ad851af",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_300K_NPT_ENM_k0p5_p10.dcd": [
+            196054100,
+            1791446098516404932
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_04_300K_NPT_MGHH_only_p10.dcd": [
+            49013812,
+            1791488260627813339
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_0S_300K_NPT_settle_fixed_dna_p100.dcd": [
+            1470403956,
+            1791446318260159729
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-b6c5co_7",
+        "removed": true
+      },
+      "resources": {
+        "8466ccc17eff": {
+          "before": {
+            "memory.current": "1583767552",
+            "memory.peak": "2100318208",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=50009\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=50009"
+          },
+          "after": {
+            "memory.current": "841940992",
+            "memory.peak": "6444531712",
+            "memory.events": "low 0\nhigh 825\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=71549\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=71536"
+          }
+        },
+        "2f281ba1a83a": {
+          "before": {
+            "memory.current": "906379264",
+            "memory.peak": "6444531712",
+            "memory.events": "low 0\nhigh 825\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=71549\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=71536"
+          },
+          "after": {
+            "memory.current": "981372928",
+            "memory.peak": "6444531712",
+            "memory.events": "low 0\nhigh 1004\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=72476\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=72457"
+          }
+        }
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2942567,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-quyhjitl",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-lwomwpup"
+          ]
+        },
+        {
+          "pid": 2939447,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-f0prm2ku",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-egre8wpf"
+          ]
+        }
+      ],
+      "submitted_stereo": [
+        {
+          "path": "2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 1984,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 71,
+          "full_snapshots": 5,
+          "left_design_pixels": 107891,
+          "left_png_sha256": "870f6ff31a6151289d5b11dbd16c6bb869bc0c693f07b88327f4470f628d712b",
+          "right_design_pixels": 106292,
+          "right_png_sha256": "c291c6275de611d5b8baed4cd5e4a63308830f55529d5ff5aa2da9ecbe5caca0"
+        },
+        {
+          "path": "2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 5880,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 189,
+          "full_snapshots": 6,
+          "left_design_pixels": 83172,
+          "left_png_sha256": "7f130c8de9b2a8b5248526e7788e1f0eddc175dd61b6428a4c17df8d82c480e6",
+          "right_design_pixels": 82220,
+          "right_png_sha256": "22fcd23eb33fd8fd9cbd4e1ce65a9c2a806e783831e36dd665f05d145d534de9"
+        },
+        {
+          "path": "2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7110,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 339,
+          "full_snapshots": 7,
+          "left_design_pixels": 123072,
+          "left_png_sha256": "bf1ff80f8044324351193077977988ba43d42c5b9b671c73e0c8a4eb25c9a956",
+          "right_design_pixels": 121043,
+          "right_png_sha256": "22078f2150f7f1556c793f382e5450f8cb124bdaf917f53fda92f662f3e4d1d5"
+        },
+        {
+          "path": "8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 2236,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 72,
+          "full_snapshots": 5,
+          "left_design_pixels": 100099,
+          "left_png_sha256": "20c0e096f925e1a5323738ebadc22a118fb42364b3b39e75c61e0ec9be881da1",
+          "right_design_pixels": 99224,
+          "right_png_sha256": "384ff20a22771f125e9cb21cf4897486f4d2da556f79d17f12484d57fcd03788"
+        },
+        {
+          "path": "8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 6082,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 184,
+          "full_snapshots": 6,
+          "left_design_pixels": 79238,
+          "left_png_sha256": "2ea88cbdc7cd60ba4acf0886560c6ff751c87101e26501d4e06fb933d283ffbf",
+          "right_design_pixels": 78697,
+          "right_png_sha256": "569f93b2f2a20797e7501b96bd8b67ff65530708fc21627c94595148c8565d14"
+        },
+        {
+          "path": "8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw/evidence.json",
+          "source": "application_swapchain",
+          "xr_end_frame_succeeded": true,
+          "opaque_shader": {
+            "requested": true,
+            "default_enabled": true,
+            "selection_source": "default",
+            "program_available": true,
+            "program_reason": "available",
+            "eligible": true,
+            "eligibility_reason": "eligible",
+            "last_color_opaque": true,
+            "opaque_color_scene_calls": 7326,
+            "legacy_color_scene_calls": 0,
+            "ineligible_color_scene_calls": 0,
+            "program_unavailable_color_scene_calls": 0,
+            "legacy_shadow_scene_calls": 0,
+            "lines_sprites_panels": "always_legacy",
+            "primitive_order": "unchanged"
+          },
+          "transform_updates": 334,
+          "full_snapshots": 7,
+          "left_design_pixels": 112307,
+          "left_png_sha256": "65e91773fca748abf95cd99843640af88cdc6507bdf3fd62d4305ff32e283e19",
+          "right_design_pixels": 110928,
+          "right_png_sha256": "418cfb262da159d6d13a0eb194bd20885f47c8d6fca16aba54351707a61bd899"
+        }
+      ]
+    }
+  },
+  "checks": {
+    "frontend-full": {
+      "log_sha256": "5d2e1c26b939787e279cbc5685de061c27c20d2b4dbd8f933e361a8d337712ce",
+      "failures": [],
+      "summary": [
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > reports an existing failed source load to later waiters and clears the error on an explicit rebuild",
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "stdout | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "stderr | src/scene/assembly_renderer_shared.reuse.test.js > shared assembly source reuse > lets readiness subscribe before a rebuild and rejects failed or disposed work",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        "[ssdna_fjc] lookup load failed; ss bridges will fall back to Bezier: TypeError: Failed to parse URL from /api/ssdna-fjc-lookup",
+        " Test Files  725 passed (725)",
+        "      Tests  8389 passed | 1 skipped (8390)"
+      ]
+    },
+    "frontend-corrected": {
+      "log_sha256": "935765f197de30a49a659bd2724fba074fe5bdfc34ad198bf6bc4a8ec1d5e71e",
+      "failures": [],
+      "summary": [
+        " Test Files  3 passed (3)",
+        "      Tests  15 passed (15)"
+      ]
+    },
+    "python-final": {
+      "log_sha256": "83233cfec5b4537e73548d7cb878c9652111ba0bca9df3e3e0fec7faef223f6f",
+      "failures": [],
+      "summary": [
+        "============================== 9 passed in 1.42s ===============================",
+        "============================== 11 passed in 1.42s ==============================",
+        "============================== 7 passed in 2.40s ===============================",
+        "============================== 4 passed in 1.34s ===============================",
+        "error: Recipe `test-focused` failed on line 105 with exit code 2"
+      ]
+    },
+    "python-delivery": {
+      "log_sha256": "83e111102db1ca0f8b4a2672ca3941385910e447fc489d63d84071c86e258a00",
+      "failures": [],
+      "summary": [
+        "============================== 12 passed in 1.46s =============================="
+      ]
+    },
+    "tours-final": {
+      "log_sha256": "17f50242f768d8fab89ab1e470f4eefb9ae21bc9bded4f6cef9f06fab1dfab75",
+      "failures": [],
+      "summary": [
+        "======================= 50 passed, 36 warnings in 1.55s ========================"
+      ]
+    },
+    "native-final": {
+      "log_sha256": "9eea6c50eedca48a13bedd8fd0bb1673723070c443dbbaafd53254ca8c2f67ad",
+      "failures": [],
+      "summary": [
+        "100% tests passed, 0 tests failed out of 2"
+      ]
+    },
+    "backend-smart": {
+      "log_sha256": "3f53328e890396cef84e3ec00859217ad23e12833b9d25dcc4df3654cd5599d2",
+      "failures": [
+        "FAILED tests/test_oxdna_relaxation.py::test_run_job_recovers_from_production_explosion",
+        "FAILED tests/test_oxdna_relaxation.py::test_run_job_recovers_from_md_relax_bp_melt",
+        "FAILED tests/test_oxdna_relaxation.py::test_run_job_fails_after_exhausting_melt_retries",
+        "FAILED tests/test_oxdna_relaxation.py::test_runner_gate_fails_on_melted - Ass...",
+        "FAILED tests/test_headless_oxdna_build.py::test_run_relaxation_completes_and_recovers_geometry",
+        "FAILED tests/test_headless_oxdna_build.py::test_create_then_start_two_step - ...",
+        "FAILED tests/test_headless_oxdna_build.py::test_display_route_surfaces_extra_bases",
+        "FAILED tests/test_headless_oxdna_build.py::test_display_route_surfaces_extension_tails",
+        "FAILED tests/test_headless_oxdna_build.py::test_append_production_after_completion",
+        "FAILED tests/test_headless_oxdna_build.py::test_run_field_spawns_child_field_job",
+        "FAILED tests/test_headless_oxdna_build.py::test_run_config_persisted_for_panel_cards",
+        "FAILED tests/test_headless_oxdna_build.py::test_run_field_allows_no_anchor - ...",
+        "FAILED tests/test_headless_oxdna_build.py::test_field_validation_oracle_passes_with_deflecting_mock",
+        "FAILED tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+        "FAILED tests/test_headless_oxdna_build.py::test_build_field_specimen_sequences_an_unsequenced_design",
+        "FAILED tests/test_headless_oxdna_build.py::test_build_field_specimen_from_build_spec",
+        "FAILED tests/test_md_health_reporting.py::TestAdoptedRunIsGuarded::test_ticks_while_the_adopted_process_lives",
+        "FAILED tests/test_md_health_reporting.py::TestAdoptedRunIsGuarded::test_a_raising_probe_cannot_kill_the_run_it_watches",
+        "FAILED tests/test_headless_oxdna_build.py::test_oracle_fires_on_wrong_count",
+        "FAILED tests/test_headless_oxdna_build.py::test_field_ready_oracle_fires_on_empty_anchor",
+        "FAILED tests/test_headless_oxdna_build.py::test_equilibration_timeline_extracts_finite_tau",
+        "FAILED tests/test_headless_oxdna_build.py::test_equilibration_timeline_inconclusive_on_short_run",
+        "FAILED tests/test_headless_oxdna_build.py::test_relaxed_measurement_fires_without_production",
+        "FAILED tests/test_headless_oxdna_build.py::test_run_oxdna_benchmark_then_apply_then_relax",
+        "FAILED tests/test_headless_oxdna_build.py::test_iterate_oracle_fires_on_vacuous_convergence",
+        "FAILED tests/test_headless_oxdna_build.py::test_relaxed_measurement_inter_helix_spacing_fires_on_wrong_target",
+        "FAILED tests/test_headless_oxdna_build.py::test_steer_field_session_follows_a_waypoint_path",
+        "FAILED tests/test_headless_oxdna_build.py::test_steer_field_session_magnitude_per_waypoint",
+        "FAILED tests/test_headless_oxdna_build.py::test_steer_field_session_rejects_empty_waypoints",
+        "FAILED tests/test_md_cutoff.py::test_early_stop_skips_remaining_chunks - Asse...",
+        "FAILED tests/test_md_cutoff.py::test_flag_off_runs_every_chunk - AssertionErr...",
+        "FAILED tests/test_md_cutoff.py::test_runner_consumes_midrun_override - Assert...",
+        "FAILED tests/test_md_cutoff.py::test_peg_runner_uses_real_metric_decision_and_preserves_restart_chain[flat-True-True-False]",
+        "FAILED tests/test_md_cutoff.py::test_peg_runner_uses_real_metric_decision_and_preserves_restart_chain[drift-True-False-False]",
+        "FAILED tests/test_md_cutoff.py::test_peg_runner_uses_real_metric_decision_and_preserves_restart_chain[flat-False-False-False]",
+        "FAILED tests/test_md_cutoff.py::test_peg_runner_uses_real_metric_decision_and_preserves_restart_chain[missing_energy-True-False-True]",
+        "FAILED tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[adsorption]",
+        "FAILED tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[biotin_tether]",
+        "FAILED tests/test_namd_input_provenance.py::test_old_jobs_never_backfilled_on_read",
+        "FAILED tests/test_md_runner_proceeds.py::test_fresh_job_marches_to_completed",
+        "FAILED tests/test_md_runner_proceeds.py::test_wc_only_breach_warns_and_continues",
+        "FAILED tests/test_md_runner_proceeds.py::test_c1_breach_warns_and_continues",
+        "FAILED tests/test_md_runner_proceeds.py::test_resume_clears_stale_error_and_uses_checkpoint",
+        "FAILED tests/test_md_runner_proceeds.py::test_cell_shrink_auto_resumes_instead_of_failing",
+        "FAILED tests/test_md_runner_proceeds.py::test_cell_shrink_gives_up_after_resume_cap",
+        "FAILED tests/test_md_runner_proceeds.py::test_host_oom_auto_resumes_without_a_checkpoint",
+        "FAILED tests/test_md_runner_proceeds.py::test_host_oom_gives_up_after_resume_cap",
+        "FAILED tests/test_md_runner_proceeds.py::test_instability_softens_ladder_and_resumes",
+        "FAILED tests/test_md_runner_proceeds.py::test_instability_gives_up_after_resume_cap",
+        "FAILED tests/test_md_runner_proceeds.py::test_instability_on_an_already_soft_segment_fails_without_looping",
+        "FAILED tests/test_md_runner_proceeds.py::test_rerun_on_completed_job_is_idempotent",
+        "FAILED tests/test_md_runner_proceeds.py::test_an_accepted_cpu_reroute_runs_without_asking_again",
+        "FAILED tests/test_md_runner_proceeds.py::test_gpu_safe_geometry_stays_on_cuda_build",
+        "FAILED tests/test_scadnano.py::test_manual_photoproduct_round_trip_preserves_ordered_and_legacy_identity",
+        "FAILED tests/test_photoproduct_api.py::test_http_atomistic_exports_fail_closed_for_product_design",
+        "FAILED tests/test_vr_scene_refresh.py::test_publish_empty_and_cleanup - OSErr...",
+        "FAILED tests/test_vr_scene_refresh.py::test_concurrent_edit_during_snapshot_retains_prior_scene",
+        "FAILED tests/test_vr_scene_refresh.py::test_autosave_during_export_publishes_once_at_acknowledged_revision",
+        "FAILED tests/test_vr_scene_refresh.py::test_concurrent_same_identity_edit_during_export_is_rejected",
+        "FAILED tests/test_run_dir.py::test_forecast_recommends_archive_only_when_tight",
+        "ERROR tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+        "ERROR tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+        "ERROR tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+        "ERROR tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry"
+      ],
+      "summary": [
+        "E         + failed",
+        "        RUNNING (resumable) with the per-segment resume counter bumped \u2014 not failed \u2014",
+        "E       AssertionError: assert <MdStatus.failed: 'failed'> == <MdStatus.running: 'running'>",
+        "E         + failed",
+        "        assert final.status == MdStatus.failed",
+        "        assert final.segments[0].status == \"failed\"",
+        "E       AssertionError: assert <MdStatus.failed: 'failed'> == <MdStatus.running: 'running'>",
+        "E         + failed",
+        "        assert final.status == MdStatus.failed",
+        "        assert final.segments[0].status == \"failed\"",
+        "E       AssertionError: assert <MdStatus.failed: 'failed'> == <MdStatus.running: 'running'>",
+        "E         + failed",
+        "        assert final.status == MdStatus.failed",
+        "        assert final.segments[0].status == \"failed\"",
+        "        assert final.status == MdStatus.failed",
+        "E       AssertionError: assert <MdStatus.failed: 'failed'> == <MdStatus.com...: 'completed'>",
+        "E         + failed",
+        "  /home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/XDR.py:310: UserWarning: seek failed, recalculating offsets and retrying",
+        "    warnings.warn(\"seek failed, recalculating offsets and retrying\")",
+        "ERROR tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+        "ERROR tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+        "ERROR tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+        "ERROR tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry",
+        "= 60 failed, 14605 passed, 92 skipped, 2712 warnings, 4 errors in 111.37s (0:01:51) =",
+        "error: Recipe `test-smart` failed on line 86 with exit code 1"
+      ]
+    },
+    "backend-archive": {
+      "log_sha256": "4f6d06f30c080f06014bf37889680433c6f741af5145d6cbf0dd457160fb07dc",
+      "failures": [
+        "FAILED tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[adsorption]",
+        "FAILED tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[biotin_tether]",
+        "FAILED tests/test_namd_input_provenance.py::test_old_jobs_never_backfilled_on_read",
+        "FAILED tests/test_scadnano.py::test_manual_photoproduct_round_trip_preserves_ordered_and_legacy_identity",
+        "FAILED tests/test_photoproduct_api.py::test_http_atomistic_exports_fail_closed_for_product_design",
+        "ERROR tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+        "ERROR tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+        "ERROR tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+        "ERROR tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry"
+      ],
+      "summary": [
+        "decision: FAST  (fast suite only)",
+        "  DEFERRED: this change would have needed the FULL suite, but no test-dedicated",
+        "            if not audit[\"passed\"]:",
+        "            if not audit[\"passed\"]:",
+        "            if not audit[\"passed\"]:",
+        "            if not audit[\"passed\"]:",
+        "  /home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/XDR.py:310: UserWarning: seek failed, recalculating offsets and retrying",
+        "    warnings.warn(\"seek failed, recalculating offsets and retrying\")",
+        "ERROR tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+        "ERROR tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+        "ERROR tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+        "ERROR tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry",
+        "= 5 failed, 14660 passed, 92 skipped, 2713 warnings, 4 errors in 134.77s (0:02:14) =",
+        "error: Recipe `test-smart` failed on line 86 with exit code 1"
+      ]
+    },
+    "triage-creation": {
+      "log_sha256": "ad0caed1a96a50bb9b1585485ecd61441f99ec761861851ce22e7cbc9a4f56ea",
+      "failures": [],
+      "summary": [
+        "============================== 1 passed in 3.53s ==============================="
+      ]
+    },
+    "triage-identity": {
+      "log_sha256": "47b23dca4bc1e117bd40531d1d07b83c41dd4bdf16f9400b8b3f5b61c670d206",
+      "failures": [],
+      "summary": [
+        "========================= 1 passed, 1 warning in 1.91s ========================="
+      ]
+    },
+    "triage-placement": {
+      "log_sha256": "91d8dacebd12083e21ae7bb1faac5c559f255a00ee4a8ec1f287249635c946d4",
+      "failures": [],
+      "summary": [
+        "============================== 1 passed in 1.47s ==============================="
+      ]
+    },
+    "triage-peers": {
+      "log_sha256": "529ddc4bfff51e5827d83947f3d462872bfb71e68f4e3e85c91b48298ea3932a",
+      "failures": [],
+      "summary": [
+        "============================== 1 passed in 2.08s ==============================="
+      ]
+    },
+    "smoke": {
+      "log_sha256": "633a05b2b6c540f21fc7725d06bd721072904c10ece2e5dcf287c2d8b1da811a",
+      "failures": [],
+      "summary": [
+        "  23 passed (1.3m)"
+      ]
+    },
+    "lint": {
+      "log_sha256": "94581d95cd53d7a1c722c73c3b255ca1940fe6d5114d4e161902750a60961248",
+      "failures": [],
+      "summary": [
+        "Found 5 errors.",
+        "error: Recipe `lint` failed on line 281 with exit code 1"
+      ]
+    },
+    "lint-memory": {
+      "log_sha256": "b377bdc48c6de42f5fdd6549e9aef3482e45c75c8442ae2ad300dfc9f419f404",
+      "failures": [],
+      "summary": [
+        "memory hygiene: 3 error(s), 61 warning(s)",
+        "error: Recipe `lint-memory` failed on line 285 with exit code 1"
+      ]
+    },
+    "test-first": {
+      "log_sha256": "0c45d0839c7504f96166e91d102c8762ff5217224417f12567e4b43386dc9be7",
+      "failures": [],
+      "summary": [
+        " Test Files  1 failed (1)",
+        "      Tests  no tests"
+      ]
+    },
+    "python-first": {
+      "log_sha256": "09aa10eac34c14a7604ba4a70a7de687e414ad893dc96d106aea590ba3681fc9",
+      "failures": [
+        "FAILED tests/test_vr_transform_updates.py::test_absolute_transforms_rotate_exactly_like_full_instance_columns[3]",
+        "FAILED tests/test_vr_transform_updates.py::test_absolute_transforms_rotate_exactly_like_full_instance_columns[12]"
+      ],
+      "summary": [
+        "========================= 2 failed, 7 passed in 1.42s ==========================",
+        "error: Recipe `test-focused` failed on line 105 with exit code 1"
+      ]
+    },
+    "task_ruff": "passed",
+    "diff_check": "passed",
+    "backend_decision": "FAST  (fast suite only)",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "backend_failure_triage": {
+      "initial": "60 failures/4 errors; system-drive scratch caused low-disk guards and cross-device export renames. Corrected repeat uses Archive TMPDIR.",
+      "archive": "5 failures,14660 passes,92 skips,4 errors. Failures: two native streptavidin import verification verdicts; existing dirty NAMD provenance unknown-vs-receipt expectation; scadnano context_coordinates expectation; CPD PDB export fail-closed expectation. Four CPD preview errors: cis-anti-I stereochemistry check. These source paths were not changed for transform streaming."
+    },
+    "timing_triage": {
+      "skill": ".claude/skills/triage-slow-tests/SKILL.md",
+      "initial_violators": [
+        {
+          "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+          "seconds": 5.25
+        },
+        {
+          "nodeid": "tests/test_design_identity_api.py::test_autosave_after_undo_redo_and_further_edit",
+          "seconds": 5.07
+        }
+      ],
+      "archive_violators": [
+        {
+          "nodeid": "tests/test_native_placement_review_gate.py::test_collection_error_reports_source_markers_without_broadening_execution_scope[syntax]",
+          "seconds": 9.25
+        },
+        {
+          "nodeid": "tests/test_collaboration_peers.py::test_bidirectional_sync_preserves_both_divergent_heads_on_both_peers",
+          "seconds": 5.04
+        }
+      ],
+      "focused_call_seconds": {
+        "durable_creation": 2.17,
+        "autosave_undo_redo": 0.6,
+        "placement_syntax_collection": 0.17,
+        "peer_sync": 0.77
+      },
+      "finding": "Different timing outliers across broad runs. Small fsync-backed revision operations and a minimal subprocess pytest collection, no scientific solve/GPU/large artifact. Isolated runs pass below budget. No slow markers or timing thresholds changed. Broad timing gate remains failed; do not claim zero broad-run violators."
+    },
+    "lint_note": "5 existing unused imports; memory lint3 existing structural errors. Task Python lint and diff check pass.",
+    "native_placement_review_gate": "clear"
+  },
+  "limitations": [
+    "24HB GPU rendering unchanged; large ball-and-stick and VDW exceed 90Hz budget.",
+    "Memory-high events occurred during 24HB validation scope; no OOM/socket throttling.",
+    "No physical headset comfort claim."
+  ],
+  "aggregate_cpd": {
+    "windows": 12,
+    "browser_frames": [
+      144,
+      144
+    ],
+    "scene_intervals": 1729,
+    "scene_gaps_over_125ms": 1,
+    "max_scene_gap_ms": 179.272216796875,
+    "cadence_pass_windows": 11,
+    "native_frames": 12891,
+    "native_frames_over_16_67ms": 2,
+    "native_frame_max_ms": 19.389209,
+    "native_p95_max_ms": 11.474072,
+    "coordinate_requests": 0,
+    "malformed_frames_in_window": 0,
+    "missing_gpu_frames": 0,
+    "transform_packets": 1752,
+    "total_packets": 1752
+  },
+  "implementation_sha256": {
+    "frontend/src/scene/vr_view_transform_stream.js": "0a4ac8de72d92a4e20b847a50a2a000e4eb40f05b5f0124065bf7ced0eb110f1",
+    "frontend/src/scene/vr_view_tools.js": "9f626040a6e5712757391f4b965767550a1495b767e0e5de812c7a262ea07850",
+    "backend/api/vr_view_tools.py": "a153c82a9e7850c4569504c87ca596986ee274d86d6cd72819b3b62a8c840a98",
+    "backend/api/vr_view_transport.py": "c609430dc5b763a013d2b3aca8188e42f4e67f57e925586aad3618a904d996b8",
+    "native/vr_viewer/src/view_transform_update.hpp": "873803b6b80cff16c9518cdda192fd224676506104aea52e586508be182bd073",
+    "native/vr_viewer/src/view_tools_stream.inc": "208d2ca3210a22f0eee70c7983bd181d2399843debf11e50e44c22edce0deb9d",
+    "native/vr_viewer/src/view_tools.hpp": "201a0ca9ef81f72f6f9e028cc10bb9d2f289763f1257f5da00ec8bc94a22f0d6",
+    "native/vr_viewer/src/view_snapshot_inbox.hpp": "6c98a3873c48663720657f759331aab62e317f03cbf57cc5996f41f0596ce949"
+  },
+  "residual_cpd_outlier": {
+    "job": "d6bcdef3d59f",
+    "representation": "ballstick",
+    "scene_gap_ms": 179.272216796875,
+    "browser_upload_ms": 98,
+    "backend_handling_ms": 7.601774006616324,
+    "version": 856206649,
+    "coordinate_requests": 0,
+    "interpretation": "Publication/scheduling delay remains; no attribution to HDD or GPU. Native frame max12.51ms in same window."
+  },
+  "visual_review": {
+    "inspected": [
+      "cpd-final/d6bcdef3d59f/stereo-stick/left.png",
+      "cpd-matrix/37d39cc6b88f/stereo-vdw/right.png",
+      "large-resident/2f281ba1a83a/stereo-ballstick/left.png"
+    ],
+    "result": "Molecules visibly present in submitted application eyes, requested stick/VDW/ballstick forms identifiable. All finalCPD/24HB eyes pass >100 design-class-pixel assertion. All finalcaptures retain eligible opaque shader. No through-lens comfort claim. Raw captures pruned after review."
+  },
+  "cleanup": {
+    "system_pytest": {
+      "path": "/tmp/pytest-of-jojo/pytest-10",
+      "active_references": [],
+      "bytes": 2418321629,
+      "ownership": "Exact pytest-10 tree identified in backend-smart log for this turn; completed suite.",
+      "removed": true
+    },
+    "smoke": "global teardown removed1 project history store and6prefixed artifacts; none remain",
+    "deployed_native_build_preserved": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-clipboard-all-20261016/native-build",
+    "original_processes_preserved": [
+      219468,
+      1669167,
+      1669173
+    ],
+    "no_user_viewer_stopped": true,
+    "steamvr_home_autostart": "unchanged false",
+    "final_removed": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-transform-stream-20261021",
+        "logical_bytes": 372443745,
+        "allocated_bytes": 373088256,
+        "active_references": [],
+        "removed": true
+      },
+      {
+        "path": "/media/jojo/Archive/pytest-of-jojo/pytest-7",
+        "logical_bytes": 2447482765,
+        "allocated_bytes": 338329600,
+        "active_references": [],
+        "removed": true
+      },
+      {
+        "path": "/media/jojo/Archive/pytest-of-jojo/pytest-8",
+        "logical_bytes": 28572,
+        "allocated_bytes": 40960,
+        "active_references": [],
+        "removed": true
+      },
+      {
+        "path": "/media/jojo/Archive/pytest-of-jojo/pytest-9",
+        "logical_bytes": 8268,
+        "allocated_bytes": 73728,
+        "active_references": [],
+        "removed": true
+      }
+    ],
+    "raw_evidence": "Pruned after summaries, pixel inspection, source fingerprints and process-reference checks. Deployed native build retained."
+  }
+}

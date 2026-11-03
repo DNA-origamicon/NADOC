@@ -1642,9 +1642,9 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     if (std::find(levels.begin(), levels.end(), result.level) == levels.end()) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 12> selectionKinds = {
+    static constexpr std::array<const char*, 13> selectionKinds = {
         "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
-        "crossover", "overhang", "extension", "protein",
+        "crossover", "overhang", "extension", "protein", "nanoparticle",
     };
     if (version >= 3 && std::find(
             selectionKinds.begin(), selectionKinds.end(), result.selectionKind)
@@ -1687,9 +1687,9 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
     static constexpr std::array<const char*, 4> statuses = {
         "pending", "succeeded", "failed", "refused",
     };
-    static constexpr std::array<const char*, 12> selectionKinds = {
+    static constexpr std::array<const char*, 13> selectionKinds = {
         "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
-        "crossover", "overhang", "extension", "protein",
+        "crossover", "overhang", "extension", "protein", "nanoparticle",
     };
     if (std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||
         std::find(actions.begin(), actions.end(), result.action) == actions.end() ||

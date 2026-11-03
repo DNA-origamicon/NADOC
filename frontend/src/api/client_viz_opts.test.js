@@ -142,7 +142,8 @@ describe('_vizOpts defaults scope even with no options object', () => {
     new Float32Array(buf, off, 9).set([1, 2, 3, 1, 0, 0, 0, 0, 1])
     const src = new Uint8Array(buf)
     const progress = []
-    window.addEventListener('nadoc:oxdna-trajectory-transfer', e => progress.push(e.detail), { once: true })
+    const trackProgress = e => progress.push(e.detail)
+    window.addEventListener('nadoc:oxdna-trajectory-transfer', trackProgress)
     global.fetch = async () => new Response(new ReadableStream({
       start(c) { c.enqueue(src.subarray(0, 20)); c.enqueue(src.subarray(20)); c.close() },
     }), { headers: { 'X-NADOC-Uncompressed-Length': String(buf.byteLength) } })
@@ -150,7 +151,9 @@ describe('_vizOpts defaults scope even with no options object', () => {
     const r = await getOxdnaTrajectory('J1')
     expect(r.frames[0]).toBeInstanceOf(Float32Array)
     expect(r.frames[0][2]).toBe(3)
-    expect(progress[0]).toMatchObject({ jobId: 'J1', loaded: 20, total: buf.byteLength })
+    expect(progress[0]).toMatchObject({ jobId: 'J1', loaded: 0, total: buf.byteLength })
+    expect(progress).toContainEqual({ jobId: 'J1', loaded: 20, total: buf.byteLength })
+    window.removeEventListener('nadoc:oxdna-trajectory-transfer', trackProgress)
   })
 })
 

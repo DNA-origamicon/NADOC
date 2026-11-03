@@ -1,0 +1,138 @@
+{
+  "at": "2026-10-17T20:31:32+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_midpoint_v1.py",
+    "sha256": "28f410994fcc4ea847a91aa7a32eaa8c656927ca1006434395fd08ae5f414224"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/assessment.json",
+    "sha256": "65bb8777dcb98ee02628aa41d9ef43c0ead01691224f0debce9f59c6b136054a"
+  },
+  "records": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/original_background_midpoint/result.json",
+      "sha256": "2ebcc61f22bb555aacc52977fb187c765f776179b3af9728d30e890fb45edea6"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/alternate_background_midpoint/result.json",
+      "sha256": "06c43743fba7a245f6648985e4c40d3dc74ec030fc1ffbaaf74cfd7d60f74faf"
+    }
+  ],
+  "six_point_panel": [
+    {
+      "label": "AA",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-v1/original/result.json",
+        "sha256": "b088277a20e01f0a4b17f766ff6d8cdca819567cf96942c882a67b06ad4754f7"
+      },
+      "energy_hartree": -1366.1026733755907,
+      "mm_kcal_mol": -13.203460639125712,
+      "torsions": {
+        "exo": 175.71170931830707,
+        "OH5": -106.10563781364921,
+        "OH3": 169.63411927435266
+      },
+      "O5_O4_A": 2.805971069445397,
+      "HO5_O4_A": 1.8994467479306707
+    },
+    {
+      "label": "AB",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/original_background_alternate_exo/result.json",
+        "sha256": "d52851b785eb407c399d9c48fc814f4ccd95bcf7e9fb4bc9915c6f5908976ae9"
+      },
+      "energy_hartree": -1366.0950865536452,
+      "mm_kcal_mol": -11.993929566454172,
+      "torsions": {
+        "exo": 46.40488302190347,
+        "OH5": 76.28900241893575,
+        "OH3": 169.63411927435266
+      },
+      "O5_O4_A": 2.6440403975371303,
+      "HO5_O4_A": 1.7299254444991254
+    },
+    {
+      "label": "BA",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/alternate_background_original_exo/result.json",
+        "sha256": "1f17ec82f02e99e9f0f9822b9dac1ce2fc2e62a2131099432c0334b3d004c31b"
+      },
+      "energy_hartree": -1366.0969836121822,
+      "mm_kcal_mol": -16.387662392309,
+      "torsions": {
+        "exo": 175.7117093182888,
+        "OH5": -44.37558499873841,
+        "OH3": 153.50277395776604
+      },
+      "O5_O4_A": 4.139329321280854,
+      "HO5_O4_A": 3.732707368637498
+    },
+    {
+      "label": "BB",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-contact-relax-alternate-v1/alternate/result.json",
+        "sha256": "ef78a36c6d67b8326cfbeca537ab9cb5fb4feec81418c90923655ca55d04c691"
+      },
+      "energy_hartree": -1366.1055182512096,
+      "mm_kcal_mol": -23.130492620936437,
+      "torsions": {
+        "exo": 46.404883021875726,
+        "OH5": 53.16797572280976,
+        "OH3": 153.50277395776604
+      },
+      "O5_O4_A": 2.900216917987745,
+      "HO5_O4_A": 1.962896422263591
+    },
+    {
+      "label": "AM",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/original_background_midpoint/result.json",
+        "sha256": "2ebcc61f22bb555aacc52977fb187c765f776179b3af9728d30e890fb45edea6"
+      },
+      "energy_hartree": -1366.064662611952,
+      "mm_kcal_mol": 7.541212119146329,
+      "torsions": {
+        "exo": 111.05809617009689,
+        "OH5": -22.003525434372815,
+        "OH3": 169.63411927435266
+      },
+      "O5_O4_A": 2.4745451094213387,
+      "HO5_O4_A": 1.6595648609505176
+    },
+    {
+      "label": "BM",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/alternate_background_midpoint/result.json",
+        "sha256": "06c43743fba7a245f6648985e4c40d3dc74ec030fc1ffbaaf74cfd7d60f74faf"
+      },
+      "energy_hartree": -1366.0943194047195,
+      "mm_kcal_mol": -18.72920053277621,
+      "torsions": {
+        "exo": 111.05809617011121,
+        "OH5": -39.158825016674186,
+        "OH3": 153.50277395776604
+      },
+      "O5_O4_A": 2.9093011503225883,
+      "HO5_O4_A": 1.9994907094240137
+    }
+  ],
+  "midpoint_chords": {
+    "A": {
+      "qm_midpoint_minus_chord": 21.471712975285193,
+      "mm_midpoint_minus_chord": 20.139907221936273,
+      "error": -1.3318057533489203
+    },
+    "B": {
+      "qm_midpoint_minus_chord": 4.349598847389375,
+      "mm_midpoint_minus_chord": 1.0298769738465055,
+      "error": -3.3197218735428695
+    }
+  },
+  "midpoint_background_qm": -18.609918431983964,
+  "midpoint_background_mm": -26.27041265192254,
+  "midpoint_error": -7.6604942199385775,
+  "decision": "Close six-point diagnostic; persistent background error and differing cap/contact relaxation make a four-corner coupling fit unjustified. No automatic scan or parameter change. Need matched QM-relaxed constrained references with controlled cap branch before assigning a sugar correction.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

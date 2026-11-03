@@ -292,7 +292,7 @@ def test_explicit_presets_never_probe_the_toolchain(monkeypatch):
         assert preset_availability(PRESETS[pid]) == (True, "")
 
 
-def test_implicit_preset_skips_explicit_water_vram_preflight(monkeypatch):
+def test_implicit_preset_requires_its_own_memory_profile(monkeypatch):
     """The wizard sends relax_preset, not its derived protocol.
 
     A GBIS request must therefore resolve the preset before deciding whether to size a
@@ -311,8 +311,6 @@ def test_implicit_preset_skips_explicit_water_vram_preflight(monkeypatch):
             routes_md.CreateJobRequest(relax_preset=IMPLICIT_GBIS)
         )
     )
-    assert result == {
-        "skipped": True,
-        "tier": "ok",
-        "reason": "implicit_solvent_has_no_water_box",
-    }
+    assert result['skipped'] is False
+    assert result['tier'] == 'unknown'
+    assert 'Implicit-solvent memory' in result['reason']

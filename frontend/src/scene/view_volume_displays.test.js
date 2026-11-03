@@ -68,3 +68,16 @@ it('masks deleted columns in an assembly base layer instead of leaving cylinder 
   expect(mask.get('h:2')).toBe('cylinders')
   displays.dispose()
 })
+
+it('exact nucleotide membership excludes a complementary base and dangling bonds', async () => {
+  const store = createMockStore({ currentDesign: { strands: [] }, currentGeometry: [] })
+  const display = initViewVolumeDisplays({ scene: new THREE.Scene(), store, api: {}, ensureAtoms: async () => ({
+    atoms: [...atoms.atoms, { ...atoms.atoms[0], serial: 1, direction: 'REVERSE' }], bonds: [[0,1]],
+  }) })
+  await display.update([{ id: 'zoom', representation: 'ballstick', keys: ['h:0'], baseKeys: ['h:0:FORWARD'], opacity: 1 }])
+  const found = []
+  display.entries.get('zoom').renderer.visitAtoms(a => found.push(a))
+  expect(found).toHaveLength(1)
+  expect(found[0].direction).toBe('FORWARD')
+  display.dispose()
+})

@@ -43,6 +43,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { showToast } from './toast.js'
+import { openThinJob, THIN_JOB_TOOLTIP } from './md_thin_job.js'
 
 const POLL_MS = 1500
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8a8a8a' }
@@ -93,7 +94,7 @@ export function nodeIsActive(node) {
  *  master Stop button, where "queued" genuinely should read as pending. */
 export function nodeNeedsPolling(node) {
   if (node?.remote_submit_progress) return true
-  if (['downloading', 'processing'].includes(node?.download_status?.state)) return true
+  if (['queued', 'downloading', 'processing'].includes(node?.download_status?.state)) return true
   if (!nodeIsActive(node)) return false
   if (node?.status !== 'queued') return true
   return !!(node?.slurm_job_id || node?.runpod_pod_id)
@@ -375,9 +376,9 @@ export function masterStatusText(node) {
   if (node.engine === 'lammps') {
     return `${eng} · ${node.status} · ${masterStepText(node)}`
   }
-  if (node.production_state === 'running') return `${eng} · production running · ${masterStepText(node)}`
-  if (node.production_state === 'done') return `${eng} · production done · ${masterStepText(node)}`
-  if (node.production_state === 'failed') return `${eng} · production failed · ${masterStepText(node)}`
+  if (node.status === 'running' && node.production_state === 'running') return `${eng} · production running · ${masterStepText(node)}`
+  if (node.status === 'completed' && node.production_state === 'done') return `${eng} · production done · ${masterStepText(node)}`
+  if (node.status === 'failed' && node.production_state === 'failed') return `${eng} · production failed · ${masterStepText(node)}`
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
   if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterStepText(node)}`
@@ -549,11 +550,13 @@ export function initSimulateJobs({
   const deleteActionBtn = $('simulate-jobs-delete-btn')
   const archiveProgress = $('simulate-jobs-archive-progress')
 
-  // The ONE shared "📁 Directory" button, above the jobs list — sets where new runs (any
-  // engine) write their large trajectories. Each engine's create reads getRunDir().
-  mountDirectoryButton($('simulate-run-dir'), { api })
+  // The directory control follows the selected engine and remembers its own folder.
+  const directoryButton = mountDirectoryButton($('simulate-run-dir'), {
+    api, engine: engineSelector?.getSelected?.() || 'oxdna',
+  })
 
   let _nodes = []
+  let _pendingSelectionId = null
   let _sel = { engine: null, id: null }
   let _listSig = null
   let _busy = false
@@ -669,10 +672,11 @@ export function initSimulateJobs({
     const nodes = _visibleNodes()
     const ctx = _rowCtx(nodes)
     const sig = `${_activeEngine}:${_showAllTypes ? 1 : 0}|` + jobListSignature(nodes, ctx)
-    if (sig === _listSig && listEl.childElementCount > 0) return
+    if (sig === _listSig && listEl.childElementCount > 0) { _paintPendingSelection(); return }
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => {
+        if (selectionPending) return
         if (jobId !== _sel.id) { _select(jobId, true); return }
         const node = _selectedNode()
         if (node?.engine === 'namd' && !selectionExplicit) { selectionExplicit = true; _dispatchDetail(node, true); return }
@@ -700,6 +704,25 @@ export function initSimulateJobs({
       dimColor: _C.dim,
       legendState: _legend,
     })
+    _paintPendingSelection()
+  }
+
+  function _paintPendingSelection() {
+    for (const row of listEl.querySelectorAll('[data-job-id]')) {
+      const pending = row.dataset.jobId === _pendingSelectionId
+      if (pending) row.setAttribute('aria-busy', 'true')
+      else row.removeAttribute('aria-busy')
+      const marker = row.querySelector('[data-selection-pending]')
+      if (!pending) { marker?.remove(); continue }
+      if (!marker) {
+        const spinner = document.createElement('span')
+        spinner.className = 'nadoc-spinner'
+        spinner.dataset.selectionPending = ''
+        spinner.setAttribute('aria-label', 'Selecting job')
+        spinner.title = 'Selecting job…'
+        row.append(spinner)
+      }
+    }
   }
 
   /**
@@ -707,6 +730,7 @@ export function initSimulateJobs({
    */
   function _openRowMenu(jobId, e) {
     const node = _nodes.find((n) => n.job_id === jobId)
+    if (node?.creating) { e.preventDefault(); return }
     const panel = node?.engine === 'namd' ? mdPanel
       : node?.engine === 'oxdna' ? oxdnaPanel : null
     if (!panel?.copyJob && !node?.remote_only) return
@@ -741,6 +765,21 @@ export function initSimulateJobs({
         label: 'Copy job (new seed)',
         disabled: node.engine === 'namd' && mdPanel.hasJobSettings?.(jobId) === false,
         onClick: () => { void panel.copyJob(jobId) },
+      })
+    }
+    if (!node.remote_only && node.engine === 'namd') {
+      items.push({
+        label: 'Thin job',
+        title: node.status === 'completed' ? THIN_JOB_TOOLTIP : 'Thinning is available after the job completes.',
+        disabled: node.status !== 'completed',
+        onClick: () => openThinJob({ jobId, api,
+          onApplying: () => mdPanel?.invalidateTrajectory?.(jobId),
+          onApplied: async result => {
+            await mdPanel?.invalidateTrajectory?.(jobId, { broadcast: true })
+            await _fetch()
+            showToast(`Job thinned: ${formatBytes(result.saved_bytes)} saved.`, { severity: 'success' })
+          },
+        }),
       })
     }
     createContextMenu({
@@ -796,6 +835,7 @@ export function initSimulateJobs({
     if (!transfer && node?.execution_target === 'alpine') {
       const ds = node.download_status
       if (ds?.state === 'verified') transfer = { phase: 'done', pct: 100, ...ds }
+      else if (ds?.state === 'queued') transfer = { phase: 'queued', pct: 0, ...ds }
       else if (ds?.state === 'processing') transfer = { phase: 'processing', pct: 100, ...ds }
       else if (ds?.state === 'downloading') {
         const moved = Math.min(Number(ds.transferred_bytes ?? ds.verified_bytes) || 0,
@@ -814,7 +854,8 @@ export function initSimulateJobs({
         + `${_transferEta(transfer.eta_seconds) ? ` · ETA ${_transferEta(transfer.eta_seconds)}` : ''}`
         + `${transfer.current_file ? ` · ${transfer.current_file}` : ''}`
       : ''
-    const transferText = transfer?.phase === 'queued' ? 'Simulation transfer queued…'
+    const transferText = transfer?.phase === 'queued' ? (node?.execution_target === 'alpine'
+      ? 'Finished on Alpine — waiting to download results…' : 'Simulation transfer queued…')
       : transfer?.phase === 'cancelling' ? 'Cancelling simulation transfer…'
       : transfer?.phase === 'downloading'
       ? (transfer.peer_id ? `Transferring simulation from ${transfer.source_peer_name || 'peer'}${peerDetail}…`
@@ -872,7 +913,7 @@ export function initSimulateJobs({
     _renderActions(node)
     if (endDownloadBtn) {
       const show = canEndAndDownload(node)
-      const transferLocked = ['downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
+      const transferLocked = ['queued', 'downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
       const sourceConnected = remoteSourceConnected(node, {
         clusterState: getClusterState?.() ?? 'disconnected',
         runpodConnected: getRunpodConnected?.() ?? false,
@@ -880,6 +921,7 @@ export function initSimulateJobs({
       endDownloadBtn.style.display = show ? '' : 'none'
       endDownloadBtn.disabled = _busy || transferLocked || !sourceConnected
       endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
+        : transfer?.phase === 'queued' ? 'Waiting to download…'
         : transfer?.phase === 'processing' ? 'Processing…'
           : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
           : transfer ? 'Retry download' : 'Terminate run and download'
@@ -894,7 +936,7 @@ export function initSimulateJobs({
   // ── consolidated Change directory / Delete (above the jobs card) ───────────
   function _renderActions(node = _selectedNode()) {
     const eng = node?.engine
-    const canDelete = !!node && eng !== 'lammps' && node.status !== 'running'
+    const canDelete = !!node && !node.creating && eng !== 'lammps' && node.status !== 'running'
     const canArchive = canDelete && (eng === 'oxdna' || eng === 'namd')
     if (actionsHost) actionsHost.style.display = canDelete ? '' : 'none'
     if (deleteActionBtn) deleteActionBtn.style.display = canDelete ? '' : 'none'
@@ -967,26 +1009,53 @@ export function initSimulateJobs({
     // here too would duplicate it (two "▶ Relax" stacked). An [L] node has no other
     // control, so the master card owns its Stop / re-Run.
     const node = _selectedNode()
-    if (!node || node.engine !== 'lammps') { runBtn.style.display = 'none'; return }
+    if (!node || (node.engine !== 'lammps' && !(node.creating && !['namd', 'oxdna'].includes(node.engine)))) { runBtn.style.display = 'none'; return }
     runBtn.style.display = ''
     const rc = _runControl()
     runBtn.textContent = _busy ? 'Working…' : rc.label
+    if (rc.spinner) {
+      const spinner = document.createElement('span')
+      spinner.className = 'nadoc-spinner'
+      runBtn.prepend(spinner)
+    }
     runBtn.disabled = rc.disabled
     runBtn.dataset.runAction = rc.action
   }
 
   // ── selection ────────────────────────────────────────────────────────────
   let selectionExplicit = false
+  let selectionPending = false
   function _select(jobId, explicit = false) {
     if (!_listReady) return
     const node = _nodes.find((n) => n.job_id === jobId)
     if (!node) return
     if (_sel.engine === node.engine && _sel.id === jobId) return
-    selectionExplicit = explicit
-    _sel = { engine: node.engine, id: jobId }
-    _renderList()
-    _renderMaster()
-    _dispatchDetail(node, explicit)
+    if (selectionPending) return
+    const previous = _sel
+    const path = _currentPath()
+    const commit = accepted => {
+      // An engine may reject selection when the user keeps a loaded trajectory.
+      // Do not highlight a job whose controls still belong to the previous job.
+      if (accepted === false || _sel !== previous || _currentPath() !== path) return false
+      selectionExplicit = explicit
+      _sel = { engine: node.engine, id: jobId }
+      _renderList()
+      _renderMaster()
+      return true
+    }
+    selectionPending = true
+    _pendingSelectionId = jobId
+    _paintPendingSelection()
+    const finish = () => {
+      selectionPending = false
+      _pendingSelectionId = null
+      _paintPendingSelection()
+    }
+    try {
+      const result = _dispatchDetail(node, explicit)
+      if (!result?.then) { const accepted = commit(result); finish(); return accepted }
+      return result.then(commit).finally(finish)
+    } catch (error) { finish(); throw error }
   }
 
   // Clicking the ALREADY-selected row deselects it: the highlight, master card and job
@@ -1015,15 +1084,14 @@ export function initSimulateJobs({
     if (node.engine !== 'namd') mdPanel?.deselectJob?.()
     if (node.engine === 'lammps') {
       engineSelector?.select?.('oxdna')
-      oxdnaPanel?.selectLammpsJob?.(node)
-      return
+      return oxdnaPanel?.selectLammpsJob?.(node)
     }
     const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel,
                     blade: bladePanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
-    if (node.engine === 'namd') panel?.selectJob?.(node.job_id, { explicit })
-    else panel?.selectJob?.(node.job_id)
+    if (node.engine === 'namd') return panel?.selectJob?.(node.job_id, { explicit })
+    return panel?.selectJob?.(node.job_id)
   }
 
   // ── run / stop / resume (dispatch by node engine) ──────────────────────────
@@ -1113,7 +1181,7 @@ export function initSimulateJobs({
     try {
       // null means the server's default folder, which the Directory button already
       // displays. Resolve that same folder instead of treating null as no choice.
-      let destRoot = getRunDir()
+      let destRoot = getRunDir('namd')
       if (!destRoot) {
         const directory = await api.getMdRunDirStatus(null)
         if (!directory?.ok || !directory.path) {
@@ -1145,11 +1213,47 @@ export function initSimulateJobs({
     }
   })
 
+  const creatingNodes = new Map()
+  function mergeCreatedNodes(nodes) {
+    for (const node of nodes) {
+      if (!creatingNodes.get(node.job_id)?.creating) creatingNodes.delete(node.job_id)
+    }
+    return [...creatingNodes.values(), ...nodes.filter(n => !creatingNodes.has(n.job_id))]
+  }
+  window.addEventListener('nadoc:sim-job-creation', ({ detail }) => {
+    _fetchEpoch++
+    if (detail.removeJobId) {
+      creatingNodes.delete(detail.removeJobId)
+      _nodes = _nodes.filter(n => n.job_id !== detail.removeJobId)
+    }
+    const node = detail.node
+    if (node) {
+      _collapsed = false
+      _applyCollapsed(false)
+      creatingNodes.set(node.job_id, node)
+      _nodes = [node, ..._nodes.filter(n => n.job_id !== node.job_id)]
+      _listReady = true
+      _loadedPath = _currentPath()
+      listEl.inert = false
+      setActiveEngine(node.engine)
+      _sel = { engine: node.engine, id: node.job_id }
+      _dispatchDetail(node)
+    } else if (_sel.id === detail.removeJobId) {
+      _panelFor({ engine: _sel.engine })?.deselectJob?.()
+      _sel = { engine: null, id: null }
+    }
+    _renderList()
+    _renderMaster()
+    _schedulePoll()
+  })
+
   // ── fetch + poll ──────────────────────────────────────────────────────────
   let _fetchPending = null
   let _fetchEpoch = 0
   let _loadedPath = undefined
   let _listReady = false
+  let _documentGeneration = 0
+  let _endDocumentLoading = null
   const loadStatus = document.createElement('div')
   loadStatus.setAttribute('role', 'status')
   loadStatus.dataset.jobsLoadStatus = 'true'
@@ -1157,11 +1261,41 @@ export function initSimulateJobs({
   listEl.before(loadStatus)
   function _fetch() {
     if (_fetchPending) return _fetchPending
+    if (_loadedPath !== _currentPath()) {
+      _listReady = false
+      listEl.inert = true
+      _nodes = []
+      _sel = { engine: null, id: null }
+      _listSig = null
+      listEl.replaceChildren()
+      _renderMaster()
+    }
     const endLoading = beginPanelLoading(_loadedPath !== _currentPath() ? [
       cardHeader, document.querySelector('.left-tab-btn[data-tab="dynamics"]'),
     ] : [], 'Loading simulation jobs…')
-    _fetchPending = (async () => {
+    _endDocumentLoading = endLoading
+    const generation = _documentGeneration
+    const pending = (async () => {
+      // Membership first: this request never waits for geometry, remote services,
+      // artifact verification, or an old document's outstanding refresh.
+      if (_loadedPath !== _currentPath() && api.listSimJobSnapshot) {
+        const path = _currentPath()
+        const nodes = await api.listSimJobSnapshot(path).catch(() => null)
+        if (generation !== _documentGeneration) return
+        if (path === _currentPath() && Array.isArray(nodes)) {
+          _nodes = mergeCreatedNodes(nodes)
+          _loadedPath = path
+          _listReady = true
+          listEl.inert = false
+          listEl.removeAttribute('aria-busy')
+          loadStatus.hidden = true
+          _renderList()
+          _renderMaster()
+          endLoading()
+        }
+      }
       while (true) {
+        if (generation !== _documentGeneration) return
         if (_loadedPath !== _currentPath()) {
           _listReady = false
           listEl.inert = true
@@ -1172,13 +1306,15 @@ export function initSimulateJobs({
         // Resolve the path AFTER geometry/operation deferral, not at the initial
         // tab event when the file being opened may not yet have its workspace path.
         await whenOperationIdle()
+        if (generation !== _documentGeneration) return
         const path = _currentPath()
         const epoch = _fetchEpoch
         const nodes = await api.listSimJobs(path, false, { waitForIdle: false }).catch(() => null)
+        if (generation !== _documentGeneration) return
         if (path !== _currentPath() || epoch !== _fetchEpoch) continue
         if (!Array.isArray(nodes)) {
           loadStatus.hidden = false
-          loadStatus.textContent = 'Could not load jobs. '
+          loadStatus.textContent = _listReady ? 'Showing saved jobs; status refresh failed. ' : 'Could not load jobs. '
           const retry = document.createElement('button')
           retry.type = 'button'; retry.textContent = 'Retry'
           retry.onclick = () => { void _fetch() }
@@ -1187,7 +1323,7 @@ export function initSimulateJobs({
           return
         }
         const previousAvailability = _selectedNode()?.storage_available
-        _nodes = nodes
+        _nodes = mergeCreatedNodes(nodes)
         if (_sel.id && previousAvailability !== _selectedNode()?.storage_available) {
           const panel = _sel.engine === 'namd' ? mdPanel : _sel.engine === 'oxdna' ? oxdnaPanel : null
           void panel?.refresh?.()
@@ -1203,8 +1339,12 @@ export function initSimulateJobs({
         _schedulePoll()
         return
       }
-    })().finally(() => { _fetchPending = null; endLoading() })
-    return _fetchPending
+    })().finally(() => {
+      if (_fetchPending === pending) _fetchPending = null
+      endLoading()
+    })
+    _fetchPending = pending
+    return pending
   }
   function _schedulePoll({ retryFailedFetch = false } = {}) {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
@@ -1250,13 +1390,30 @@ export function initSimulateJobs({
     }
   })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
-  window.addEventListener('nadoc:workspace-path-change', () => {
+  function _clearDocumentJobs() {
+    creatingNodes.clear()
+    _documentGeneration++
+    _endDocumentLoading?.()
+    _endDocumentLoading = null
     _fetchEpoch++
+    _fetchPending = null
+    if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
+    _loadedPath = undefined
     _listReady = false
     listEl.inert = true
+    listEl.removeAttribute('aria-busy')
+    loadStatus.hidden = true
     _sel = { engine: null, id: null }
+    _nodes = []
+    _listSig = null
+    listEl.replaceChildren()
     _renderMaster()
-    if (_dynamicsActive) _fetch()
+  }
+  window.addEventListener('nadoc:document-reset', _clearDocumentJobs)
+  window.addEventListener('nadoc:workspace-path-change', () => {
+    _clearDocumentJobs()
+    // Closing is synchronous; never query the old backend document with a null path.
+    if (_currentPath()) void _fetch()
   })
   // A job launched / stopped / resumed from an engine panel (each polls its OWN hidden
   // list) must WAKE the master: its poll re-arms only while it already has an active
@@ -1307,6 +1464,7 @@ export function initSimulateJobs({
   function setActiveEngine(engine) {
     if (!engine || engine === _activeEngine) return
     _activeEngine = engine
+    directoryButton?.setEngine?.(engine)
     _updateEngineLabel()
     if (_sel.id && !_visibleNodes().some((n) => n.engine === _sel.engine && n.job_id === _sel.id)) {
       if (_sel.engine === 'namd') mdPanel?.deselectJob?.()

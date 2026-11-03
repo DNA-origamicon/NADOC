@@ -6,7 +6,7 @@ async function openScientificReview(page) {
     has: page.locator('#menu-help-tt-cpd-scientific-review'),
   })
   await help.hover()
-  await page.locator('#menu-help-tt-cpd-scientific-review').click()
+  await page.locator('#menu-help-experimental').hover(); await page.locator('#menu-help-tt-cpd-scientific-review').click()
   const modal = page.locator('.modal__overlay').filter({
     has: page.locator('.modal__title', { hasText: 'TT-CPD scientific review' }),
   })

@@ -5,8 +5,8 @@ from .selection_wheel_check import thumb_samples, capture
 from .profile_input import reach_target
 from tools.vr_motion.metrics import rotate
 
-LABELS = ('LIGATE', 'NICK', 'UNDO', 'REDO')
-AXES = ((.8, 0), (0, .8), (-.8, 0), (0, -.8))
+LABELS = ('LIGATE', 'NICK', 'UNDO', 'REDO', 'COPY', 'PASTE')
+AXES = ((.8, 0), (.4, .69282), (-.4, .69282), (-.8, 0), (-.4, -.69282), (.4, -.69282))
 
 
 def slide(live, index, preset, trials, start=(0, 0)):
@@ -50,7 +50,7 @@ def run(live, _catalog, output, preset, events):
         live.send('pose', hand=0, position=[head[0]-.5, head[1]-.7, head[2]], orientation=q);live.frame()
         assert [i['label'] for i in live.state['radial_edit']['items']] == list(LABELS)
         acknowledge()
-        for index, label in enumerate(LABELS):
+        for index, label in enumerate(LABELS[:4]):
             before = request();level = live.state['level_sequence']
             axis((0, 0));press(True)
             assert live.state['radial_edit']['open'] and live.state['radial_edit']['hovered'] is None
@@ -118,4 +118,4 @@ def run(live, _catalog, output, preset, events):
 
 def review(live, alive, sleep=time.sleep):
     while alive():
-        live.send('trackpad_axis', hand=1, x=-.8, y=0);live.frame();sleep(.5)
+        live.send('trackpad_axis', hand=1, x=AXES[2][0], y=AXES[2][1]);live.frame();sleep(.5)

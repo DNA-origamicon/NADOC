@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-02",
+  "cutoff_exclusive": "2020-01-01",
+  "broad_query": "(cadnano OR scadnano OR \"DNA origami\") AND FIRST_PDATE:[1900-01-01 TO 2019-12-31]",
+  "broad_hits": 1831,
+  "focused_query": "(cadnano OR scadnano) AND FIRST_PDATE:[1900-01-01 TO 2019-12-31]",
+  "focused_hits": 147,
+  "pmc_fulltext_attempts": 145,
+  "fulltext_successes": 96,
+  "evidence_pages_attempted": 39,
+  "download_errors": [
+    {
+      "pmcid": "PMC4914096",
+      "errors": [
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/instance/4914096/bin/supp_gkw208_20160324_Supp.pdf",
+          "error": "Not a PDF/JPEG/PNG (possible access challenge)"
+        }
+      ]
+    },
+    {
+      "pmcid": "PMC5944424",
+      "errors": [
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/instance/5944424/bin/CC-054-C8CC00738A-s001.pdf",
+          "error": "Not a PDF/JPEG/PNG (possible access challenge)"
+        }
+      ]
+    },
+    {
+      "pmcid": "PMC6992424",
+      "errors": [
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/instance/7018398/bin/nn9b01025_si_001.pdf",
+          "error": "Not a PDF/JPEG/PNG (possible access challenge)"
+        }
+      ]
+    },
+    {
+      "pmcid": "PMC5003508",
+      "errors": [
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/instance/5003508/bin/nl5b05139_si_001.pdf",
+          "error": "Not a PDF/JPEG/PNG (possible access challenge)"
+        }
+      ]
+    }
+  ],
+  "additional_sources": [
+    "caDNAno gallery",
+    "Dietz lab 2009 publication page",
+    "Caltech DNA group paper supplements",
+    "Qian lab tilings supplement",
+    "CaltechAUTHORS geometry-recognition supplements",
+    "Paper-linked GitHub repositories"
+  ],
+  "coverage_status": "incomplete; initial manually reviewed subset"
+}

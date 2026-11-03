@@ -47,7 +47,11 @@ export function createFeatureLogVR({ list, target, prepare, context, seek, seekC
     if (match[1] === 'r') {
       if (state.configurations) await seekConfig(Number(match[2]))
       else { const key = featureRowPosition(row.key);await seek(key.position, key.subPosition) }
-    } else if (match[1] === 'a' && row[match[3]]) row.actions[match[3]].click()
+    } else if (match[1] === 'a' && row[match[3]]) {
+      const detail = { nativeVR: true }
+      row.actions[match[3]].dispatchEvent(new CustomEvent('click', { bubbles: true, detail }))
+      await detail.completion
+    }
   }
   return { snapshot, activate }
 }

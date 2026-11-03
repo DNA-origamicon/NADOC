@@ -101,7 +101,7 @@ test('QR guest joins by name without a tracking panel or camera request', async 
       }
     }).observe(document, { childList: true, subtree: true })
   })
-  await page.goto(share.qrUrl + '&qrmm=150')
+  await page.goto(share.qrUrl)
   await expect(page.locator('input[type=password]')).toHaveCount(0)
   await page.locator('#guest-name').click()
   expect(await page.evaluate(() => window.__passwordInputsSeen)).toBe(false)

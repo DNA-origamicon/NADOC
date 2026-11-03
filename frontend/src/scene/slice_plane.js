@@ -36,6 +36,7 @@ import {
   squareCellWorldPos,
 } from './slice_plane/lattice_math.js'
 import { translateFootprint, validParityCandidates } from './primitive_placement_logic.js'
+import { rectangleCells } from './slice_plane/rectangle_cells.js'
 import { latticeLengthStepBp } from '../ui/extrude_panel_logic.js'
 
 // Default grid extents when no design is loaded.
@@ -437,7 +438,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _refHelixId       = null   // helix that opened the deformed frame (for cluster membership)
   let _deformedSourceBp = null   // bp where the deformed frame was sampled (lets the backend re-place this segment after an upstream bend/twist edit/delete)
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
-  let _cadnanoDims      = null   // when set, overrides _computeLerpedDimensions in _resizePlane
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
   let _planeH           = 40    // current plane height (nm)
   let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
@@ -571,7 +571,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _resizePlane() {
-    const { width, height, cx, cy } = _cadnanoDims ?? _computeLerpedDimensions(_unfoldT)
+    const { width, height, cx, cy } = _computeLerpedDimensions(_unfoldT)
     _planeW = width
     _planeH = height
     // Set lateral center: centroid of all helix positions in the plane's two tangent axes.
@@ -854,7 +854,17 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _projVec.copy(worldPos).project(camera)
     const sx   = (_projVec.x *  0.5 + 0.5) * _canvasRect.width
     const sy   = (_projVec.y * -0.5 + 0.5) * _canvasRect.height
-    const dist = Math.hypot(sx - _cursorPx.x, sy - _cursorPx.y)
+    // During box selection, brighten the entire box with the usual soft halo
+    // outside its edges, rather than leaving the far end of the drag dim.
+    let dist = Math.hypot(sx - _cursorPx.x, sy - _cursorPx.y)
+    if (_boxDrag?.moved) {
+      const { start, end } = _boxDrag
+      const x = sx + _canvasRect.left, y = sy + _canvasRect.top
+      dist = Math.hypot(
+        Math.max(Math.min(start.x, end.x) - x, 0, x - Math.max(start.x, end.x)),
+        Math.max(Math.min(start.y, end.y) - y, 0, y - Math.max(start.y, end.y)),
+      )
+    }
     if (dist <= PROX_FULL_PX) return 1
     if (dist >= PROX_FADE_PX) return 0
     return (PROX_FADE_PX - dist) / (PROX_FADE_PX - PROX_FULL_PX)
@@ -1130,6 +1140,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _updateCircleColors() {
+    _updateSelectionHint()
     for (const { fill, ring, row, col, state } of _circleMeshes) {
       const key     = `${row},${col}`
       const isSel   = _selected.has(key)
@@ -1154,7 +1165,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
       const baseColor = state === 'continuable' ? C_CONTINUABLE : _freeColor(row, col)
 
-      if (isHover) {
+      if (_boxDrag?.candidates.has(key)) {
+        // A subtle blue tint previews inclusion without looking committed.
+        fill.material.color.copy(baseColor).lerp(C_SELECTED, 0.35)
+        fill.material.opacity = 0.65
+        ring.material.color.copy(baseColor).lerp(C_SELECTED, 0.35)
+        ring.material.opacity = RING_MAX_FREE
+      } else if (isHover && !_boxDrag) {
         fill.material.color.copy(C_HOVER)
         fill.material.opacity = 0.75
         ring.material.color.copy(baseColor)
@@ -1534,6 +1551,60 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     return hits.length ? hits[0].object.userData : null
   }
 
+  let _boxSelectionMode = false
+  let _boxDrag = null
+  const _selectionHint = document.createElement('div')
+  _selectionHint.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:1000;padding:6px 10px;border-radius:4px;background:#161b22;color:#c9d1d9;font:12px sans-serif;display:none'
+  document.body.appendChild(_selectionHint)
+
+  function _updateSelectionHint() {
+    _selectionHint.style.display = _visible && _latticeMode && !_readOnly && !_placementMode ? '' : 'none'
+    _selectionHint.textContent = _boxSelectionMode
+      ? 'Box select · Drag right: fully inside · Drag left: touching · Tab: paint cells'
+      : 'Click / drag to select cells · Tab: box select'
+  }
+
+  function _endBoxDrag() {
+    if (!_boxDrag) return
+    const { pointerId, overlay } = _boxDrag
+    _boxDrag = null
+    overlay.remove()
+    if (canvas.hasPointerCapture?.(pointerId)) canvas.releasePointerCapture(pointerId)
+    _pendingCellClick = false
+    _pointerDownPos = null
+    _hoverCell = null
+    _updateCircleColors()
+  }
+
+  function _moveBoxDrag(e) {
+    _setNDC(e)
+    const { start, overlay } = _boxDrag
+    _boxDrag.end = { x: e.clientX, y: e.clientY }
+    _boxDrag.moved ||= Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4
+    Object.assign(overlay.style, {
+      display: _boxDrag.moved ? '' : 'none',
+      left: `${Math.min(start.x, e.clientX)}px`, top: `${Math.min(start.y, e.clientY)}px`,
+      width: `${Math.abs(e.clientX - start.x)}px`, height: `${Math.abs(e.clientY - start.y)}px`,
+      borderStyle: e.clientX < start.x ? 'dashed' : 'solid',
+    })
+    _boxDrag.candidates = new Set(_boxDrag.moved
+      ? rectangleCells(_circleMeshes, _camera, _canvasRect, start, _boxDrag.end)
+        .map(cell => `${cell.row},${cell.col}`)
+      : [])
+    _updateCircleColors()
+  }
+
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey ||
+        !_visible || !_latticeMode || _readOnly || _placementMode ||
+        !['CANVAS', 'BODY'].includes(e.target?.tagName)) return
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (e.repeat || _boxDrag || _isDragging || _pendingCellClick || _isDragSelecting) return
+    _boxSelectionMode = !_boxSelectionMode
+    _updateSelectionHint()
+  }, { capture: true })
+
   // ── Event handlers ──────────────────────────────────────────────────────────
 
   function _onPointerDown(e) {
@@ -1548,6 +1619,17 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       // as the rings, so without this the cell-hit below swallows the click. Once on a
       // face (continuation), clicks commit normally — rings no longer steal them.
       if (_placementMode && !_placementSpec?.continuation && getBluntEnds?.()?.isRingHit(e)) return
+      if (_boxSelectionMode && e.pointerType === 'mouse' && _latticeMode && !_readOnly &&
+          !_placementMode && !_rayHandle()) {
+        const overlay = document.createElement('div')
+        overlay.style.cssText = 'position:fixed;display:none;border:1.5px solid #74b9ff;background:rgba(116,185,255,.07);pointer-events:none;z-index:1000;box-sizing:border-box'
+        document.body.appendChild(overlay)
+        _boxDrag = { start: _pointerDownPos, end: _pointerDownPos, pointerId: e.pointerId, overlay, moved: false, candidates: new Set() }
+        canvas.setPointerCapture(e.pointerId)
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
       if (_rayHandle()) {
         _isDragging = true
         _isDragSelecting = false
@@ -1584,6 +1666,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _onPointerMove(e) {
     if (!_visible) return
+    if (_boxDrag && e.pointerId === _boxDrag.pointerId) {
+      _moveBoxDrag(e)
+      e.stopImmediatePropagation()
+      return
+    }
     _setNDC(e)  // also updates _canvasRect and _cursorPx
 
     if (_isDragging) {
@@ -1634,6 +1721,23 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _onPointerUp(e) {
     if (!_visible) return
+
+    if (_boxDrag && e.pointerId === _boxDrag.pointerId) {
+      _moveBoxDrag(e)
+      if (_boxDrag.moved) {
+        for (const key of _boxDrag.candidates) _selectCell(key)
+      } else {
+        _setNDC(e)
+        const cell = _rayCells()
+        if (cell) _toggleCell(`${cell.row},${cell.col}`)
+      }
+      _endBoxDrag()
+      _updateCircleColors()
+      _updateLabels()
+      _refreshExtrudeUi()
+      e.stopImmediatePropagation()
+      return
+    }
 
     // Primitive placement: a clean left-click (no camera drag) commits the footprint.
     if (_placementMode) {
@@ -1894,8 +1998,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // ── Attach events ───────────────────────────────────────────────────────────
 
   canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
-  canvas.addEventListener('pointermove',  _onPointerMove)
-  canvas.addEventListener('pointerup',    _onPointerUp)
+  canvas.addEventListener('pointermove',  _onPointerMove, { capture: true })
+  canvas.addEventListener('pointerup',    _onPointerUp, { capture: true })
+  canvas.addEventListener('pointercancel', _endBoxDrag)
+  canvas.addEventListener('lostpointercapture', _endBoxDrag)
+  window.addEventListener('blur', _endBoxDrag)
   // Deferred to pointer-up so a right-drag-pan isn't mistaken for a per-cell click
   // on Linux (press-time contextmenu). See right_click_menu.js.
   canvas.addEventListener('contextmenu',  deferrableContextMenu(canvas, _onContextMenu))
@@ -1931,6 +2038,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
     show(plane, offsetNm, continuation = false, readOnly = false, { latticeType = 'HONEYCOMB', newBundle = false } = {}) {
+      _endBoxDrag()
       _placementMode    = false
       _placementSpec    = null
       _placementHasConflict = false
@@ -1966,6 +2074,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _hidePreview()
         _setLegendVisible(false)
       }
+      _updateSelectionHint()
     },
 
     /**
@@ -1981,6 +2090,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     hide() {
+      _endBoxDrag()
+      _selectionHint.style.display = 'none'
       _dynBounds     = null
       _baseBounds    = null
       _visible       = false
@@ -2002,7 +2113,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _bpLabelRight.visible = false
       // Reset plane mesh to constructor default (40×40) so any subsequent show()
       // starts from the same baseline. Without this, a prior readOnly call (e.g.
-      // cadnano view's tiny indicator) leaves the mesh shrunk for the next show.
+      // read-only indicator) leaves the mesh shrunk for the next show.
       _planeW = 40
       _planeH = 40
       _planeMesh.geometry.dispose()
@@ -2264,21 +2375,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       return Math.abs(PLANE_CFG[_plane].normal.y) > 0.5
         ? new THREE.Vector3(0, 0, 1)
         : new THREE.Vector3(0, 1, 0)
-    },
-
-    /**
-     * Override plane dimensions for cadnano mode.
-     * dims = { width, height, cx, cy } in the same coordinate system as _computeLerpedDimensions.
-     * Call clearCadnanoDimensions() on exit to restore normal behaviour.
-     */
-    setCadnanoDimensions(dims) {
-      _cadnanoDims = dims
-      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
-    },
-
-    clearCadnanoDimensions() {
-      _cadnanoDims = null
-      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
     },
 
     /** Debug: call window.SLICE.debug() in browser console to inspect internal state. */

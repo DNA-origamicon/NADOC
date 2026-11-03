@@ -1,0 +1,22 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-startup-control-v1-service/completion_wake_ack.json",
+    "sha256": "790c1dab8607a766aa839a8e6f35b173f4c190c8930f3cf325b5bdd1e3c394d3"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-startup-control-v1/completion_audit.json",
+    "sha256": "f9cedd5cb34cecf8879e1ef58e1f44324aca0c6264fa2b0c54fd9985fd533c29"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-anti-v1/launch_receipt.json",
+    "sha256": "52f38e3673841955e8aad809296a8353838d888c35d646e53b8f9b6e720090d8"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-thermal-anti-v1/handoff.json",
+    "sha256": "90fb211d48550c7be7f034e1abfb4eb93dca9aad786daeb3f628773901f92838"
+  },
+  "review": "Both10ps restrained startup pilots pass; final temperatures245.7941K welded and245.0486K control. Next step is20ps300K restrained continuation, not another initial velocity reset or production.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

@@ -182,3 +182,8 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 - **Q-VR-017 — Transaction acknowledgement (priority):** Confirm must remain visually pending until the desktop-authoritative mutation response identifies the committed feature-log entry. Native should then expose committed/failed/cancelled status and enable Undo only for that exact transaction; a later desktop edit must make the VR Undo token stale rather than undoing unrelated work.
 - **Q-VR-018 — Move/Rotate residue granularity (priority):** Base/End/Domain/Strand previews already resolve to exact residues. Persist the whole target set atomically as one feature-log/undo entry; do not loop single-residue endpoints or silently promote them to Cluster.
 - **Q-VR-019 — Extrude scope after exact End (deferred expansion):** finish one-cell continuation first. Multi-cell slice footprints, overhang extrusion, new-bundle extrusion, and deformed-End continuation need separate discoverable target/footprint contracts and must not be hidden behind the current End action.
+
+Master integration retains October 15–22 rendering, clipboard and upload-pacing
+evidence in [the archive](project_native_vr_archive.md). The October 22 standard-24HB
+recheck supersedes earlier baseline performance claims; physical comfort and strict
+no-drop editing remain unqualified. Rediscover runtime identities before use.

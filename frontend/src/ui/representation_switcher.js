@@ -193,7 +193,7 @@ export function initRepresentationSwitcher({
   // free — six listeners fan out of it and several do real network work (oxDNA/NAMD
   // heavy-frame reconstruction, the solvent refetch, the NAMD trajectory prebuild).
   // Null until the first apply, so the very first click always goes through.
-  let _appliedRepr = null, generation = 0, pendingRepr = null
+  let _appliedRepr = null, settledRepr = null, generation = 0, pendingRepr = null
   const detailedBlocked = (repr, detail) => store.getState().presentationActive && (repr === 'surface-detail' || repr === 'surface' && detail && detail !== 'coarse')
   const simulationActive = () => simulationDisplay?.active() || simulationViewActive(document)
   function syncSimulation() {
@@ -224,6 +224,7 @@ export function initRepresentationSwitcher({
     if (simulationActive() && !simulationRepresentationAllowed(repr)) return false
     if (detailedBlocked(repr, detail)) { showToast('Detail Surface is unavailable during presentations. Use Quick Surface.', { severity: 'warn' }); return false }
     const ticket = ++generation
+    settledRepr = null
     pendingRepr = repr
     cancelSurfaceComputations()
     if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
@@ -285,6 +286,8 @@ export function initRepresentationSwitcher({
     _updateReprRadio(repr)
     reprOptionSliders(repr)
     await simulationDisplay?.refresh?.(repr)
+    if (ticket !== generation) return false
+    settledRepr = repr
     window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
       detail: { representation: repr },
     }))
@@ -411,6 +414,10 @@ export function initRepresentationSwitcher({
 
   return {
     setRepresentation:    _setRepresentation,
+    // Native lazy-loading may acknowledge a style the desktop already finished.
+    // Reapplying would rebuild the model and pause a running trajectory.
+    ensureRepresentation: (repr, detail) => !pendingRepr && settledRepr === repr && (!detail || detail === getSurfaceDetail())
+      ? Promise.resolve(true) : _setRepresentation(repr, detail),
     ensureSimulationRepresentation: () => simulationRepresentationAllowed(_appliedRepr) ? undefined : _setRepresentation("full"),
     updateReprRadio:      _updateReprRadio,
     syncAssemblyReprMenu: _syncAssemblyReprMenu,

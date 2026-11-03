@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-18T00:27:54.742938+00:00",
+  "passed": true,
+  "records": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "max_abs_difference": 1.1368683772161603e-13,
+      "max_scaled_difference": 4.660886637288064e-16,
+      "passed": true,
+      "bond_bond_factor": 995.683049736949,
+      "bond_angle_factor": 526.8928171357288,
+      "angle_angle_factor": 278.819691489745,
+      "matrix_sha256": "7c03f48a61af3ac129682c465ac18d71b52479e452f3a623d27770cddde151fc"
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "max_abs_difference": 1.1368683772161603e-13,
+      "max_scaled_difference": 4.428885259786881e-16,
+      "passed": true,
+      "bond_bond_factor": 995.683049736949,
+      "bond_angle_factor": 526.8928171357288,
+      "angle_angle_factor": 278.819691489745,
+      "matrix_sha256": "8b956813da3eabbb08c8b07ad40a571a6d580de9b230ae991147e357e9ccc0a9"
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "max_abs_difference": 1.1368683772161603e-13,
+      "max_scaled_difference": 4.572093873040271e-16,
+      "passed": true,
+      "bond_bond_factor": 995.683049736949,
+      "bond_angle_factor": 526.8928171357288,
+      "angle_angle_factor": 278.819691489745,
+      "matrix_sha256": "6216e062eb67cbbf9945d8325471d18883825bd5697b4eb04c93f3ec5edf0c57"
+    }
+  ],
+  "meaning": "Exact numeric parity with external ffTK 2.2 reader convention; not an independent validation of the empirical frequency scale or force field.",
+  "convention": "0.5 * hartree-to-kcal/mol * 0.943^2; each stretch dimension divides by external bohr-to-angstrom 0.529177249. Angular dimensions remain radians, not degrees.",
+  "source": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/archived-fftk-interface-v1/check_numeric.py",
+    "sha256": "3255eff10fb05ca76021132a4302d3ea57483c7e6f0ddb680f73536cea5c3997"
+  },
+  "native_electronic_calculations": 0,
+  "parameter_fits": 0,
+  "assignment_package": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-core-geometry-v1/cgenff-assignment-inputs-v2.zip",
+    "sha256": "41369adcc128de4a42f837a40ab37c46826795f9b45f77dc1394a7f855652ad7"
+  },
+  "dependency": "External initial assignments unavailable; user access question pending. No new native simulations launched."
+}

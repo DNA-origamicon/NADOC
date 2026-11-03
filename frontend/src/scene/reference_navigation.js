@@ -1,4 +1,7 @@
-/** Geometry/topology projection used by camera navigation when references are hidden. */
+/** Geometry/topology projection shared by fitting, orbit and zoom. */
+import { baseKey } from './base_ref.js'
+
+const EMPTY_HIDDEN = new Set()
 
 export function referenceGeometryHidden(state) {
   return state?.showReferenceGeometry === false || state?.simulationTabActive === true
@@ -16,39 +19,64 @@ export function referenceStrandInteractionHidden(state, strandId) {
 }
 
 /** Keep only geometry that is actually visible to the camera controls. */
-export function navigationGeometry(state) {
+export function navigationGeometry(state, hiddenBaseKeys = EMPTY_HIDDEN) {
   const geometry = state?.currentGeometry ?? []
-  if (!referenceGeometryHidden(state)) return geometry
-  const refs = referenceStrandIds(state?.currentDesign)
-  if (refs.size === 0) return geometry
-  return geometry.filter(n => !refs.has(n?.strand_id))
+  const refs = referenceGeometryHidden(state) ? referenceStrandIds(state?.currentDesign) : EMPTY_HIDDEN
+  if (!refs.size && !hiddenBaseKeys.size && !state?.staplesHidden) return geometry
+  return geometry.filter(n => !refs.has(n?.strand_id) &&
+    !(state?.staplesHidden && n.strand_type !== 'scaffold') &&
+    !hiddenBaseKeys.has(baseKey(n, n.copy_k ?? 0)))
 }
 
 const _projectedDesigns = new WeakMap()
 
-/**
- * Remove helix axes occupied exclusively by reference strands. Multiscale orbit
- * uses these axes to choose its zoom/pan scale, so invisible reference helpers
- * must not remain in that distance field.
- */
-export function navigationDesign(state) {
+/** Keep only visible axis intervals in the navigation speed/pivot field. */
+export function navigationDesign(state, hiddenBaseKeys = EMPTY_HIDDEN) {
   const design = state?.currentDesign
-  if (!design || !referenceGeometryHidden(state)) return design
-
+  const refsHidden = referenceGeometryHidden(state)
+  const staplesHidden = !!state?.staplesHidden
+  if (!design || (!refsHidden && !staplesHidden && !hiddenBaseKeys.size)) return design
+  const geometry = state?.currentGeometry
   const cached = _projectedDesigns.get(design)
-  if (cached) return cached
+  if (cached && cached.geometry === geometry && cached.hiddenBaseKeys === hiddenBaseKeys &&
+      cached.refsHidden === refsHidden && cached.staplesHidden === staplesHidden) return cached.projected
 
-  const usedHelices = new Set()
-  for (const strand of design.strands ?? []) {
-    if (strand?.is_reference) continue
-    for (const domain of strand?.domains ?? []) {
-      if (domain?.helix_id != null) usedHelices.add(domain.helix_id)
+  let helices
+  if (geometry) {
+    const visibleColumns = new Map()
+    for (const nuc of navigationGeometry(state, hiddenBaseKeys)) {
+      if (!Number.isFinite(nuc.bp_index)) continue
+      let columns = visibleColumns.get(nuc.helix_id)
+      if (!columns) visibleColumns.set(nuc.helix_id, columns = new Set())
+      columns.add(nuc.bp_index)
     }
+    helices = (design.helices ?? []).flatMap(helix => {
+      const columns = [...(visibleColumns.get(helix.id) ?? [])].sort((a, b) => a - b)
+      if (!columns.length) return []
+      const runs = []
+      for (const bp of columns) {
+        const last = runs.at(-1)
+        if (last && bp === last[1] + 1) last[1] = bp
+        else runs.push([bp, bp])
+      }
+      const start = helix.axis_start, end = helix.axis_end
+      if (!start || !end || !(helix.length_bp > 1)) return [helix]
+      const point = bp => {
+        const t = Math.max(0, Math.min(1, (bp - (helix.bp_start ?? 0)) / (helix.length_bp - 1)))
+        return Object.fromEntries(['x', 'y', 'z'].map(k => [k, start[k] + (end[k] - start[k]) * t]))
+      }
+      return runs.map(([lo, hi]) => ({ ...helix, axis_start: point(lo), axis_end: point(hi) }))
+    })
+  } else {
+    // Topology-only startup: reference filtering remains available before geometry arrives.
+    const usedHelices = new Set()
+    for (const strand of design.strands ?? []) {
+      if ((refsHidden && strand.is_reference) || (staplesHidden && strand.strand_type !== 'scaffold')) continue
+      for (const domain of strand.domains ?? []) usedHelices.add(domain.helix_id)
+    }
+    helices = (design.helices ?? []).filter(h => usedHelices.has(h.id))
   }
-  const projected = {
-    ...design,
-    helices: (design.helices ?? []).filter(h => usedHelices.has(h?.id)),
-  }
-  _projectedDesigns.set(design, projected)
+  const projected = { ...design, helices }
+  _projectedDesigns.set(design, { geometry, hiddenBaseKeys, refsHidden, staplesHidden, projected })
   return projected
 }

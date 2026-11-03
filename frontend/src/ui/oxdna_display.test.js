@@ -448,6 +448,23 @@ describe('initOxdnaDisplay controller', () => {
     expect(applyOxdnaFrame).toHaveBeenLastCalledWith(null)
   })
 
+  it.each(['oxdna', 'mrdna-coarse', 'mrdna-fine'])('reapplying %s frames never re-enables native crossover arcs', async repr => {
+    const resp = { ready: true, positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
+      backbone_position: [8, 0, 0], nx: 1, ny: 0, nz: 0 }] }
+    const deps = makeDeps(resp), setDesignVisible = vi.fn()
+    let currentRepr = repr
+    const ctrl = initOxdnaDisplay({ ...deps, setDesignVisible, getCurrentRepr: () => currentRepr })
+    await ctrl.displayJob('job')
+    setDesignVisible.mockClear()
+    ctrl.reapplyForRepr()
+    expect(setDesignVisible).toHaveBeenCalledWith(false)
+    expect(setDesignVisible).not.toHaveBeenCalledWith(true)
+    // Native Full still needs its crossover lines when explicitly restored.
+    currentRepr = 'full'
+    ctrl.reapplyForRepr()
+    expect(setDesignVisible).toHaveBeenLastCalledWith(true)
+  })
+
   it('does not activate when there is no relaxed frame', async () => {
     const deps = makeDeps({ ready: false, positions: [] })
     const ctrl = initOxdnaDisplay(deps)
@@ -532,6 +549,28 @@ describe('initOxdnaDisplay controller', () => {
     expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
   })
 
+  it('opens oxDNA with a bounded first page and fetches a distant seek on demand', async () => {
+    const renderer = { applyFemPositions: vi.fn() }
+    const api = {
+      getOxdnaTrajectoryMeta: vi.fn().mockResolvedValue({ n_frames: 100, stages: [], markers: [] }),
+      getOxdnaTrajectory: vi.fn(async (_id, opts) => ({
+        ready: true, keys: [['h0', 0, 'FORWARD']], frame_start: opts.frameStart,
+        frames: Array.from({ length: Math.min(99, opts.frameEnd) - opts.frameStart + 1 },
+          (_, i) => new Float32Array([opts.frameStart + i, 0, 0, 1, 0, 0])),
+      })),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer: renderer, api })
+    const result = await ctrl.loadTrajectory('large-job', false, 'job', 5)
+    expect(result.n_frames).toBe(100)
+    expect(api.getOxdnaTrajectoryMeta).toHaveBeenCalledWith('large-job', 'job', 5)
+    expect(api.getOxdnaTrajectory.mock.calls[0][1]).toMatchObject({ stride: 5 })
+    expect(api.getOxdnaTrajectory.mock.calls[0][1]).toMatchObject({ frameStart: 0, frameEnd: 7 })
+    await ctrl.ensureTrajectoryFrame(90)
+    expect(api.getOxdnaTrajectory).toHaveBeenCalledWith('large-job', expect.objectContaining({ frameStart: 88, frameEnd: 99 }))
+    expect(api.getOxdnaTrajectory.mock.calls.every(([, opts]) => opts.frameEnd - opts.frameStart < 16)).toBe(true)
+    ctrl.stopAndRestore()
+  })
+
   it('loadTrajectory caches frames and showFrame deforms to a given frame', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const traj = {
@@ -578,7 +617,7 @@ describe('initOxdnaDisplay controller', () => {
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1) // scrubbing never rebuilds/refetches caps
   })
 
-  it('trajectory keeps a hybrid protein at the job simulation pose', async () => {
+  it('trajectory does not reuse a final protein pose when the frame has no protein data', async () => {
     const M = Array.from({ length: 16 }, (_, i) => i)
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
@@ -595,7 +634,8 @@ describe('initOxdnaDisplay controller', () => {
 
     await ctrl.loadTrajectory('hybrid-job')
 
-    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenCalledWith({ 'protein-1': M })
+    expect(proteinRenderer.applyOxdnaTransforms).not.toHaveBeenCalledWith({ 'protein-1': M })
+    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith({})
     ctrl.showFrame(0)
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1)
   })
@@ -1159,6 +1199,41 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(seen.mode).toBe(null)
   })
 
+  it('document reset releases trajectory state without rebuilding the outgoing model', async () => {
+    const { ctrl, designRenderer, onRestoreDesignHeavy } = makeHeavyDeps('full')
+    await ctrl.loadTrajectory('job1')
+    designRenderer.applyFemPositions.mockClear()
+    onRestoreDesignHeavy.mockClear()
+    ctrl.discardForDocumentReset()
+    expect(ctrl.isActive()).toBe(false)
+    expect(ctrl.mode()).toBe(null)
+    expect(ctrl.trajectoryPreparationState().atom).toBe(null)
+    expect(ctrl.trajectoryPreparationState().surface).toBe(null)
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    expect(onRestoreDesignHeavy).not.toHaveBeenCalled()
+    ctrl.showFrame(0)
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+  })
+
+  it('document reset rejects a late reconstruction without restoring the old model', async () => {
+    const { ctrl, api, atom, onRestoreDesignHeavy } = makeHeavyDeps('ballstick')
+    await ctrl.displayJob('job1')
+    await tick()
+    let release
+    api.getOxdnaDisplayAtomistic = vi.fn().mockReturnValue(new Promise(resolve => {
+      release = () => resolve({ ready: true, atomistic: [9, 9, 9] })
+    }))
+    ctrl.reapplyForRepr()
+    atom.applyPositionLerp.mockClear()
+    onRestoreDesignHeavy.mockClear()
+    ctrl.discardForDocumentReset()
+    release()
+    await tick()
+    expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+    expect(onRestoreDesignHeavy).not.toHaveBeenCalled()
+    expect(ctrl.isActive()).toBe(false)
+  })
+
   it('flex map is cached across toggle-off → re-toggle is instant (no re-fetch)', async () => {
     const { ctrl, api } = makeHeavyDeps('full')   // CG so no heavy rebuild noise
     await ctrl.displayRmsf('jobF', { awaitHeavy: true })
@@ -1364,12 +1439,12 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     })
 
     it('reports the grid as capped, and stays within budget, when meshes are large', async () => {
-      // 4 M vertices ≈ 48 MB/frame against the 1.5 GB ceiling → ~32 frames of 500.
+      // Plain JS vertices cost 96 MB/frame; the shared 512 MiB ceiling fits only a short window.
       const { ctrl } = makeSurfDeps(500, 4_000_000)
       await ctrl.loadTrajectory('jobT'); await tick()
       const r = await ctrl.prebuildHeavy(() => {})
       expect(r.capped).toBe(true)
-      expect(r.frames).toBeGreaterThan(8)                 // still better than the old fixed cap
+      expect(r.frames).toBeGreaterThan(0)                 // still better than the old fixed cap
       expect(r.frames).toBeLessThan(500)
     })
 
@@ -1674,8 +1749,8 @@ describe('prebuildMemoryPlan', () => {
   })
 
   it('names FREE RAM as the limit on a machine that is short of it', () => {
-    // 1 GB free -> only 512 MB may be taken -> below both other ceilings.
-    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    // 0.5 GiB free -> only 256 MiB may be taken -> below the cache ceiling.
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     expect(p.limitedBy).toBe('ram')
     expect(p.capped).toBe(true)
     expect(p.frames * p.frameBytes).toBeLessThanOrEqual(0.5 * GB)
@@ -1700,7 +1775,7 @@ describe('prebuildMemoryPlan', () => {
   it('takes the LOWER of free RAM and the heap ceiling, never the higher', () => {
     // The two limits are independent: a huge machine is still bounded by the tab, and a
     // small one by its RAM. Picking either alone would be wrong half the time.
-    const tight = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    const tight = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     const roomy = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 64 * GB })
     expect(tight.budgetBytes).toBeLessThan(roomy.budgetBytes)
     expect(roomy.budgetBytes).toBe(BROWSER_HEAP_CEILING_BYTES)
@@ -1716,7 +1791,7 @@ describe('prebuildMemoryPlan', () => {
   it('reports the true total cost even when it cannot be afforded', () => {
     // wantBytes is what the panel quotes in the warning — it must be the REAL figure,
     // not the affordable one, or the warning understates the problem it is warning about.
-    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     expect(p.wantBytes).toBe(991 * 469_350 * 12)
     expect(p.wantBytes).toBeGreaterThan(p.budgetBytes)
   })
@@ -1921,4 +1996,106 @@ it('keeps VR paged trajectory source indices exact across styles and page bounda
   expect(api.getOxdnaFramesAtomistic.mock.lastCall[1]).toEqual([580])
   for (repr of ['oxdna','mrdna-coarse','mrdna-fine','full']) expect(await ctrl.showFullTrajectoryFrame(page,1)).toBe(true)
   ctrl.stopAndRestore()
+})
+
+it('plays prepared VR atoms without per-frame loading notifications',async()=>{
+ const status=vi.fn(),atom={getMode:()=> 'ballstick',update:vi.fn(),applyPositionLerp:vi.fn()}
+ const api={getOxdnaAtomisticModel:async()=>({n_serials:1,atoms:[{serial:0,element:'P',strand_id:'s',x:0,y:0,z:0}],bonds:[]}),
+  getOxdnaFramesAtomistic:vi.fn(async(_,ids)=>Object.fromEntries(ids.map(i=>[i,[i,2,3]])))}
+ const ctrl=initOxdnaDisplay({designRenderer:{applyFemPositions:vi.fn(),clearScalarColors:vi.fn()},api,getCurrentRepr:()=> 'ballstick',getAtomisticRenderer:()=>atom,onHeavyStatus:status})
+ const page={keys:[['h',0,'FORWARD']],frame_start:10,frame_step:5,scope:'job',frames:[[0,0,0,1,0,0],[1,0,0,1,0,0]]}
+ await ctrl.loadFullTrajectoryPage('job',page);await ctrl.prepareFullTrajectoryFrames(page)
+ status.mockClear();const calls=api.getOxdnaFramesAtomistic.mock.calls.length
+ for(const i of [0,1,0,1])await ctrl.showFullTrajectoryFrame(page,i)
+ expect(status).not.toHaveBeenCalled();expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(calls)
+ ctrl.stopAndRestore()
+})
+
+
+it('updates protein poses with each trajectory frame and interpolates rotation without scaling', async () => {
+  const { trajectoryProteinTransforms, interpolateProteinTransforms } = await import('./oxdna_display.js')
+  const keys = [['h0', 0, 'FORWARD'], ...[0,1,2].map(row => ['__protein_transform__', 'protein1', row])]
+  const first = [0,0,0,1,0,0, 1,0,0,0,0,0, 0,1,0,0,0,0, 0,0,1,0,0,0]
+  // 90-degree Z rotation, translation (10, 0, 0).
+  const last = [1,0,0,1,0,0, 0,-1,0,10,0,0, 1,0,0,0,0,0, 0,0,1,0,0,0]
+  const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
+  const designRenderer = { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }
+  const api = {
+    getOxdnaTrajectory: vi.fn(async () => ({ ready:true, n_frames:2, keys, frames:[first,last], stages:[], markers:[] })),
+    getOxdnaDisplay: vi.fn(async () => ({ proteins:[{ attachment_id:'protein1', transform:trajectoryProteinTransforms(keys,last).protein1 }] })),
+  }
+  const display = initOxdnaDisplay({designRenderer, proteinRenderer, api})
+  await display.loadTrajectory('job')
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,first))
+  display.showFrame(1)
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,last))
+  expect(designRenderer.applyFemPositions.mock.calls.at(-1)[0]).toHaveLength(1)
+  const middle = interpolateProteinTransforms(keys,first,last,0.5).protein1
+  expect(middle[3]).toBe(5)
+  expect(middle[0]).toBeCloseTo(Math.SQRT1_2)
+  expect(middle[1]).toBeCloseTo(-Math.SQRT1_2)
+  display.showFrame(0)
+  expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenLastCalledWith(trajectoryProteinTransforms(keys,first))
+  display.stopAndRestore()
+  expect(proteinRenderer.clearOxdnaTransforms).toHaveBeenCalled()
+})
+
+it.each(['full', 'vdw'])('keeps a finite %s preview grid interactive without fetching and replaces it with the exact settled frame', async repr => {
+  const keys = [['h', 0, 'FORWARD']]
+  function bin(i, end, step = 1) {
+    const count = (end - i) / step + 1
+    const header = new TextEncoder().encode(JSON.stringify({ keys, frame_start: i, frame_step: step }))
+    const offset = (20 + header.length + 3) & ~3, buf = new ArrayBuffer(offset + 24 * count), dv = new DataView(buf)
+    ;[0x4e54524a, 1, count, 1, header.length].forEach((n, j) => dv.setUint32(j * 4, n, true))
+    new Uint8Array(buf, 20, header.length).set(header)
+    for (let j = 0; j < count; j++) new Float32Array(buf, offset + j * 24, 6).set([i + j * step,0,0,1,0,0])
+    return buf
+  }
+  const renderer = { applyFemPositions: vi.fn() }
+  const api = {
+    getOxdnaTrajectoryMeta: async () => ({ n_frames: 1000, markers: [{ frame: 500 }] }),
+    getOxdnaTrajectory: vi.fn(async (_, opts) => ({ ready: true, keys,
+      frames: Array.from({ length: opts.frameEnd - opts.frameStart + 1 }, (_, j) =>
+        new Float32Array([opts.frameStart + j, 0, 0, 1, 0, 0])) })),
+    getOxdnaTrajectoryBin: vi.fn(async (_, opts) => bin(opts.frameStart, opts.frameEnd, opts.frameStep)),
+  }
+  const atom = { getMode: () => repr, update: vi.fn(), applyPositionLerp: vi.fn() }
+  api.getOxdnaAtomisticModel = async () => ({ n_serials: 1, atoms: [{ serial: 0, element: 'P', x: 0, y: 0, z: 0 }], bonds: [] })
+  api.getOxdnaFramesAtomistic = vi.fn(async (_, ids) => Object.fromEntries(ids.map(i => [i, [i, 0, 0]])))
+  const d = initOxdnaDisplay({ designRenderer: renderer, api, getCurrentRepr: () => repr, getAtomisticRenderer: () => atom })
+  await d.loadTrajectory('job', false, 'job')
+  expect((await d.prepareInteractivePreview()).ok).toBe(true)
+  expect(api.getOxdnaTrajectoryBin.mock.calls.length).toBeLessThan(16)
+  const binCalls = api.getOxdnaTrajectoryBin.mock.calls.length
+  const calls = api.getOxdnaTrajectory.mock.calls.length
+  for (const i of [400.5, 700.5, 200.5, 499.5]) {
+    expect(d.showTrajectoryPreview(i)).toBe(true)
+    expect(renderer.applyFemPositions.mock.lastCall[0][0].backbone_position[0]).toBeCloseTo(i === 499.5 ? 499 : i)
+  }
+  expect(api.getOxdnaTrajectory).toHaveBeenCalledTimes(calls)
+  expect(api.getOxdnaTrajectoryBin).toHaveBeenCalledTimes(binCalls)
+  expect(await d.showExactTrajectoryFrame(799)).toBe(true)
+  expect(renderer.applyFemPositions.mock.lastCall[0][0].backbone_position[0]).toBe(799)
+  if (repr === 'vdw') expect(Array.from(atom.applyPositionLerp.mock.lastCall[0])).toEqual([799, 0, 0])
+  d.stopAndRestore()
+  expect(d.hasInteractivePreview()).toBe(false)
+})
+
+it('prepares a bounded saved-frame playback window across the loop boundary', async () => {
+  const keys = [['h', 0, 'FORWARD']], requested = []
+  const api = {
+    getOxdnaTrajectoryMeta: async () => ({ n_frames: 100, markers: [] }),
+    getOxdnaTrajectory: async (_, opts) => ({ ready: true, keys,
+      frames: Array.from({ length: Math.min(99, opts.frameEnd) - opts.frameStart + 1 },
+        (_, j) => new Float32Array([opts.frameStart + j,0,0,1,0,0])) }),
+    getOxdnaAtomisticModel: async () => ({ n_serials: 1, atoms: [{serial:0,element:'P',x:0,y:0,z:0}], bonds:[] }),
+    getOxdnaFramesAtomistic: async (_, ids) => { requested.push(...ids); return Object.fromEntries(ids.map(i => [i, [i,0,0]])) },
+  }
+  const d = initOxdnaDisplay({ api, designRenderer: {applyFemPositions:vi.fn()}, getCurrentRepr: () => 'vdw',
+    getAtomisticRenderer: () => ({ getMode: () => 'vdw', update: vi.fn(), applyPositionLerp: vi.fn() }) })
+  await d.loadTrajectory('job', false, 'job')
+  requested.length = 0
+  expect(await d.preparePlaybackFrames(98)).toBe(true)
+  expect(requested).toEqual([98,99,0,1])
+  d.stopAndRestore()
 })

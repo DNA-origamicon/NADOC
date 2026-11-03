@@ -90,3 +90,50 @@ it('embedded scene refresh uses the host capabilities without opening the broadc
   expect(v.ui.active).toBe(false)
   v.ui.dispose()
 })
+
+it('publishes headset cameras, holds on tracking loss, recovers, and discards poses completed after stopping', async () => {
+  const v=setup(), camera={...v.pose,near:.1,far:1000,source:'headset',unitsPerMeter:1}
+  let value=camera
+  await v.ui.present({id:'room',title:'VR'},{getCamera:async()=>value})
+  const sent=()=>v.fetch.mock.calls.filter(([url])=>url.endsWith('/camera'))
+  expect(JSON.parse(sent().at(-1)[1].body).camera).toEqual(camera)
+  value=null;v.advance(100);await v.ui.tick()
+  expect(v.fetch.mock.calls.at(-1)[0]).toContain('/hold')
+  const count=sent().length;v.advance(100);await v.ui.tick();expect(sent()).toHaveLength(count)
+  value=camera;v.advance(100);await v.ui.tick();expect(sent()).toHaveLength(count+1)
+  await v.ui.stop()
+  let finish
+  const starting=v.ui.present({id:'room',title:'VR'},{getCamera:()=>new Promise(resolve=>{finish=resolve})})
+  await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));await v.ui.stop();finish(camera)
+  await expect(starting).rejects.toThrow()
+  expect(sent()).toHaveLength(count+1);v.ui.dispose()
+})
+
+it('waits for an obsolete headset request before starting a replacement desktop camera lease', async () => {
+  const v=setup();let finish,value={...v.pose,near:.1,far:1000,source:'headset',unitsPerMeter:1}
+  await v.ui.present({id:'room',title:'VR'},{getCamera:()=>value})
+  value=new Promise(resolve=>{finish=resolve});v.advance(100)
+  const flight=v.ui.tick();await v.ui.stop()
+  const replacement=v.ui.present({id:'room',title:'Desktop'})
+  finish(null);await flight;await replacement
+  expect(v.ui.active).toBe(true)
+  const last=v.fetch.mock.calls.filter(([url])=>url.endsWith('/camera')).at(-1)
+  expect(JSON.parse(last[1].body).camera.source).toBeUndefined()
+  v.ui.dispose()
+})
+
+it('continues headset publication while the desktop edit view is unavailable and after scene replacement', async () => {
+  const v=setup(), camera={...v.pose,near:.1,far:1000,source:'headset',unitsPerMeter:1}
+  v.prepared.captureView=()=>{throw new Error('Return to the normal 3D view before exporting a prepared snapshot')}
+  await v.ui.present({id:'room',title:'VR'},{getCamera:async()=>camera})
+  v.advance(100);await v.ui.tick()
+  expect(v.ui.active).toBe(true)
+  expect(v.fetch.mock.calls.filter(([url])=>url.endsWith('/camera'))).toHaveLength(2)
+  await v.ui.stop()
+  // Scene publication acquires a replacement lease before following resumes.
+  v.fetch.mockImplementation(async()=>({ok:true,json:async()=>({lease:'replacement',revision:'d'.repeat(64)})}))
+  await v.ui.present({id:'room',title:'VR'},{getCamera:async()=>camera})
+  const last=v.fetch.mock.calls.filter(([url])=>url.endsWith('/camera')).at(-1)
+  expect(JSON.parse(last[1].body)).toEqual({revision:'d'.repeat(64),camera})
+  v.ui.dispose()
+})

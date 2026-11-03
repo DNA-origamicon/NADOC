@@ -48,6 +48,8 @@ const _INPUT_CSS =
 export function initWizardResources({
   mount, getSlurmPreview, getPartition = () => null, getTotalNs = () => 0,
   getGresType = () => null,
+  getPreparation = () => ({}),
+  getPlanShape = () => null,
   onChange = () => {}, readOnly = () => false, getRecorded = () => null,
 } = {}) {
   const _ro = () => !!readOnly()
@@ -61,7 +63,7 @@ export function initWizardResources({
   let _edited = {}
 
   const _sizedKey = () => `${getPartition() || ''}|${getGresType() || ''}|${
-    Number(getTotalNs() || 0)}`
+    Number(getTotalNs() || 0)}|${JSON.stringify(getPreparation())}|${JSON.stringify(getPlanShape())}`
 
   /**
    * Size the request for the selected partition. Cheap to call: it no-ops unless the
@@ -80,18 +82,25 @@ export function initWizardResources({
     _error = ''
     paint()
     try {
-      _preview = await getSlurmPreview?.({
+      const result = await getSlurmPreview?.({
         cluster_name: 'alpine', partition,
         ...(getGresType() ? { gres_type: getGresType() } : {}),
-        total_ns: Number(getTotalNs() || 0),
+        ...getPlanShape(),
+        total_ns: getPlanShape() ? Number(getPlanShape()?.relax_ns || 0) + Number(getPlanShape()?.production_ns || 0) : Number(getTotalNs() || 0),
+        stages: getPlanShape()?.stages || null,
         job_name: 'nadoc_job',
+        ...getPreparation(),
       })
+      if(key!==_key)return
+      _preview=result
       if (!_preview) _error = 'Could not size this run on the cluster.'
       else if (_preview.sized === false) _error = _preview.reason || 'Not sized.'
     } catch (err) {
+      if(key!==_key)return
       _preview = null
       _error = `Could not size this run: ${err?.message || err}`
     } finally {
+      if(key!==_key)return
       _busy = false
       paint()
       onChange()

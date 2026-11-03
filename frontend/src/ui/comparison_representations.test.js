@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyComparisonRepresentation } from './comparison_representations.js'
+import { applyComparisonRepresentation, oxdnaPreviewInputsChanged } from './comparison_representations.js'
 
 describe('comparison representations', () => {
   it.each([
@@ -39,4 +39,20 @@ describe('comparison representations', () => {
     })).toBe(false)
     expect(onUnavailable).toHaveBeenCalled()
   })
+})
+
+it('keeps oxDNA geometry through annotation edits and cloned autosave acknowledgements', () => {
+  const state = { currentGeometry: [], currentDesign: { id: 'd', strands: [{ id: 's', sequence: 'AT' }],
+    cluster_transforms: [], annotations: [], metadata: { name: 'd' }, loadouts: [] } }
+  const saved = { ...state, currentDesign: JSON.parse(JSON.stringify(state.currentDesign)) }
+  saved.currentDesign.annotations = [{ id: 'note', highlight: true }]
+  saved.currentDesign.annotations_enabled = false
+  saved.currentDesign.metadata.modified = 'now'
+  saved.currentDesign.loadouts = [{ id: 'saved' }]
+  saved.currentDesign.active_loadout_id = 'saved'
+  expect(oxdnaPreviewInputsChanged(saved, state)).toBe(false)
+  expect(oxdnaPreviewInputsChanged({ ...saved, currentGeometry: [{}] }, state)).toBe(true)
+  expect(oxdnaPreviewInputsChanged({ ...saved, showReferenceGeometry: false }, state)).toBe(true)
+  saved.currentDesign.strands[0].sequence = 'GC'
+  expect(oxdnaPreviewInputsChanged(saved, state)).toBe(true)
 })

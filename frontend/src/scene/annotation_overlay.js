@@ -1,13 +1,16 @@
 /**
  * Annotation overlay: screen-space callouts (DOM + SVG leaders) plus a 3D
- * highlight for each entry's target. Both draw above the scene — the callout
- * layer is a DOM sibling over the canvas and the highlight material ignores
- * depth — so annotations are never occluded.
+ * optional highlight for each entry's target. Callouts and leaders draw above
+ * the scene; target highlights use the cluster-selection glow. Invisible target
+ * buffers preserve live anchor positions when publishing a shared view.
  *
  * Read-only with respect to the design: targets are resolved from live
  * backbone entries every frame, nothing is written back (Three-Layer Law).
  */
 import * as THREE from 'three'
+import { SilhouetteHighlight, registerSilhouetteHighlights } from './silhouette_highlight.js'
+import { createGlowLayer } from './glow_layer.js'
+import { drawAnnotationCallouts } from './annotation_canvas.js'
 import './annotation_overlay.css'
 import { annotationIsRenderable } from './annotation_model.js'
 import { isExternalRef } from './annotation_external.js'
@@ -17,17 +20,23 @@ import { anchorFromPoints, matchTargetEntries, unresolvedBaseKeys } from './anno
 import { layoutCallouts, leaderPoints } from './annotation_layout.js'
 
 const sharedOverlays = new WeakMap()
+const exportOverlays = new WeakMap()
+
+export function drawSceneAnnotations(scene, ctx, width, height, camera) {
+  exportOverlays.get(scene)?.draw(ctx, width, height, camera)
+}
 
 /** Visible callouts only; hidden annotation text and editor selection refs stay local. */
 export function captureSceneAnnotations(scene) {
   return sharedOverlays.get(scene)?.() ?? []
 }
 
+export function syncSceneAnnotations(scene) { exportOverlays.get(scene)?.update() }
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const BASE_FONT_PX = 13
 const BASE_ICON_PX = 18
 const HIGHLIGHT_RENDER_ORDER = 1200
-const SMALL_TARGET_POINTS = 4
 const HALO_SCALE = 3.2          // sprite diameter as a multiple of the sphere radius
 const MAX_OCCUPANCY_POINTS = 20000
 /** Design fields target resolution reads; an annotation-only design change must not force a rebuild. */
@@ -53,6 +62,7 @@ function glowTexture(document) {
 export function initAnnotationOverlay({
   document = globalThis.document, container, scene, getCamera, controller,
   getEntries = () => [], getDesign = () => null, resolveBasePosition = () => null,
+  resolveSilhouette = (_refs, matched) => matched,
   resolveExternal = () => null, getOccluders = () => [],
   addFrameCallback = null, removeFrameCallback = null, getViewport = null,
   readOnly = false, resolveSharedPoints = null, resolveTargetEntries = null,
@@ -106,7 +116,7 @@ export function initAnnotationOverlay({
     const rec = {
       id: entry.id, el, box, icon, text, grip, g, line, dot,
       size: { w: 0, h: 0 }, rect: null, drag: null, dirty: true,
-      src: null, srcLen: -1, design: null, matched: [], extra: [], externalRefs: [], halos: [], points: null, pointCount: 0,
+      src: null, srcLen: -1, design: null, matched: [], extra: [], externalRefs: [], halos: [], glow: null, points: null, pointCount: 0,
       shown: false, styleSig: '', tx: NaN, ty: NaN, hasAnchor: false,
     }
     if (!readOnly) wireDrag(rec)
@@ -150,6 +160,10 @@ export function initAnnotationOverlay({
   }
   function disposeHighlight(rec) {
     disposeHalos(rec)
+    rec.silhouette?.dispose()
+    rec.silhouette = null
+    rec.glow?.dispose()
+    rec.glow = null
     if (!rec.points) return
     group.remove(rec.points)
     rec.points.geometry.dispose()
@@ -185,11 +199,11 @@ export function initAnnotationOverlay({
     rec.size = { w: el.offsetWidth, h: el.offsetHeight }
     if (rec.points) {
       rec.points.material.color.set(entry.color)
-      rec.points.material.opacity = 0.85 * (1 - entry.transparency)
+      rec.points.material.opacity = 0
     }
     for (const halo of rec.halos) {
       halo.material.color.set(entry.color)
-      halo.material.opacity = 0.7 * (1 - entry.transparency)
+      halo.material.opacity = entry.highlight && entry.highlightType !== 'silhouette' ? Math.min(1, 0.45 * entry.glowIntensity) : 0
     }
   }
 
@@ -205,7 +219,7 @@ export function initAnnotationOverlay({
     disposeHalos(rec)
     for (const ref of rec.externalRefs) {
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: texture, color: entry.color, transparent: true, opacity: 0.7 * (1 - entry.transparency),
+        map: texture, color: entry.color, transparent: true, opacity: 0,
         depthTest: false, depthWrite: false,
       }))
       halo.renderOrder = HIGHLIGHT_RENDER_ORDER - 1
@@ -224,8 +238,10 @@ export function initAnnotationOverlay({
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
       const material = new THREE.PointsMaterial({
-        color: entry.color, map: texture, size: count <= SMALL_TARGET_POINTS ? 3.5 : 2.2,
-        sizeAttenuation: true, transparent: true, opacity: 0.85 * (1 - entry.transparency),
+        // Keep target positions for shared-view callout anchors, without drawing
+        // the legacy soft-dot overlay when Highlight target is switched off.
+        color: entry.color, size: 1,
+        sizeAttenuation: true, transparent: true, opacity: 0,
         depthTest: false, depthWrite: false, alphaTest: 0.01,
       })
       rec.points = new THREE.Points(geometry, material)
@@ -238,6 +254,14 @@ export function initAnnotationOverlay({
   }
 
   function writeHighlight(rec) {
+    const entry = rec.entry
+    if (entry.highlight && entry.highlightType !== 'silhouette' && !readOnly) {
+      rec.glow ??= createGlowLayer(group, entry.glowColor, undefined, `Annotation glow ${rec.id}`)
+      rec.glow.setStyle(entry.glowColor, entry.glowIntensity)
+      rec.glow.setEntries(rec.matched.concat(rec.extra.map(pos => ({ pos }))))
+    } else if (rec.glow) { rec.glow.dispose(); rec.glow = null }
+    // Only the optional glow renders; points carry shared-view anchor positions.
+    if (rec.points) rec.points.visible = !entry.highlight || entry.highlightType === 'silhouette'
     if (rec.points) {
       const attr = rec.points.geometry.attributes.position
       const a = attr.array
@@ -251,7 +275,13 @@ export function initAnnotationOverlay({
     rec.externalRefs.forEach((ref, k) => {
       const sphere = resolveExternal(ref)
       const halo = rec.halos[k]
-      if (halo) halo.visible = !!sphere
+      if (halo) {
+        halo.visible = !!sphere
+        halo.material.color.set(entry.highlight ? entry.glowColor : entry.color)
+        halo.material.opacity = entry.highlight && entry.highlightType !== 'silhouette' ? Math.min(1, 0.45 * entry.glowIntensity) : 0
+        const blending = entry.highlight ? THREE.AdditiveBlending : THREE.NormalBlending
+        if (halo.material.blending !== blending) { halo.material.blending = blending; halo.material.needsUpdate = true }
+      }
       if (!sphere) return
       spheres.push(sphere)
       if (halo) { halo.position.set(sphere.x, sphere.y, sphere.z); halo.scale.setScalar(sphere.radius * HALO_SCALE) }
@@ -311,16 +341,16 @@ export function initAnnotationOverlay({
   }
 
   /** Per-frame: resolve anchors, project, lay out, draw. */
-  function update() {
+  function update(exportView = null, exportCamera = null) {
     // Two independent switches: part mode, and the user's global annotations toggle.
     const on = enabled && controller.isEnabled()
     if (on !== shown) { shown = on; root.hidden = !on; group.visible = on }
     if (!on) return
-    const camera = getCamera?.()
+    const camera = exportCamera ?? getCamera?.()
     if (!camera) return
     const list = controller.list()
     if (records.size !== list.length || list.some(e => records.get(e.id)?.entry !== e)) sync()
-    const { width, height } = viewport()
+    const { width, height } = exportView?.width ? exportView : viewport()
     const src = getEntries() ?? []
     const design = getDesign()
     camera.updateMatrixWorld?.()
@@ -386,10 +416,39 @@ export function initAnnotationOverlay({
       return { id: entry.id, text: entry.text, icon: entry.icon, calloutType: entry.calloutType,
         color: entry.color, size: entry.size, transparency: entry.transparency,
         manual: entry.manual, screenPos: entry.screenPos,
-        targets: [rec?.points, ...(rec?.halos ?? [])].filter(o => o?.visible).map(o => o.uuid) }
+        targets: [rec?.points, rec?.glow?.getMesh(), ...(rec?.halos ?? [])].filter(o => o?.visible).map(o => o.uuid) }
     })
   }
-  if (!readOnly) sharedOverlays.set(scene, captureShared)
+  function drawExport(ctx, width, height, camera) {
+    const live = viewport()
+    const scale = Math.min(width / live.width, height / live.height)
+    const previousRects = new Map([...records].map(([id, rec]) => [id, rec.rect]))
+    try {
+      update({ width: width / scale, height: height / scale }, camera)
+      if (!enabled || !controller.isEnabled()) return
+      drawAnnotationCallouts(ctx, [...records.values()].filter(rec => annotationIsRenderable(rec.entry)), scale)
+    } finally {
+      // Export layout must not become the next frame's preferred live layout.
+      for (const [id, rect] of previousRects) {
+        const rec = records.get(id)
+        if (rec) rec.rect = rect
+      }
+      // The photo session restores the live camera before its final sync.
+    }
+  }
+  if (!readOnly) {
+    sharedOverlays.set(scene, captureShared)
+    exportOverlays.set(scene, { draw: drawExport, update })
+  }
+  const unregisterSilhouette = readOnly ? () => {} : registerSilhouetteHighlights(scene, (renderer, camera, pixelScale) => {
+    if (!enabled || !controller.isEnabled()) return
+    for (const rec of records.values()) {
+      const entry = rec.entry
+      if (!annotationIsRenderable(entry) || !entry.highlight || entry.highlightType !== 'silhouette') continue
+      rec.silhouette ??= new SilhouetteHighlight()
+      rec.silhouette.render(renderer, camera, resolveSilhouette(entry.refs, rec.matched), entry.glowColor, entry.glowIntensity, pixelScale)
+    }
+  })
   addFrameCallback?.(update)
 
   return {
@@ -405,6 +464,8 @@ export function initAnnotationOverlay({
     getRecord: id => records.get(id) ?? null,
     dispose() {
       if (sharedOverlays.get(scene) === captureShared) sharedOverlays.delete(scene)
+      if (exportOverlays.get(scene)?.draw === drawExport) exportOverlays.delete(scene)
+      unregisterSilhouette()
       unsubscribe()
       removeFrameCallback?.(update)
       for (const rec of [...records.values()]) destroyRecord(rec)

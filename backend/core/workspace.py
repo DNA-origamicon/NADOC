@@ -27,6 +27,7 @@ from backend.core.models import Assembly, PartSourceFile
 # design library and must not be advertised by the welcome screen or its event feed.
 INTERNAL_WORKSPACE_ROOTS = frozenset(
     {
+        "alpine_deletions",
         "autorefine",
         "benchmark_runs",
         "bench_fixtures",

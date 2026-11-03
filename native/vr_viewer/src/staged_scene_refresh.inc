@@ -43,7 +43,7 @@ public:
         // All potentially large CPU containers move in constant time. Keep the
         // old source alive until its borrowing indexes/resident refs are dropped.
         auto obsolete=std::make_tuple(std::move(scene_),std::move(staticSourceIndices_),
-            std::move(previewGeometry_),std::move(committedHandleOffsets_),
+            std::move(previewGeometry_),std::move(committedHandleOffsets_),std::move(committedHandleDeltas_),std::move(committedHandleIndex_),
             std::move(atomisticSphereInstances_),std::move(atomisticCylinderInstances_),
             std::move(atomisticSphereCoordinateIndices_),std::move(atomisticCylinderCoordinateIndices_),
             std::move(visualizationPositions_),std::move(visualizationColors_),

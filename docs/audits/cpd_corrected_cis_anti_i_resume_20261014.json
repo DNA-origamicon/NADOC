@@ -1,0 +1,76 @@
+{
+  "at": "2026-10-14T06:38:24.745454+00:00",
+  "schema": "nadoc.corrected-cis-anti-i-resume.v1",
+  "user_request": "resume",
+  "archive_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "native_started": true,
+  "startup_verified": true,
+  "current_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/active_handoff.json",
+    "sha256": "09bf41d2ccfb702ffab460fbb923848129386f7fe433dfb3590119fd57f7bb70"
+  },
+  "artifacts": {
+    "plan.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/plan.json",
+      "sha256": "03f9667a383b5114028f25496fc1a29cac6a1d9892ea7cfc3d4e15a8ef63b0da"
+    },
+    "admission.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/admission.json",
+      "sha256": "84e1810a3af4af19a1a5a3055a5bb4e533bfd2d9e112c601cabd78659faa0828"
+    },
+    "preflight.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/preflight.json",
+      "sha256": "748d4427bfb1866cdb9d490c45f7d4313e5dad9f853f8cd64cf7d9b4c12b6f11"
+    },
+    "launch_verification.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/launch_verification.json",
+      "sha256": "89c2e42226b885619efa926bb4d96c3ec4cf9d91a15759bef548babc53131b90"
+    },
+    "source_revision_review.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/source_revision_review.json",
+      "sha256": "11c981c96066621242eea5a1e4a10b4ace79dba0b4234f5f31d432aa6d17a1f8"
+    },
+    "launch_repair_review.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/launch_repair_review.json",
+      "sha256": "6cfeea9e1876bf6ca978c4cdbbedd16be04c4ea5fd223ecdc948209ebf3d3f3e"
+    },
+    "preparation_record.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/preparation_record.json",
+      "sha256": "8fda97abd776fe9e02d03933870158224d48f3f8d011289eebfe9aa3b81095bf"
+    }
+  },
+  "previous_failed_resume_attempt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/resume_failure_20261014.json",
+    "sha256": "ca4be6790aa2fa99aa757d908bf1b1b3737f73f0c2f5d84f40cd47607b0deeb5"
+  },
+  "source_change": "Formatting only; complete module AST is identical. Both native source lists updated in new manifest; historical sources and plan hashes preserved.",
+  "source_revision_changed_science": false,
+  "optimizer_run_unchanged": true,
+  "native_worker_unchanged": true,
+  "seed_result": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/evaluation-012/result.json",
+    "sha256": "bd8312fc55af032676fa043ea9bb1ad1d0a3351a6b8880a4709a133a55d5025b"
+  },
+  "max_new_gradients": 30,
+  "hard_seconds": 7200,
+  "task_timeout_seconds": 600,
+  "launch_local": "2026-10-14T00:37:18.198838-06:00",
+  "expected_full_allocation_finish_local": "2026-10-14T02:24:47.008005-06:00",
+  "audit_deadline_local": "2026-10-14T02:32:18.198838-06:00",
+  "hard_deadline_local": "2026-10-14T02:37:18.198838-06:00",
+  "available_memory_gib_at_launch": 23.36962127685547,
+  "systemd": {
+    "TimeoutStopUSec": "15s",
+    "RuntimeMaxUSec": "1h 59min 45s",
+    "CPUQuotaPerSecUSec": "4s",
+    "MemoryMax": "8589934592",
+    "MemorySwapMax": "0",
+    "ActiveState": "active"
+  },
+  "wake_token": "dcf69bad-3abf-4037-9fd5-1ec816a09a77",
+  "periodic_polling": false,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "heldout_accessed": false,
+  "cloud_spending_usd": 0
+}

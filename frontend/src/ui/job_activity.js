@@ -392,14 +392,16 @@ export function bigRunSummary(forecast) {
   const dur = formatHours(hours)
   if (dur) {
     const rate = forecast.est_ns_per_day ? ` (at roughly ${forecast.est_ns_per_day} ns/day)` : ''
-    lines.push(`Estimated wall-clock: ${dur}${rate}`)
+    lines.push(`${forecast.completion?.available ? 'Estimated time until results' : 'Estimated compute time'}: ${dur}${rate}`)
+    if (forecast.completion?.available) lines.push(`Planning range: ${formatHours(forecast.completion.low_hours)}–${formatHours(forecast.completion.high_hours)}`)
   }
+  if (forecast.timing_note) lines.push(forecast.timing_note)
   return {
     bytes,
     hours,
     message: `${lines.join('\n')}\n\n` +
-      'The throughput estimate is a rough atom-count model, so treat the time as an ' +
-      'order of magnitude, not a deadline. The run checkpoints as it goes and can be ' +
+      (forecast.completion?.available ? 'The range includes preparation and processing; retries and contention add time. ' : 'Compute time uses available timing evidence; startup, analysis and transfers add time. ') +
+      'Completion is not guaranteed. The run checkpoints as it goes and can be ' +
       'stopped and resumed.',
   }
 }

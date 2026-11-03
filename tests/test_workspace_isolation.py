@@ -60,9 +60,10 @@ def test_startup_isolation_closes_handlers_and_restores_globals_after_failure(tm
     from tests.workspace_isolation import isolated_startup_workspace
 
     original = (main._WORKSPACE_DIR, assembly._WORKSPACE_DIR, alpine_operations._LOGGER,
-                alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE"))
+                alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE"), os.environ.get("NADOC_MEMORY_BUDGET_DIR"))
     with pytest.raises(RuntimeError, match="injected"):
         with isolated_startup_workspace(tmp_path):
+            assert os.environ["NADOC_MEMORY_BUDGET_DIR"] == str(tmp_path / ".memory-budget")
             path = alpine_operations.configure(tmp_path)
             handler = alpine_operations._LOGGER.handlers[0]
             alpine_operations.event("private_failure")
@@ -70,4 +71,4 @@ def test_startup_isolation_closes_handlers_and_restores_globals_after_failure(tm
     assert handler.stream is None
     assert '"event": "private_failure"' in path.read_text()
     assert (main._WORKSPACE_DIR, assembly._WORKSPACE_DIR, alpine_operations._LOGGER,
-            alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE")) == original
+            alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE"), os.environ.get("NADOC_MEMORY_BUDGET_DIR")) == original

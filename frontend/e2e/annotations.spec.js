@@ -45,6 +45,19 @@ test('annotation tab: target, text/icon gating, highlight, manual drag', async (
   await column.locator('.anno-icon-pop [title="Green check"]').click()
   await expect(callout.locator('.nadoc-anno__icon svg')).toBeVisible()
 
+  await card.locator('[data-field="highlight"]').check()
+  await card.locator('[data-field="glowColor"]').fill('#00ff00')
+  await card.locator('[data-field="glowIntensity"]').fill('1.5')
+  await card.locator('[data-field="glowIntensity"]').dispatchEvent('input')
+  await expect.poll(() => page.evaluate(() => {
+    let found = false
+    window.__nadocTest.scene.traverse(o => {
+      if (o.name.startsWith('Annotation glow ') && o.count > 0 && o.material.color.getHexString() === '00ff00'
+          && Math.abs(o.material.opacity - 0.675) < 1e-6) found = true
+    })
+    return found
+  })).toBe(true)
+
   // Manual: the box keeps its screen position while the camera moves.
   await card.locator('[data-field="manual"]').check()
   const grip = callout.locator('.nadoc-anno__grip')
@@ -126,6 +139,9 @@ test('annotations: protein + nanoparticle targets, auto placement off the design
   await gold.locator('[data-field="color"]').fill('#ffd700')
   await gold.locator('[data-field="useSelection"]').click()
   await expect(gold.locator('.anno-target')).toContainText('Gold nanosphere')
+  expect(await page.evaluate(() => window.__nadocTest.nanoparticles.gizmoAttached())).toBe(false)
+  await expect(page.locator('#move-rotate-panel')).not.toBeVisible()
+  await gold.locator('[data-field="highlight"]').check()
 
   // Protein target.
   await page.evaluate(id => window.__nadocTest.selectProteinForTest(id), proteinId)
@@ -136,6 +152,15 @@ test('annotations: protein + nanoparticle targets, auto placement off the design
   await prot.locator('[data-field="color"]').fill('#39c5cf')
   await prot.locator('[data-field="useSelection"]').click()
   await expect(prot.locator('.anno-target')).toContainText('Protein')
+  expect(await page.evaluate(() => window.__nadocTest.isProteinGizmoAttached())).toBe(false)
+  await expect(page.locator('#move-rotate-panel')).not.toBeVisible()
+  await prot.locator('[data-field="highlight"]').check()
+  await prot.locator('[data-field="highlightType"]').selectOption('silhouette')
+  await gold.locator('[data-field="highlightType"]').selectOption('silhouette')
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.annotations.map(a => a.highlight_type)))
+    .toEqual(['silhouette', 'silhouette'])
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.annotations.map(a => a.refs)))
+    .toEqual([[{ kind: 'nanoparticle', id: goldId }], [{ kind: 'protein', id: proteinId }]])
 
   const state = () => page.evaluate(() => {
     const halos = []

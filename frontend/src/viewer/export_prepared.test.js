@@ -16,7 +16,7 @@ it('exports display geometry and navigation without writes or editor history', a
   expect(spec.navigation).toBeInstanceOf(Float64Array)
   expect(spec).not.toHaveProperty('design')
   expect(state.currentDesign.feature_history).toEqual(['private'])
-  state.cadnanoActive = true
+  state.unfoldActive = true
   await expect(api.exportView()).rejects.toThrow('3D view')
   api.dispose()
 })

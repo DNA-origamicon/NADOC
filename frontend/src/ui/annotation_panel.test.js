@@ -21,6 +21,22 @@ const field = (card, name) => card.querySelector(`[data-field="${name}"]`)
 const input = (el, value) => { el.value = value; el.dispatchEvent(new window.Event('input', { bubbles: true })) }
 
 describe('annotation panel', () => {
+  it('edits independent highlight color and intensity', () => {
+    const a = controller.add({ text: 'note' })
+    const card = cards()[0]
+    expect(field(card, 'glowIntensity').disabled).toBe(true)
+    field(card, 'highlight').click()
+    expect(controller.get(a.id).highlight).toBe(true)
+    expect(field(card, 'glowIntensity').disabled).toBe(false)
+    field(card, 'highlightType').value = 'silhouette'
+    field(card, 'highlightType').dispatchEvent(new window.Event('change'))
+    expect(controller.get(a.id).highlightType).toBe('silhouette')
+    input(field(card, 'glowColor'), '#123456')
+    input(field(card, 'glowIntensity'), '1.5')
+    expect(controller.get(a.id)).toMatchObject({ glowColor: '#123456', glowIntensity: 1.5 })
+    expect(controller.get(a.id).color).not.toBe('#123456')
+  })
+
   it('starts empty, adds entries into a scrollable list and focuses the new text box', () => {
     expect(root.querySelector('.anno-empty')).toBeTruthy()
     root.querySelector('.anno-add').click()

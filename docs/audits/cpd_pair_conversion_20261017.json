@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-17",
+  "scope": "Existing thymine-pair conversion and same-strand/different-strand support; prerequisite audit for MVP isomer selection",
+  "verified": [
+    "Existing convert_extra_pair builds cis-syn CPD coordinates and both crosslinks for junction extra thymines on the same strand or different strands.",
+    "Regression fixtures preserve CPD core distances, strand ownership, existing bonds and unselected atom coordinates across conversion and normalized-design save/reload.",
+    "Existing place_product_template supports ordinary and extra endpoints in both strand relationships; synthetic geometry tests exercise all four combinations. This is not qualification of arbitrary DNA contexts."
+  ],
+  "fix": {
+    "file": "backend/core/models.py",
+    "problem": "Legacy load reclassification from Crossover to ForcedLigation discarded the junction ID and extra_bases, making CPD endpoints and saved poses stale.",
+    "resolution": "Preserve ID and inserted sequence for both mismatched-bp and non-neighbor reclassification."
+  },
+  "reuse": {
+    "selection": "frontend/src/scene/cpd_selection.js",
+    "dialog": "frontend/src/ui/cpd_conversion.js",
+    "api": "backend/api/routes_photoproducts.py",
+    "conversion": "backend/core/cpd_design.py",
+    "placement": "backend/core/cpd_product.py",
+    "endpoint_resolution": "backend/core/base_keys.py",
+    "native_job_contract": "backend/core/part_cpd_contract.py",
+    "context_fixtures": "backend/parameterization/photoproduct_candidate_context.py"
+  },
+  "remaining_for_general_isomer_selection": [
+    "Editor conversion selection, pose storage and native job admission are currently restricted to junction extra bases; ordinary backbone thymines need integration.",
+    "Production conversion currently admits cis-syn only. The four archived MVP packages are provisional candidates, not production registry releases; see cpd_mvp_final_scope_audit_20261017.json.",
+    "minimize_attachment_bonds reloads the default cis-syn template. Propagate the selected isomer before enabling other templates, including re-relaxation.",
+    "add_design_bonds and preview crosslinks currently assume syn C5-C5/C6-C6 connectivity. Reuse chemical-definition graph_delta for anti products.",
+    "Preserve explicit ordered endpoint stereochemistry and version native source/template/engine contracts when adding isomers.",
+    "Saving generic photoproduct intent through preflight is not evidence that product coordinates were built. Keep authoring availability separate from simulation qualification."
+  ],
+  "compatibility": "models.py is included in the native CPD engine digest. Previously pinned recipes may report an engine mismatch under the existing strict verification contract; no pins are silently refreshed.",
+  "validation": {
+    "tests/test_cpd_design.py": "9 passed",
+    "tests/test_importer_crossover_classification.py": "12 passed",
+    "tests/test_cpd_product_placement.py": "11 passed",
+    "git_diff_check": "passed"
+  },
+  "production_geometry_algorithm_changed": false,
+  "mvp_assets_promoted": false
+}

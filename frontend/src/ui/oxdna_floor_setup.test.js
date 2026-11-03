@@ -122,6 +122,25 @@ describe('initOxdnaFloorSetup', () => {
     expect(a.getSurfaceSpec().positionNm).toBe(-4.37)
   })
 
+  it('rounds initial contact to 0.1 nm and edits to three decimals without altering saved precision', () => {
+    const a = initOxdnaFloorSetup({ getStructureBounds: () => ({ min: [-1, -3.14678, -1], max: [1, 1, 1] }) })
+    els['oxdna-floor-enable'].checked = true
+    els['oxdna-floor-enable'].dispatchEvent(new Event('change'))
+    expect(a.getSurfaceSpec().positionNm).toBe(-3.1)
+    a.applyConfig({ dir: [0, 1, 0], position_nm: -7.937621, stiff: 5 })
+    expect(els['oxdna-floor-offset'].value).toBe('-7.938')
+    expect(a.getSurfaceSpec().positionNm).toBe(-7.937621)
+    els['oxdna-floor-offset'].value = '-4.12378'
+    els['oxdna-floor-offset'].dispatchEvent(new Event('input'))
+    expect(els['oxdna-floor-offset'].value).toBe('-4.124')
+    expect(a.getSurfaceSpec().positionNm).toBe(-4.124)
+    els['oxdna-floor-enable'].checked = false
+    els['oxdna-floor-enable'].dispatchEvent(new Event('change'))
+    els['oxdna-floor-enable'].checked = true
+    els['oxdna-floor-enable'].dispatchEvent(new Event('change'))
+    expect(a.getSurfaceSpec().positionNm).toBe(-4.124)
+  })
+
   it('applyConfig(null) turns the surface off', () => {
     api.applyConfig({ dir: [0, 1, 0], offset_nm: 1, stiff: 5 })
     api.applyConfig(null)

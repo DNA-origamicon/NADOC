@@ -1,8 +1,10 @@
 """Lossless float64 aligned coordinates in sparse simulation-serial order."""
 import struct
 import numpy as np
+from backend.core.memory_budget import check_array_budget, reserve_trajectory_response
 
 
+@reserve_trajectory_response
 def md_frames_atomistic_bin(topology, segments, coordinate, design, indices,
                             max_frames=200, stride=None):
     from backend.core.md_trajectory import (
@@ -13,6 +15,9 @@ def md_frames_atomistic_bin(topology, segments, coordinate, design, indices,
     raw = composite_raw_frame_map(segments, max_frames, stride)
     indices = sorted({int(i) for i in indices if 0 <= int(i) < len(raw)})
     serials = ctx['heavy_idx']
+    wire_bytes = 32 + len(serials) * 4 + len(indices) * (8 + len(serials) * 24)
+    # bytearray growth, final immutable copy and a frame's packing scratch.
+    check_array_budget(3 * wire_bytes + len(serials) * 24)
     nserials = int(serials.max()) + 1 if len(serials) else 0
     # Ship only real heavy atoms. Serial gaps are restored by the browser; no
     # coordinate precision is reduced and no solvent/hydrogen placeholders travel.

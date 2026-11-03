@@ -13,6 +13,8 @@ Routes
 
 from __future__ import annotations
 
+from backend.core.md_topology import open_universe
+
 import asyncio
 import hashlib
 import os
@@ -54,6 +56,8 @@ _UNWRAP_MAX_ATOMS = 200_000
 # scrub from two displays would race the file position, which the app never does.
 _UNIVERSE_CACHE: "OrderedDict[str, object]" = OrderedDict()
 _UNIVERSE_CACHE_MAX = 2
+_UNIVERSE_CACHE_MAX_BYTES = 1536 * 1024**2
+_UNIVERSE_CACHE_CHARGES: dict[str, int] = {}
 _UNIVERSE_CACHE_LOCK = threading.Lock()
 _UNIVERSE_BUILD_LOCKS: dict[str, threading.Lock] = {}
 _UNIVERSE_BUILD_LOCKS_GUARD = threading.Lock()
@@ -191,15 +195,31 @@ def _cache_get_universe(key: str):
 
 
 def _cache_put_universe(key: str, universe) -> None:
+    from backend.core.memory_sizes import topology_bytes
+
+    charge = topology_bytes(universe)
     with _UNIVERSE_CACHE_LOCK:
+        if charge > _UNIVERSE_CACHE_MAX_BYTES:
+            return
         _UNIVERSE_CACHE[key] = universe
+        _UNIVERSE_CACHE_CHARGES[key] = charge
         _UNIVERSE_CACHE.move_to_end(key)
-        while len(_UNIVERSE_CACHE) > _UNIVERSE_CACHE_MAX:
+        while (len(_UNIVERSE_CACHE) > _UNIVERSE_CACHE_MAX or
+               sum(_UNIVERSE_CACHE_CHARGES.get(k, 0) for k in _UNIVERSE_CACHE) > _UNIVERSE_CACHE_MAX_BYTES):
             _k, _u = _UNIVERSE_CACHE.popitem(last=False)
-            try:
-                _u.trajectory.close()
-            except Exception:  # noqa: BLE001 — best-effort handle release
-                pass
+            _UNIVERSE_CACHE_CHARGES.pop(_k, None)
+            # A live viewer may still own this Universe; eviction must not close
+            # its reader. The final owner closes it through its normal lifecycle.
+
+
+def _clear_universe_cache():
+    with _UNIVERSE_CACHE_LOCK:
+        _UNIVERSE_CACHE.clear()
+        _UNIVERSE_CACHE_CHARGES.clear()
+
+
+from backend.core.memory_budget import register_reclaimer
+register_reclaimer('md_topologies', _clear_universe_cache)
 
 
 def _universe_build_lock(key: str) -> threading.Lock:
@@ -521,7 +541,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
         """Synchronous load — runs inside asyncio.to_thread."""
         from pathlib import Path
 
-        import MDAnalysis as mda  # type: ignore
 
         from backend.core.atomistic_cache import build_atomistic_model_cached
         from backend.core.atomistic_to_nadoc import (
@@ -664,19 +683,19 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 _cached_u = _cache_get_universe(_u_key)
                 if _cached_u is None:
                     logs.append("Opening MDAnalysis Universe…")
-                    u = mda.Universe(str(topology_path), str(xtc_path))
+                    u = open_universe(str(topology_path), str(xtc_path))
                     if len(u.atoms) > _UNWRAP_MAX_ATOMS:
                         # Cache only the expensive parsed PSF topology. Caching `u`
                         # itself also caches its DCD reader, so deleting a downloaded
                         # 100+ GB trajectory cannot reclaim space until LRU eviction or
                         # server restart. Each display socket owns its trajectory reader.
-                        _cache_put_universe(_u_key, mda.Universe(u._topology))
+                        _cache_put_universe(_u_key, open_universe(u._topology))
                 elif _large_namd:
                     logs.append(
                         "Opening MDAnalysis Universe… (single-flight topology cache; "
                         "attaching new frame)"
                     )
-                    u = mda.Universe(_cached_u._topology, str(xtc_path))
+                    u = open_universe(_cached_u._topology, str(xtc_path))
                 else:
                     u = _cached_u
                     logs.append("Opening MDAnalysis Universe… (single-flight cache hit)")
@@ -691,7 +710,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             logs.append(
                 "Opening MDAnalysis Universe… (cached topology; attaching new frame)"
             )
-            u = mda.Universe(_cached_u._topology, str(xtc_path))
+            u = open_universe(_cached_u._topology, str(xtc_path))
         else:
             u = _cached_u
             logs.append("Opening MDAnalysis Universe… (cached — re-parse skipped)")

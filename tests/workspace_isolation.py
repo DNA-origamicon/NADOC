@@ -16,6 +16,9 @@ def isolated_startup_workspace(path):
         patch.setattr(assembly, '_WORKSPACE_DIR', path)
         patch.setattr(main, '_WORKSPACE_DIR', path)
         patch.setenv('NADOC_WORKSPACE', str(path))
+        # Reservations are process-shared state too. Keep test workers and their
+        # children out of the user's live simulation/analysis registry.
+        patch.setenv('NADOC_MEMORY_BUDGET_DIR', str(path / '.memory-budget'))
         patch.setattr(alpine_operations, '_LOGGER', logger)
         patch.setattr(alpine_operations, '_PATH', None)
         try:

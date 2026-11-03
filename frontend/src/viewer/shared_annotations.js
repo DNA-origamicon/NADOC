@@ -21,7 +21,7 @@ export function validateSharedAnnotations(entries, root) {
         !Number.isFinite(e.size) || e.size < SIZE_RANGE.min || e.size > SIZE_RANGE.max ||
         !Number.isFinite(e.transparency) || e.transparency < TRANSPARENCY_RANGE.min || e.transparency > TRANSPARENCY_RANGE.max ||
         typeof e.manual !== 'boolean' || (e.screenPos !== null && (!e.screenPos || !['x', 'y'].every(k => Number.isFinite(e.screenPos[k]) && e.screenPos[k] >= 0 && e.screenPos[k] <= 1))) ||
-        !Array.isArray(e.targets) || e.targets.length > 4096 || e.targets.some(id => !['Points', 'Sprite'].includes(nodes.get(id)?.type))) fail()
+        !Array.isArray(e.targets) || e.targets.length > 4096 || e.targets.some(id => !['Points', 'Sprite', 'InstancedMesh'].includes(nodes.get(id)?.type))) fail()
     ids.add(e.id)
   }
 }
@@ -47,6 +47,12 @@ export function mountSharedAnnotations({ current, container, runtime }) {
         if (object?.isPoints) {
           const position = object.geometry.attributes.position
           for (let i = 0; i < position.count; i++) points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(object.matrixWorld))
+        } else if (object?.isInstancedMesh) {
+          const matrix = new THREE.Matrix4()
+          for (let i = 0; i < object.count; i++) {
+            object.getMatrixAt(i, matrix)
+            points.push(new THREE.Vector3().setFromMatrixPosition(matrix).applyMatrix4(object.matrixWorld))
+          }
         } else if (object?.isSprite) points.push(object.getWorldPosition(new THREE.Vector3()))
       }
       return points

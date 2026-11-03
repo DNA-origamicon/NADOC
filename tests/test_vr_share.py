@@ -7,11 +7,11 @@ from backend.api.vr_share import router, parse_share_event
 def test_share_actions_are_allowlisted_and_survive_event_envelope(tmp_path):
     from backend.api.routes_vr import _event_payload
     path = tmp_path/'events'
-    for action in ('pause', 'resume', 'end'):
+    for action in ('start', 'pause', 'resume', 'end', 'admit'):
         event = dict(sequence=3, action=action)
         path.write_text(json.dumps(dict(sequence=4, level_sequence=1, selection_level='base', share_control=event)))
         assert _event_payload({'event_path': str(path)})['share_control'] == event
-    for value in (None, {}, dict(sequence=True, action='end'), dict(sequence=1, action='create'), dict(sequence=1, action='start')):
+    for value in (None, {}, dict(sequence=True, action='end'), dict(sequence=1, action='create')):
         assert parse_share_event(value) is None
 
 
@@ -23,14 +23,16 @@ def test_presenter_state_is_local_document_bound_and_atomic(tmp_path, monkeypatc
     monkeypatch.setattr(doc_context, 'get_current_doc', lambda: 'test')
     app=FastAPI(); app.include_router(router)
     with TestClient(app) as client:
-        body=dict(active=True,perspective=False,busy=False,failed=False,acknowledged=7)
+        body=dict(active=True,perspective=False,busy=False,failed=False,acknowledged=7,activeGuests=16,waitingGuests=8,perspectiveAvailable=False,startAvailable=True)
         assert client.post('/vr/share-controls',json=body).status_code==200
-        assert (tmp_path/'events.share').read_text()=='1 0 0 7 0'
+        assert (tmp_path/'events.share').read_text()=='1 0 0 7 0 16 8 0 1 0'
         assert not (tmp_path/'events.share.next').exists()
         assert client.post('/vr/share-controls',json={**body,'active':'yes'}).status_code==422
+        assert client.post('/vr/share-controls',json={**body,'waitingGuests':-1}).status_code==422
+        assert client.post('/vr/share-controls',json={**body,'startAvailable':1}).status_code==422
         monkeypatch.setattr(doc_context,'get_current_doc',lambda:'other')
         assert client.post('/vr/share-controls',json=body).status_code==409
-        assert (tmp_path/'events.share').read_text()=='1 0 0 7 0'
+        assert (tmp_path/'events.share').read_text()=='1 0 0 7 0 16 8 0 1 0'
 
 
 def test_avatar_mapping_inverts_scale_rotation_translation_and_normalization():
@@ -67,6 +69,17 @@ def test_pose_feed_is_fresh_local_and_document_bound(tmp_path, monkeypatch):
         ui={'lines': [0.,0.,0.,1.,1.,1.,0.,1.,0.,1.,1.,1.]*200, 'panels': []}
         path.write_text(json.dumps({**payload,'ui':ui}))
         assert client.get('/vr/presenter-pose').json()['avatar']['ui']==ui
+        assert 'ui' not in client.get('/vr/presenter-pose?camera=1').json()['avatar']
+        path.write_text(json.dumps({**payload, 'enabled':False, 'presenting':True}))
+        assert client.get('/vr/presenter-pose').json()['avatar'] is None
+        assert client.get('/vr/presenter-pose?camera=1').json()['avatar'] is not None
+        path.write_text(json.dumps({**payload, 'enabled':False, 'presenting':True, 'sweepPreview':{'nodes':[[0,0,0]]}}))
+        preview=client.get('/vr/presenter-pose?preview=1').json()['preview']
+        assert preview['nodes']==[[0,0,0]] and len(preview['trackingToSource'])==16
+        path.write_text(json.dumps({**payload, 'presenting':False, 'sweepPreview':{'nodes':[[0,0,0]]}}))
+        assert client.get('/vr/presenter-pose?preview=1').json()['preview'] is None
+        path.write_text(json.dumps({**payload, 'enabled':False, 'presenting':True, 'tracked':False}))
+        assert client.get('/vr/presenter-pose?camera=1').json()['avatar'] is None
         for key in ('enabled','tracked'):
             path.write_text(json.dumps({**payload,key:False}))
             assert client.get('/vr/presenter-pose').json()['avatar'] is None

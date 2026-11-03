@@ -1,0 +1,105 @@
+{
+  "at": "2026-10-17T03:39:24+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_standard_density_v1.py",
+    "sha256": "ef96eb75686812e053a1a93e072664ea000d5da18a779d0e854aabc8a7207ed5"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/assessment.json",
+    "sha256": "f087ef3f9ca8150930272b77678f9225bcde7befd01c3d8113d8c5aafbb4427d"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-density-v1/output.dat",
+    "sha256": "2c381bdc01f874c83bc9dea82f3a284e3d16f125d74c8a873c0d0df3513a89e7"
+  },
+  "baseline_reproduction_error_hartree": 4.233790831809081e-08,
+  "records": [
+    {
+      "name": "baseline",
+      "shift_kcal_mol": 0.0,
+      "gap_hartree": 0.24407680840273474,
+      "occupied_subspace_loss": 0.0
+    },
+    {
+      "name": "coarse_surface",
+      "shift_kcal_mol": 1.7381173772158343,
+      "gap_hartree": 0.46385602353592503,
+      "occupied_subspace_loss": 0.0006556596785287638
+    },
+    {
+      "name": "coarse_integration",
+      "shift_kcal_mol": 1.1823119935247184,
+      "gap_hartree": 0.22041208870330797,
+      "occupied_subspace_loss": 9.510532504464209e-05
+    },
+    {
+      "name": "higher_integration",
+      "shift_kcal_mol": -0.07685321273758669,
+      "gap_hartree": 0.22945627196570242,
+      "occupied_subspace_loss": 6.464125078764482e-06
+    },
+    {
+      "name": "higher_surface",
+      "shift_kcal_mol": 1.3065370089210135,
+      "gap_hartree": 0.008470676400685717,
+      "occupied_subspace_loss": 3.968022765178148
+    }
+  ],
+  "decision": "Higher integration reduces incremental fixed-density shift to 0.077 kcal/mol, but higher surface shifts 1.31 kcal/mol and loses about four occupied orbitals in one Fock diagonalization. No higher-grid SCF justified. One direct-versus-FMM fixed-density check can isolate acceleration error; if reproduced, close solvent numerical-refinement branch for methodological review rather than more SCF/grid tuning.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "next_launch": {
+    "at": "2026-10-17T03:39:38.489934+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1/plan.json",
+      "sha256": "e72e8905999d722e27ca1c38e4b16ea8f42ec77bccab5ab2dac5246724a4eeb8"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-ddx-standard-direct-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=885",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-direct-v1-service"
+    ],
+    "watcher": {
+      "token": "9e8db4c1-b184-44a2-824e-6a5dea79e8c1",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792208378.4862475,
+      "expected_seconds": 180,
+      "supervisor_pid": 1576650,
+      "supervisor_identity": "26347379",
+      "state": "armed",
+      "watcher_pid": 1576652,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 480,
+      "active_deadline_id": "endpoint-ddx-standard-direct-v1-review",
+      "active_deadline_epoch": 1792209098.4208229
+    },
+    "limits": "RuntimeMaxUSec=14min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792209278.4208229,
+    "review_epoch": 1792209098.4208229,
+    "cloud_spending_usd": 0
+  }
+}

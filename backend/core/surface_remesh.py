@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.sparse import csr_matrix
+from backend.core.spatial_workers import spatial_workers
 from scipy.spatial import cKDTree
 from backend.core.surface_progress import report
 
@@ -121,8 +122,9 @@ def remesh_sharp_patches(
     degree = np.asarray(adj.sum(axis=1)).ravel()
     ref_normals, ref_area = _normals(reference, local_faces)
 
-    def score(v):
-        n, _ = _normals(v, local_faces)
+    def score(v, n=None):
+        if n is None:
+            n, _ = _normals(v, local_faces)
         angle = np.degrees(
             np.arccos(np.clip(np.einsum("ij,ij->i", n[la[:, 0]], n[la[:, 1]]), -1, 1))
         )
@@ -149,7 +151,8 @@ def remesh_sharp_patches(
                 area < ref_area * 0.1
             ):
                 continue
-            candidate_score = score(candidate)
+            # Validation above already computed these exact candidate normals.
+            candidate_score = score(candidate, n)
             if candidate_score < best_score:
                 current, best_score = candidate, candidate_score
                 accepted = True
@@ -160,7 +163,7 @@ def remesh_sharp_patches(
         return mesh
     vertices[local_ids] = current
     # Only query affected/new vertices; unchanged ownership stays byte-identical.
-    lookup = cKDTree(original).query(vertices[active], workers=-1)[1]
+    lookup = cKDTree(original).query(vertices[active], workers=spatial_workers())[1]
 
     def owners(values):
         if not values:

@@ -51,11 +51,16 @@ export function formatResourceSummary(rec) {
     partition: `${r.partition ?? '?'} (${r.kind ?? '?'})`,
     hardware: `${r.gpus ?? 0} GPU · ${r.cores ?? 0} core · ${r.mem_gb ?? 0} GB`,
     walltime: r.walltime ?? '?',
+    completion: r.completion?.available ? `${r.completion.known_hours.toFixed(1)} h (${r.completion.low_hours.toFixed(1)}–${r.completion.high_hours.toFixed(1)} h) + queue waits` : 'unknown',
+    totalCost: r.completion?.available ? `${Math.round(r.completion.cost).toLocaleString()} SU (${Math.round(r.completion.low_cost).toLocaleString()}–${Math.round(r.completion.high_cost).toLocaleString()} SU)` : 'unknown',
+    compute: r.run_hours != null ? `~${Number(r.run_hours).toFixed(1)} h compute` : 'unknown',
+    planning: r.planning_hours != null ? `${Number(r.planning_hours).toFixed(1)} h / ${r.submission_count ?? 1} submission(s)` : 'unknown',
+    planningCost: r.planning_cost_su != null ? `${Math.round(r.planning_cost_su).toLocaleString()} SU` : 'unknown',
     qos:      r.qos ?? '?',
     throughput: expected != null
       ? `${Number(expected).toFixed(1)} ns/day ${measured ? '(measured)' : '(estimated)'}`
       : 'unknown',
-    queue:    fmtQueueMinutes(r.est_queue_min),
+    queue:    r.completion ? 'unknown for this request' : fmtQueueMinutes(r.est_queue_min),
     cost:     r.est_cost_su != null ? `${Math.round(r.est_cost_su).toLocaleString()} SU` : 'unknown',
     safety:   `${r.safety_factor ?? 1.5}× walltime headroom`,
     notes:    Array.isArray(r.notes) ? r.notes : (r.notes ? [String(r.notes)] : []),
@@ -284,11 +289,16 @@ export function initMdSubmitReview({
         ${_row('Simulation', s.totalNs)}
         ${_row('Partition', s.partition)}
         ${_row('Hardware', s.hardware)}
-        ${_row('Walltime', s.walltime)}
+        ${_row('Walltime per submission', s.walltime)}
+        ${_row('Time until results', s.completion)}
+        ${_row('Total allocation cost', s.totalCost)}
+        ${_row('Estimated compute', s.compute)}
+        ${_row('Planning allowance', s.planning)}
         ${_row('QoS', s.qos)}
         ${_row('Throughput', s.throughput)}
         ${_row('Est. queue', s.queue)}
-        ${_row('Est. cost', s.cost, _C.warn)}
+        ${_row('Full compute cost', s.cost, _C.warn)}
+        ${_row('Cost with headroom', s.planningCost, _C.warn)}
       </div>
       <div style="color:${_C.dim};margin-bottom:8px">${s.safety}</div>
       ${s.notes.length ? `<div style="color:${_C.muted};margin-bottom:8px;line-height:1.4">${s.notes.map(n => `• ${n}`).join('<br>')}</div>` : ''}
@@ -372,9 +382,9 @@ export function initMdSubmitReview({
           const nErr = result.errors?.length ?? 0
           _notify(`Submitted ${nSub}/${nSub + nErr} replica${nSub === 1 ? '' : 's'} on Alpine${nErr ? ` (${nErr} failed)` : ''}`,
                   nErr ? 'warn' : 'ok')
+          await onSubmitted(parentId, result)
           _submitting = false
-          onSubmitEnd({ ok: true })
-          onSubmitted(parentId, result)
+          await onSubmitEnd({ ok: true })
           return
         }
         const result = resume
@@ -382,9 +392,9 @@ export function initMdSubmitReview({
           : await api.submitMdJobRemote(jobId, payload)
         if (!result) throw new Error(api.lastErrorMessage?.() ?? (resume ? 'Resume failed' : 'Submit failed'))
         _notify(`${resume ? 'Resumed' : 'Submitted'} on Alpine as SLURM ${result.slurm_job_id}`, 'ok')
+        await onSubmitted(jobId, result)
         _submitting = false
-        onSubmitEnd({ ok: true })
-        onSubmitted(jobId, result)
+        await onSubmitEnd({ ok: true })
       } catch (err) {
         // The card is already gone, so the failure has to reach the user through the
         // toast — silently dropping it would look like a submit that just never landed.

@@ -1,3 +1,4 @@
+import { TrajectoryMemoryMap, queueTrajectoryTransfer } from '../scene/trajectory_memory.js'
 /**
  * md_solvent_controls.js — the Visualizations card's Water / Ions / Periodic box
  * toggles, and the fetch+cache that feeds them.
@@ -176,7 +177,7 @@ export function initMdSolventControls({
   let _nFrames = 0
   let _meta = null              // /solvent-meta for _jobId
   let _measuredSpecies = null   // real ion census, once a frame has landed
-  let _cache = new Map()        // frame index → parsed frame
+  const _cache = new TrajectoryMemoryMap()        // frame index → parsed frame
   let _deferDraw = false, _batchPage = false, _cachedSignature = null
   let _frameIdx = 0
   let _interpolationPair = null
@@ -339,7 +340,7 @@ export function initMdSolventControls({
     _generation++
     _preparation = null
     _frameBytes = 0
-    _cache = new Map()
+    _cache.clear()
     _measuredWater = null
   }
 
@@ -351,10 +352,12 @@ export function initMdSolventControls({
     const foreground = !_batchPage && !_cache.has(i)
     const want = foreground ? [i]
       : selectedFrames().filter(k => !_cache.has(k))
-        .slice(0, Math.max(1, Math.floor(128 * 1024 * 1024 / Math.max(1, _frameBytes || _plan().bytesPerFrame))))
+        // The backend's 128 MiB working allowance includes arrays and packing
+        // copies, so leave room for four copies plus frame/header metadata.
+        .slice(0, Math.max(1, Math.floor(24 * 1024 * 1024 / Math.max(1024, _frameBytes || _plan().bytesPerFrame))))
     if (!want.length) return
     const generation = _generation
-    const task = _fetchBatch(want, generation)
+    const task = queueTrajectoryTransfer(() => generation === _generation ? _fetchBatch(want, generation) : false)
     _inflight = task
     void task.finally(() => { if (_inflight === task) _inflight = null })
     return task
@@ -436,9 +439,14 @@ export function initMdSolventControls({
           _setStatus(`Ions / box ready · ${total}/${total} frames`, '#3fb950')
           return true
         }
+        const before = frames.filter(i => _cache.has(i)).length
         const pending = _fetchMissing(_frameIdx)
         _setStatus(`Preparing ions / box · ${_cache.size}/${total} frames…`, '#58a6ff')
         if (await pending === false) return false
+        if (frames.filter(i => _cache.has(i)).length <= before) {
+          _setStatus('Shared trajectory memory is full. Close another trajectory or increase the frame interval.', '#d29922')
+          return false
+        }
       }
       return false
     })()
@@ -453,7 +461,8 @@ export function initMdSolventControls({
   function ensureFrame(i) {
     if (!_needsFrames() || _cache.has(i | 0)) return true
     const generation = _generation
-    return prepareAll().then(ok => ok && generation === _generation && _cache.has(i | 0))
+    return Promise.resolve(_inflight).then(() => queueTrajectoryTransfer(() => generation === _generation ? _fetchBatch([i | 0], generation) : false))
+      .then(ok => ok && generation === _generation && _cache.has(i | 0))
   }
 
   // ── draw ──────────────────────────────────────────────────────────────────
@@ -599,7 +608,7 @@ export function initMdSolventControls({
         _meta = null
         _measuredSpecies = null
         _measuredWater = null
-        _cache = new Map()
+        _cache.clear()
       }
       // Retry while the answer is "not ready": a package still being built has no
       // charge audit yet and reports zero water and zero ions, and caching THAT for the
@@ -634,7 +643,7 @@ export function initMdSolventControls({
         waterToggle.checked = _live ? _read(LS.water, '') === 'true' : false
       }
       _renderCount()
-      if (_live !== wasLive) { _cache = new Map(); _measuredWater = null }
+      if (_live !== wasLive) { _cache.clear(); _measuredWater = null }
       // Only ask for the representation when it can matter. The panel gates these
       // controls once during its own construction, and main.js's `getCurrentRepr`
       // closes over a `let` declared FURTHER DOWN in the same function — reading it
@@ -736,7 +745,7 @@ export function initMdSolventControls({
         _renderLegend()
       }
       _measuredWater = frame.nWater
-      _cache = new Map([[_frameIdx, frame]])
+      _cache.clear(); _cache.set(_frameIdx, frame)
       _draw(_frameIdx)
       _renderCount()
       _setStatus(parsed.capped
@@ -750,7 +759,7 @@ export function initMdSolventControls({
       _preparation = null
       _clearScene()
       _setStatus('')
-      _cache = new Map()
+      _cache.clear()
       _measuredWater = null
       if (_live) _pushLive()
       if (_jobId) api.cancelMdAnalysis?.(_jobId, 'solvent')

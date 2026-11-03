@@ -1,0 +1,36 @@
+{
+  "before": [
+    {
+      "path": "/media/jojo/Archive/nr5-35t5y8_m/browser/workspace",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/media/jojo/Archive/nr5-35t5y8_m/browser/captures",
+      "exists": true,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/test-results",
+      "exists": false,
+      "entries": []
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/frontend/playwright-report",
+      "exists": false,
+      "entries": []
+    }
+  ],
+  "doc": "__e2e__desktop-round3",
+  "credentials_before": [],
+  "isolation": "Fresh empty Archive workspace; uvicorn lifespan off; preserve existing placement review ledger",
+  "cleanup": "afterEach closes page/deletes doc; global teardown removes prefixed documents/project/session artifacts and credentials; explicit owned workspace/captures removal after process checks",
+  "after": {
+    "workspace_entries": [
+      ".identity_audit.json"
+    ],
+    "credentials": [],
+    "process_references": [],
+    "result": "1 passed; 22 exact visible pixel comparisons with negative blank-scene check; temporary workspace/captures removed"
+  }
+}

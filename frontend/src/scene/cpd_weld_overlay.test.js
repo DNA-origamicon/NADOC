@@ -22,6 +22,13 @@ const PAIR = {
 }
 
 describe('planWeldDraw', () => {
+  it('shows a formed anti isomer without reactant collision or propensity warnings', () => {
+    const [p] = planWeldDraw([{...PAIR, formed:true, stereochemistry:'cis-anti-I'}], getPosFor(0.16))
+    expect(p.belowVdw).toBe(false)
+    expect(p.k).toBeNull()
+    expect(p.reactive).toBe(false)
+    expect(p.readout).toContain('Formed cis-anti-I CPD')
+  })
   it('places markers on the two bond midpoints', () => {
     const [p] = planWeldDraw([PAIR], getPosFor(0.34))
     expect(p.midA).toEqual([0.0695, 0, 0])
@@ -83,6 +90,13 @@ describe('planWeldDraw', () => {
 const fakeScene = () => ({ add: vi.fn(), remove: vi.fn() })
 
 describe('initCpdWeldOverlay', () => {
+  it('uses the current static frame when pairs are enabled after rendering', () => {
+    const overlay = initCpdWeldOverlay({})
+    overlay.update(getPosFor(0.34))
+    overlay.setPairs([PAIR])
+    overlay.setVisible(true)
+    expect(overlay.getReadouts()).toHaveLength(1)
+  })
   it('starts hidden and draws nothing until made visible', () => {
     const overlay = initCpdWeldOverlay({ scene: fakeScene(), THREE: null })
     overlay.setPairs([PAIR])
@@ -167,6 +181,7 @@ describe('initCpdWeldOverlay with real three.js', () => {
     expect(group).toBeTruthy()
     const meshes = group.children.filter((c) => c.isMesh)
     expect(meshes).toHaveLength(3) // marker A, marker B, connecting bar
+    expect(meshes.every(m => m.visible)).toBe(true)
 
     const positions = meshes.map((m) => [m.position.x, m.position.y, m.position.z])
     expect(positions).toContainEqual([0.0695, 0, 0]) // midpoint A

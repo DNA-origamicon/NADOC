@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-17T08:42:41+00:00",
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/closeout_pyscf_pair_v1.py",
+    "sha256": "2a6a637122e9e468a66d26162df610554bf585434afd1668bebabe59971d7378"
+  },
+  "sources": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-v1/completion_audit.json",
+      "sha256": "9729f47ab43bbe3f92f4a6ba68feed0ffe65770cfdc5213e16b5ac3992a3fb3e"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-original350-v1/completion_audit.json",
+      "sha256": "8f64fa4e09a6344edf06a9b0d4356bc19184d8c63a3addef9e34b97b56290a0a"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/completion_audit.json",
+      "sha256": "e2e722efea287cae259530cd087765e7ad510baf2624b6ded2d2f0b5e20f6ffe"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/completion_audit.json",
+      "sha256": "936556ae783f98f356182c430f887f5b74f491b6f156909dc2af7ce14c04fdc4"
+    }
+  ],
+  "energies_hartree": {
+    "endpoint-pyscf-pcm-v1": -1963.9735037900928,
+    "endpoint-pyscf-pcm-original350-v1": -1963.9735539925232,
+    "endpoint-pyscf-pcm-alternate-v1": -1963.9735789985798,
+    "endpoint-pyscf-pcm-alternate350-v1": -1963.973612577216
+  },
+  "original_shift_kcal_mol": -0.031502500715589986,
+  "alternate_shift_kcal_mol": -0.02107091237200305,
+  "alternate_minus_original302_kcal_mol": -0.047194038143031455,
+  "alternate_minus_original350_kcal_mol": -0.03676244979944453,
+  "relative_grid_change_kcal_mol": 0.010431588343586928,
+  "individual_screen_kcal_mol": 0.5,
+  "relative_screen_kcal_mol": 0.2,
+  "numerical_screen_passed": true,
+  "total_scf_wall_seconds": 13935.38775668497,
+  "decision": "Independent IEF-PCM passes planned local paired surface screen. Fixed proxy conformers nearly degenerate; no robust physical ranking, free energy, occupancy or melting prediction. Close planned numerical pilot; no more automatic grid refinement. Original neutral MP2/MM mismatch remains a different target; return to existing-target reconciliation before new QM.",
+  "limitations": [
+    "Alternate434 excluded by memory gate;302/350 comparison is not proof of asymptotic convergence.",
+    "Same charged terminal proxy only; internal and other terminal chemistries not validated.",
+    "HF reference, independently prepared cap conformers, fixed geometry; no ensemble/thermal corrections.",
+    "No condensed-phase MM comparison or force-field refit performed."
+  ],
+  "minimum_certified": false,
+  "simulation_ready": false
+}

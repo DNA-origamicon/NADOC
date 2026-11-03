@@ -1,0 +1,127 @@
+{
+  "at": "2026-10-17T20:24:20+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_cross_v2.py",
+    "sha256": "24564477595530bbdc0adecdae01878464dc0fd0acdde3bb6951ab05a7eff941"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/assessment.json",
+    "sha256": "108ba693a209a55d1af32e78c4c24b83ebc6fb1f3497e3cee069548dd3e50eee"
+  },
+  "contrasts": {
+    "background_at_exo_A": {
+      "qm": 3.5703804440454596,
+      "mm": -3.184201753183288,
+      "error": -6.754582197228748
+    },
+    "background_at_exo_B": {
+      "qm": -6.545989052221749,
+      "mm": -11.136563054482265,
+      "error": -4.5905740022605155
+    },
+    "exo_at_background_A": {
+      "qm": 4.760802648863402,
+      "mm": 1.20953107267154,
+      "error": -3.551271576191862
+    },
+    "exo_at_background_B": {
+      "qm": -5.355566847403807,
+      "mm": -6.742830228627437,
+      "error": -1.3872633812236295
+    },
+    "diagonal": {
+      "qm": -1.7851864033583476,
+      "mm": -9.927031981810725,
+      "error": -8.141845578452378
+    }
+  },
+  "coupling_qm": -10.11636949626721,
+  "coupling_mm": -7.952361301298977,
+  "coupling_error": 2.1640081949682326,
+  "decision": "Substantial residual remains at either fixed exocyclic orientation; exocyclic-only correction cannot fix both. Coupling is real for these MM-selected proxy points, not uniquely sugar-ring coupling. Two midpoint-orientation diagnostics on the existing backgrounds will test interpolation curvature/basin dependence before any fit. No full sweep, no fit to four corners.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "midpoint_preflight": {
+    "at": "2026-10-17T20:24:49+00:00",
+    "passed": true,
+    "script": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_midpoint_preflight_v1.py",
+      "sha256": "259f7cdd40de38051976b8c32b56de1c61901d813b63565ca3ffaa7b1f17221d"
+    },
+    "checks": [
+      {
+        "name": "original_background_midpoint",
+        "projected_gradient_max": 1.7432260817834014e-05,
+        "bond_ratio_range": [
+          0.989534358733335,
+          1.036853908519903
+        ],
+        "fixed_atoms_unchanged": true
+      },
+      {
+        "name": "alternate_background_midpoint",
+        "projected_gradient_max": 5.8080325844311886e-05,
+        "bond_ratio_range": [
+          0.991459615930979,
+          1.022824179517125
+        ],
+        "fixed_atoms_unchanged": true
+      }
+    ],
+    "limitation": "Fixed endpoint background includes more than ring pucker; cap orientation and branch relaxation may couple. Diagnostic conditional contrasts only; not globally minimized surfaces or a fit dataset."
+  },
+  "launch": {
+    "at": "2026-10-17T20:24:50.061397+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/plan.json",
+      "sha256": "366149318c6ff48b0e8221cb11806b3a20f85c417f8fa2cc0f47b1fe51c936d5"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-ring-exocyclic-midpoint-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=7485",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-midpoint-v1-service"
+    ],
+    "watcher": {
+      "token": "8cb8d6b0-cacb-4e26-8081-790d734389ac",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792268690.0578508,
+      "expected_seconds": 900,
+      "supervisor_pid": 3140391,
+      "supervisor_identity": "32378537",
+      "state": "armed",
+      "watcher_pid": 3140393,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-ring-exocyclic-midpoint-v1-review",
+      "active_deadline_epoch": 1792275589.9988112
+    },
+    "limits": "RuntimeMaxUSec=2h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792276189.9988112,
+    "review_epoch": 1792275589.9988112,
+    "cloud_spending_usd": 0
+  }
+}

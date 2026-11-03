@@ -147,6 +147,6 @@ def test_flex_progress_files_are_removed_on_failure(monkeypatch):
 
     monkeypatch.setattr(routes_md, '_run_md_analysis', fail)
     with pytest.raises(RuntimeError, match='worker failed'):
-        asyncio.run(routes_md._run_md_flex(None, 'J', 'rmsf', 'md_rmsf', ()))
+        asyncio.run(routes_md._run_md_flex(None, 'J', 'rmsf', 'md_rmsf', ('missing.psf', [], 'missing.pdb', None)))
     assert not paths[0].exists()
     assert ('J', 'rmsf') not in routes_md._FLEX_PROGRESS_PATHS

@@ -1,0 +1,7 @@
+doi,accession,kind,url,scope,notes
+10.1038/nature07971,EMD-1612,processed_cryo_em_map,https://www.ebi.ac.uk/emdb/EMD-1612,DNA box with controllable lid,Processed reconstruction; not raw micrographs or particle stacks.
+10.1073/pnas.1215713109,EMD-2210,processed_cryo_em_map,https://www.ebi.ac.uk/emdb/EMD-2210,Square-lattice pointer object,"Match deposited object, buffer and processing before simulation comparison."
+10.1073/pnas.1215713109,4V5X,atomic_model,https://www.rcsb.org/structure/4V5X,Square-lattice pointer object,Model polymer sequences do not establish completeness of the synthesis staple list; supersedes earlier split PDB entries.
+10.1039/c8nr10113b,EMD-4653,processed_cryo_em_map,https://www.ebi.ac.uk/emdb/EMD-4653,Viral capsid packaging study; origami scope unresolved,Map describes capsid; do not assume it resolves the packaged origami.
+10.1126/sciadv.aau1157,EMD-0028,processed_cryo_em_map,https://www.ebi.ac.uk/emdb/EMD-0028,excluded brick-named objects,"Retained as scope boundary evidence, not included as an eligible design."
+10.1126/sciadv.aau1157,EMD-4354,processed_cryo_em_map,https://www.ebi.ac.uk/emdb/EMD-4354,excluded brick-named objects,"Retained as scope boundary evidence, not included as an eligible design."

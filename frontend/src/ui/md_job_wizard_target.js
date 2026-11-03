@@ -19,6 +19,7 @@
  */
 
 import { el } from './primitives/dom.js'
+import { initRuntimeComparison } from './md_runtime_comparison.js'
 import { initClusterConnection } from './cluster_connection.js'
 import { getRunDir, mountDirectoryButton, runDirLabel } from './run_location.js'
 import { initWizardResources } from './md_job_wizard_resources.js'
@@ -53,6 +54,8 @@ export function initWizardTargetStep({
   getSlurmPreview = undefined,
   getTotalNs = () => 0,
   getJobPreview = undefined,
+  getRuntimePreview = undefined,
+  getPreparation = () => ({}),
   getVolumes = undefined,
   setVolume = undefined,
   getPlanShape = () => null,
@@ -74,6 +77,9 @@ export function initWizardTargetStep({
   let _clusterState = 'disconnected'
   let _conn = null
   let _chipMount = null
+  let _transferRates = { upload_mbps: 11, download_mbps: 50 }
+  const _getQuoteShape = () => ({ ...getPlanShape(), ..._transferRates })
+  let _comparison = null
   let _resources = null
   let _runpod = null
   let _runpodActivated = false
@@ -101,6 +107,7 @@ export function initWizardTargetStep({
 
   function _emit() {
     _paintHint()
+    if (!_ro()) void _comparison?.refresh()
     onChange({
       target: _target, partition: _partition, gresType: _gresType,
       ready: readiness().ready,
@@ -370,6 +377,21 @@ export function initWizardTargetStep({
       attrs: { style: 'font-size:12px;color:#8b949e;margin:0 0 10px' },
     }))
 
+    _comparison?.dispose()
+    _comparison = null
+    if (!_ro() && getRuntimePreview) {
+      const comparisonMount = el('div', { attrs: { style: 'border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:12px' } })
+      mount.appendChild(comparisonMount)
+      _comparison = initRuntimeComparison({ mount: comparisonMount, fetchPreview: getRuntimePreview,
+        getShape: _getQuoteShape, getPartition: () => _partition, getGresType: () => _gresType,
+        getGpuKey: () => _runpod?.gpuKey?.(),
+        onAssumptionsChange: values => {
+          _transferRates = values
+          if (_target === 'runpod') void _runpod?.refresh()
+          if (_target === 'alpine') void _resources?.refresh()
+        } })
+      void _comparison.refresh()
+    }
     for (const t of TARGETS) {
       // A locked view shows the one target this job used — the other two cards would offer
       // a choice about a job that already exists.
@@ -431,6 +453,8 @@ export function initWizardTargetStep({
           getPartition: () => _partition,
           getGresType: () => _gresType,
           getTotalNs,
+          getPreparation,
+          getPlanShape: _getQuoteShape,
           onChange: _emit,
           readOnly,
           // What the job actually asked for and got, so the locked block shows the run's
@@ -452,7 +476,7 @@ export function initWizardTargetStep({
           getJobPreview,
           getVolumes,
           setVolume,
-          getPlanShape,
+          getPlanShape: _getQuoteShape,
           onChange: _emit,
           readOnly,
           getRecorded: () => _recordedRunpod,
@@ -549,11 +573,13 @@ export function initWizardTargetStep({
      *  changes, which is what makes the estimates follow the later tabs. Each block's own
      *  cache key makes this a no-op unless something that moves a number actually moved. */
     refreshSizing: () => {
+      if (!_ro()) void _comparison?.refresh()
       if (_target === 'alpine') void _resources?.refresh()
       if (_target === 'runpod') void _runpod?.refresh()
     },
     dispose() {
       window.removeEventListener('nadoc:cluster-state-change', _onClusterState)
+      _comparison?.dispose()
       _conn?.dispose?.()
     },
   }

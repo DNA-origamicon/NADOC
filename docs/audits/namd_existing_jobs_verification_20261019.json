@@ -1,0 +1,54 @@
+{
+  "policy": "Show warnings only for detected mismatches or unavailable recorded inputs. Matching and incomplete historical comparisons are silent.",
+  "validation_scope": "Existing CPD jobs compared against their own frozen design; job metadata and receipts left unchanged. The UI compares against the active design on each request.",
+  "jobs": [
+    {
+      "job_id": "6d6c46163a00",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "edb512c46112",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "e345c67349bf",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "b2b43076da96",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "37d39cc6b88f",
+      "status": "running",
+      "self_snapshot_match": true,
+      "verification": "namd_prepared_package"
+    },
+    {
+      "job_id": "935bbecba8cf",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "974191dc2e63",
+      "status": "completed",
+      "self_snapshot_match": true,
+      "verification": "saved_design_snapshot"
+    },
+    {
+      "job_id": "9b08bed08561",
+      "status": "running",
+      "self_snapshot_match": true,
+      "verification": "namd_prepared_package"
+    }
+  ]
+}

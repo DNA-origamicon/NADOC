@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three'
+import { computeSurfaceNormals } from './surface_normals.js'
 import { applyInstanceAlphaMaterial } from './instance_alpha.js'
 import { clusterOfNucKey } from './color_util.js'
 
@@ -583,7 +584,7 @@ export function initSurfaceRenderer(scene) {
     _liveVerts.set(vertices)
     const geo = _mesh.geometry
     geo.attributes.position.needsUpdate = true
-    geo.computeVertexNormals()
+    computeSurfaceNormals(geo)
     geo.boundingBox = null
     geo.boundingSphere = null
     _normalState = null
@@ -665,7 +666,7 @@ export function initSurfaceRenderer(scene) {
     if (positionsChanged || facesChanged || _normalState?.geometry !== newGeo
       || _normalState.positionVersion !== newGeo.attributes.position.version
       || _normalState.indexVersion !== newGeo.index.version) {
-      newGeo.computeVertexNormals()
+      computeSurfaceNormals(newGeo)
       newGeo.boundingBox = null
       newGeo.boundingSphere = null
       _normalState = { geometry: newGeo, positionVersion: newGeo.attributes.position.version,

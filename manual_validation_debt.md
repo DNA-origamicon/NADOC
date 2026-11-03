@@ -903,6 +903,14 @@ No timing thresholds or motion presets were relaxed. Re-run this profile under a
 quiet host condition before claiming complete four-profile coverage.
 
 - **MV-44 — IMPROVED, OPEN — Timing-related physical double vision (2026-10-13).**
+  **October 15 Ball+Stick update:** ISSUE-97 groups exact exported sphere meshes
+  in batches of eight. The same restored Flex scene improved from about 45 to
+  87.343 application Hz, with occasional missed refreshes still present. Native
+  exact rendering checks pass; this does not close the physical symptom. A fresh
+  two-second gripped-model torso recording and monocular report were requested
+  with the candidate live. See
+  [current evidence](.development-artifacts/vr-temporal-fix-20261015/index.html).
+  The following October 13 evidence remains historical context.
   The user reports substantially reduced doubling after the normal optimized
   viewer deployment, with remaining lag/frame drops when menus enter view or the
   other controller aims, hovers or vibrates. The speed-dependent monocular symptom
@@ -934,6 +942,15 @@ Feature-history session scope update (2026-10-15): the user explicitly deferred
 VR/headset validation to a later machine-specific session on VR-capable hardware.
 This machine cannot perform those checks. Preserve their pending status; desktop
 checks in MV-45–MV-47 remain in scope and are not covered by this deferral.
+
+
+2026-10-16: QR shared-position AR tools retired at user request. Earlier QR calibration, cube printing, reference-marker and phone tracking entries are historical, not active validation debt. Guest QR invitations remain. VR Share now starts and ends presentations through the desktop lifecycle; see docs/vr_sharing.md.
+
+2026-10-16: Sweep-edit headset Follow regression fixed and verified in real protected-display workflows with both steady profiles. Variable-fast and variable-deliberate controller simulations remain blocked by missed sweep adjustment/point button reaches (three attempts each); do not report those end-to-end cases as passed. See `.development-artifacts/sweep-headset-follow-20261016/results.json` and docs/vr_sharing.md. No target sizes, motion presets or thresholds were changed.
+
+2026-10-16 compact sweep preview: direct enlarged-node dragging and guest preview lifecycle passed steady_fast, steady_deliberate (avatar hidden), and variable_deliberate (mobile-sized guest). variable_fast was blocked by the overlapping Feature Log Close control; a Menu-button dismissal diagnostic also failed and was reverted. Existing noisy numeric-button reach debt is not resolved by enlarging 3D nodes. No motion preset, retry count or acceptance threshold was relaxed. Evidence: `.development-artifacts/sweep-preview-20261016/results.json`.
+
+2026-10-16 — OPEN, deferred by user: eight simultaneous guests worked while the presenter shared headset perspective and edited a sweep, but VR became very laggy and maintaining good framerate was difficult. No measured FPS or bottleneck attribution is available. This is functional evidence, not a performance/capacity sign-off. See docs/vr_sharing.md.
 
 - **MV-45 — PENDING — Standard-part recipe repair panel (2026-10-15).**
   Exercise Check / repair recipe from the desktop Feature Log using an isolated
@@ -1401,3 +1418,52 @@ indicators and picking in each section. The design remains separate feature/segm
 records internally. Automated checks exercise shared rows and real editing gestures;
 user visual acceptance remains pending. The user authorized resuming autoscaffold
 work on November 3; it is no longer blocked on this review.
+
+2026-10-16 VR clipboard, updated after minimum-domain scope clarification: the registered tour validates clusters, overlapping base/bond/extension selections, and proteins/nanoparticles in rendered stereo and document history across all four motion profiles (12 cases). All canonical part-editor selection kinds are resolved; small picks copy the minimum owning domain(s), while explicit strand/cluster picks retain their scope. Native rigid-element export and post-paste visibility are now covered. Physical controller comfort and through-lens preview legibility remain manual coverage. Final evidence: `.development-artifacts/vr-clipboard-all-20261016/app-visible/`. Diagnostic capture settling is outside timed human-motion intervals; the earlier 289 ms variable-fast input-delivery failure remains retained in `.development-artifacts/vr-clipboard-20261016/app-isolated/`.
+
+### MV-48 — PENDING: VR numeric popup dismissal (ISSUE-98, 2026-10-20)
+
+After the current viewer session ends, start the rebuilt viewer. Load CPD p1 Alpine
+trajectory with defaults; select the frame field. Aim from above and below the
+panel, enter digits, Cancel: popup closes and displayed frame remains unchanged.
+Reopen, enter a loaded source frame, Apply: popup closes and requested frame appears.
+Check invalid input keeps Apply disabled but Cancel usable; repeat a generic numeric
+option. Run Debug → VR Tours & Tests → Simulation jobs with trajectory-loop
+validation across all four motion profiles. Production ray unit regression passes;
+live stereo pixels and physical headset behavior remain unchecked because viewer
+PID 1671029 was kept running. No SteamVR/session restart was performed.
+
+### MV-49 — PENDING: exact-frame CPD and 24HB VR continuity (ISSUE-99, 2026-10-21)
+
+Use the four completed CPD production jobs, default selected frames, Smooth OFF, and ball-and-stick, stick and VDW. Play after Load finishes and confirm no unsolicited pause following a style switch. Compare with 24HB P1 Alpine; separate head-motion judder from trajectory update cadence. Automated submitted-eye images establish visible molecular output, not physical comfort. Retain saved-coordinate fidelity; do not mask hitches by changing geometry or interpolation. The registered CPD playback benchmark supplies repeatable software measurements.
+
+### MV-50 — PENDING: persistent-transform playback in the headset (ISSUE-101, 2026-10-21)
+
+Repeat the registered CPD production playback workload across all four isomers and ball-and-stick, stick and VDW with Smooth OFF, then 24HB P1. Check head-motion stability separately from saved-frame delivery, including style switches and replay/seek. Automated exact-buffer/pixel parity and submitted stereo checks do not establish physical comfort. No molecular simplification is authorized by this optimization.
+
+MV-50 follow-up (ISSUE-102, 2026-10-21): bounded block decoding retains exact CPU/GPU/pixel parity. Three-minute CPD and resident 24HB P1 checks are summarized in `docs/audits/vr_final_pass_20261021.json`; physical continuity remains pending.
+
+
+### MV-51 — PENDING: slower Smooth pacing and compact vertices (ISSUE-104, 2026-10-21)
+
+Use Debug → VR Tours & Tests → CPD production playback, then the large-workload
+variant. Compare Smooth on/off across ball-and-stick, stick and VDW while moving
+the head. Smooth deliberately advances saved endpoints more slowly and retains
+all seven display interpolation fractions. Confirm the slower presentation feels
+continuous, including pause, seek, loop wrap and style changes. Submitted stereo
+and automated pixel/timing evidence do not establish through-lens comfort.
+
+Publication follow-up (2026-10-21): startup-heap freezing removes the identified
+long backend GC scan without changing GC for later objects. Four-isomer
+atomistic checks pass, but browser-side request waits and encoding outliers
+remain. Use the new startup factory on the next normal backend start; the live
+session was deliberately not restarted. See `docs/audits/vr_publication_20261021.json`.
+
+### MV-52 — PENDING: scientific alignment of p7560 reconstruction markers (2026-10-27)
+
+Review Gerling Fig.S1 Page3 with reference42hb(1)-(3), offset17 and proposed
+nick/junction markers enabled. Confirm helix40/41 markers under the selected BP
+calibration and legibility at desktop size. These are hypothesis coordinates;
+markers do not recalibrate the PDF or change design topology. Automated DOM/API
+checks cover selections, numeric helix labels and four marker targets. Full
+scientific alignment remains conditional on the editable row/BP calibration.

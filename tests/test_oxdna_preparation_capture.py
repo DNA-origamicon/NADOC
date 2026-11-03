@@ -45,7 +45,8 @@ def source():
         helix_id=helix.id, start_bp=0, end_bp=7, direction=m.Direction.FORWARD)])
     return m.Design(id="legacy-dna", helices=[helix], strands=[strand],
         metadata=m.DesignMetadata(name="Unrooted legacy design", tags=["kept"]),
-        annotations=[m.Annotation(text="Archive this", refs=[{"kind": "strand", "id": "dna", "notes": ["kept"]}])],
+        annotations=[m.Annotation(text="Archive this", highlight=True, glow_color="#123456",
+            glow_intensity=1.5, highlight_type="silhouette", refs=[{"kind": "strand", "id": "dna", "notes": ["kept"]}])],
         visibility_state=m.VisibilityState(hidden_base_keys=["h_XY_0_0:0:forward"]),
         feature_log=[m.SnapshotLogEntry(id="old", op_kind="overhang-bulk", label="Legacy",
             params={"legacy": {"values": [1, 2]}},

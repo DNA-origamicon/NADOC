@@ -1,0 +1,245 @@
+{
+  "scope": "cProfile of five independent 500-mate connector postpasses; fixture creation excluded; timings instrumented and cumulative entries overlap",
+  "top_self": [
+    {
+      "source": "backend/core/models.py",
+      "line": 130,
+      "function": "from_array",
+      "calls": 10000,
+      "self_ms": 14.604777,
+      "cumulative_ms": 24.255852
+    },
+    {
+      "source": "backend/core/assembly_connectors.py",
+      "line": 526,
+      "function": "_enforce_connector_coincidence",
+      "calls": 5,
+      "self_ms": 13.285399000000002,
+      "cumulative_ms": 97.08087900000001
+    },
+    {
+      "source": "backend/core/assembly_connectors.py",
+      "line": 269,
+      "function": "_get_connector_world",
+      "calls": 5000,
+      "self_ms": 9.987055,
+      "cumulative_ms": 19.171549
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<built-in method numpy.array>",
+      "calls": 25000,
+      "self_ms": 9.808641,
+      "cumulative_ms": 9.808641
+    },
+    {
+      "source": "backend/core/assembly_fk.py",
+      "line": 66,
+      "function": "_fk_expand_rigid_group",
+      "calls": 2500,
+      "self_ms": 8.353809,
+      "cumulative_ms": 30.494167
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/pydantic/main.py",
+      "line": 94,
+      "function": "_model_field_setattr_handler",
+      "calls": 12500,
+      "self_ms": 4.553184,
+      "cumulative_ms": 6.1756720000000005
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'validate_python' of 'pydantic_core._pydantic_core.SchemaValidator' objects>",
+      "calls": 10000,
+      "self_ms": 4.418902000000001,
+      "cumulative_ms": 4.418902000000001
+    },
+    {
+      "source": "backend/core/models.py",
+      "line": 127,
+      "function": "to_array",
+      "calls": 15000,
+      "self_ms": 3.7184450000000004,
+      "cumulative_ms": 13.400990000000002
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'flatten' of 'numpy.ndarray' objects>",
+      "calls": 10000,
+      "self_ms": 3.538097,
+      "cumulative_ms": 3.538097
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/pydantic/main.py",
+      "line": 1028,
+      "function": "__setattr__",
+      "calls": 12500,
+      "self_ms": 3.316687,
+      "cumulative_ms": 10.352003
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+      "calls": 15000,
+      "self_ms": 2.4111480000000003,
+      "cumulative_ms": 2.4111480000000003
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'get' of 'dict' objects>",
+      "calls": 30009,
+      "self_ms": 2.35948,
+      "cumulative_ms": 2.35948
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py",
+      "line": 2598,
+      "function": "norm",
+      "calls": 2500,
+      "self_ms": 2.113035,
+      "cumulative_ms": 4.176035000000001
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/numpy/lib/_twodim_base_impl.py",
+      "line": 176,
+      "function": "eye",
+      "calls": 2500,
+      "self_ms": 1.8424270000000003,
+      "cumulative_ms": 2.583508
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'add' of 'set' objects>",
+      "calls": 15000,
+      "self_ms": 1.8403230000000002,
+      "cumulative_ms": 1.8403230000000002
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/pydantic/main.py",
+      "line": 240,
+      "function": "__init__",
+      "calls": 10000,
+      "self_ms": 1.6940760000000001,
+      "cumulative_ms": 6.112978000000001
+    },
+    {
+      "source": "backend/core/assembly_connectors.py",
+      "line": 295,
+      "function": "<genexpr>",
+      "calls": 5000,
+      "self_ms": 1.0573890000000001,
+      "cumulative_ms": 1.0573890000000001
+    },
+    {
+      "source": "backend/core/assembly_fk.py",
+      "line": 50,
+      "function": "_build_fk_joint_index",
+      "calls": 5,
+      "self_ms": 0.989637,
+      "cumulative_ms": 1.5232290000000002
+    },
+    {
+      "source": "backend/core/assembly_fk.py",
+      "line": 106,
+      "function": "_fk_propagate",
+      "calls": 2500,
+      "self_ms": 0.8760690000000001,
+      "cumulative_ms": 1.2086780000000001
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'dot' of 'numpy.ndarray' objects>",
+      "calls": 2500,
+      "self_ms": 0.8513170000000001,
+      "cumulative_ms": 0.8513170000000001
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<built-in method builtins.next>",
+      "calls": 5000,
+      "self_ms": 0.7102390000000001,
+      "cumulative_ms": 1.767628
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'append' of 'list' objects>",
+      "calls": 12500,
+      "self_ms": 0.663053,
+      "cumulative_ms": 0.663053
+    },
+    {
+      "source": "backend/core/assembly_fk.py",
+      "line": 39,
+      "function": "_build_inst_by_id",
+      "calls": 5,
+      "self_ms": 0.6029810000000001,
+      "cumulative_ms": 0.6029810000000001
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'pop' of 'list' objects>",
+      "calls": 7500,
+      "self_ms": 0.563177,
+      "cumulative_ms": 0.563177
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'setdefault' of 'dict' objects>",
+      "calls": 7500,
+      "self_ms": 0.45582200000000006,
+      "cumulative_ms": 0.45582200000000006
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<built-in method numpy.zeros>",
+      "calls": 2500,
+      "self_ms": 0.45502600000000004,
+      "cumulative_ms": 0.45502600000000004
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'ravel' of 'numpy.ndarray' objects>",
+      "calls": 2500,
+      "self_ms": 0.358408,
+      "cumulative_ms": 0.358408
+    },
+    {
+      "source": ".venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py",
+      "line": 169,
+      "function": "isComplexType",
+      "calls": 2500,
+      "self_ms": 0.34959700000000005,
+      "cumulative_ms": 0.502627
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<built-in method builtins.issubclass>",
+      "calls": 5000,
+      "self_ms": 0.331892,
+      "cumulative_ms": 0.331892
+    },
+    {
+      "source": "~",
+      "line": 0,
+      "function": "<method 'tolist' of 'numpy.ndarray' objects>",
+      "calls": 2500,
+      "self_ms": 0.31205000000000005,
+      "cumulative_ms": 0.31205000000000005
+    }
+  ]
+}

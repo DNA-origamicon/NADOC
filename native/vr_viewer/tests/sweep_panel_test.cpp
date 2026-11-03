@@ -74,5 +74,9 @@ int main() {
     assert(menu.hit(ray)->id=="sweep:confirm");
     assert(std::abs(menu.raySurfacePoint(ray)->z-.035F)<1e-5F);
     panel.exit(menus);assert(!menu.customTab && menu.offset()==8);
+    panel.enter(menus);
+    panel.refresh(menus,draft,2,false,"both",true,"EDIT SWEEP / READY TO APPLY","XY","100",true);
+    assert(control("sweep:back").label=="CANCEL" && control("sweep:back").action=="sweep:cancel");
+    assert(control("sweep:confirm").label=="APPLY");audit();
     std::cout<<"Sweep wizard, coordinate arrows, scroll, footer and raised picking passed\n";
 }

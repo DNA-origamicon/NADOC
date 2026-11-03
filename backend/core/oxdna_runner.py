@@ -11,9 +11,8 @@ Sibling of ``namd_runner.py``.  Manages a single oxDNA relaxation job:
   4. update job.json on every state change; append health.jsonl / metrics.jsonl.
   5. stop on health-gate failure or explicit cancellation.
 
-The long-running work runs in a background thread + asyncio loop (out of the
-FastAPI request loop), exactly like the NAMD runner, so the sidebar keeps
-polling job/health/progress while oxDNA runs.
+The complete protocol runs in a detached worker; the API reads durable job,
+health and progress files and sends Stop through the runtime mailbox.
 
 oxDNA output is Physical-layer only — never written back into Design topology.
 """
@@ -550,6 +549,7 @@ def prepare_oxdna_job(
     surface_anchors: list[dict] | None = None,
     anchor_stiff: float = 1000.0,
     surface_strands: dict | None = None,
+    initial_configuration: Path | None = None,
 ) -> dict:
     """Write topology.top, conf.dat, design.json, and stages_spec.json into job dir.
 
@@ -563,6 +563,8 @@ def prepare_oxdna_job(
     appended to forces.txt (alongside the mutual traps) and also written to
     equil_forces.txt (the equil stage drops the mutual traps but keeps these).
     Returns the forces info dict (``n_anchored`` etc.) or an empty dict.
+    ``initial_configuration`` preserves an existing job's frozen starting frame
+    when rebuilding force settings; any capture particles are rebuilt separately.
     """
     design = design.without_reference_geometry()
     from backend.physics.oxdna_protein import (
@@ -627,6 +629,15 @@ def prepare_oxdna_job(
         write_topology(design, jd / "topology.top", mobile_gold=mobile_gold)
         write_configuration(design, geometry, jd / "conf.dat", oxdna_native_seed=True)
 
+    if initial_configuration is not None:
+        # Settings edits keep the job's frozen origami/protein coordinates. Strip
+        # old appended capture particles before rebuilding the requested surface.
+        n_base = int((jd / "topology.top").read_text().splitlines()[0].split()[0])
+        lines = initial_configuration.read_text().splitlines(keepends=True)
+        if len(lines) < n_base + 3:
+            raise ValueError("The saved starting configuration is incomplete.")
+        (jd / "conf.dat").write_text("".join(lines[:n_base + 3]))
+
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
     # on a surface differs from one relaxed free).  Computed from the ORIGAMI-ONLY conf
     # (before capture strands are appended) so the wall plane sits at the origami extent,
@@ -686,7 +697,7 @@ def prepare_oxdna_job(
     # The equil stage drops the DNA mutual traps but keeps surface/anchors/capture-strand
     # traps AND the protein tethers (so nothing drifts during the unbiased settle).
     equil_extra = "\n".join(t for t in (sa_text, cap_text, prot_traps) if t)
-    if surface or anchors or protein or cap_text:
+    if surface or anchors or surface_anchors or protein or cap_text:
         (jd / "equil_forces.txt").write_text(equil_extra, encoding="utf-8")
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this
@@ -700,6 +711,9 @@ def prepare_oxdna_job(
         job.stages = [stage.to_status() for stage in specs]
         info["mobile_gold"] = manifest
         job.backend = "CUDA"
+    from backend.physics.oxdna_attachments import attachment_text, FILENAME
+    (jd / FILENAME).unlink(missing_ok=True)
+    (jd / FILENAME).write_text(attachment_text(jd))
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
@@ -1687,6 +1701,15 @@ async def run_job(
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
+    config = job.run_config or {}
+    if config.get("kind") == "surface_deposition" and config.get("surface_anchor_mapping_version") != 2:
+        header = (jd / "topology.top").read_text().splitlines()[0].split()
+        if len(header) >= 5 and int(header[3]) > 0:
+            job.status = OxdnaStatus.failed
+            job.error = "This protein-containing deposition job predates corrected anchor indexing. Create a new deposition job from the relaxation."
+            job.save(workspace_dir)
+            return
+
     from backend.physics.oxdna_peg import configure_peg_stages
     configure_peg_stages(specs, (job.run_config or {}).get("surface_strands"))
     if (job.run_config or {}).get("mobile_gold"):
@@ -1848,6 +1871,7 @@ async def run_job(
                     max_contact_gap_nm=float(
                         spec.forces_meta.get("max_contact_gap_nm", 0.75)
                     ),
+                    contacted_particles=(job.run_config or {}).get("surface_contacted_particles"),
                 )
             except (KeyError, ValueError) as exc:
                 job.status = OxdnaStatus.failed
@@ -1861,6 +1885,10 @@ async def run_job(
             if spec.external_forces
             else None
         )
+        from backend.physics.oxdna_attachments import compose_stage_forces
+        forces = compose_stage_forces(jd, stage_dir, forces)
+        if forces is not None:
+            spec = replace(spec, external_forces=True)
         # The ANM parameter file (hybrid stages) is resolved to an absolute path in
         # the job dir, like topology/conf/forces (oxDNA runs with cwd=stage_dir).
         parfile = str((jd / spec.parfile).resolve()) if spec.parfile else None
@@ -2186,18 +2214,21 @@ async def run_job(
             contact_forces = jd / "deposition_settle_forces.txt"
             contact_forces.unlink(missing_ok=True)
             try:
-                write_surface_deposition_settle_forces(
+                contact_info = write_surface_deposition_settle_forces(
                     contact_forces,
                     design,
                     stage_dir / "last_conf.dat",
                     wall=rcfg["surface"],
                     anchors=rcfg.get("surface_anchors") or [],
-                    anchor_stiff=float(rcfg.get("surface_anchor_stiff", 1.0)),
+                    anchor_stiff=float(rcfg.get("surface_anchor_stiff", 2.0)),
                     max_contact_gap_nm=float(rcfg.get("contact_gap_nm", 0.75)),
+                    contacted_particles=rcfg.get("surface_contacted_particles"),
                 )
+                rcfg["surface_contacted_particles"] = contact_info["anchor_particles"]
+                job.run_config = rcfg
             except (KeyError, ValueError) as exc:
                 retry = int(rcfg.get("approach_retry_count", 0))
-                max_windows = int(rcfg.get("max_approach_windows", 8))
+                max_windows = int(rcfg.get("max_approach_windows", 40))
                 if retry >= max_windows:
                     job.stages[idx].status = "failed"
                     job.status = OxdnaStatus.failed
@@ -2205,7 +2236,7 @@ async def run_job(
                     job.save(workspace_dir)
                     return
                 base_force = float(rcfg.get("approach_force_pn", 5.0))
-                force_ceiling = float(rcfg.get("max_approach_force_pn", 20.0))
+                force_ceiling = float(rcfg.get("max_approach_force_pn", 50.0))
                 force_pn = min(force_ceiling, base_force * (2 ** (retry + 1)))
                 info = write_surface_deposition_approach_forces(
                     jd / "deposition_approach_forces.txt",
@@ -2216,13 +2247,17 @@ async def run_job(
                     force_pn=force_pn,
                     capture_contacted=True,
                     capture_gap_nm=float(rcfg.get("capture_gap_nm", 1.0)),
-                    capture_stiff=float(rcfg.get("surface_anchor_stiff", 1.0)),
+                    capture_stiff=float(rcfg.get("surface_anchor_stiff", 2.0)),
+                    captured_particles=rcfg.get("surface_captured_particles"),
+                    contacted_particles=rcfg.get("surface_contacted_particles"),
+                    contact_gap_nm=float(rcfg.get("contact_gap_nm", 0.75)),
                 )
-                window = int(rcfg.get("approach_retry_chunk_steps", 50_000))
+                window = int(rcfg.get("approach_retry_chunk_steps", 10_000))
                 total_spec = specs[idx]
                 specs[idx] = replace(
                     total_spec,
                     steps=total_spec.steps + window,
+                    refresh_vel=False,  # Continue the checkpoint dynamics across capture checks.
                     print_energy_every_override=(
                         total_spec.print_energy_every_override
                         or max(1, total_spec.steps // 100)
@@ -2236,6 +2271,8 @@ async def run_job(
                 rcfg["approach_retry_force_pn"] = force_pn
                 rcfg["approach_retry_max_gap_nm"] = info["max_initial_gap_nm"]
                 rcfg["approach_retry_captured"] = info["n_captured"]
+                rcfg["surface_captured_particles"] = info["captured_particles"]
+                rcfg["surface_contacted_particles"] = info["contacted_particles"]
                 rcfg["approach_retry_remaining"] = len(info["remaining_particles"])
                 job.run_config = rcfg
                 _persist_specs(job, workspace_dir, specs)
@@ -2271,39 +2308,13 @@ async def run_job(
 
 @runtime.in_workspace
 def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
-    """Launch run_job in a background thread. Idempotent if already running."""
+    """Launch the complete protocol independently of the API server."""
     if is_running(job.job_id):
         return
-
-    def _thread_main() -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        handle = _RUNNING.get(job.job_id)
-        if handle is not None:
-            handle.loop = loop
-        task = loop.create_task(run_job(job, workspace_dir, specs))
-        if handle is not None:
-            handle.task = task
-        try:
-            loop.run_until_complete(task)
-        except asyncio.CancelledError:
-            pass
-        finally:
-            _ACTIVE_PIDS.pop(job.job_id, None)
-            _RUNNING.pop(job.job_id, None)
-            if task.cancelled():
-                try:
-                    j = OxdnaJob.load(job.job_id, workspace_dir)
-                    if j.status == OxdnaStatus.running:
-                        j.status = OxdnaStatus.stopped
-                        j.save(workspace_dir)
-                except Exception:  # noqa: BLE001
-                    pass
-            loop.close()
-
-    runtime.launch_thread(
-        job.job_dir(workspace_dir), job.job_id, _thread_main, _RUNNING, _RunningHandle,
-        lambda: stop_job(job.job_id, workspace_dir), name=f"oxdna-runner-{job.job_id}", before_start=lambda: (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True),
+    (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True)
+    runtime.launch_detached(
+        job, workspace_dir, "backend.core.oxdna_worker", Path(__file__).resolve().parents[2],
+        initialize_stage=False,
     )
 
 
@@ -2326,7 +2337,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     running) finds the orphan via /proc (self-verifying) or the persisted ``oxdna_pid``,
     kills it, and marks the job stopped so it stays controllable."""
     local = _RUNNING.get(job_id)
-    requested = runtime.request_stop(Path(workspace_dir) / "oxdna_jobs" / job_id)
+    requested = runtime.request_stop(runtime.job_path("oxdna_jobs", job_id, workspace_dir))
     if not (local and local.thread.is_alive()) and requested:
         return True
 

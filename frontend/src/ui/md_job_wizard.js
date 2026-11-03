@@ -542,6 +542,15 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       plan={...plan,box_preview:{calculated_nm:supplied,selected_nm:supplied,padding_nm:payload.padding_nm,box_mode:payload.box_mode}}
       boxKey=null;boxLoading=false;return
     }
+    if(readOnly && viewJob && plan && state.mode!=='production' && plan.protocol!=='implicit_gbis_namd'){
+      const inputs={saved_job_id:viewJob.job_id}
+      boxKey=JSON.stringify(inputs)
+      if(!boxEstimates.has(boxKey)){
+        const entry={pending:true,result:null};boxEstimates.set(boxKey,entry)
+        void loadBoxPreview(inputs,boxKey,entry,sessionVersion)
+      }
+      applyBoxEstimate();return
+    }
     if (!plan || !api.fetchProtocolBoxPreview || state.mode === 'production'
         || plan.protocol === 'implicit_gbis_namd') {
       boxKey = null
@@ -562,11 +571,16 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   async function loadBoxPreview(payload, key, entry, session) {
     try {
-      const result = await api.fetchProtocolBoxPreview(payload)
+      let result
+      if(payload.saved_job_id){
+        const saved=await api.getMdSolventMeta?.(payload.saved_job_id)
+        if(saved?.box_nm?.length!==3 || !saved.box_nm.every(v=>Number.isFinite(v) && v>0))throw Error('Saved package dimensions unavailable; no current-design estimate is substituted.')
+        result={box_preview:{calculated_nm:saved.box_nm,selected_nm:saved.box_nm,source:'saved_package'}}
+      }else result=await api.fetchProtocolBoxPreview(payload)
       if (!result) throw new Error(api.lastErrorMessage?.() || 'server error')
       entry.result = result
     } catch (err) {
-      entry.result = { warnings: [`Box estimate unavailable: ${err?.message || err}`] }
+      entry.result = { warnings: [`${payload.saved_job_id?'Saved box unavailable':'Box estimate unavailable'}: ${err?.message || err}`] }
     }
     entry.pending = false
     if (session !== sessionVersion || key !== boxKey) return
@@ -575,7 +589,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const previous = mounts.fields.querySelector('.wizard-box-size')
     if (previous) {
       previous.querySelectorAll('.nadoc-spinner').forEach(spinner => spinner.remove())
-      const manual = valueOf('box_size_nm') || []
+      const manual = readOnly ? [] : valueOf('box_size_nm') || []
       const calculated = plan?.box_preview?.calculated_nm || []
       for (const [i, axis] of ['X', 'Y', 'Z'].entries()) {
         const input = previous.querySelector(`[aria-label="Box ${axis} (nm)"]`)
@@ -822,7 +836,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   function renderBoxSize(parent) {
     const implicit = plan?.protocol === 'implicit_gbis_namd'
     if (implicit) return
-    const manual = valueOf('box_size_nm') || [null, null, null]
+    const manual = readOnly ? [null,null,null] : valueOf('box_size_nm') || [null, null, null]
     const calculated = plan?.box_preview?.calculated_nm || []
     const group = el('div', { className: 'wizard-field wizard-box-size', attrs: { 'data-testid': 'box-size-controls' } })
     group.appendChild(el('strong', { text: 'Initial box size (nm)' }))
@@ -851,7 +865,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       onClick: () => setField('box_size_nm', null),
     }))
     group.appendChild(el('div', { className: 'wizard-field__help',
-      text: 'These dimensions are submitted unchanged. Preparation checks the final solute clearance and stops if the box is too small. Reset uses fast geometry with the selected cell sizing and water padding. Production inherits the prepared cell.',
+      text: readOnly?'Initial cell from this job’s saved package. Pressure equilibration can change its dimensions.': 'These dimensions are submitted unchanged. Preparation checks the final solute clearance and stops if the box is too small. Reset uses fast geometry with the selected cell sizing and water padding. Production inherits the prepared cell.',
     }))
     parent.appendChild(group)
   }
@@ -1617,6 +1631,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     // wizard that throws work away, and so the one undo has to cover.
     record()
     state.mode = mode
+    if(mode==='relaxation')preparation?.beginPreparation?.()
     state.touched = {}
     renderSource()
     void loadPlan()
@@ -1751,24 +1766,32 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       return
     }
     const totalNs = Number(plan.totals?.total_ns || 0)
-    const key = `${state.partition || ''}|${state.gresType || ''}|${totalNs}`
+    const preparationValues=state.mode!=='production' ? preparation?.payload() || {} : {}
+    const stages = runpodPlanShape(plan).stages
+    const key = `${state.partition || ''}|${state.gresType || ''}|${totalNs}|${JSON.stringify(preparationValues)}|${JSON.stringify(stages)}`
     if (key === slurmKey && (slurmPreview || slurmBusy)) return
     slurmKey = key
     slurmBusy = true
     slurmError = ''
     paintSlurm()
     try {
-      slurmPreview = await api.getSlurmPreview?.({
+      const result = await api.getSlurmPreview?.({
         cluster_name: 'alpine', partition: state.partition,
         ...(state.gresType ? { gres_type: state.gresType } : {}),
         total_ns: totalNs,
+        stages,
         job_name: 'nadoc_job',
+        ...preparationValues,
       })
+      if(key!==slurmKey)return
+      slurmPreview=result
       if (!slurmPreview) slurmError = api.lastErrorMessage?.() || 'Could not size the SLURM request.'
     } catch (err) {
+      if(key!==slurmKey)return
       slurmPreview = null
       slurmError = `Could not size the SLURM request: ${err?.message || err}`
     } finally {
+      if(key!==slurmKey)return
       slurmBusy = false
       paintSlurm()
     }
@@ -1861,7 +1884,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   function submittedBoxSize() {
     const sidebar=!readOnly && state.mode!=='production' ? preparation?.payload()?.box_size_nm : null
     if(sidebar?.every(v=>Number.isFinite(v) && v>0))return sidebar
-    const manual = valueOf('box_size_nm') || []
+    const manual = readOnly ? [] : valueOf('box_size_nm') || []
     const calculated = plan?.box_preview?.calculated_nm || []
     const sizes = [0, 1, 2].map(i => manual[i] ?? calculated[i])
     return sizes.every(v => Number.isFinite(v) && v > 0) ? sizes : null
@@ -2064,14 +2087,27 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       // the job has already been built.
       getSlurmPreview: api?.getSlurmPreview,
       getTotalNs: () => Number(plan?.totals?.total_ns || 0),
+      getPreparation: () => !readOnly && state.mode!=='production' ? preparation?.payload() || {} : {},
       // The RunPod card prices the WHOLE plan — ladder and production at their own timesteps —
       // so it needs the stage table, not just the total. `runpodPlanShape` derives everything
       // from the plan the wizard already has, and `refreshSizing()` re-runs it on every plan
       // change, which is what makes the cost follow the later tabs.
       getJobPreview: api?.getRunpodJobPreview,
+      getRuntimePreview: api?.getRuntimePreview,
       getVolumes: api?.getRunpodVolumes,
       setVolume: api?.setRunpodVolume,
-      getPlanShape: () => runpodPlanShape(plan),
+      getPlanShape: () => {
+        const prep = !readOnly && state.mode !== 'production' ? preparation?.payload() || {} : {}
+        return { ...runpodPlanShape(plan, { productionNsIntent: prep.production_ns_intent }), ...prep,
+          ...(plan?.inherited?.n_atoms ? { n_atoms: plan.inherited.n_atoms,
+            box_size_nm: plan.inherited.box_ang?.map(v => v / 10) } : {}),
+          parent_job_id: state.mode === 'production' ? state.parentJobId : null,
+          prepared: state.mode === 'production',
+          threads: Number(valueOf('threads') || 16),
+          devices: String(valueOf('devices') || '0'),
+          gpu_resident_mode: valueOf('gpu_resident') || 'auto',
+        }
+      },
       fsApi: api?.fsApi,
       initialTarget: state.target,
       initialGresType: state.gresType,
@@ -2156,7 +2192,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         ],
       }),
       actions: [cancelBtn, prevBtn, nextBtn, createBtn],
-      onClose: () => { refetch.cancel() },
+      onClose: () => { refetch.cancel(); unsubscribePreparation?.(); unsubscribePreparation=null },
     })
     // Ctrl+Z anywhere in the wizard except inside a text control, where the browser's own
     // undo is the one the user means.
@@ -2176,6 +2212,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
    *  wizard keeps ONE `state` object and one modal; without this, looking at a finished
    *  run would leave its settings sitting in the next new job. */
   let parkedLiveState = null
+  let unsubscribePreparation = null
 
   async function open(mode = null, { draftId = null, prefill = null,
     parentJobId = null, viewJob: job = null, editJob: editableJob = null } = {}) {
@@ -2185,7 +2222,11 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const wasReadOnly = readOnly
     readOnly = !!job
     editJob = editableJob
-    if(editableJob && preparation)preparation.restore(editableJob.prep_params || {})
+    if(!job && !editableJob && mode!=='production')preparation?.beginPreparation?.()
+    if(editableJob && preparation){
+      if(editableJob.status==='draft' && preparation.selectJob)preparation.selectJob(editableJob,editableJob.prep_params || {})
+      else preparation.restore(editableJob.prep_params || {})
+    }
     if (readOnly && !wasReadOnly) parkedLiveState = snapshotState(state)
     if (!readOnly && wasReadOnly && parkedLiveState) {
       applySnapshot(state, parkedLiveState)
@@ -2314,6 +2355,16 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       const lbl = cancelBtn.querySelector('span') || cancelBtn
       lbl.textContent = readOnly ? 'Close' : 'Cancel'
     }
+    unsubscribePreparation?.()
+    unsubscribePreparation=preparation?.subscribe?.(()=>{
+      if(readOnly || state.mode==='production' || !modal?.isOpen?.())return
+      planVersion++
+      boxKey=null
+      boxLoading=false
+      boxEstimates.clear()
+      if(plan)plan={...plan,box_preview:null}
+      void loadPlan()
+    })
     modal.open()
     render()
     await loadPlan()

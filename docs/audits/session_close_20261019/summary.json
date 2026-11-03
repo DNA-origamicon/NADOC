@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-19",
+  "design": "24hb_0xT.nadoc",
+  "method": "Desktop Chromium Playwright, 1440x1000, isolated copied design, dedicated backend with lifespan off. Close menu click to visible welcome plus two animation frames. Same local environment for before/after; not a hardware-independent latency guarantee.",
+  "before_ms": [
+    1550.2000000476837,
+    1490.699999988079
+  ],
+  "after_ms": [
+    276,
+    499
+  ],
+  "finding": "Three approximately 420 ms rendering frames blocked the save response and teardown. Pausing viewer frames during close removed these long tasks. Save still precedes teardown.",
+  "validation": [
+    "10 runtime and dimensions persistence tests passed",
+    "Playwright saved clone, cleared current design/geometry, returned to welcome, reopened clone and observed resumed frames",
+    "Welcome screenshot inspected; no dimensions warning after fix",
+    "Original design and running simulation jobs untouched"
+  ],
+  "cleanup": "Temporary fixture, screenshots and CPU profile removed after review."
+}

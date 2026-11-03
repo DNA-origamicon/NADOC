@@ -34,7 +34,12 @@ export function createEditorBroadcast({ room, rooms, now }) {
     if (action === 'progress') return room.presentation.setLoading(JSON.parse(body))
     if (action === 'heartbeat') return { revision: room.revision }
     if (action === 'hold') { room.presentation.pause(); return { revision: room.revision } }
-    if (action === 'camera') return room.presentation.publish(JSON.parse(body))
+    if (action === 'camera') {
+      const state=room.presentation.publish(JSON.parse(body))
+      // Camera acknowledgements must not echo menu textures or preview geometry.
+      const {revision,sequence,camera,serverTime}=state
+      return {revision,sequence,camera,serverTime}
+    }
     if (action === 'frame' && jobStream) return acceptLiveFrame(room, body)
     if (action !== 'scene') throw new Error('Unknown broadcast action')
     if (body.length > 512 * 1024 * 1024 || body.subarray(0, 8).toString() !== 'NADOCVW1') throw new Error('Invalid prepared viewer update')

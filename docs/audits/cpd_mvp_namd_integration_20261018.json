@@ -1,0 +1,27 @@
+{
+  "schema": "nadoc.cpd-mvp-namd-integration.v1",
+  "date": "2026-10-18",
+  "issue": "Six-residue CPD copies were rejected by a visual-only guard; normal NAMD preparation did not consume the provisional MVP parameter sets.",
+  "resolution": [
+    "Explicit experimental adapter for reviewed six-residue 1xT lesions. Registry scientific release gates remain unchanged.",
+    "Pinned isomer-specific patches, overlays, chemical definitions, charge/type and exact graph audit specifications packaged with provenance.",
+    "CGenFF parent verified locally and frozen into exported packages.",
+    "One isomer parameter set per system; mixed or unsupported placements rejected.",
+    "Authored product coordinates preserved; H6 copied from the chiral core and final psfgen coordinates audited.",
+    "Exact topology/type/charge/improper delta audit retained; the release-only requirement for four product stereochemical impropers is not claimed by these MVP packages.",
+    "Packaged manifests and README explicitly identify experimental qualification; existing 2 fs/ordinary-mass policy retained."
+  ],
+  "verification": {
+    "NAMD_zero_step_loads": 4,
+    "all_finite": true,
+    "full_psf_audits": 4,
+    "solvated_package": "trans-syn-II, 195232 atoms; all packaged asset hashes verified",
+    "mvp_tests": 9,
+    "existing_forcefield_tests": 16,
+    "six_residue_tests": 7,
+    "job_creation_tests": "All four accepted; draft creation mocked, no user jobs created"
+  },
+  "scheduled_user_jobs": 0,
+  "relaxation_or_production_steps_run": 0,
+  "review_artifacts": ".development-artifacts/cpd-mvp-namd-integration"
+}

@@ -1,0 +1,36 @@
+{
+  "at": "2026-10-16T01:40:21.998755+00:00",
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-anti-resume-v2-service/completion_wake_ack.json",
+    "sha256": "ded73430af445e6d5e15438aef8291efefacd348a3a1f981727e87cd4212cff4"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-anti-resume-v2/completion_audit.json",
+    "sha256": "01103b7e891002a6d8e0aba6a5b7ea474a8ff816e4cedf87fd84b305bad16f45"
+  },
+  "passed": true,
+  "validation_ns": 10,
+  "total_replica_ns": 11.15,
+  "coverage": "Ten native terminal logs/checkpoint bundles and1000 hash-pinned saved-frame verdicts; independent replay of30 sampled frames and10 endpoints, including pause/resume boundary. Full trajectory hashes recorded.",
+  "endpoint_density_range_g_ml": [
+    1.0220741512587765,
+    1.0247051030290815
+  ],
+  "final_RMSD_A": 11.39641229944731,
+  "next_launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-control-v1/launch_receipt.json",
+    "sha256": "abb4adf178b8e3aea79df10ad271e65e263b392ebaab95a0e5d13ffdc98b8063"
+  },
+  "next_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-preparation-control-v1/handoff.json",
+    "sha256": "9df6d2f5c827c3f1d0232f78372545bad78c56670a1e40153e73e026dfc9d5d1"
+  },
+  "audit_tooling_failure_preserved": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-anti-resume-v2/completion_review_v1_failure.json",
+    "sha256": "faa229b451ec1c168e16c445326ea936c500ac590b886141a56498847b7b596f"
+  },
+  "limitations": "Independent velocities, same initial structure. Provisional parameters;7.15616kcal/mol conformer discrepancy unresolved. No ensemble convergence or endpoint minimum certificate.",
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0
+}

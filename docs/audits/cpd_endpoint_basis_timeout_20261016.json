@@ -1,0 +1,63 @@
+{
+  "at": "2026-10-16T17:02:33.384858+00:00",
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1-service/completion_wake_ack.json",
+    "sha256": "4e4f08eb3adfdb006b6032c822ce767be8b96f3822ee2ef4c2250bfe95ebc302"
+  },
+  "original_status": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1-service/status.json",
+    "sha256": "ab038483455343765b077729aeece791c215305e6c46c60546191fbdd39f4254"
+  },
+  "failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/failure.json",
+    "sha256": "00163bba81a97c68da0680d012cb44fb2e7d2cb69bce0ba5a939fc04a1beaee9"
+  },
+  "native_log": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/original_qm/output.dat",
+    "sha256": "0c6b7235b4d3d663f831eda70b41ce128ee71eae025a542c0de88799fa71a8b9"
+  },
+  "diagnosis": "First point timed out after3600seconds during disk-backed DF-RHF SCF.19 iterations; no converged RHF or MP2 result.6.4GiB integral scratch exceeded3GiB JK allocation. Final logged energy changes around1e-11Hartree/density residual3.5e-11; no certified energy.",
+  "scratch_preserved": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/original_qm/scratch/psi.127942.35",
+      "bytes": 3759840
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/original_qm/scratch/psi.127942.64",
+      "bytes": 225354008
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/original_qm/scratch/psi.127942.97",
+      "bytes": 6837077640
+    }
+  ],
+  "completed_mp2_points": 0,
+  "next_launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/launch_receipt.json",
+    "sha256": "47fee0738012f09465ed6805192d183fb7ab1cc4c0e58e8a5f0abe361ac2ff8b"
+  },
+  "changes": {
+    "psi4_memory_gib": [
+      4,
+      10
+    ],
+    "service_memory_gib": [
+      8,
+      12
+    ],
+    "e_convergence": [
+      1e-12,
+      1e-10
+    ],
+    "d_convergence": [
+      1e-12,
+      1e-10
+    ],
+    "native_point_timeout_seconds": 3600,
+    "total_hard_seconds": 7500
+  },
+  "rationale": "Avoid integral disk traffic with native memory headroom. Energy-only basis-sensitivity pilot uses prospective1e-10SCF thresholds, not gradient/Hessian certification or a relaxed forcefield acceptance gate. Actual algorithm/convergence and basis delta still require native audit; no claim of speedup before measurement.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

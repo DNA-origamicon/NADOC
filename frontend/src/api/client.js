@@ -1,4 +1,7 @@
 import { passiveReadScheduler, isPassiveRead } from './passive_read_scheduler.js'
+import { TRAJECTORY_RESPONSE_BYTES } from '../scene/trajectory_memory.js'
+import { getRunDir } from '../ui/run_location_preferences.js'
+import { withCreatingJob } from './sim_job_creation.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
@@ -59,7 +62,9 @@ function _signalDesignChanged({
     changed_helix_ids: changedHelixIds,
     metadata_only: metadataOnly,
   })
-  if (typeof window !== 'undefined') {
+  // Display metadata still syncs across tabs, but does not invalidate simulation
+  // results or restart a renderer owned by a loaded trajectory.
+  if (!metadataOnly && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nadoc:design-changed', {
       detail: { geometry_unchanged: geometryUnchanged },
     }))
@@ -748,6 +753,7 @@ async function _applyDesignResponse(json, {
   transient = false,
   crossTabMetadataOnly = false,
   simulationProjection = false,
+  deferGeometry = false,
 } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
@@ -842,7 +848,7 @@ async function _applyDesignResponse(json, {
     // atomic setState so the renderer subscriber fires only once (one rebuild).
     const helixAxesMap = {}
     for (const ax of json.helix_axes ?? []) {
-      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, segments: ax.segments ?? null }
+      helixAxesMap[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null }
     }
     if (json.partial_geometry && json.changed_helix_ids?.length) {
       // ── Fix B merge path ──────────────────────────────────────────────────
@@ -890,7 +896,7 @@ async function _applyDesignResponse(json, {
           start: ax.start, end: ax.end,
           samples:  ax.samples  ?? null,
           ovhgAxes: ax.ovhg_axes ?? null,
-          segments: ax.segments ?? null,
+          residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
         }
       }
       updates.straightHelixAxes = Object.keys(straightAxesMap).length ? straightAxesMap : null
@@ -898,18 +904,27 @@ async function _applyDesignResponse(json, {
     _setTimedState(updates, json)
     markOperationTiming('store-applied', undefined, _responseTimings.get(json) ?? null)
   } else {
-    _setTimedState(updates, json)
-    markOperationTiming('design-applied', undefined, _responseTimings.get(json) ?? null)
+    // Deferred VR commits already started canonical export. Keep the desktop
+    // on its coherent old scene until the matching geometry arrives, avoiding
+    // a rebuild of the new topology against the old nucleotide records.
+    if (!deferGeometry || !json.design) _setTimedState(updates, json)
+    markOperationTiming(deferGeometry ? 'design-awaiting-geometry' : 'design-applied', undefined, _responseTimings.get(json) ?? null)
     if (json.design) {
       const h0 = json.design.helices?.[0]
       console.debug('[NADOC import] design set: first helix axis_start =',
         h0 ? `(${h0.axis_start?.x?.toFixed(3)}, ${h0.axis_start?.y?.toFixed(3)})` : 'none',
         '| debug =', json.debug ?? 'none')
     }
-    // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
+    // Fetch the response's retained partial scope, or full geometry (getGeometry stores it).
     if (json.design) {
       markOperationTiming('geometry-fetch-start', undefined, _responseTimings.get(json) ?? null)
-      const geometry = await getGeometry()
+      const scope = _documentRequests.capture()
+      const geometry = await getGeometry(json.deferred_geometry_helix_ids,
+        deferGeometry ? { designResponse: json, designUpdates: updates } : {})
+      if (!_documentRequests.isCurrent(scope) || _isStaleDesignResponse(json)) return json
+      // A committed mutation still needs its feature/Undo identity if the
+      // geometry fetch fails. Keep the existing failure behavior in that case.
+      if (!geometry && deferGeometry) _setTimedState(updates, json)
       if (!geometry) finishOperationTiming(_responseTimings.get(json), { status: 'Failed', phase: 'geometry-fetch-failed' })
       markOperationTiming('geometry-fetched', undefined, _responseTimings.get(json) ?? null)
       const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
@@ -1161,7 +1176,7 @@ export async function undo({ onCommitted, deferGeometry = false } = {}) {
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -1173,7 +1188,7 @@ export async function redo({ onCommitted, deferGeometry = false } = {}) {
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -1399,13 +1414,14 @@ async function _syncPositionsOnlyDiff(json) {
         existing.samples  = ax.samples ?? existing.samples ?? null
         existing.ovhgAxes = ax.ovhg_axes ?? existing.ovhgAxes ?? null
         existing.segments = ax.segments ?? existing.segments ?? null
+        existing.residue_transformed = ax.residue_transformed === true
       } else {
         // New helix in axes (shouldn't happen if topology unchanged, but be safe).
         state.currentHelixAxes[ax.helix_id] = {
           start: ax.start, end: ax.end,
           samples:  ax.samples  ?? null,
           ovhgAxes: ax.ovhg_axes ?? null,
-          segments: ax.segments ?? null,
+          residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
         }
       }
     }
@@ -1601,7 +1617,7 @@ export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPe
     is_periodic_seam:      isPeriodicSeam,
   }, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 // Join owns a guarded preview session. Return raw responses so its controller
@@ -1915,11 +1931,11 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
     cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
     preview,
   }
-  const json = await _request('POST', '/design/deformation', body)
+  const json = await _request('POST', '/design/deformation', body, { deferGeometry: !preview && guard.deferGeometry === true })
   if (!preview && json?.design && Number.isSafeInteger(json.revision)) guard.onCommitted?.(json)
   // A preview op is transient (no undo, no commit) → must not auto-save/propagate
   // to the assembly. The non-preview add IS the commit → save normally.
-  const synced = _syncFromDesignResponse(json, { transient: preview })
+  const synced = _syncFromDesignResponse(json, { transient: preview, deferGeometry: !preview && guard.deferGeometry === true })
   // On commit (not preview), surface any feasibility warning the backend attached.
   if (!preview && json?.deformation_warning) _toastDeformationWarning(json.deformation_warning)
   return synced
@@ -1977,8 +1993,8 @@ export async function updateMetadata(fields, { skipGeometry = false } = {}) {
  *   merge the result into the existing currentGeometry (Fix B partial path).
  *   Pass null (default) for a full fetch that replaces the whole geometry.
  */
-export async function getGeometry(helixIds = null) {
-  if (welcomeVisible() && !store.getState().currentDesign) return null
+export async function getGeometry(helixIds = null, { designResponse = null, designUpdates = null } = {}) {
+  if (!designResponse && welcomeVisible() && !store.getState().currentDesign) return null
   const base = helixIds?.length
     ? `/design/geometry?helix_ids=${helixIds.join(',')}`
     : '/design/geometry'
@@ -1986,11 +2002,13 @@ export async function getGeometry(helixIds = null) {
   // toggle costs one refetch and the legacy request stays byte-identical when off.
   const url  = base
   const json = await _request('GET', url)
-  return _applyTimedResponse(json, () => _applyGeometryResponse(json))
+  return _applyTimedResponse(json, () => _applyGeometryResponse(json, designResponse, designUpdates))
 }
 
-async function _applyGeometryResponse(json) {
+async function _applyGeometryResponse(json, designResponse = null, designUpdates = null) {
   if (!json) return null
+  if (designResponse && _isStaleDesignResponse(designResponse)) return json
+  if (designUpdates && designResponse) designUpdates.currentDesign = designResponse.design
   // Response format: { nucleotides: [...], helix_axes: [...] }
   // When the design has deformations or cluster_transforms, the backend
   // also auto-embeds straight_positions_by_helix + straight_helix_axes so
@@ -2004,7 +2022,7 @@ async function _applyGeometryResponse(json) {
       start: ax.start, end: ax.end,
       samples: ax.samples ?? null,
       ovhgAxes: ax.ovhg_axes ?? null,
-      segments: ax.segments ?? null,
+      residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
     }
   }
   // Materialise the embedded straight payload (if any) into the same flat
@@ -2019,7 +2037,7 @@ async function _applyGeometryResponse(json) {
         start: ax.start, end: ax.end,
         samples:  ax.samples  ?? null,
         ovhgAxes: ax.ovhg_axes ?? null,
-        segments: ax.segments ?? null,
+        residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
       }
     }
     if (Object.keys(straightAxes).length === 0) straightAxes = null
@@ -2031,11 +2049,13 @@ async function _applyGeometryResponse(json) {
     const retainedAxes = { ...(store.getState().currentHelixAxes ?? {}) }
     for (const id of changedSet) delete retainedAxes[id]
     const updates = {
+      ...designUpdates,
       currentGeometry: [
         ...existing.filter(n => !changedSet.has(n.helix_id)),
         ...nucleotides,
       ],
       currentHelixAxes: { ...retainedAxes, ...helixAxesMap },
+      lastPartialChangedHelixIds: json.changed_helix_ids,
     }
     // Partial responses do not embed straight (axes unchanged on partial
     // mutations), so straightGeo/straightAxes are null here in practice —
@@ -2045,8 +2065,10 @@ async function _applyGeometryResponse(json) {
     _setTimedState(updates, json)
   } else {
     const updates = {
+      ...designUpdates,
       currentGeometry:  nucleotides,
       currentHelixAxes: Object.keys(helixAxesMap).length ? helixAxesMap : null,
+      lastPartialChangedHelixIds: null,
     }
     if (straightGeo !== null)  updates.straightGeometry  = straightGeo
     if (straightAxes !== null) updates.straightHelixAxes = straightAxes
@@ -2079,7 +2101,7 @@ export async function getStraightGeometry() {
       start: ax.start, end: ax.end,
       samples: ax.samples ?? null,
       ovhgAxes: ax.ovhg_axes ?? null,
-      segments: ax.segments ?? null,
+      residue_transformed: ax.residue_transformed === true, segments: ax.segments ?? null,
     }
   }
   store.setState({
@@ -2462,7 +2484,7 @@ export async function addNick({ helixId, bpIndex, direction }, { onCommitted, de
     direction,
   }, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 export async function addNickBatch(nicks) {
@@ -2823,7 +2845,10 @@ async function _oxdnaJSONTransport(method, path, body = undefined, { signal, hea
     })
     return null
   }
-  const json = await r.json().catch(() => null)
+  const trajectoryResponse = /^\/md\/jobs\/[^/]+\/(?:trajectory|frames-atomistic|frames-surface)(?:\?|$)/.test(path)
+  const json = trajectoryResponse && typeof r.arrayBuffer === 'function'
+    ? JSON.parse(new TextDecoder().decode(await _boundedResponseBuffer(r, { maxBytes: TRAJECTORY_RESPONSE_BYTES })))
+    : await r.json().catch(() => null)
   _emitRequestDiagnostic({
     phase: 'complete', id: diagnosticId, method, path,
     durationMs: performance.now() - diagnosticStarted,
@@ -2858,7 +2883,15 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
     opts.body = JSON.stringify(body)
   }
   const r = await fetch(`${BASE}${path}`, opts).catch(() => null)
+  if (r && [413, 429].includes(r.status)) {
+    const error = await r.json().catch(() => ({}))
+    throw new Error(error.detail || 'Trajectory request exceeds the safe memory limit. Load fewer frames.')
+  }
   if (!r || !r.ok) return null
+  return _boundedResponseBuffer(r, { onProgress, maxBytes })
+}
+
+async function _boundedResponseBuffer(r, { onProgress, maxBytes = Infinity } = {}) {
   if (!r.body?.getReader || (typeof onProgress !== 'function' && maxBytes === Infinity)) {
     const buffer = await r.arrayBuffer().catch(() => null)
     if (buffer?.byteLength > maxBytes) throw new Error('Visualization exceeds the browser memory limit')
@@ -2914,8 +2947,8 @@ export const prepareExpPrediction = () => _ensureAssemblySimulation('/exp/jobs',
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
 /** Ranked available RunPod GPUs for the active design's relaxation — each with live price,
  *  estimated relax wall-clock, and estimated cost. nAtoms omitted → backend sizes the design. */
-export const getRunpodGpuOptions = (nAtoms)      =>
-  _oxdnaJSON('POST', '/runpod/gpu-options', nAtoms ? { n_atoms: nAtoms } : {})
+export const getRunpodGpuOptions = (nAtoms, preparation = {}) =>
+  _oxdnaJSON('POST', '/runpod/gpu-options', { ...preparation, ...(nAtoms ? { n_atoms: nAtoms } : {}) })
 /** The Job Wizard's RunPod feed: the WHOLE plan costed (relaxation + production, at their own
  *  timesteps) plus storage, balance, live pods and the pre-flight — in ONE round trip, so the
  *  card does not fetch the same live stock four times. Body is `runpodPlanShape(plan)`. */
@@ -2938,8 +2971,8 @@ export const browseFiles         = (path, kind)  => {
   const s = q.toString()
   return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
 }
-export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
-export const copyOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`)
+export const createOxdnaJob      = (body)        => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', '/oxdna/jobs', { run_dir: getRunDir('oxdna'), ...body }))
+export const copyOxdnaJob        = (id)          => withCreatingJob('oxdna', { copy_source_id: id }, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`, { run_dir: getRunDir('oxdna') }))
 export const updateOxdnaJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/oxdna/jobs/${id}/settings`, body)
 
 // ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
@@ -2995,7 +3028,7 @@ export const getLammpsTrajectoryBin = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getLammpsTrajectoryBin')
   return _oxdnaBin(
     'GET', `/lammps/jobs/${id}/trajectory-bin?align=${align}`,
-    undefined, { signal, onProgress: opts?.onProgress },
+    undefined, { signal, onProgress: opts?.onProgress, maxBytes: TRAJECTORY_RESPONSE_BYTES },
   )
 }
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
@@ -3024,10 +3057,10 @@ export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
 export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/start`)
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
-export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, body)
-export const appendOxdnaRun      = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, body)
+export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, { run_dir: getRunDir('oxdna'), ...body })
+export const appendOxdnaRun      = (id, body)    => withCreatingJob('oxdna', body, () => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, { run_dir: getRunDir('oxdna'), ...body }))
 export const startOxdnaSurfaceDeposition = (id, body) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, body)
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, { run_dir: getRunDir('oxdna'), ...body })
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)
 export const stopOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/stop`)
 export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna/jobs/${id}`)
@@ -3125,32 +3158,18 @@ export const getOxdnaTrajectory = (id, opts) => {
   return _oxdnaTrajectoryBin(id, { ...opts, align, signal, scope })
 }
 
+const oxdnaStrideQuery = stride => Number.isInteger(stride) && stride > 0 ? `&stride=${stride}` : ''
+
 async function _oxdnaTrajectoryBin(id, { align, signal, scope, ...range }) {
-  const r = await fetch(`${BASE}/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin${_trajectoryRangeQuery(range)}`, {
-    headers: { ...docHeaders() }, signal,
-  }).catch(err => err?.name === 'AbortError' ? null : Promise.reject(err))
-  if (!r?.ok) return null
-  const expected = Number(r.headers?.get?.('X-NADOC-Uncompressed-Length'))
-  let buf
-  if (r.body && Number.isSafeInteger(expected) && expected > 0) {
-    const bytes = new Uint8Array(expected)
-    const reader = r.body.getReader()
-    let loaded = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (loaded + value.byteLength > bytes.byteLength) return null
-      bytes.set(value, loaded)
-      loaded += value.byteLength
-      window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
-        detail: { jobId: id, loaded, total: expected },
-      }))
-    }
-    if (loaded !== expected) return null
-    buf = bytes.buffer
-  } else {
-    buf = await r.arrayBuffer()
-  }
+  const buf = await _oxdnaBin('GET',
+    `/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin${_trajectoryRangeQuery(range)}${oxdnaStrideQuery(range.stride)}`,
+    undefined, {
+      signal, maxBytes: 128 * 1024 * 1024,
+      onProgress: p => window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
+        detail: { jobId: id, loaded: p.done, total: p.total },
+      })),
+    })
+  if (!buf) return null
   const { decodeOxdnaTrajectoryBin } = await import('../ui/oxdna_trajectory_bin.js')
   return decodeOxdnaTrajectoryBin(buf)
 }
@@ -3160,14 +3179,14 @@ async function _oxdnaTrajectoryBin(id, { align, signal, scope, ...range }) {
 export const getOxdnaTrajectoryBin = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectoryBin')
   return _oxdnaBin(
-    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}${_trajectoryRangeQuery(opts)}`,
-    undefined, { signal, onProgress: opts?.onProgress },
+    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}${oxdnaStrideQuery(opts?.stride)}${_trajectoryRangeQuery(opts)}${Number.isInteger(opts?.frameStep) && opts.frameStep > 1 ? `&frame_step=${opts.frameStep}` : ''}`,
+    undefined, { signal, onProgress: opts?.onProgress, maxBytes: 128 * 1024 * 1024 },
   )
 }
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast.
  *  Pass the SAME scope as getOxdnaTrajectory or the slider length won't match the payload. */
-export const getOxdnaTrajectoryMeta = (id, scope = 'lineage') =>
-  _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory-meta?scope=${scope}`)
+export const getOxdnaTrajectoryMeta = (id, scope = 'lineage', stride) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory-meta?scope=${scope}${oxdnaStrideQuery(stride)}`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
 export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
 /** Live progress for an in-flight trajectory-RANGE export ({active,done,total,phase}). */
@@ -3202,11 +3221,11 @@ export async function exportOxdnaTrajectory(jobId, { lo, hi, format = 'pdb' } = 
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
  *  format). Heavy — pass a downsampled index set. `scope` must match the scope the
  *  trajectory itself was loaded with, or the indices address different frames. */
-export const getOxdnaFramesAtomistic = (id, frameIndices, align=true, scope='lineage') =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}&scope=${scope}`, { frame_indices: frameIndices })
+export const getOxdnaFramesAtomistic = (id, frameIndices, align=true, scope='lineage', stride) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}&scope=${scope}${oxdnaStrideQuery(stride)}`, { frame_indices: frameIndices })
 /** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
 export const getOxdnaFramesSurface = (id, frameIndices, params = {}, align=true, scope='lineage') =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}&scope=${scope}`, { frame_indices: frameIndices, ...params })
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}&scope=${scope}${oxdnaStrideQuery(params.stride)}`, { frame_indices: frameIndices, ...params })
 /** All-atom flat-XYZ for the relaxed-display structure ({ready, atomistic:[x,y,z,…]}) —
  *  lets the OxDNA-display toggle drive the atomistic rep, not just CG beads. */
 export const getOxdnaDisplayAtomistic = (id, align = true) =>
@@ -3421,11 +3440,11 @@ export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/rela
  *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
 export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan?include_box_preview=false', body)
 export const fetchProtocolBoxPreview = (body) => _oxdnaJSON('POST', '/md/protocol-box-preview', body)
-export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+export const createMdJob         = (body)        => withCreatingJob('namd', body, () => _oxdnaJSON('POST', '/md/jobs', body))
 /** Validate the selected NAMD run/download directory. With no path, the backend creates and
  * returns NADOC's portable <workspace>/md_jobs default. */
-export const getMdRunDirStatus   = (path = null) =>
-  _oxdnaJSON('GET', `/md/run-dir-status${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+export const getMdRunDirStatus   = (path = null, engine = 'namd') =>
+  _oxdnaJSON('GET', `/md/run-dir-status?engine=${encodeURIComponent(engine)}${path ? `&path=${encodeURIComponent(path)}` : ''}`)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA
  *  source; backs the "Relax from oxDNA" button. */
@@ -3443,6 +3462,8 @@ export const listMdJobs          = (opts)        => _backgroundJobList('/md/jobs
 export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)
 export const mdArchiveStatus     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/archive-status`)
+export const previewThinMdJob = (id) => _oxdnaJSON('POST', `/md/jobs/${encodeURIComponent(id)}/thin/preview`)
+export const applyThinMdJob = (id, body) => _oxdnaJSON('POST', `/md/jobs/${encodeURIComponent(id)}/thin`, body)
 
 // ── Host filesystem browse (archive folder picker, routes_fs.py) ────────────────
 /** Subdirectories of an absolute host path (default: home). {path, parent, entries}. */
@@ -3485,7 +3506,7 @@ export const getMdTrajectory     = (id, signal, opts = {}) =>
 export const getMdTrajectoryBin = (id, signal, opts = {}) =>
   _oxdnaBin(
     'GET', `/md/jobs/${id}/trajectory-bin${_trajectoryQuery(opts)}`, undefined,
-    { signal, onProgress: opts?.onProgress },
+    { signal, onProgress: opts?.onProgress, maxBytes: TRAJECTORY_RESPONSE_BYTES },
   )
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast.
  *  Also returns `total_raw` + per-stage `n_raw` (undownsampled DCD counts). */
@@ -3539,7 +3560,7 @@ export const cancelMdAnalysis = (id, kind) =>
 export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
   opts.positionsOnly
     ? _oxdnaBin('POST', `/md/jobs/${id}/frames-atomistic-bin`,
-        { frame_indices: frameIndices, ..._strideBody(opts) }).then(buffer => parseMdAtomFrames(buffer, { compact: opts.compact }))
+        { frame_indices: frameIndices, ..._strideBody(opts) }, { signal: opts.signal, maxBytes: TRAJECTORY_RESPONSE_BYTES }).then(buffer => parseMdAtomFrames(buffer, { compact: opts.compact }))
     : _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`,
     { frame_indices: frameIndices, ..._strideBody(opts),
       ...(opts.positionsOnly ? { positions_only: true } : {}) })
@@ -3547,7 +3568,7 @@ export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
  *  stream coordinates with getMdFramesAtomistic(..., {positionsOnly:true}). Same
  *  contract as getOxdnaAtomisticModel. */
 export const getMdAtomisticModel = (id) =>
-  _oxdnaBin('GET', `/md/jobs/${id}/atomistic-model-bin`).then(parseMdAtomModel)
+  _oxdnaBin('GET', `/md/jobs/${id}/atomistic-model-bin`, undefined, { maxBytes: TRAJECTORY_RESPONSE_BYTES }).then(parseMdAtomModel)
 /** The design's intended extra-base UV weld pairs + their C5/C6 atom serials
  *  ({ready, pairs, constants}). Identity only — the viewer computes d_mid/eta from the
  *  frame it is already rendering, so the markers can't drift off the atoms. `pairs` is
@@ -3609,7 +3630,7 @@ export const getMdFramesSolventBin = (id, frameIndices, opts = {}) =>
     atomistic: !!opts.atomistic,
     max_waters: opts.maxWaters ?? null,
     include_dna: !!opts.includeDna,
-  })
+  }, { signal: opts.signal, maxBytes: TRAJECTORY_RESPONSE_BYTES })
 /** How much solvent a NAMD job HAS ({ready, n_waters, n_ions, species, box_nm}) —
  *  read from the package's charge audit, so it answers in milliseconds and can price
  *  a fetch before one is made. */
@@ -3665,7 +3686,7 @@ export const appendMdProduction  = (id, body)    => _oxdnaJSON('POST',   `/md/jo
 /** Branch a production run off a completed relaxation (or production) as a CHILD job,
  *  seeded from the parent's equilibrated coords with a distinct velocity seed. Body:
  *  {steps, length_ns, autostart}. Relaxation stays selectable; children nest under it. */
-export const spawnMdProduction   = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/production-run`, body)
+export const spawnMdProduction   = (id, body)    => withCreatingJob('namd', body, () => _oxdnaJSON('POST',   `/md/jobs/${id}/production-run`, body))
 /** Migrate a legacy job whose production was appended onto the relaxation back to a
  *  clean relaxation (production artifacts moved to _superseded_production/, not deleted),
  *  so relax + production become separate entries. */
@@ -3713,7 +3734,8 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Replace settings and rebuild an unstarted draft/prepared job in place. */
 export const updateMdJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/md/jobs/${id}/settings`, body)
-export const copyMdJob           = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/copy`)
+export const updateMdDraftPreparation = (id, body = {}) => _oxdnaJSON('PATCH', `/md/jobs/${id}/preparation`, body)
+export const copyMdJob           = (id)          => withCreatingJob('namd', { copy_source_id: id }, () => _oxdnaJSON('POST', `/md/jobs/${id}/copy`))
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
 export const finishMdJob = (id, destRoot) =>
@@ -3915,7 +3937,7 @@ export async function createPhotoproduct(baseKeys, stereochemistry = 'cis-syn') 
 
 export async function deletePhotoproduct(photoproductId) {
   const json = await _request('DELETE', `/design/photoproducts/${encodeURIComponent(photoproductId)}`)
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /**
@@ -4181,14 +4203,15 @@ function _clearStaleSelections() {
  * @param {object} params new request body, in the format originally sent to
  *                        the extrude endpoint
  */
-export async function editFeature(index, params) {
-  const json = await _request('POST', `/design/features/${index}/edit`, { params })
+export async function editFeature(index, params, { onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', `/design/features/${index}/edit`, { params }, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   // Edit responses now go through _design_replace_response on the backend so
   // they may take the lean fast paths when the diff is small (deformation
   // edits often hit positions_only since topology is unchanged).
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
 
 /**
@@ -4282,9 +4305,10 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
  * ({vertices, faces, vertex_strand_index*, stats}); NOT a design response.
  */
 export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.06, detail = 'coarse',
-                                                   signal, suppressBusy = false } = {}) {
+                                                   signal, suppressBusy = false, nucleotideKeys } = {}) {
   return _oxdnaJSON('POST', '/design/surface/region', {
     segments,
+    nucleotide_keys: nucleotideKeys,
     detail,
     color_mode:   colorMode,
     probe_radius: probeRadius,
@@ -4943,8 +4967,8 @@ export async function saveAssemblyToWorkspace(filename) {
   return _syncFromAssemblyResponse(json)
 }
 
-export function saveDesignToWorkspace(path) {
-  return _coordinateAssetSave(() => _saveDesignToWorkspace(path))
+export function saveDesignToWorkspace(path, { suppressBusy = false } = {}) {
+  return _coordinateAssetSave(() => _saveDesignToWorkspace(path, { suppressBusy }))
 }
 
 function _coordinateAssetSave(action) {
@@ -4953,9 +4977,9 @@ function _coordinateAssetSave(action) {
     && getDocId() === doc && store.getState().currentDesign?.id === id)
 }
 
-async function _saveDesignToWorkspace(path) {
-  const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
-  if (!json) return null
+async function _saveDesignToWorkspace(path, { suppressBusy = false } = {}) {
+  const json = await _request('POST', '/design/save-workspace', { path, overwrite: true }, { suppressBusy })
+  if (!json) throw new Error(store.getState().lastError?.message ?? 'The part file could not be saved.')
   // A same-path save refreshes only the backend's identity_confirmed_at stamp.
   // Feeding that response back through currentDesign creates an autosave loop:
   // design ref changes → autosave → fresh timestamp/ref → autosave, and every
@@ -4968,7 +4992,12 @@ async function _saveDesignToWorkspace(path) {
   }
   // Initial path claims and Save As can change identity/path metadata (and Save
   // As can mint a new UUID), so those responses still must enter the store.
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  // Claiming a path does not alter the model or invalidate its active simulation.
+  // A Save As identity change still needs the normal document-change signal.
+  return _syncFromDesignResponse(json, {
+    skipGeometry: true,
+    crossTabMetadataOnly: json.design?.id === store.getState().currentDesign?.id,
+  })
 }
 
 /** Convert the open part's legacy history to a verified recipe (dry run unless apply). */
@@ -4993,7 +5022,12 @@ async function _saveDesignAs(path, overwrite) {
         json.previous_revision === currentRevisionWatermark()) _designRevisions.acceptMetadata(json, [], json.design_id)
     return json
   }
-  return _syncFromDesignResponse(json, { skipGeometry: true })
+  // Claiming a path does not alter the model or invalidate its active simulation.
+  // A Save As identity change still needs the normal document-change signal.
+  return _syncFromDesignResponse(json, {
+    skipGeometry: true,
+    crossTabMetadataOnly: json.design?.id === store.getState().currentDesign?.id,
+  })
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */
@@ -5259,9 +5293,14 @@ export async function simulateRecommendation(devices = '0') {
 /** The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
  *  normalized into one common node shape (engine/kind/status/parent_job_id/…) so the
  *  Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in one hierarchical list. */
+// Local saved metadata is independent of geometry and remote status reconciliation.
+export function listSimJobSnapshot(designSourcePath = null) {
+  return listSimJobs(designSourcePath, false, { waitForIdle: false, snapshot: true })
+}
 const _simJobsInflight = new Map()
-export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true } = {}) {
+export async function listSimJobs(designSourcePath = null, showAll = false, { waitForIdle = true, snapshot = false } = {}) {
   const q = new URLSearchParams()
+  if (snapshot) q.set('snapshot', 'true')
   if (store.getState().assemblyActive) q.set('assembly', 'true')
   if (designSourcePath) q.set('design_source_path', designSourcePath)
   if (showAll) q.set('show_all', 'true')
@@ -5586,6 +5625,26 @@ export async function getCpdDesignTemplate(stereochemistry) {
   return _request('GET', `/design/photoproducts/template/${encodeURIComponent(stereochemistry)}`, undefined, { suppressBusy: true })
 }
 
+export async function getCpdConversionOptions() {
+  return _request('GET', '/design/photoproducts/conversion-options', undefined, { suppressBusy: true })
+}
+
+export async function previewCpdConversion(baseKeys, stereochemistry, revision = currentRevisionWatermark()) {
+  const result = await _request('POST', '/design/photoproducts/conversion-preview', {
+    base_keys: baseKeys, stereochemistry, expected_revision: revision,
+  }, { suppressBusy: true, skipSimulationPrepare: true })
+  if (!result) throw new Error(lastErrorMessage() || 'Could not build the CPD preview.')
+  return result
+}
+
+export async function convertThyminesToCpd(baseKeys, stereochemistry, revision) {
+  const result = await _request('POST', '/design/photoproducts/convert', {
+    base_keys: baseKeys, stereochemistry, expected_revision: revision, placement: 'contextual',
+  })
+  if (!result) throw new Error(lastErrorMessage() || 'CPD conversion failed.')
+  return _syncFromDesignResponse(result)
+}
+
 export async function convertExtraBasesToCpd(baseKeys, stereochemistry) {
   const json = await _request('POST', '/design/photoproducts/convert', {
     base_keys: baseKeys, stereochemistry, expected_revision: currentRevisionWatermark(),
@@ -5609,9 +5668,9 @@ export const sendVRJoinFeedback = body => _request('POST', '/vr/join-feedback', 
 export async function saveAssemblyViewVolumes(volumes) {
   return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })
 }
-export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal } = {}) {
+export async function getInstanceRegionSurface(id, segments, { colorMode = 'strand', probeRadius = .06, signal, nucleotideKeys } = {}) {
   return _oxdnaJSON('POST', `/assembly/instances/${encodeURIComponent(id)}/surface/region`,
-    { segments, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
+    { segments, nucleotide_keys: nucleotideKeys, color_mode: colorMode, probe_radius: probeRadius }, { signal, suppressBusy: true })
 }
 
 export async function saveAssemblyAnnotations({ annotations, enabled }) {
@@ -5637,8 +5696,19 @@ export const previewSweep = (body, index = null, { includeGeometry = true } = {}
   if (!includeGeometry) query.set('include_geometry', 'false')
   return _request('POST', `/design/sweep/preview${query.size ? `?${query}` : ''}`, body, { suppressBusy: true })
 }
-export async function createSweep(body, { onCommitted } = {}) {
-  const json = await _request('POST', '/design/sweep', body)
+export async function createSweep(body, { onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', '/design/sweep', body, { deferGeometry })
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { deferGeometry })
 }
+
+export const validateVRClipboard = body => _request('POST', '/vr/clipboard/validate', body, { suppressBusy: true })
+export async function pasteVRClipboard(body, { onCommitted } = {}) {
+  const response = await _request('POST', '/vr/clipboard/paste', body)
+  if (!response) throw new Error(store.getState().lastError?.message || 'Paste failed')
+  onCommitted?.(response)
+  await _syncFromDesignResponse(response)
+  return response
+}
+
+export const getMdRuntimePreview = (body) => _oxdnaJSON('POST', '/md/runtime-preview', body)

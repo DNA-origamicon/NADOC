@@ -53,6 +53,7 @@ def _generated_sequence(design, spec, length: int, extra_sequences=()):
     corpus = staple_sequences + list(extra_sequences)
     screen = OverhangSequenceScreen(design, spec)
     sub_domains = list(spec.sub_domains or [])
+    warning = None
     try:
         if sub_domains and any(sd.sequence_override for sd in sub_domains):
             sequence = generate_overhang_sequence_with_overrides(
@@ -67,8 +68,11 @@ def _generated_sequence(design, spec, length: int, extra_sequences=()):
                 candidate_filter=screen,
             )[0]
     except SequenceGenerationError as exc:
-        raise HTTPException(422, detail=screen.failure_message()) from exc
-    return sequence, screen.apply(sequence)
+        if screen.best_candidate is None:
+            raise HTTPException(422, detail=screen.failure_message()) from exc
+        sequence = screen.best_candidate
+        warning = screen.fallback_warning()
+    return sequence, screen.apply(sequence), warning
 
 
 @router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
@@ -86,11 +90,11 @@ def generate_overhang_random_sequence(overhang_id: str, preview: bool = False) -
             404, detail=f"No domain references overhang {overhang_id!r}."
         )
 
-    sequence, updated = _generated_sequence(design, spec, domain_length)
+    sequence, updated, warning = _generated_sequence(design, spec, domain_length)
     if preview:
         # Connection creation captures this screened sequence as an authored
         # input and applies it in its one transaction. No intermediate write.
-        return {"sequence": sequence}
+        return {"sequence": sequence, "sequence_generation_warnings": [warning] if warning else []}
     updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
     updated, report, _ = design_state.mutate_with_feature_log(
         op_kind="overhang-sequence",
@@ -98,7 +102,9 @@ def generate_overhang_random_sequence(overhang_id: str, preview: bool = False) -
         params={"overhang_id": overhang_id, "action": "generate-random", "sequence": sequence},
         fn=lambda _design: updated,
     )
-    return _design_response(updated, report)
+    result = _design_response(updated, report)
+    result["sequence_generation_warnings"] = [warning] if warning else []
+    return result
 
 
 @router.post("/design/generate-overhang-sequences", status_code=200)
@@ -113,14 +119,17 @@ def generate_all_overhang_sequences() -> dict:
     generated: dict[str, str] = {}
     extra_sequences: list[str] = []
     updated = design
+    warnings = []
     for spec in design.overhangs:
         domain_length = lengths.get(spec.id)
         if domain_length is None:
             continue
-        sequence, updated = _generated_sequence(
+        sequence, updated, warning = _generated_sequence(
             updated, spec, domain_length, extra_sequences
         )
         generated[spec.id] = sequence
+        if warning:
+            warnings.append(warning)
         extra_sequences.extend((sequence * 10, reverse_complement(sequence) * 10))
 
     updated, report, _ = design_state.mutate_with_feature_log(
@@ -132,4 +141,5 @@ def generate_all_overhang_sequences() -> dict:
     result = _design_response(updated, report)
     result["generated_count"] = len(generated)
     result["generated_overhang_ids"] = list(generated)
+    result["sequence_generation_warnings"] = warnings
     return result

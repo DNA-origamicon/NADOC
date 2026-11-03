@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-16T16:01:16.118248+00:00",
+  "user_scope": "User owns melting simulations and system choices. Resolve tractable sugar/reference and parameter defects beforehand. Handoff when further refinement chiefly requires system-specific MD; no requirement for agent-run melting or extended replica campaigns.",
+  "parent_source_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/parent_pdb_residue_audit.json",
+    "sha256": "b32381495117df33ebe46f4c69723dc555d15c123ef3fb1ea538c1a74ce40f10"
+  },
+  "energy_decomposition": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-error-decomposition-v1/assessment.json",
+    "sha256": "ce4e7c850a422488bbf52fef123ee71d962ee032e732cdf21c12f181acb5de2b"
+  },
+  "launch_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/launch_receipt.json",
+    "sha256": "370b65a385fee2be1da3691003f19a81c02bcde4f95e78d40d6a10bf10c106e2"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v1/handoff.json",
+    "sha256": "24efabd33eab3c1d3978aea1ad520ffdbe7a9f846a8ec9f20b8d617ebdc77d4a"
+  },
+  "sugar_disposition": "Canonical QM endpoint1 matches independent DT reference. Archived parent DNA package already has6 C3 and2 C4 mismatches; quarantine that input, preserve raw runs, do not promote a silent geometry repair or treat its simulation results as canonical-DNA validation.",
+  "decomposition_summary": {
+    "coulomb_delta": -4.337096091406957,
+    "lj_delta": -0.35067024833893967,
+    "cap_hydrogen_coulomb_delta": -12.162928831400274,
+    "cap_hydrogen_lj_delta": 0.01411012034623697,
+    "torsion_delta": -4.281533244800542
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

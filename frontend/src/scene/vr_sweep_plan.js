@@ -7,6 +7,20 @@ export function buildVRSweepPlan(config, design, revision) {
   if (!config.painted_footprint.cells.length) return refuse('paint_cells_required')
   if (config.painted_footprint.lattice_type !== design.lattice_type) return refuse('lattice_mismatch')
   if (config.points_nm.length < 2) return refuse('path_points_required')
+  const reference = config.edit_reference
+  const entry = reference ? design.feature_log?.[reference.index] : null
+  if (reference && (reference.design_id !== design.id || reference.revision !== revision ||
+      entry?.id !== reference.feature_id || entry.op_kind !== 'sweep')) return refuse('sweep_edit_stale')
+  if (reference) {
+    const args = { ...structuredClone(entry.params), points_nm: config.points_nm.map(p => [...p]),
+      orientations_deg: config.orientations_deg ?? null, expected_design_id: design.id, expected_revision: revision }
+    return { accepted: true, reason: 'ready_read_only', plan: {
+      kind: 'sweep', targetIdentity: `feature:${entry.id}`, editReference: { ...reference },
+      preflight: { apiMethod: 'previewSweep', arguments: args, featureIndex: reference.index },
+      commit: { apiMethod: 'editFeature', arguments: args, featureIndex: reference.index },
+      lifecycle: { previewAuthority: 'native_read_only_geometry', cancel: 'discard_descriptor', undo: 'desktop_feature_log' },
+    } }
+  }
   const frames = new Map((design.lattice_frames ?? []).map(f => [f.id, f]))
   const occupied = new Set((design.helices ?? []).flatMap(h => {
     const frame = frames.get(h.lattice_frame_id)

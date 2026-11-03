@@ -101,7 +101,7 @@ class StereoRecording {
         const auto text=m.str();write(directory_/"recording.json",text.data(),text.size());
         if(saved_==0)throw std::runtime_error("No submitted eye frames recorded");
         if(writeErrors_)throw std::runtime_error("Recording disk write failed; partial frames retained");
-        if(child({"/usr/bin/python3",std::string(NADOC_QR_ROOT)+"/tools/vr_recording.py",directory_.string()},true)!=0)
+        if(child({"/usr/bin/python3",std::string(NADOC_SOURCE_ROOT)+"/tools/vr_recording.py",directory_.string()},true)!=0)
             throw std::runtime_error("Video export failed; eye frames retained");
     }
     void retire(Slot& s) {
@@ -138,7 +138,7 @@ class StereoRecording {
 public:
     static std::filesystem::path root() {
         if(const char* p=std::getenv("NADOC_VR_RECORDINGS_DIR"))return std::filesystem::path(p);
-        return std::filesystem::path(NADOC_QR_ROOT)/".development-artifacts/vr-recordings";
+        return std::filesystem::path(NADOC_SOURCE_ROOT)/".development-artifacts/vr-recordings";
     }
     bool busy() const {return active_ || writer_.valid();}
     std::string label() const {return active_?(clock_.finished(now())?"Saving stereo clip...":clock_.label(now())):writer_.valid()?"Saving stereo clip...":"Record app eyes 5s";}

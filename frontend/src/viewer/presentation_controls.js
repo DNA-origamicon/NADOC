@@ -2,7 +2,7 @@ import './sharing_controls.css'
 import { mountMeetingPresence } from './meeting_presence.js'
 
 /** Persistent controls anchored to the editor's actual 3D canvas area. */
-export function initPresentationControls({ document: doc = document, onPerspective, onEnd, onGuestView, onViewLock = async () => {} }) {
+export function initPresentationControls({ document: doc = document, onPerspective, onEnd, onGuestView, onAdmit = async () => {}, onRemoveGuest = async () => {}, onViewLock = async () => {} }) {
   const bar = doc.createElement('div'); bar.id = 'presentation-controls'; bar.hidden = true
   bar.className = 'presentation-controls'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Presentation')
   bar.innerHTML = `<span class="presentation-label"><span class="presentation-dot" aria-hidden="true"></span>Presenting</span>
@@ -11,6 +11,7 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     </button><button class="btn presentation-view-lock" type="button" aria-label="Lock guest perspective" aria-pressed="false" title="Lock guest perspective to your camera">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
     </button><button class="btn btn--danger" type="button" data-end-presentation title="End presentation and close guest access">End</button>
+    <button class="btn" type="button" data-admit-guests title="Make room for waiting guests, starting with the longest-present guests">Admit new guests</button><span data-admission-count></span><details data-guest-management><summary>Guests</summary><div data-admission-guests></div></details>
     <span class="presentation-error" role="status" aria-live="polite"></span>`
   ;(doc.getElementById('canvas-area') ?? doc.getElementById('viewport-container') ?? doc.body).append(bar)
   const glasses = bar.querySelector('.presentation-perspective'), end = bar.querySelector('[data-end-presentation]'), error = bar.querySelector('.presentation-error')
@@ -23,6 +24,8 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     glasses.title = enabled ? 'Stop sharing perspective — guests can continue exploring independently' : 'Share perspective — let guests follow your camera in the shared view'
     glasses.setAttribute('aria-label', enabled ? 'Stop sharing perspective' : 'Share perspective')
     glasses.disabled = busy || manualLock || animation; end.disabled = busy
+    bar.querySelector('[data-admit-guests]').disabled = busy
+    for (const button of bar.querySelectorAll('[data-remove-guest]')) button.disabled = busy
     lock.disabled = busy || animation
     lock.setAttribute('aria-pressed', String(manualLock || animation))
     lock.title = animation ? 'Guest perspective locked during animation' : manualLock ? 'Unlock guest perspective' : 'Lock guest perspective to your camera'
@@ -34,9 +37,9 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     try { await action() } catch (reason) { if (!disposed && ticket === generation) error.textContent = reason.message }
     finally { busy = false; if (!disposed) paint() }
   }
-  glasses.onclick = () => act(async () => {
-    const next = !enabled
-    await onPerspective(next)
+  glasses.onclick = event => act(async () => {
+    const next = event.detail?.nativeVR && bar.dataset.perspectiveSource !== 'headset' ? true : !enabled
+    await onPerspective(next, { nativeVR: event.detail?.nativeVR === true })
     if (!disposed && !bar.hidden) enabled = next
   })
   lock.onclick = () => act(async () => {
@@ -45,14 +48,27 @@ export function initPresentationControls({ document: doc = document, onPerspecti
     if (!disposed && !bar.hidden) manualLock = next
   })
   end.onclick = () => act(onEnd)
+  bar.querySelector('[data-admit-guests]').onclick = () => act(onAdmit)
   return {
     get perspective() { return enabled },
     get viewLocked() { return manualLock || animation },
     get manualViewLock() { return manualLock },
     setAnimation(value) { animation = value; paint() },
+    setSource(value) { bar.dataset.perspectiveSource = value },
     setPerspective(value) { enabled = value; paint() },
     error(message) { error.textContent = message },
     setParticipants: presence.update,
+    setAdmission(value) {
+      bar.dataset.activeGuests = String(value?.active ?? 0); bar.dataset.waitingGuests = String(value?.waiting ?? 0)
+      bar.querySelector('[data-admission-count]').textContent = value ? `${value.active} active · ${value.waiting} waiting${value.displays ? ' · 1 demo display' : ''}` : ''
+      const list = bar.querySelector('[data-admission-guests]'); list.replaceChildren()
+      for (const guest of value?.guests ?? []) {
+        const row = doc.createElement('div'), name = doc.createElement('span'), remove = doc.createElement('button')
+        name.textContent = guest.name + ' '; remove.textContent = 'Remove'; remove.className = 'btn'; remove.dataset.removeGuest = guest.id
+        remove.setAttribute('aria-label', `Remove ${guest.name}`); remove.onclick = () => act(() => onRemoveGuest(guest.id)); row.append(name,remove); list.append(row)
+      }
+      paint()
+    },
     setActive(active) { bar.hidden = !active; if (!active) { generation++; enabled = false; manualLock = false; animation = false; error.textContent = '' } paint() },
     dispose() { disposed = true; generation++; presence.dispose(); bar.remove() },
   }

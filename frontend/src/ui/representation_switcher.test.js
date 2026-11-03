@@ -617,3 +617,24 @@ it('preserves a supported style when loading a simulation and replaces a native-
   expect(deps.setCurrentRepr).toHaveBeenLastCalledWith('full')
   ui.dispose()
 })
+
+it('acknowledges an already settled native style without rebuilding or pausing listeners', async () => {
+  mountIds(DOM)
+  const deps = makeDeps({ currentDesign: { id: 'd1' }, assemblyActive: false })
+  const ui = initRepresentationSwitcher(deps)
+  await ui.setRepresentation('ballstick')
+  const seen = vi.fn()
+  window.addEventListener('nadoc:representation-change', seen)
+  deps.setCurrentRepr.mockClear()
+  try {
+    await ui.ensureRepresentation('ballstick')
+    expect(deps.setCurrentRepr).not.toHaveBeenCalled()
+    expect(seen).not.toHaveBeenCalled()
+    await ui.ensureRepresentation('stick')
+    expect(deps.setCurrentRepr).toHaveBeenCalledWith('stick')
+    expect(seen).toHaveBeenCalledTimes(1)
+    // Explicit rebuild callers retain the existing force-apply contract.
+    await ui.setRepresentation('stick')
+    expect(seen).toHaveBeenCalledTimes(2)
+  } finally { window.removeEventListener('nadoc:representation-change', seen); ui.dispose() }
+})

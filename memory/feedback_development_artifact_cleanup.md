@@ -6,6 +6,19 @@ status: active
 ---
 # Development artifact cleanup
 
+## Legacy GROMACS campaigns deleted — 2026-10-23
+
+User explicitly requested deletion: “Delete the gromacs campaigns. We have no
+need for them anymore.” Deleted all three campaigns in checkout `runs/`:
+`10hb_bundle_params` (303 files), `3NN_opt2_bundle_params` (485 files), and
+`crossover_parameterization` (384 files). These were standalone legacy campaigns
+without NADOC `job.json` records; no references were found in the 95 workspace
+part files inspected. No active process cwd/open-file references were found
+before deletion. Verified `runs/` is empty afterward. Removed 1,172 files,
+24,440,135,868 logical bytes; measured free-space increase 24,443,875,328 bytes
+(22.76 GiB). No archive copy was made and no part files or managed jobs changed.
+Historical references to these campaign outputs now refer to deleted data.
+
 User instruction, 2026-09-15/16: delete disposable development/test artifacts;
 retain useful evidence only where it does not clutter the main user workspace.
 

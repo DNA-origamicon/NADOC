@@ -114,7 +114,7 @@ def namd_run_output_bytes(segments, n_atoms: int) -> int:
     total = 0
     for seg in segments:
         steps, dcd_freq = _steps_and_freq(seg)
-        frames = steps // max(1, dcd_freq)
+        frames = steps // dcd_freq if dcd_freq > 0 else 0
         total += frames * frame_bytes
         total += _NAMD_RESTART_BYTES_PER_ATOM * n_atoms
     return int(total * _SAFETY)
@@ -147,7 +147,7 @@ def oxdna_run_output_bytes(stages, n_nucleotides: int) -> int:
 def _steps_and_freq(seg) -> tuple[int, int]:
     if isinstance(seg, (tuple, list)):
         return int(seg[0]), int(seg[1])
-    return int(seg.steps), int(getattr(seg, "dcd_freq", 0) or 1)
+    return int(seg.steps), int(getattr(seg, "dcd_freq", 0) or 0)
 
 
 # ── Forecast (before a run) ──────────────────────────────────────────────────────

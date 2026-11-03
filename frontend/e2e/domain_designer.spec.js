@@ -227,7 +227,7 @@ test.describe('Domain Designer — popup tab integration', () => {
     expect(body.name).toBe('renamed-sd')
   })
 
-  test('Gen button is disabled when sub-domain has hairpin_warning', async ({ page }) => {
+  test('Gen button remains enabled when sub-domain has hairpin_warning', async ({ page }) => {
     await openOverhangsManager(page)
     await page.locator('.ohc-tab[data-tab="domain-designer"]').click()
     await expect(page.locator('#tab-content-domain-designer')).toBeVisible()
@@ -247,14 +247,14 @@ test.describe('Domain Designer — popup tab integration', () => {
 
     // Type a length-matched palindromic sequence into the override field.
     // The panel's debounced PATCH (150ms) will fire, the backend's inner
-    // hairpin scan flags it, and the panel re-renders with the Gen button
-    // disabled. This exercises the full UI path end-to-end.
+    // hairpin scan flags it, and Gen must remain available so the user can
+    // replace the problematic sequence.
     const base = 'GCGCATATGCGC'
     const palindrome = base.repeat(Math.ceil(sdLen / base.length)).slice(0, sdLen)
     await seqInput.fill(palindrome)
     // Allow the 150 ms debounce + backend round-trip + store update + render.
     await page.waitForTimeout(1200)
-    await expect(page.locator('button.dd-ann-generate')).toBeDisabled({ timeout: 5000 })
+    await expect(page.locator('button.dd-ann-generate')).toBeEnabled({ timeout: 5000 })
   })
 
   // 3D preview removed 2026-05-11 — the toggle / canvas / placeholder no

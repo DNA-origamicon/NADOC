@@ -23,6 +23,7 @@ export const ANNOTATION_COLORS = Object.freeze([
 
 export const SIZE_RANGE = Object.freeze({ min: 0.7, max: 2.5, step: 0.05, default: 1 })
 export const TRANSPARENCY_RANGE = Object.freeze({ min: 0, max: 0.8, step: 0.05, default: 0 })
+export const GLOW_INTENSITY_RANGE = Object.freeze({ min: 0, max: 2, step: 0.05, default: 1 })
 export const MAX_TEXT_LENGTH = 500
 
 const HEX = /^#[0-9a-f]{6}$/i
@@ -50,6 +51,10 @@ export function normalizeAnnotation(input = {}, { index = 0 } = {}) {
     icon: isAnnotationIcon(input.icon) ? input.icon : null,
     calloutType: CALLOUT_KEYS.has(input.calloutType) ? input.calloutType : 'elbow',
     color,
+    highlight: input.highlight === true,
+    highlightType: input.highlightType === 'silhouette' ? 'silhouette' : 'glow',
+    glowColor: typeof input.glowColor === 'string' && HEX.test(input.glowColor) ? input.glowColor.toLowerCase() : color,
+    glowIntensity: clamp(finiteOr(input.glowIntensity, 1), 0, 2),
     transparency: clamp(finiteOr(input.transparency, TRANSPARENCY_RANGE.default), TRANSPARENCY_RANGE.min, TRANSPARENCY_RANGE.max),
     size: clamp(finiteOr(input.size, SIZE_RANGE.default), SIZE_RANGE.min, SIZE_RANGE.max),
     manual: input.manual === true,
@@ -75,6 +80,7 @@ export const legacyStorageKeyFor = designId => `nadoc.annotations.v1:${designId}
 export function annotationToWire(entry) {
   return {
     id: entry.id, text: entry.text, icon: entry.icon, callout_type: entry.calloutType, color: entry.color,
+    highlight: entry.highlight, highlight_type: entry.highlightType, glow_color: entry.glowColor, glow_intensity: entry.glowIntensity,
     transparency: entry.transparency, size: entry.size, manual: entry.manual,
     screen_pos: entry.screenPos ? [entry.screenPos.x, entry.screenPos.y] : null,
     visible: entry.visible, refs: entry.refs,
@@ -86,6 +92,7 @@ export function annotationFromWire(wire, { index = 0 } = {}) {
   const pos = Array.isArray(wire?.screen_pos) ? { x: wire.screen_pos[0], y: wire.screen_pos[1] } : null
   return normalizeAnnotation({
     id: wire?.id, text: wire?.text, icon: wire?.icon, calloutType: wire?.callout_type, color: wire?.color,
+    highlight: wire?.highlight, highlightType: wire?.highlight_type, glowColor: wire?.glow_color, glowIntensity: wire?.glow_intensity,
     transparency: wire?.transparency, size: wire?.size, manual: wire?.manual, screenPos: pos,
     visible: wire?.visible, refs: wire?.refs,
   }, { index })
@@ -109,4 +116,14 @@ export function deserializeAnnotations(raw) {
   } catch {
     return []
   }
+}
+
+/** Annotation edits preserve all geometry inputs, including active simulation poses. */
+export function isAnnotationOnlyDesignChange(next, previous) {
+  if (!next || !previous || next === previous) return false
+  const keys = new Set([...Object.keys(next), ...Object.keys(previous)])
+  keys.delete('annotations')
+  keys.delete('annotations_enabled')
+  for (const key of keys) if (next[key] !== previous[key]) return false
+  return true
 }

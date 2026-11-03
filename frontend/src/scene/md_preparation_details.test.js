@@ -37,3 +37,14 @@ it('keeps transparent annotations from occluding surfaces rendered later',()=>{
   group.traverse(node=>{if(node.material)expect(node.material.depthWrite,node.name).toBe(false)})
   ui.dispose();vi.restoreAllMocks()
 })
+
+it('labels saved cell dimensions and actual ion counts without inventing face clearance',()=>{
+ vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({measureText:text=>({width:text.length*12}),fillRect(){},strokeRect(){},fillText(){}})
+ const scene=new THREE.Scene(),ui=initPreparationDetails({scene,getEntries:()=>[{pos:new THREE.Vector3(1,2,3)}]})
+ window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details',{detail:{enabled:true,estimated:false,source:'Prepared initial box',jobName:'2hb_1xT',dimensions:[6.093,8.344,12.814],numbers:{na:0,mg:52,cl:11}}}))
+ const group=scene.getObjectByName('NAMD box and solvent details')
+ expect(group.getObjectByName('Solvent conditions callout').userData.annotation).toContain('Actual ions: Na⁺ 0 · Mg²⁺ 52 · Cl⁻ 11')
+ expect(group.children.filter(o=>o.name==='Water margin highlight')).toHaveLength(0)
+ expect(group.userData.dimensions).toEqual([6.093,8.344,12.814])
+ ui.dispose();vi.restoreAllMocks()
+})

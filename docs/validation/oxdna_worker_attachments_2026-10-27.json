@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-27",
+  "source_parent": "223c939e616c",
+  "isolated_workspace": "/tmp/nadoc-worker-attachments-czhvdq0t",
+  "job_id": "42cc44078694",
+  "status": "completed",
+  "scope": "Real CUDA DNANM VoltronCoreArmV2 smoke test: two 5000-step continuation stages. Launcher exited before completion. Full deposition was prepared but not rerun to completion. No production workspace job inputs changed.",
+  "stages": [
+    {
+      "name": "1_attachment_check",
+      "kind": "production",
+      "steps": 5000,
+      "status": "done",
+      "started_at": 1793119742.1299372,
+      "resumed": false,
+      "completed_steps": 0
+    },
+    {
+      "name": "2_attachment_check",
+      "kind": "production",
+      "steps": 5000,
+      "status": "done",
+      "started_at": 1793119870.5465739,
+      "resumed": false,
+      "completed_steps": 0
+    }
+  ],
+  "frames": [
+    {
+      "stage": "42cc44078694",
+      "finite": true,
+      "particles": 30849,
+      "tether_distance_nm": 1.0024077951425874
+    },
+    {
+      "stage": "1_attachment_check",
+      "finite": true,
+      "particles": 30849,
+      "tether_distance_nm": 1.0858324534749906
+    },
+    {
+      "stage": "2_attachment_check",
+      "finite": true,
+      "particles": 30849,
+      "tether_distance_nm": 0.6043996386624785
+    }
+  ],
+  "molecular_springs": {
+    "particles": [
+      432,
+      30833
+    ],
+    "reciprocal_blocks_per_stage": [
+      2,
+      2
+    ]
+  },
+  "prepared_deposition_job": "c3e788ef3abc",
+  "fresh_process_api_checks": {
+    "list_status": "completed",
+    "detail_status": "completed",
+    "progress": {
+      "overall": 1.0,
+      "done_stages": 2,
+      "total_stages": 2,
+      "current_stage_idx": 2,
+      "stage_fraction": 0.0,
+      "eta_seconds": null,
+      "next_frame_eta_seconds": null,
+      "frame_index": null,
+      "live_health": null
+    }
+  },
+  "tests": {
+    "oxdna_backend_passed": 335,
+    "shared_runtime_passed": 25,
+    "frontend_passed": 292,
+    "browser_workflow_passed": 1
+  },
+  "limitations": [
+    "Short validation checks attachment persistence and worker lifecycle, not long-term sampling convergence.",
+    "Quantum dots remain display-only; no QD attachment physics was invented.",
+    "Earlier untethered trajectories are unchanged; start corrected deposition from the attached relaxation."
+  ]
+}

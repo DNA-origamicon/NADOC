@@ -71,6 +71,7 @@ def report(text, intervals=None, *, target_budget_ms=None):
     if target_budget_ms is not None and (not math.isfinite(target_budget_ms) or target_budget_ms<=0):
         raise ValueError('Target budget must be a finite positive number of milliseconds')
     rows = parse(text)
+    trace_dropped=any(line.startswith('VR_TRACE_DROPPED ') for line in text.splitlines())
     malformed=sum(line.startswith('VR_FRAME_AUDIT ') for line in text.splitlines())-len(rows)
     groups = defaultdict(list)
     for row in rows:
@@ -78,8 +79,8 @@ def report(text, intervals=None, *, target_budget_ms=None):
             # Include only complete frames; captures at either boundary stay out.
             if interval['start_ms'] <= row['epoch_ms'] and row['epoch_ms']+row['total_ms'] <= interval['end_ms']:
                 groups[(interval['name'],row['representation'],row['tool'])].append(row)
-    return dict(malformed_records=malformed, valid=bool(rows) and not malformed and 'VR_TRACE_DROPPED ' not in text and not any(r['overflow'] for r in rows),
-                trace_dropped='VR_TRACE_DROPPED ' in text,
+    return dict(malformed_records=malformed, valid=bool(rows) and not malformed and not trace_dropped and not any(r['overflow'] for r in rows),
+                trace_dropped=trace_dropped,
                 missing_intervals=[i['name'] for i in intervals or [] if not any(k[0]==i['name'] for k in groups)],
                 limits='CPU wall phases include driver waits. Non-runtime-wait time subtracts only xrWaitFrame, xrSyncActions, xrEndFrame and swapchain acquisition/wait; it is not pure CPU execution or combined CPU+GPU cost. Calculation subscopes are inclusive and overlap phases; do not sum them. FPS estimates application cadence from outer-loop start timestamps of consecutive focused submitted frames, not headset scanout. Use compositor.jsonl for GPU/repeated/dropped evidence. Tool is frame-end mode; use explicit operation intervals. Clock/scope overhead is included. Final audit record formatting/enqueue is outside timed phases but affects submission cadence; these are instrumented-run results.',
                 cases=[dict(interval=k[0], representation=k[1], tool=k[2], **summarize(v,target_budget_ms)) for k,v in groups.items()])

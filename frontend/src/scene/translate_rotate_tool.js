@@ -34,7 +34,7 @@ if (import.meta.hot) import.meta.hot.dispose(() => moveDocumentScope.dispose())
  * @returns {{ action: 'retarget'|'none', clusterId: string|null }}
  */
 export function decideSelectionAction({ newSel, toolActive, activeClusterId, mode }) {
-  const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
+  const partsEditor = !!mode && !mode.assemblyActive && !mode.unfoldActive
   const newCid = newSel?.kind === 'cluster' ? newSel.id ?? null : null
   // Selection never arms or closes the tool. Once explicitly armed, a cluster click
   // may still retarget the live gizmo; this keeps selection and tool activation as
@@ -384,6 +384,18 @@ export function initTranslateRotateTool(deps) {
     setActive(true)
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
 
+    // Explicit activation lets attachment subscribers attach the selected
+    // protein/nanoparticle. Keep their controller and panel instead of replacing
+    // them with the cluster-selection waiting state.
+    if (!targetClusterId && proteinGizmo?.isAttached()) {
+      finishClusterPick?.()
+      _moveRotatePanel.setAssemblyCtx(null)
+      _moveRotatePanel.setSessionMode?.('protein')
+      if (_mrPanel) _mrPanel.style.display = ''
+      _confirmBtn.style.display = 'flex'
+      return
+    }
+
     // ── Multi-selected clusters → drive them all as one rigid body ──────────────
     // Only when the caller did NOT pre-target a specific cluster (Rotate button,
     // joint rotate, strand-click retarget all pass one). Keep only canonical ids
@@ -517,6 +529,13 @@ export function initTranslateRotateTool(deps) {
     const current = () => attempt === moveEpoch && moveDocumentScope.isCurrent(generation)
       && getDocId() === docId && store.getState().currentDesign?.id === designId
       && !store.getState().assemblyActive
+    // Finish the attachment preview before disabling the tool: its subscribers
+    // cancel uncommitted previews on deactivation.
+    if (proteinGizmo?.isAttached()) {
+      await proteinGizmo.commit()
+      if (!current()) return false
+      proteinGizmo.detach()
+    }
     setActive(false)
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
@@ -824,7 +843,6 @@ export function initTranslateRotateTool(deps) {
       activeClusterId: newState.activeClusterId,
       mode: {
         assemblyActive: newState.assemblyActive,
-        cadnanoActive:  newState.cadnanoActive,
         unfoldActive:   newState.unfoldActive,
       },
     })
@@ -844,7 +862,7 @@ export function initTranslateRotateTool(deps) {
     if (newState.selection === prevState.selection) return
     if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (!getActive()) return
-    if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
+    if (newState.assemblyActive || newState.unfoldActive) return
     const clusters = newState.currentDesign?.cluster_transforms ?? []
     const groupIds = selectedClusterIds(newState).filter(id => clusters.some(c => c.id === id))
     if (groupIds.length >= 2) {

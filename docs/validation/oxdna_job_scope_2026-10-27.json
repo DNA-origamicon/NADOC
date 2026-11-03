@@ -1,0 +1,21 @@
+{
+  "job": "cb8b5c48b561",
+  "job_stage_files": [
+    "/home/jojo/Work/NADOC/workspace/oxdna_jobs/cb8b5c48b561/1_production/trajectory.dat"
+  ],
+  "lineage_stage_files": 25,
+  "old_job_frames": 501,
+  "corrected_job_frames": 500,
+  "first_frame_matches_first_saved_frame": true,
+  "first_frame_differs_from_design_pose": true,
+  "max_first_backbone_coordinate_difference_from_design_nm": 133.42959785461426,
+  "finding": "Job-only requests exclude ancestors, but prepended design-pose frame zero made continuations appear to replay prior history, amplified by interpolated previews.",
+  "fix": "Job-only stages disable the artificial design seed. Shared metadata, compact/legacy coordinates, atomic and surface reads use matching zero-based saved-frame indices. Alignment refresh preserves job scope.",
+  "validation": {
+    "backend_suite_passed": 266,
+    "frontend_passed": 286,
+    "real_saved_frame_verified": true,
+    "additional_checks": "Targeted index regressions include atomic and surface consumers; comparison converts all paths to the same backbone-site convention."
+  },
+  "simulation_files_modified": false
+}

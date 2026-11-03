@@ -1,0 +1,265 @@
+{
+  "report": {
+    "per_test_budget_sec": 5.0,
+    "total_test_seconds": 585.4,
+    "n_tests": 14825,
+    "sim_running": false,
+    "sim_reason": "",
+    "slowest_files_15": [
+      {
+        "file": "tests/test_part_immutable_creation.py",
+        "seconds": 27.8,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_oxdna_relaxation.py",
+        "seconds": 26.2,
+        "n_tests": 248,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_alpine_restart.py",
+        "seconds": 24.5,
+        "n_tests": 19,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_project_revisions.py",
+        "seconds": 24.4,
+        "n_tests": 23,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_headless_oxdna_build.py",
+        "seconds": 23.1,
+        "n_tests": 45,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_cluster_join_api.py",
+        "seconds": 20.3,
+        "n_tests": 17,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_design_identity_api.py",
+        "seconds": 18.9,
+        "n_tests": 17,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_immutable_cache.py",
+        "seconds": 10.5,
+        "n_tests": 53,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_vr_representation_loading.py",
+        "seconds": 10.0,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_project_collaboration_api.py",
+        "seconds": 9.7,
+        "n_tests": 11,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_native_protein_input_proof.py",
+        "seconds": 8.6,
+        "n_tests": 16,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_mrdna_surface.py",
+        "seconds": 8.2,
+        "n_tests": 11,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_runpod_executor.py",
+        "seconds": 7.9,
+        "n_tests": 49,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_part_coating_evaluation.py",
+        "seconds": 7.8,
+        "n_tests": 27,
+        "n_slow_marked": 0
+      },
+      {
+        "file": "tests/test_trajectory_thinning.py",
+        "seconds": 7.8,
+        "n_tests": 14,
+        "n_slow_marked": 0
+      }
+    ],
+    "violators": [
+      {
+        "nodeid": "tests/test_project_revisions.py::test_topology_autosave_commit_race[False]",
+        "seconds": 9.02
+      },
+      {
+        "nodeid": "tests/test_mrdna_surface.py::test_field_into_surface_prepares_without_a_strand_anchor",
+        "seconds": 6.4
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_autosave_after_undo_redo_and_further_edit",
+        "seconds": 5.53
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 5.46
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_topology_autosave_commit_race[True]",
+        "seconds": 5.2
+      },
+      {
+        "nodeid": "tests/test_project_collaboration_api.py::test_authenticated_peer_can_transfer_and_fast_forward_project",
+        "seconds": 5.13
+      }
+    ],
+    "slowest_25": [
+      {
+        "nodeid": "tests/test_project_revisions.py::test_topology_autosave_commit_race[False]",
+        "seconds": 9.02,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_mrdna_surface.py::test_field_into_surface_prepares_without_a_strand_anchor",
+        "seconds": 6.4,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_autosave_after_undo_redo_and_further_edit",
+        "seconds": 5.53,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 5.46,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_revisions.py::test_topology_autosave_commit_race[True]",
+        "seconds": 5.2,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration_api.py::test_authenticated_peer_can_transfer_and_fast_forward_project",
+        "seconds": 5.13,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_save_as_forks_identity_and_keeps_old_file",
+        "seconds": 4.66,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_restart.py::test_fresh_and_checkpoint_at_total",
+        "seconds": 4.37,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_autosave_after_history_snapshot_restore",
+        "seconds": 4.0,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_restart.py::test_restart_resumes_remaining_steps_preserving_prior_trajectory",
+        "seconds": 3.58,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_headless_oxdna_build.py::test_run_relaxation_completes_and_recovers_geometry",
+        "seconds": 3.53,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_undo_boundaries.py::test_save_as_cannot_undo_back_to_original_file",
+        "seconds": 3.09,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_protein_input_proof.py::test_unwritable_derived_cache_cannot_block_portable_revision",
+        "seconds": 3.04,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_pending_record_refuses_fresh_creation_without_preparation_or_overwrite",
+        "seconds": 2.98,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_restart.py::test_no_checkpoint_stops_without_overwriting",
+        "seconds": 2.96,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_oxdna_relaxation.py::test_oxdna_create_counts_strand_nucleotides_not_lattice",
+        "seconds": 2.96,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_repair_persistence.py::test_content_addressed_project_revision_retains_draft_and_proposed_source_bytes[True]",
+        "seconds": 2.9,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+        "seconds": 2.79,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+        "seconds": 2.77,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_oxdna_relaxation.py::test_oxdna_job_name_from_source_path",
+        "seconds": 2.72,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_design_identity_api.py::test_autosave_does_not_adopt_another_documents_revision",
+        "seconds": 2.64,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_project_collaboration_api.py::test_local_project_overview_needs_no_peer_token",
+        "seconds": 2.5,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+        "seconds": 2.49,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_native_protein_input_proof.py::test_valid_inline_input_restores_corrupt_derived_project_cache",
+        "seconds": 2.47,
+        "slow_marked": false
+      },
+      {
+        "nodeid": "tests/test_alpine_restart.py::test_partial_generation_falls_back_to_consistent_old",
+        "seconds": 2.37,
+        "slow_marked": false
+      }
+    ]
+  },
+  "status": "Focused rechecks complete; 6 passed. No marker or budget changes.",
+  "diagnosis": "Revision, collaboration, autosave and durable-create tests perform small durable writes; mrdna test stubs engine launch and only prepares a 6hb-42bp fixture. No heavy solver in these cases. Broad timings not reproduced serially; do not relegate from contention alone.",
+  "focused_call_seconds": [
+    1.29,
+    0.18,
+    1.13,
+    1.01,
+    2.72,
+    0.4
+  ],
+  "results": "round2_slow_rechecks.json"
+}

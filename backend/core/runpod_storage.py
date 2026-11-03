@@ -19,7 +19,7 @@ Three distinct storage facts matter before renting, and none of them were visibl
    50 GB free on a volume already holding three checkpoint sets is exactly the kind of
    confident-wrong number that gets a run killed at hour six.
 
-3. **Staging is billable.** The package uploads over SFTP at domestic upstream speed while the
+3. **SSH staging is billable; S3 staging before rental is not.** The package uploads over SFTP at domestic upstream speed while the
    GPU sits idle and billing. On the 1.94M-atom run that was 1.21 GB ≈ 15 min ≈ $0.20 before
    NAMD ran a single step (RUNBOOK §6). Small in absolute terms, but it is the one cost that is
    pure waste, and seeing it is what motivates re-using an already-staged job_id.
@@ -50,6 +50,7 @@ def staging_estimate(
     *,
     usd_per_hour: Optional[float] = None,
     upload_mbps: float = DEFAULT_UPLOAD_MBPS,
+    billable: bool = True,
 ) -> dict:
     """Upload time and billed cost for staging a package onto the network volume.
 
@@ -66,8 +67,10 @@ def staging_estimate(
         }
     minutes = (package_bytes * 8.0) / (upload_mbps * 1e6) / 60.0
     usd = (minutes / 60.0) * usd_per_hour if usd_per_hour else None
+    if not billable: usd = 0.0
     return {
         "bytes": int(package_bytes),
+        "billable": billable,
         "minutes": round(minutes, 1),
         "usd": round(usd, 2) if usd is not None else None,
         "upload_mbps": upload_mbps,
@@ -83,6 +86,7 @@ def storage_estimate(
     volume_used_gb: Optional[float] = None,
     usd_per_hour: Optional[float] = None,
     upload_mbps: float = DEFAULT_UPLOAD_MBPS,
+    billable: bool = True,
 ) -> dict:
     """What this run needs on the network volume, and whether it fits.
 
@@ -96,7 +100,7 @@ def storage_estimate(
     """
     output_bytes = namd_run_output_bytes(stages, n_atoms) if n_atoms > 0 else 0
     staging = staging_estimate(
-        package_bytes, usd_per_hour=usd_per_hour, upload_mbps=upload_mbps
+        package_bytes, usd_per_hour=usd_per_hour, upload_mbps=upload_mbps, billable=billable
     )
     needed_bytes = output_bytes + max(0, int(package_bytes))
 

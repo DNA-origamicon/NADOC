@@ -1,0 +1,23 @@
+{
+  "behavior": {
+    "smooth_off": "Successive saved frames; no sparse preview substitution during playback.",
+    "smooth_on": "Interpolation between adjacent saved frames, respecting stage boundaries.",
+    "scrub": "Immediate sparse preview while dragging, then exact settled frame.",
+    "buffer": "Four saved frames prepared ahead, including loop wrap; cache misses hold the last exact frame."
+  },
+  "validation": {
+    "frontend_tests_passed": 351,
+    "files": 5,
+    "scope": "Unit and integration tests for player, panel, display, MD adapter, and trajectory stream; no new full-application GPU timing benchmark."
+  },
+  "physics_assessment": {
+    "job": "9124dd8cc503",
+    "thermostat": "bussi",
+    "bussi_tau": 1000,
+    "newtonian_steps": 53,
+    "dt": 0.00125,
+    "field_force_pN_per_particle": 0.004005441584999999,
+    "simulation_settings_changed": false,
+    "conclusion": "Bussi is temperature control, not a calibrated local solvent-drag model. Underdamped mechanical modes are plausible but have not been diagnosed from exact frame data. Langevin/Brownian local drag and missing cooperative hydrodynamics must be distinguished."
+  }
+}

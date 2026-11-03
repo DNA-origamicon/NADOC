@@ -697,7 +697,8 @@ def test_base_pair_retention_on_hybrid_conf(tmp_path):
     assert total > 0 and 0.0 <= frac <= 1.0  # resolves DNA pairs, no crash
 
 
-def test_hybrid_trajectory_and_flex_map_ignore_leading_protein_particles(tmp_path):
+@pytest.mark.parametrize("align", [False, True])
+def test_hybrid_trajectory_and_flex_map_ignore_leading_protein_particles(tmp_path, align):
     """The shared trajectory/RMSF readers keep nucleotide identities aligned when
     protein beads lead every DNANM frame; protein motion must not become DNA motion."""
     from backend.api.crud import _geometry_for_design
@@ -731,12 +732,29 @@ def test_hybrid_trajectory_and_flex_map_ignore_leading_protein_particles(tmp_pat
     assert flex["max_rmsf"] == pytest.approx(0.0, abs=1e-6)
 
     composite = composite_trajectory(
-        design, [("production", "production", traj)], ref, align=False
+        design, [("production", "production", traj)], ref, align=align
     )
     assert composite["n_frames"] == 3  # prepended reference + two written frames
     assert composite["n_nucleotides"] == len(composite["keys"])
     assert all(len(frame) == len(composite["keys"]) * 9 for frame in composite["frames"])
-    assert composite["frames"][1] == pytest.approx(composite["frames"][2], abs=1e-6)
+    dna_count = sum(k[0] != "__protein_transform__" for k in composite["keys"])
+    assert composite["frames"][1][:dna_count*9] == pytest.approx(composite["frames"][2][:dna_count*9], abs=1e-6)
+    assert composite["frames"][2][dna_count*9+3] - composite["frames"][1][dna_count*9+3] == pytest.approx(1.0, abs=1e-5)
+    assert len(composite["keys"]) == dna_count + 3
+    # Binary transport and a progressive page must carry the very same pose.
+    import json, struct
+    from backend.core.oxdna_health import pack_composite_trajectory_bin
+    payload = pack_composite_trajectory_bin(design, [("production", "production", traj)], ref,
+        align=align, frame_start=2, frame_end=2)
+    _, _, nf, nk, size = struct.unpack('<IIIII', payload[:20])
+    meta = json.loads(payload[20:20+size])
+    assert meta['keys'] == composite['keys']
+    offset = (20 + size + 3) // 4 * 4
+    floats = np.frombuffer(payload, dtype='<f4', offset=offset).reshape(nf, nk, 6)
+    assert floats[0,dna_count,3] == pytest.approx(composite['frames'][2][dna_count*9+3], abs=1e-5)
+    packed = composite_trajectory(design, [("production", "production", traj)], ref,
+        align=align, packed=True, frame_start=2, frame_end=2)
+    assert packed['frames'][0] == pytest.approx(composite['frames'][2], abs=1e-5)
 
 
 # ── Phase 4b: protein display transform (Kabsch recovery) ───────────────────────

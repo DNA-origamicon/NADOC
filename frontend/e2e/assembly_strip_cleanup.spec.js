@@ -6,7 +6,7 @@
  * toggles, expanded spacing. The whole Selectable section is hidden (assembly
  * overhang selection is done by hovering/clicking overhangs in 3D, not via a
  * selection filter), along with the blunt/xover tools, length/undef toggles,
- * and deform/unfold/cadnano mode buttons. Everything restores on exit.
+ * and deform/unfold mode buttons. Everything restores on exit.
  *
  * Servers must be running (Vite :5173, FastAPI :8000).
  */
@@ -43,7 +43,6 @@ const HIDE = [
   '#view-tools [data-vt="undefinedBases"]',
   '#view-tools [data-vt="deform"]',
   '#view-tools [data-vt="unfold"]',
-  '#view-tools [data-vt="cadnano2d"]',
 ]
 
 /** Map selector -> computed display ('none' means hidden). */

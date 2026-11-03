@@ -39,7 +39,7 @@ import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopolo
 export function initDesignRenderer(scene, storeRef) {
   const simulationListeners = new Set()
   let simulationGeometry = null, simulationDesign = null
-  const notifySimulation = () => { for (const fn of simulationListeners) fn() }
+  const notifySimulation = (...args) => { for (const fn of simulationListeners) fn(...args) }
   let _helixCtrl        = null
   let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
@@ -611,6 +611,8 @@ export function initDesignRenderer(scene, storeRef) {
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
+      _activeFemUpdates = null
+      _activeFemAmp = 1
       return
     }
 
@@ -630,7 +632,7 @@ export function initDesignRenderer(scene, storeRef) {
     // Each connection is a line between the backbone beads of the two linked nucleotides.
     // Extra-base beads + slabs for crossovers with extra bases.
     // Line rendering (straight + arc) is handled exclusively by unfold_view.js.
-    // Hidden when unfold or cadnano view is active.
+    // Hidden when unfold view is active.
     const colorMap    = buildStapleColorMap(geometry, design)
     const effectiveCols = _effectiveColors(strandColors, strandGroups)
     const xoverResult = buildCrossoverConnections(design, geometry, colorMap, effectiveCols)
@@ -646,18 +648,24 @@ export function initDesignRenderer(scene, storeRef) {
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
       // root.visible covers them automatically; no extra VISIBILITY RULE required.
       _helixCtrl.root.add(xoverResult.group)
-      _cpdSlabBonds = createCpdSlabBonds(design, _xoverSlabsMesh, target => {
-        const arc = _xoverArcDataMap.get(target?.crossover_id)
-        if (!arc || target.k < 0 || target.k >= arc.beadCount) return null
-        return arc.beadStartIdx + simBeadIndex(target.k, arc.beadCount, arc.simReversed)
-      })
-      if (_cpdSlabBonds) xoverResult.group.add(_cpdSlabBonds.mesh)
       // Re-skin extra-base meshes if a non-strand coloring mode is active —
       // build emitted strand colors, applyColoring covers helix meshes, this
       // covers the xover extras.
       if (coloringMode && coloringMode !== 'strand') _applyXoverColoring(coloringMode)
     }
 
+    _cpdSlabBonds = createCpdSlabBonds(design, _xoverSlabsMesh, target => {
+      if (target?.helix_id === '__xb__') {
+        const arc = _xoverArcDataMap?.get(target.crossover_id)
+        if (!arc || target.k < 0 || target.k >= arc.beadCount) return null
+        return { mesh: _xoverSlabsMesh, index: arc.beadStartIdx + simBeadIndex(target.k, arc.beadCount, arc.simReversed) }
+      }
+      const entry = _helixCtrl.slabEntries.find(e => e.nuc.helix_id === target?.helix_id &&
+        e.nuc.bp_index === target.bp_index && e.nuc.direction === target.direction &&
+        (e._copy ?? e.nuc.copy_k ?? 0) === (target.copy ?? 0))
+      return entry ? { mesh: entry.instMesh, index: entry.id } : null
+    })
+    if (_cpdSlabBonds) _helixCtrl.root.add(_cpdSlabBonds.mesh)
 
     // Re-apply post-rebuild visibility state
     if (_slabThickness !== 0.06) _helixCtrl.setSlabThickness(_slabThickness)
@@ -1150,6 +1158,8 @@ export function initDesignRenderer(scene, storeRef) {
         // Still run post-rebuild side-effects that depend on design state.
         if (newState.staplesHidden !== prevState.staplesHidden) {
           _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+          _previewGlowLayer.refresh()
+          _glowLayer.refresh()
         }
         if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
           _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
@@ -1170,10 +1180,6 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    if (window._cnDebug && storeRef.getState().cadnanoActive) {
-      console.warn(`[CN f${window._cnFrame}] design_renderer._rebuild() geo:${geoChanged} des:${designChanged} loop:${loopChanged}`,
-        new Error().stack.split('\n').slice(2, 8).join('\n'))
-    }
     markOperationTiming('scene-rebuild-trigger', {
       geoChanged, designChanged, loopChanged,
       nucleotides: newState.currentGeometry?.length ?? 0,
@@ -1201,6 +1207,8 @@ export function initDesignRenderer(scene, storeRef) {
     // Hide/show all staple strands.
     if (newState.staplesHidden !== prevState.staplesHidden) {
       _helixCtrl?.setStapleVisibility(!newState.staplesHidden)
+      _previewGlowLayer.refresh()
+      _glowLayer.refresh()
     }
 
     // Isolate a single staple strand (dim all others).
@@ -1209,7 +1217,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
 
     // Extra-base beads+slabs now track arc positions during all transitions
-    // (unfold, cadnano, deform) via updateExtraBaseArc() — no need to hide.
+    // (unfold, deform) via updateExtraBaseArc() — no need to hide.
   })
 
   // Build immediately if the store already has data (e.g. on hot reload).
@@ -1501,6 +1509,11 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
+      // Stopping an inactive simulation must not restore authored coordinates:
+      // cluster previews live in the instance buffers until their commit finishes.
+      // Multiple simulation panels receive the same design-change notification,
+      // so clearing an already-cleared overlay must also be idempotent.
+      if (updates == null && _activeFemUpdates == null) return
       _activeFemUpdates = Array.isArray(updates)
         ? updates.map(u => ({ ...u, backbone_position: [...u.backbone_position] }))
         : null
@@ -1527,7 +1540,7 @@ export function initDesignRenderer(scene, storeRef) {
       // replacing currentGeometry. Refresh position-backed overlays on every frame;
       // the store subscriber cannot observe these playback/scrub mutations.
       this.refreshAllGlow()
-      notifySimulation()
+      notifySimulation(updates, amp)
     },
 
     subscribeSimulation(fn) { simulationListeners.add(fn); return () => simulationListeners.delete(fn) },
@@ -1542,7 +1555,26 @@ export function initDesignRenderer(scene, storeRef) {
 
     /** Exact live Full-representation slab transforms for native VR parity. */
     getFemSlabFrames() {
-      return _activeFemUpdates ? (_helixCtrl?.getSlabFrames?.() ?? []) : null
+      if (!_activeFemUpdates) return null
+      const frames = _helixCtrl?.getSlabFrames?.() ?? []
+      if (!_xoverSlabsMesh || !_simXbByCrossover) return frames
+      const matrix = new THREE.Matrix4(), vector = new THREE.Vector3()
+      for (const ad of _xoverArcData ?? []) {
+        const sim = _simXbByCrossover.get(ad.xoId)
+        for (let k = 0; k < ad.beadCount; k++) {
+          if (!sim?.has(k)) continue
+          const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
+          _xoverSlabsMesh.getMatrixAt(ad.beadStartIdx + bi, matrix)
+          frames.push({
+            base_key: `__xb__:${ad.xoId}:${k}`,
+            center: vector.setFromMatrixPosition(matrix).toArray(),
+            axis_x: vector.setFromMatrixColumn(matrix, 0).toArray(),
+            axis_y: vector.setFromMatrixColumn(matrix, 1).toArray(),
+            axis_z: vector.setFromMatrixColumn(matrix, 2).toArray(),
+          })
+        }
+      }
+      return frames
     },
 
     /** Snapshot of active scalar colors for the native VR display bridge. */
@@ -1857,12 +1889,12 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Remove the mrDNA relaxed-position overlay: revert beads to design geometry.
-     * Skip revertToGeometry when cadnano or unfold modes own bead positions —
-     * those modes will restore positions themselves on deactivation.
+     * Skip revertToGeometry when unfold owns bead positions —
+     * unfold will restore positions themselves on deactivation.
      */
     clearFemOverlay() {
-      const { cadnanoActive, unfoldActive } = storeRef.getState()
-      if (!cadnanoActive && !unfoldActive) {
+      const { unfoldActive } = storeRef.getState()
+      if (!unfoldActive) {
         _helixCtrl?.revertToGeometry()
       }
     },
@@ -1881,10 +1913,6 @@ export function initDesignRenderer(scene, storeRef) {
 
     applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap = null) {
       _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap)
-    },
-
-    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
-      _helixCtrl?.applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap)
     },
 
     snapshotPositions() {
@@ -1909,7 +1937,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
-     * Hide/show nucleotides by domain-aware key set.  Keys are either:
+     * Hide/show nucleotides and their axes by baseKey(nuc, copy), or:
      *   'h:<helix_id>'                 — hide whole helix (helix-level cluster)
      *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
      * Persists across geometry rebuilds.
@@ -1918,6 +1946,7 @@ export function initDesignRenderer(scene, storeRef) {
     setHiddenNucs(keys) {
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
       _helixCtrl?.setHiddenNucs(new Set([..._hiddenNucKeys, ...[..._previewHelices].map(id => `h:${id}`)]))
+      this.refreshAllGlow()
     },
 
     /**
@@ -2038,7 +2067,7 @@ export function initDesignRenderer(scene, storeRef) {
             // Simulated k is 5′→3′ from the strand's exit half; beads run A→B.
             const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
             setExtraBaseInstanceFromSim(
-              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
+              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
             for (const g of _xoverGlowLive) {
               if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
             }
@@ -2107,7 +2136,7 @@ export function initDesignRenderer(scene, storeRef) {
           if (!s) continue
           const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
           setExtraBaseInstanceFromSim(
-            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
+            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx, s)
           for (const g of _xoverGlowLive) {
             if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
           }

@@ -232,9 +232,17 @@ def topology_thymine_sites(universe: Any, design: Any | None = None) -> list[dic
     """Return uniquely paired C5/C6 atoms for every topology thymine residue."""
 
     design_map = _design_residue_map(design) if design is not None else {}
+    formed = set()
+    if design is not None and getattr(design, 'photoproduct_junctions', None):
+        from backend.core.cpd_metrics import designed_weld_pairs
+        formed = {(p[f'segid_{side}'], p[f'resid_{side}'])
+                  for p in designed_weld_pairs(design) if p.get('formed')
+                  for side in ('a', 'b')}
     sites: list[dict] = []
     for residue in universe.residues:
         resname = str(residue.resname).upper()
+        if (str(residue.segid), int(residue.resid)) in formed:
+            continue  # Saturated product carbons are not reactant C5=C6 sites.
         if resname not in THYMINE_RESNAMES:
             continue
         c5 = residue.atoms.select_atoms("name C5")
@@ -290,6 +298,9 @@ def _designed_candidate_map(
     mapped: dict[tuple[int, int], dict] = {}
     excluded: list[dict] = []
     for weld in cpd_metrics.designed_weld_pairs(design):
+        if weld.get('formed'):
+            excluded.append({**weld, 'reason': 'already formed CPD; not a reactant pair'})
+            continue
         a = by_residue.get((weld["segid_a"], weld["resid_a"]))
         b = by_residue.get((weld["segid_b"], weld["resid_b"]))
         if a is None or b is None:

@@ -26,6 +26,7 @@ from backend.core.models import (
 )
 from backend.core.sequences import (
     M13MP18_SEQUENCE,
+    P7560_SEQUENCE,
     _build_loop_skip_map,
     _resolve_scaffold_strand,
     _strand_nt_with_skips,
@@ -250,6 +251,15 @@ class TestBuildScaffoldIndexMap:
 
 
 class TestAssignScaffoldSequence:
+    def test_assigns_complete_p7560_sequence(self):
+        assert len(P7560_SEQUENCE) == 7560
+        assert set(P7560_SEQUENCE) <= set("ACGT")
+        design = make_minimal_design(helix_length_bp=7560)
+        assigned, total_nt, padded = assign_scaffold_sequence(design, "p7560")
+        assert total_nt == 7560
+        assert padded == 0
+        assert assigned.scaffold().sequence == P7560_SEQUENCE
+
     def test_assigns_m13_to_minimal_design(self):
         d = make_minimal_design(helix_length_bp=42)
         d2, total_nt, padded = assign_scaffold_sequence(d, "M13mp18")

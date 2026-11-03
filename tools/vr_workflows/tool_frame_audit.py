@@ -71,10 +71,13 @@ def main():
     parser.add_argument('--design',type=Path,help='Full-size authored design imported into private tool fixtures')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--settled-drag',action='store_true',help='Measure a long settled Move/Rotate drag and stationary control.')
+    parser.add_argument('--setup-trackpad',action='store_true',help='Move audit only: recenter through production focus navigation before motion; does not validate noisy recenter acquisition.')
     parser.add_argument('--profiles',nargs='+',choices=['steady_fast','steady_deliberate','variable_fast','variable_deliberate'],
                         help='Explicit subset for a documented retry; use --validate for profile-named case directories')
     parser.add_argument('--desktop-rendering',choices=['off','on'],default='off',
                         help='Browser desktop viewport during VR; off by default for feature benchmarks')
+    parser.add_argument('--playwright-trace',choices=['off','retain-on-failure'],default='off',
+                        help='Move audit browser tracing; native/browser frame instrumentation and explicit captures stay enabled')
     parser.add_argument('--target-hz',type=float,default=90,help='Fixed benchmark target, independent of adaptive OpenXR pacing')
     parser.add_argument('--restart-runtime-between-representations',action='store_true',
                         help='Exclusive audit only: gracefully restart the owned Steam/SteamVR client stack before each representation batch')
@@ -82,6 +85,7 @@ def main():
     parser.add_argument('--output',type=Path,default=ROOT/'.development-artifacts/vr-tool-frame-audit'/uuid.uuid4().hex[:10])
     args=parser.parse_args()
     if args.settled_drag and any(t not in ('move','move_cluster') for t in args.tools):parser.error('--settled-drag requires Move/Rotate tools only')
+    if args.setup_trackpad and any(t not in ('move','move_cluster') for t in args.tools):parser.error('--setup-trackpad requires Move/Rotate tools only')
     if args.profiles and not args.validate:parser.error('--profiles requires --validate')
     if not math.isfinite(args.target_hz) or args.target_hz<=0:parser.error('Target Hz must be finite and positive')
     if not math.isfinite(args.min_available_gib) or args.min_available_gib<0:parser.error('Memory floor must be finite and nonnegative')
@@ -100,7 +104,7 @@ def main():
         source={'path':str(args.design),'sha256':hashlib.sha256(args.design.read_bytes()).hexdigest()}
     profiles=args.profiles or (['steady_fast','steady_deliberate','variable_fast','variable_deliberate'] if args.validate else ['steady_fast'])
     (args.output/'campaign.json').write_text(json.dumps({'source':source,'tools':args.tools,'representations':args.representations,'validation':args.validate,'profiles':profiles,'target_hz':args.target_hz,'desktop_rendering':args.desktop_rendering,
-        'restart_runtime_between_representations':args.restart_runtime_between_representations,'min_available_gib':args.min_available_gib,'settled_drag':args.settled_drag},indent=2))
+        'restart_runtime_between_representations':args.restart_runtime_between_representations,'min_available_gib':args.min_available_gib,'settled_drag':args.settled_drag,'setup_trackpad':args.setup_trackpad,'move_playwright_trace':args.playwright_trace},indent=2))
     uv=shutil.which('uv') or 'uv'
     from tools.vr_workflows.audit_runtime import resources,pressure,restart
     current_rep=None
@@ -117,7 +121,9 @@ def main():
         env={**os.environ,'NADOC_VR_FRAME_AUDIT':'1','NADOC_VR_AUDIT_REPRESENTATION':rep,
              'NADOC_VR_AUDIT_DESKTOP_DRAW':'preference-off' if args.desktop_rendering=='off' else 'on',
              'NADOC_VR_AUDIT_BROWSER_TRACE':'1',
-             'NADOC_VR_AUDIT_INTERVALS':str(case/'reaches.jsonl'),'NADOC_VR_AUDIT_PROFILE':profile}
+             'NADOC_VR_PLAYWRIGHT_TRACE':args.playwright_trace,
+             'NADOC_VR_AUDIT_INTERVALS':str(case/'reaches.jsonl'),'NADOC_VR_AUDIT_PROFILE':profile,
+             'NADOC_VR_MOVE_SETUP_TRACKPAD':'1' if args.setup_trackpad else '0'}
         if args.design:env['NADOC_VR_AUDIT_DESIGN']=str(args.design)
         module,*options=TOOLS[tool]
         command=[uv,'run','python','-m','tools.vr_workflows.'+module,*options,'--output',str(case/'tour')]

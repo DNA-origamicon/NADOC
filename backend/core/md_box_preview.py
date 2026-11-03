@@ -11,10 +11,10 @@ _design_pdb_lock = Lock()
 @lru_cache(maxsize=4)
 def _design_pdb(serialized: str) -> str:
     from backend.core.models import Design
-    from backend.core.pdb_export import export_pdb
+    from backend.core.pdb_export import export_coordinate_pdb
     from backend.core.atomistic import build_atomistic_model
     design = Design.model_validate_json(serialized)
-    return export_pdb(design, model=build_atomistic_model(
+    return export_coordinate_pdb(design, model=build_atomistic_model(
         design, fast_bridges=True, include_proteins=True,
     ))
 

@@ -1,0 +1,4850 @@
+{
+  "date": "2026-10-21",
+  "scope": "Publication stall diagnosis; source coordinates, trajectory pacing and GPU fidelity unchanged",
+  "deployment": "Dedicated startup factory; existing live backend/frontend/Alpine worker not restarted",
+  "cause": {
+    "gc_start_epoch_ms": 1792626635560.7664,
+    "gc_ms": 149.6245070011355,
+    "collected": 560,
+    "version": 656269838,
+    "browser_upload_start_epoch_ms": 1792626635563.2,
+    "handler_entry_epoch_ms": 1792626635711.3284,
+    "handler_write_end_ms": 10.006148018874228,
+    "browser_upload_ms": 160.800048828125
+  },
+  "runs": {
+    "before": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 200,
+            "start": 1792626179491,
+            "end": 1792626239491,
+            "pauseAcknowledged": 1792626239601,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 139,
+              "callbacks": 1014,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 139,
+              "callbacks": 4627,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 723,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 152,
+            "coordinateRequests": 0,
+            "viewUploads": 723,
+            "submitted_scene_gap_ms": {
+              "count": 722,
+              "p50": 78.351806640625,
+              "p95": 89.584716796875,
+              "max": 223.275390625
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 223.275390625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 2,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 5371,
+              "p50": 11.158886,
+              "p95": 11.404916,
+              "max": 13.154369
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 5371,
+              "p50": 0.550912,
+              "p95": 0.656384,
+              "max": 3.296256
+            },
+            "native_transform_packets": 723,
+            "wire_bytes": {
+              "count": 725,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 725,
+            "parse_ms": {
+              "count": 723,
+              "p50": 0.937564,
+              "p95": 1.115927,
+              "max": 1.182161
+            },
+            "upload_gl_ms": {
+              "count": 723,
+              "p50": 0.056335,
+              "p95": 0.080701,
+              "max": 0.210594
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 725,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.900146484375
+            },
+            "encode_ms": {
+              "count": 725,
+              "p50": 0.599853515625,
+              "p95": 0.7998046875,
+              "max": 24.300048828125
+            },
+            "upload_ms": {
+              "count": 725,
+              "p50": 7.099853515625,
+              "p95": 10.199951171875,
+              "max": 146.800048828125
+            },
+            "apply_ms": {
+              "count": 725,
+              "p50": 0.7001953125,
+              "p95": 1.099853515625,
+              "max": 1.7998046875
+            }
+          }
+        ]
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "85057536",
+            "memory.peak": "142090240",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "818225152",
+            "memory.peak": "3194945536",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-v5pb87tf",
+        "removed": true
+      },
+      "gc": [],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792626158362.6514,
+          "delay_ms": 148.1102440156974,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1415, in _handle_fromlist\n",
+            "  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n",
+            "  File \"<frozen importlib._bootstrap>\", line 1357, in _find_and_load\n",
+            "  File \"<frozen importlib._bootstrap>\", line 417, in __enter__\n",
+            "  File \"<frozen importlib._bootstrap>\", line 456, in _get_module_lock\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626158390.8872,
+          "delay_ms": 176.3278040161822,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626162160.0496,
+          "delay_ms": 61.212476022774354,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626170090.156,
+          "delay_ms": 54.02585200499743,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626192895.055,
+          "delay_ms": 133.96084200940095,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2022, in acquire\n    return await self.acquire_on_behalf_of(current_task())\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2025, in acquire_on_behalf_of\n    await AsyncIOBackend.checkpoint_if_cancelled()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py\", line 2367, in checkpoint_if_cancelled\n    cancel_scope = _task_states[task].cancel_scope\n",
+            "  File \"/usr/lib/python3.12/weakref.py\", line 415, in __getitem__\n    return self.data[ref(key)]\n",
+            "  File \"/usr/lib/python3.12/_weakrefset.py\", line 39, in _remove\n    def _remove(item, selfref=ref(self)):\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3480759,\"started_at\":1792626164.5240097,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-fl7qml_f/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800/compositor\",\"checked_unix_ns\":1792626164678935205,\"compositor_pid\":3480546,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800/compositor/events-3480546.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800/compositor\",\"checked_unix_ns\":1792626164504750310,\"compositor_pid\":3480546,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800/compositor/events-3480546.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-tcc11mo3/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-v5pb87tf/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":false,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        }
+      ],
+      "runtime_cleanup": [
+        {
+          "pid": 3480759,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-tcc11mo3",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-fl7qml_f"
+          ]
+        }
+      ],
+      "transport_outliers": [
+        {
+          "file": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+          "start": 1792626192765.5,
+          "duration": 143.5,
+          "requestStart": 0.800000011920929,
+          "response": 142.2999999821186
+        }
+      ],
+      "log_sha256": "30ca5f53a5ff447f32fe0d3b0152065714f5595756ad2e1bbca3ba167d26729e",
+      "exclusion": "Raw timing valid; Smooth trace exceeded original 20,000-record buffer, so run failed. Duration-scaled bounded trace capacity fixes measurement without relaxing zero-drop assertion."
+    },
+    "gc-before": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": []
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "82714624",
+            "memory.peak": "139751424",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "646516736",
+            "memory.peak": "1984299008",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-jb9tm67o",
+        "removed": true
+      },
+      "gc": [
+        {
+          "epoch_ms": 1792626339644.0447,
+          "ms": 124.66532600228675,
+          "generation": 2,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792626339768.5388,
+          "delay_ms": 143.24731699889526,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n",
+            "  File \"<frozen importlib._bootstrap>\", line 1357, in _find_and_load\n",
+            "  File \"<frozen importlib._bootstrap>\", line 417, in __enter__\n",
+            "  File \"<frozen importlib._bootstrap>\", line 456, in _get_module_lock\n",
+            "  File \"/home/jojo/Work/NADOC/tools/vr_workflows/publication_probe.py\", line 23, in collected\n    def collected(phase, info):\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626339790.5537,
+          "delay_ms": 165.24444799870253,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 503,
+          "body": "{\"detail\":\"SteamVR started without a ready final-output recorder. See /media/jojo/Archive/NADOC_archive/runtime/vr-capture.\"}"
+        }
+      ],
+      "runtime_cleanup": [],
+      "transport_outliers": [],
+      "log_sha256": "74af898e66123082d1f6b14c6baaeaf344fb5ec32c41032cd11e7ab61b154ab9",
+      "exclusion": "Startup failed before playback: compositor raced server socket (NoServerForBackgroundApp)."
+    },
+    "gc-retry": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": []
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "81207296",
+            "memory.peak": "139292672",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "601604096",
+            "memory.peak": "1939763200",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-e3xmqr3u",
+        "removed": true
+      },
+      "gc": [
+        {
+          "epoch_ms": 1792626463909.5208,
+          "ms": 124.71888199797831,
+          "generation": 2,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792626464034.0588,
+          "delay_ms": 138.0857769981958,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n",
+            "  File \"<frozen importlib._bootstrap>\", line 1357, in _find_and_load\n",
+            "  File \"<frozen importlib._bootstrap>\", line 417, in __enter__\n",
+            "  File \"<frozen importlib._bootstrap>\", line 456, in _get_module_lock\n",
+            "  File \"/home/jojo/Work/NADOC/tools/vr_workflows/publication_probe.py\", line 23, in collected\n    def collected(phase, info):\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626464056.6355,
+          "delay_ms": 160.6559290084988,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 503,
+          "body": "{\"detail\":\"SteamVR started without a ready final-output recorder. See /media/jojo/Archive/NADOC_archive/runtime/vr-capture.\"}"
+        }
+      ],
+      "runtime_cleanup": [],
+      "transport_outliers": [],
+      "log_sha256": "a93f4583bcc7cc5428517ef665fa209ba9d98c792b4e6ff11c5084d75f070d7a",
+      "exclusion": "Same startup race; not a renderer result. Launcher now waits for matching server pipe."
+    },
+    "gc-baseline": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 200,
+            "start": 1792626612005,
+            "end": 1792626672006,
+            "pauseAcknowledged": 1792626672112,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 168,
+              "callbacks": 1042,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 168,
+              "callbacks": 4655,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 723,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 166,
+            "coordinateRequests": 0,
+            "viewUploads": 722,
+            "submitted_scene_gap_ms": {
+              "count": 722,
+              "p50": 78.390869140625,
+              "p95": 89.582763671875,
+              "max": 234.656494140625
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 234.656494140625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 5367,
+              "p50": 11.159866,
+              "p95": 11.417578,
+              "max": 70.434249
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 5367,
+              "p50": 0.551936,
+              "p95": 0.657408,
+              "max": 2.609152
+            },
+            "native_transform_packets": 722,
+            "wire_bytes": {
+              "count": 724,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 724,
+            "parse_ms": {
+              "count": 722,
+              "p50": 0.939638,
+              "p95": 1.125876,
+              "max": 1.399669
+            },
+            "upload_gl_ms": {
+              "count": 722,
+              "p50": 0.057688,
+              "p95": 0.089447,
+              "max": 0.173184
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 724,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 3.2001953125
+            },
+            "encode_ms": {
+              "count": 724,
+              "p50": 0.5,
+              "p95": 0.800048828125,
+              "max": 1.300048828125
+            },
+            "upload_ms": {
+              "count": 724,
+              "p50": 7.10009765625,
+              "p95": 10.5,
+              "max": 160.800048828125
+            },
+            "apply_ms": {
+              "count": 725,
+              "p50": 0.699951171875,
+              "p95": 1.099853515625,
+              "max": 1.800048828125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": true,
+            "count": 200,
+            "start": 1792626672626,
+            "end": 1792626732626,
+            "pauseAcknowledged": 1792626732744,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 168,
+              "callbacks": 4678,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 168,
+              "callbacks": 8290,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 221,
+            "interpolatedSamples": 1543,
+            "gap_p50": 264,
+            "gap_p95": 305,
+            "gap_max": 376,
+            "coordinateRequests": 0,
+            "viewUploads": 3303,
+            "submitted_scene_gap_ms": {
+              "count": 3302,
+              "p50": 11.40185546875,
+              "p95": 33.641845703125,
+              "max": 256.990234375
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 256.990234375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 5372,
+              "p50": 11.166979,
+              "p95": 11.435763,
+              "max": 14.348301
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 5372,
+              "p50": 0.644096,
+              "p95": 0.731136,
+              "max": 3.038208
+            },
+            "native_transform_packets": 3302,
+            "wire_bytes": {
+              "count": 3307,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 3307,
+            "parse_ms": {
+              "count": 3302,
+              "p50": 0.938305,
+              "p95": 1.111218,
+              "max": 1.931884
+            },
+            "upload_gl_ms": {
+              "count": 3302,
+              "p50": 0.059231,
+              "p95": 0.099977,
+              "max": 0.42776
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 3307,
+              "p50": 1.400146484375,
+              "p95": 2.0,
+              "max": 4.0
+            },
+            "encode_ms": {
+              "count": 3307,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 31.60009765625
+            },
+            "upload_ms": {
+              "count": 3307,
+              "p50": 7.400146484375,
+              "p95": 11.7001953125,
+              "max": 58.800048828125
+            },
+            "apply_ms": {
+              "count": 221,
+              "p50": 0.699951171875,
+              "p95": 1.2001953125,
+              "max": 1.5
+            }
+          }
+        ]
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "81317888",
+            "memory.peak": "140025856",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "1157001216",
+            "memory.peak": "3574632448",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-cxjidwty",
+        "removed": true
+      },
+      "gc": [
+        {
+          "epoch_ms": 1792626590580.742,
+          "ms": 126.47443200694397,
+          "generation": 2,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792626635560.7664,
+          "ms": 149.6245070011355,
+          "generation": 2,
+          "collected": 560,
+          "uncollectable": 0
+        }
+      ],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792626590707.024,
+          "delay_ms": 141.5360779792536,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n",
+            "  File \"<frozen importlib._bootstrap>\", line 1357, in _find_and_load\n",
+            "  File \"<frozen importlib._bootstrap>\", line 417, in __enter__\n",
+            "  File \"<frozen importlib._bootstrap>\", line 456, in _get_module_lock\n",
+            "  File \"/home/jojo/Work/NADOC/tools/vr_workflows/publication_probe.py\", line 23, in collected\n    def collected(phase, info):\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626590730.319,
+          "delay_ms": 164.82665698276833,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626594020.3677,
+          "delay_ms": 62.359294010093436,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 4840, in get_md_job_display\n    ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1446, in _production_ready_checkpoint\n    has_restart = all(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1447, in <genexpr>\n    (output / f\"{spec.name}.{ext}\").exists() for ext in (\"coor\", \"vel\", \"xsc\")\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 862, in exists\n    self.stat(follow_symlinks=follow_symlinks)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 842, in stat\n    return os.stat(self, follow_symlinks=follow_symlinks)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626594041.2236,
+          "delay_ms": 83.25654498185031,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 4840, in get_md_job_display\n    ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1446, in _production_ready_checkpoint\n    has_restart = all(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1447, in <genexpr>\n    (output / f\"{spec.name}.{ext}\").exists() for ext in (\"coor\", \"vel\", \"xsc\")\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 862, in exists\n    self.stat(follow_symlinks=follow_symlinks)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 842, in stat\n    return os.stat(self, follow_symlinks=follow_symlinks)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626594061.5132,
+          "delay_ms": 103.54722299962305,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 4840, in get_md_job_display\n    ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1446, in _production_ready_checkpoint\n    has_restart = all(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/routes_md.py\", line 1447, in <genexpr>\n    (output / f\"{spec.name}.{ext}\").exists() for ext in (\"coor\", \"vel\", \"xsc\")\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 862, in exists\n    self.stat(follow_symlinks=follow_symlinks)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 842, in stat\n    return os.stat(self, follow_symlinks=follow_symlinks)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626635709.6414,
+          "delay_ms": 154.5367959770374,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3496801,\"started_at\":1792626596.79427,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-ij2jq9t5/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402/compositor\",\"checked_unix_ns\":1792626596949633878,\"compositor_pid\":3496600,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402/compositor/events-3496600.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402/compositor\",\"checked_unix_ns\":1792626596776547109,\"compositor_pid\":3496600,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402/compositor/events-3496600.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-qxmndhi5/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-cxjidwty/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":false,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        }
+      ],
+      "runtime_cleanup": [
+        {
+          "pid": 3496801,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-qxmndhi5",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-ij2jq9t5"
+          ]
+        }
+      ],
+      "transport_outliers": [
+        {
+          "file": "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+          "start": 1792626635563.4001,
+          "duration": 158.69999998807907,
+          "requestStart": 0.29999998211860657,
+          "response": 157.90000000596046
+        }
+      ],
+      "log_sha256": "1210326c2ba4d38f85c10657c2a53c5e6618753bcc95e7e4c915de521509199b",
+      "configuration": "60 seconds per mode; publication probe; startup graph not frozen (current reproduction: NADOC_VR_PUBLICATION_FREEZE=0)"
+    },
+    "freeze": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 200,
+            "start": 1792626767424,
+            "end": 1792626827425,
+            "pauseAcknowledged": 1792626827531,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 227,
+              "callbacks": 1073,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 227,
+              "callbacks": 4672,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 720,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 291,
+            "coordinateRequests": 0,
+            "viewUploads": 720,
+            "submitted_scene_gap_ms": {
+              "count": 720,
+              "p50": 78.362548828125,
+              "p95": 89.598876953125,
+              "max": 357.91357421875
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 357.91357421875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 5372,
+              "p50": 11.151941,
+              "p95": 11.412809,
+              "max": 15.211896
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 5372,
+              "p50": 0.550912,
+              "p95": 0.65536,
+              "max": 2.832384
+            },
+            "native_transform_packets": 721,
+            "wire_bytes": {
+              "count": 722,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 722,
+            "parse_ms": {
+              "count": 721,
+              "p50": 0.937795,
+              "p95": 1.103434,
+              "max": 1.797373
+            },
+            "upload_gl_ms": {
+              "count": 721,
+              "p50": 0.056696,
+              "p95": 0.078848,
+              "max": 0.182982
+            },
+            "long_tasks_ms": [
+              273
+            ],
+            "capture_ms": {
+              "count": 722,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.699951171875
+            },
+            "encode_ms": {
+              "count": 722,
+              "p50": 0.599853515625,
+              "p95": 0.800048828125,
+              "max": 271.5
+            },
+            "upload_ms": {
+              "count": 722,
+              "p50": 7.10009765625,
+              "p95": 10.599853515625,
+              "max": 31.800048828125
+            },
+            "apply_ms": {
+              "count": 722,
+              "p50": 0.7001953125,
+              "p95": 1.099853515625,
+              "max": 1.900146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": true,
+            "count": 200,
+            "start": 1792626828047,
+            "end": 1792626888048,
+            "pauseAcknowledged": 1792626888155,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 227,
+              "callbacks": 4695,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 227,
+              "callbacks": 8308,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 226,
+            "interpolatedSamples": 1578,
+            "gap_p50": 263,
+            "gap_p95": 281,
+            "gap_max": 302,
+            "coordinateRequests": 0,
+            "viewUploads": 3377,
+            "submitted_scene_gap_ms": {
+              "count": 3377,
+              "p50": 11.387451171875,
+              "p95": 33.60693359375,
+              "max": 257.10791015625
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 257.10791015625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 5372,
+              "p50": 11.150048,
+              "p95": 11.422337,
+              "max": 13.267829
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 5372,
+              "p50": 0.643072,
+              "p95": 0.72192,
+              "max": 3.910656
+            },
+            "native_transform_packets": 3377,
+            "wire_bytes": {
+              "count": 3382,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 3382,
+            "parse_ms": {
+              "count": 3377,
+              "p50": 0.93535,
+              "p95": 1.081934,
+              "max": 2.778507
+            },
+            "upload_gl_ms": {
+              "count": 3377,
+              "p50": 0.05872,
+              "p95": 0.09065,
+              "max": 1.124885
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 3382,
+              "p50": 1.400146484375,
+              "p95": 1.89990234375,
+              "max": 4.800048828125
+            },
+            "encode_ms": {
+              "count": 3382,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 24.5
+            },
+            "upload_ms": {
+              "count": 3382,
+              "p50": 7.400146484375,
+              "p95": 11.199951171875,
+              "max": 26.699951171875
+            },
+            "apply_ms": {
+              "count": 226,
+              "p50": 0.7001953125,
+              "p95": 1.0,
+              "max": 1.5
+            }
+          }
+        ]
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "80969728",
+            "memory.peak": "139919360",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "1153626112",
+            "memory.peak": "3749593088",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-32js_zup",
+        "removed": true
+      },
+      "gc": [
+        {
+          "epoch_ms": 1792626754008.3435,
+          "ms": 37.17473999131471,
+          "generation": 2,
+          "collected": 298,
+          "uncollectable": 0
+        }
+      ],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792626749305.5005,
+          "delay_ms": 56.93130800500512,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/api/ws.py\", line 1860, in md_run_ws\n    _note = _preload_size_note(config_str, topology_str)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/ws.py\", line 339, in _preload_size_note\n    resolve_md_config(config_str).topology_path\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_import.py\", line 217, in resolve_md_config\n    ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_import.py\", line 79, in _parse_namd_metrics\n    for line in log_path.read_text(errors=\"replace\").splitlines():\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1030, in read_text\n    return f.read()\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626749327.1184,
+          "delay_ms": 78.55534899863414,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/api/ws.py\", line 1860, in md_run_ws\n    _note = _preload_size_note(config_str, topology_str)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/api/ws.py\", line 339, in _preload_size_note\n    resolve_md_config(config_str).topology_path\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_import.py\", line 217, in resolve_md_config\n    ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_import.py\", line 79, in _parse_namd_metrics\n    for line in log_path.read_text(errors=\"replace\").splitlines():\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1030, in read_text\n    return f.read()\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626749676.3433,
+          "delay_ms": 60.938293987419456,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626749999.624,
+          "delay_ms": 234.1419869917445,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626750446.685,
+          "delay_ms": 82.53520500147715,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792626750958.1426,
+          "delay_ms": 151.121224014787,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3505580,\"started_at\":1792626752.8260524,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-0azyb4gy/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147/compositor\",\"checked_unix_ns\":1792626752980208707,\"compositor_pid\":3505377,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147/compositor/events-3505377.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147/compositor\",\"checked_unix_ns\":1792626752808190832,\"compositor_pid\":3505377,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147/compositor/events-3505377.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-kmvc1cwm/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-32js_zup/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":false,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        }
+      ],
+      "runtime_cleanup": [
+        {
+          "pid": 3505580,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-kmvc1cwm",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-0azyb4gy"
+          ]
+        }
+      ],
+      "transport_outliers": [],
+      "log_sha256": "ca6fd414c9bbb51d1419069aa4b7b10970ee0d6dafd92f6a2657d636a9fc985b",
+      "configuration": "60 seconds per mode; publication probe; collect then freeze before lifespan; same policy now factored into server_bootstrap.create_app"
+    },
+    "final": {
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        },
+        {
+          "job": "972af34aa9c5",
+          "passed": true
+        },
+        {
+          "job": "37d39cc6b88f",
+          "passed": true
+        },
+        {
+          "job": "9b08bed08561",
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627019453,
+            "end": 1792627031454,
+            "pauseAcknowledged": 1792627031560,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 1099,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 1832,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.371337890625,
+              "p95": 89.494384765625,
+              "max": 111.635498046875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 111.635498046875,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.16214,
+              "p95": 11.345443,
+              "max": 14.097722
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.549888,
+              "p95": 0.671744,
+              "max": 2.36544
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.944557,
+              "p95": 1.246682,
+              "max": 1.478726
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.053139,
+              "p95": 0.086742,
+              "max": 0.148257
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.900146484375,
+              "max": 3.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 21.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.900146484375,
+              "p95": 10.300048828125,
+              "max": 12.400146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.10009765625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627031921,
+            "end": 1792627043922,
+            "pauseAcknowledged": 1792627044027,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 1847,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 2580,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 319,
+            "gap_p50": 264,
+            "gap_p95": 279,
+            "gap_max": 282,
+            "coordinateRequests": 0,
+            "viewUploads": 678,
+            "submitted_scene_gap_ms": {
+              "count": 679,
+              "p50": 11.314208984375,
+              "p95": 33.565673828125,
+              "max": 46.177978515625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 46.177978515625,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.163272,
+              "p95": 11.378816,
+              "max": 13.232122
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.642048,
+              "p95": 0.70656,
+              "max": 2.414592
+            },
+            "native_transform_packets": 678,
+            "wire_bytes": {
+              "count": 683,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 683,
+            "parse_ms": {
+              "count": 678,
+              "p50": 0.929608,
+              "p95": 1.137307,
+              "max": 1.386073
+            },
+            "upload_gl_ms": {
+              "count": 678,
+              "p50": 0.051266,
+              "p95": 0.081953,
+              "max": 0.151965
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 683,
+              "p50": 1.400146484375,
+              "p95": 1.89990234375,
+              "max": 3.39990234375
+            },
+            "encode_ms": {
+              "count": 683,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 1.0
+            },
+            "upload_ms": {
+              "count": 683,
+              "p50": 7.5,
+              "p95": 11.099853515625,
+              "max": 31.2998046875
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.7998046875,
+              "p95": 1.0,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627056115,
+            "end": 1792627068116,
+            "pauseAcknowledged": 1792627068221,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 3298,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 4031,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.3359375,
+              "p95": 89.476318359375,
+              "max": 90.484130859375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.484130859375,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.16722,
+              "p95": 11.361864,
+              "max": 12.915881
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.294912,
+              "p95": 0.4096,
+              "max": 2.622464
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.733843,
+              "p95": 0.911955,
+              "max": 1.25617
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.041718,
+              "p95": 0.056777,
+              "max": 0.091692
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.099853515625,
+              "p95": 1.5,
+              "max": 1.699951171875
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.400146484375,
+              "p95": 0.60009765625,
+              "max": 1.39990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.900146484375,
+              "p95": 9.7001953125,
+              "max": 14.300048828125
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.10009765625,
+              "max": 1.699951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627068573,
+            "end": 1792627080574,
+            "pauseAcknowledged": 1792627080679,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 4046,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 4778,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 322,
+            "gap_p50": 263,
+            "gap_p95": 268,
+            "gap_max": 282,
+            "coordinateRequests": 0,
+            "viewUploads": 683,
+            "submitted_scene_gap_ms": {
+              "count": 683,
+              "p50": 11.358642578125,
+              "p95": 33.556884765625,
+              "max": 51.237060546875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 51.237060546875,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.169353,
+              "p95": 11.400095,
+              "max": 17.50239
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.323584,
+              "p95": 0.61952,
+              "max": 2.609152
+            },
+            "native_transform_packets": 684,
+            "wire_bytes": {
+              "count": 689,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 689,
+            "parse_ms": {
+              "count": 684,
+              "p50": 0.7267,
+              "p95": 0.894844,
+              "max": 1.151343
+            },
+            "upload_gl_ms": {
+              "count": 684,
+              "p50": 0.043822,
+              "p95": 0.073037,
+              "max": 0.14921
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 689,
+              "p50": 1.0,
+              "p95": 1.39990234375,
+              "max": 1.900146484375
+            },
+            "encode_ms": {
+              "count": 689,
+              "p50": 0.39990234375,
+              "p95": 0.5,
+              "max": 0.800048828125
+            },
+            "upload_ms": {
+              "count": 689,
+              "p50": 7.2998046875,
+              "p95": 10.5,
+              "max": 16.599853515625
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.7001953125,
+              "p95": 1.300048828125,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627092736,
+            "end": 1792627104737,
+            "pauseAcknowledged": 1792627104844,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 5494,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 6227,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.4345703125,
+              "p95": 89.586669921875,
+              "max": 111.0
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 111.0,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.162471,
+              "p95": 11.421074,
+              "max": 12.532974
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.630784,
+              "p95": 0.695296,
+              "max": 1.6128
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.23006,
+              "p95": 0.275375,
+              "max": 0.292186
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.029606,
+              "p95": 0.050715,
+              "max": 0.14971
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.39990234375,
+              "max": 2.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.5,
+              "p95": 9.300048828125,
+              "max": 40.400146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 1.0,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627105199,
+            "end": 1792627117199,
+            "pauseAcknowledged": 1792627117306,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 218,
+              "callbacks": 6242,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 218,
+              "callbacks": 6975,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 46,
+            "interpolatedSamples": 323,
+            "gap_p50": 262,
+            "gap_p95": 264,
+            "gap_max": 265,
+            "coordinateRequests": 0,
+            "viewUploads": 687,
+            "submitted_scene_gap_ms": {
+              "count": 687,
+              "p50": 11.338134765625,
+              "p95": 33.50341796875,
+              "max": 44.8623046875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 44.8623046875,
+            "malformed_records": {
+              "frames": 1,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.163904,
+              "p95": 11.44596,
+              "max": 14.05952
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.673792,
+              "p95": 0.743424,
+              "max": 2.55488
+            },
+            "native_transform_packets": 689,
+            "wire_bytes": {
+              "count": 692,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 692,
+            "parse_ms": {
+              "count": 689,
+              "p50": 0.220432,
+              "p95": 0.274153,
+              "max": 0.41724
+            },
+            "upload_gl_ms": {
+              "count": 689,
+              "p50": 0.028774,
+              "p95": 0.046777,
+              "max": 0.126016
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 692,
+              "p50": 0.89990234375,
+              "p95": 1.300048828125,
+              "max": 2.199951171875
+            },
+            "encode_ms": {
+              "count": 692,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.699951171875
+            },
+            "upload_ms": {
+              "count": 692,
+              "p50": 6.699951171875,
+              "p95": 9.599853515625,
+              "max": 26.699951171875
+            },
+            "apply_ms": {
+              "count": 46,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.60009765625
+            }
+          }
+        ],
+        "972af34aa9c5": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627150767,
+            "end": 1792627162767,
+            "pauseAcknowledged": 1792627162873,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 1371,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 2104,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.413330078125,
+              "p95": 89.588623046875,
+              "max": 122.91650390625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 122.91650390625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.160597,
+              "p95": 11.417638,
+              "max": 12.841471
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.550912,
+              "p95": 0.654336,
+              "max": 2.26816
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.94089,
+              "p95": 1.16527,
+              "max": 1.413574
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.056957,
+              "p95": 0.081102,
+              "max": 0.116387
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.300048828125
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.800048828125,
+              "max": 1.0
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.300048828125,
+              "p95": 10.300048828125,
+              "max": 54.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.800048828125,
+              "p95": 1.199951171875,
+              "max": 1.89990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627163231,
+            "end": 1792627175233,
+            "pauseAcknowledged": 1792627175338,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 2119,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 2851,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 318,
+            "gap_p50": 264,
+            "gap_p95": 280,
+            "gap_max": 324,
+            "coordinateRequests": 0,
+            "viewUploads": 675,
+            "submitted_scene_gap_ms": {
+              "count": 674,
+              "p50": 11.34326171875,
+              "p95": 33.646728515625,
+              "max": 78.20947265625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 78.20947265625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.163263,
+              "p95": 11.433308,
+              "max": 13.003835
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.643072,
+              "p95": 0.718848,
+              "max": 2.4064
+            },
+            "native_transform_packets": 674,
+            "wire_bytes": {
+              "count": 681,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 681,
+            "parse_ms": {
+              "count": 674,
+              "p50": 0.937945,
+              "p95": 1.109506,
+              "max": 1.429544
+            },
+            "upload_gl_ms": {
+              "count": 674,
+              "p50": 0.059141,
+              "p95": 0.090058,
+              "max": 0.217697
+            },
+            "long_tasks_ms": [
+              53
+            ],
+            "capture_ms": {
+              "count": 681,
+              "p50": 1.400146484375,
+              "p95": 1.900146484375,
+              "max": 3.099853515625
+            },
+            "encode_ms": {
+              "count": 681,
+              "p50": 0.5,
+              "p95": 0.699951171875,
+              "max": 50.800048828125
+            },
+            "upload_ms": {
+              "count": 681,
+              "p50": 7.39990234375,
+              "p95": 11.199951171875,
+              "max": 24.39990234375
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.800048828125,
+              "p95": 1.0,
+              "max": 1.0
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627186886,
+            "end": 1792627198887,
+            "pauseAcknowledged": 1792627198991,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 3538,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 4268,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 148,
+            "coordinateRequests": 0,
+            "viewUploads": 143,
+            "submitted_scene_gap_ms": {
+              "count": 143,
+              "p50": 78.387939453125,
+              "p95": 89.499267578125,
+              "max": 223.392578125
+            },
+            "scene_gaps_over_125ms": 2,
+            "scene_window_max_gap_ms": 223.392578125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.166508,
+              "p95": 11.378805,
+              "max": 13.333752
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.295936,
+              "p95": 0.39936,
+              "max": 2.342912
+            },
+            "native_transform_packets": 144,
+            "wire_bytes": {
+              "count": 145,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 145,
+            "parse_ms": {
+              "count": 144,
+              "p50": 0.741898,
+              "p95": 0.942052,
+              "max": 1.147667
+            },
+            "upload_gl_ms": {
+              "count": 144,
+              "p50": 0.04263,
+              "p95": 0.061796,
+              "max": 0.087264
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 145,
+              "p50": 1.10009765625,
+              "p95": 1.5,
+              "max": 2.300048828125
+            },
+            "encode_ms": {
+              "count": 145,
+              "p50": 0.400146484375,
+              "p95": 0.60009765625,
+              "max": 0.900146484375
+            },
+            "upload_ms": {
+              "count": 145,
+              "p50": 7.199951171875,
+              "p95": 10.599853515625,
+              "max": 169.699951171875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.2001953125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627199345,
+            "end": 1792627211345,
+            "pauseAcknowledged": 1792627211451,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 4283,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 5016,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 320,
+            "gap_p50": 263,
+            "gap_p95": 266,
+            "gap_max": 279,
+            "coordinateRequests": 0,
+            "viewUploads": 681,
+            "submitted_scene_gap_ms": {
+              "count": 681,
+              "p50": 11.339111328125,
+              "p95": 33.51904296875,
+              "max": 44.893798828125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 44.893798828125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.156239,
+              "p95": 11.406827,
+              "max": 13.710677
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.325632,
+              "p95": 0.6144,
+              "max": 2.697216
+            },
+            "native_transform_packets": 682,
+            "wire_bytes": {
+              "count": 685,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 685,
+            "parse_ms": {
+              "count": 682,
+              "p50": 0.728052,
+              "p95": 0.895495,
+              "max": 1.101971
+            },
+            "upload_gl_ms": {
+              "count": 682,
+              "p50": 0.045506,
+              "p95": 0.077775,
+              "max": 0.144891
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 685,
+              "p50": 1.0,
+              "p95": 1.400146484375,
+              "max": 3.099853515625
+            },
+            "encode_ms": {
+              "count": 685,
+              "p50": 0.39990234375,
+              "p95": 0.5,
+              "max": 0.900146484375
+            },
+            "upload_ms": {
+              "count": 685,
+              "p50": 7.2998046875,
+              "p95": 10.300048828125,
+              "max": 31.5
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.7998046875,
+              "p95": 1.10009765625,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627223548,
+            "end": 1792627235549,
+            "pauseAcknowledged": 1792627235657,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 5735,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 6468,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.364990234375,
+              "p95": 89.58740234375,
+              "max": 89.879150390625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.879150390625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.16218,
+              "p95": 11.425603,
+              "max": 31.328222
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.630784,
+              "p95": 0.692224,
+              "max": 2.341888
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.223759,
+              "p95": 0.274604,
+              "max": 0.300542
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.030247,
+              "p95": 0.052959,
+              "max": 0.097132
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.89990234375
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.699951171875,
+              "p95": 9.7001953125,
+              "max": 12.300048828125
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.89990234375,
+              "max": 1.300048828125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627236009,
+            "end": 1792627248010,
+            "pauseAcknowledged": 1792627248116,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 55,
+              "callbacks": 6483,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 55,
+              "callbacks": 7216,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 321,
+            "gap_p50": 262,
+            "gap_p95": 265,
+            "gap_max": 316,
+            "coordinateRequests": 0,
+            "viewUploads": 683,
+            "submitted_scene_gap_ms": {
+              "count": 682,
+              "p50": 11.34619140625,
+              "p95": 33.560302734375,
+              "max": 55.8828125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 55.8828125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1071,
+              "p50": 11.165777,
+              "p95": 11.428108,
+              "max": 53.269005
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1071,
+              "p50": 0.677888,
+              "p95": 0.753664,
+              "max": 2.644992
+            },
+            "native_transform_packets": 684,
+            "wire_bytes": {
+              "count": 687,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 687,
+            "parse_ms": {
+              "count": 684,
+              "p50": 0.21936,
+              "p95": 0.272871,
+              "max": 0.296484
+            },
+            "upload_gl_ms": {
+              "count": 684,
+              "p50": 0.028964,
+              "p95": 0.04276,
+              "max": 0.125465
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 687,
+              "p50": 0.900146484375,
+              "p95": 1.39990234375,
+              "max": 1.900146484375
+            },
+            "encode_ms": {
+              "count": 687,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.7001953125
+            },
+            "upload_ms": {
+              "count": 687,
+              "p50": 6.7998046875,
+              "p95": 9.800048828125,
+              "max": 41
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.199951171875
+            }
+          }
+        ],
+        "37d39cc6b88f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627279419,
+            "end": 1792627291419,
+            "pauseAcknowledged": 1792627291523,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 1333,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 2065,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 141,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.376708984375,
+              "p95": 89.504638671875,
+              "max": 201.072021484375
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 201.072021484375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.155177,
+              "p95": 11.368987,
+              "max": 12.827745
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.55296,
+              "p95": 0.652288,
+              "max": 2.290688
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.949295,
+              "p95": 1.20817,
+              "max": 1.408244
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.05346,
+              "p95": 0.073638,
+              "max": 0.112851
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.39990234375
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.599853515625,
+              "p95": 0.800048828125,
+              "max": 28.699951171875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.300048828125,
+              "p95": 11.300048828125,
+              "max": 129.5
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.800048828125,
+              "p95": 1.10009765625,
+              "max": 1.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627291898,
+            "end": 1792627303899,
+            "pauseAcknowledged": 1792627304005,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 2082,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 2810,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 316,
+            "gap_p50": 264,
+            "gap_p95": 281,
+            "gap_max": 376,
+            "coordinateRequests": 0,
+            "viewUploads": 673,
+            "submitted_scene_gap_ms": {
+              "count": 671,
+              "p50": 11.328369140625,
+              "p95": 33.5703125,
+              "max": 145.322509765625
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 145.322509765625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.152101,
+              "p95": 11.386209,
+              "max": 13.384397
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.643072,
+              "p95": 0.69632,
+              "max": 2.390016
+            },
+            "native_transform_packets": 672,
+            "wire_bytes": {
+              "count": 677,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 677,
+            "parse_ms": {
+              "count": 672,
+              "p50": 0.935831,
+              "p95": 1.177994,
+              "max": 1.459951
+            },
+            "upload_gl_ms": {
+              "count": 672,
+              "p50": 0.053189,
+              "p95": 0.08578,
+              "max": 0.162424
+            },
+            "long_tasks_ms": [
+              105
+            ],
+            "capture_ms": {
+              "count": 677,
+              "p50": 1.39990234375,
+              "p95": 1.800048828125,
+              "max": 3
+            },
+            "encode_ms": {
+              "count": 677,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 104.0
+            },
+            "upload_ms": {
+              "count": 677,
+              "p50": 7.5,
+              "p95": 11.10009765625,
+              "max": 25.5
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.7998046875,
+              "p95": 0.900146484375,
+              "max": 2.0
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627316069,
+            "end": 1792627328070,
+            "pauseAcknowledged": 1792627328175,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 3527,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 4260,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 90,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.37744140625,
+              "p95": 89.482666015625,
+              "max": 100.588623046875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 100.588623046875,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.153744,
+              "p95": 11.38689,
+              "max": 13.060751
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.295936,
+              "p95": 0.442368,
+              "max": 2.072576
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.733361,
+              "p95": 0.986916,
+              "max": 1.224611
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.044052,
+              "p95": 0.070672,
+              "max": 0.101971
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.10009765625,
+              "p95": 1.5,
+              "max": 2
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.400146484375,
+              "p95": 0.599853515625,
+              "max": 0.699951171875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.0,
+              "p95": 10,
+              "max": 14.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627328548,
+            "end": 1792627340548,
+            "pauseAcknowledged": 1792627340655,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 4276,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 5008,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 319,
+            "gap_p50": 263,
+            "gap_p95": 279,
+            "gap_max": 343,
+            "coordinateRequests": 0,
+            "viewUploads": 677,
+            "submitted_scene_gap_ms": {
+              "count": 676,
+              "p50": 11.357666015625,
+              "p95": 33.55029296875,
+              "max": 55.840087890625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 55.840087890625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.158613,
+              "p95": 11.374257,
+              "max": 13.715856
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.321536,
+              "p95": 0.540672,
+              "max": 2.29888
+            },
+            "native_transform_packets": 677,
+            "wire_bytes": {
+              "count": 683,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 683,
+            "parse_ms": {
+              "count": 677,
+              "p50": 0.724335,
+              "p95": 0.918318,
+              "max": 1.17569
+            },
+            "upload_gl_ms": {
+              "count": 677,
+              "p50": 0.039735,
+              "p95": 0.065282,
+              "max": 0.11743
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 683,
+              "p50": 1.0,
+              "p95": 1.39990234375,
+              "max": 2.699951171875
+            },
+            "encode_ms": {
+              "count": 683,
+              "p50": 0.39990234375,
+              "p95": 0.5,
+              "max": 0.900146484375
+            },
+            "upload_ms": {
+              "count": 683,
+              "p50": 7.2001953125,
+              "p95": 10.599853515625,
+              "max": 49.300048828125
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.7998046875,
+              "p95": 1.0,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627352724,
+            "end": 1792627364725,
+            "pauseAcknowledged": 1792627364831,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 5726,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 6459,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.3623046875,
+              "p95": 89.517822265625,
+              "max": 89.691162109375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.691162109375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.159926,
+              "p95": 11.362189,
+              "max": 12.926734
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.631808,
+              "p95": 0.710656,
+              "max": 2.326528
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.226685,
+              "p95": 0.283551,
+              "max": 0.30979
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.026018,
+              "p95": 0.041668,
+              "max": 0.063088
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 3.60009765625
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.300048828125,
+              "p95": 9.300048828125,
+              "max": 11.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.599853515625,
+              "p95": 0.800048828125,
+              "max": 1.900146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627365200,
+            "end": 1792627377201,
+            "pauseAcknowledged": 1792627377306,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 6475,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 7208,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 46,
+            "interpolatedSamples": 323,
+            "gap_p50": 261,
+            "gap_p95": 264,
+            "gap_max": 272,
+            "coordinateRequests": 0,
+            "viewUploads": 688,
+            "submitted_scene_gap_ms": {
+              "count": 687,
+              "p50": 11.2939453125,
+              "p95": 33.5029296875,
+              "max": 44.812255859375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 44.812255859375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.15786,
+              "p95": 11.359528,
+              "max": 13.099016
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.678912,
+              "p95": 0.77312,
+              "max": 2.357248
+            },
+            "native_transform_packets": 689,
+            "wire_bytes": {
+              "count": 692,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 692,
+            "parse_ms": {
+              "count": 689,
+              "p50": 0.220092,
+              "p95": 0.275065,
+              "max": 0.391534
+            },
+            "upload_gl_ms": {
+              "count": 689,
+              "p50": 0.022863,
+              "p95": 0.040336,
+              "max": 0.113243
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 692,
+              "p50": 0.89990234375,
+              "p95": 1.2001953125,
+              "max": 2.699951171875
+            },
+            "encode_ms": {
+              "count": 692,
+              "p50": 0.300048828125,
+              "p95": 0.39990234375,
+              "max": 0.60009765625
+            },
+            "upload_ms": {
+              "count": 692,
+              "p50": 6.599853515625,
+              "p95": 9.699951171875,
+              "max": 25.0
+            },
+            "apply_ms": {
+              "count": 46,
+              "p50": 0.60009765625,
+              "p95": 0.900146484375,
+              "max": 1.0
+            }
+          }
+        ],
+        "9b08bed08561": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627419808,
+            "end": 1792627431809,
+            "pauseAcknowledged": 1792627431913,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 1973,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 2702,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 95,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.328125,
+              "p95": 89.630859375,
+              "max": 178.823974609375
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 178.823974609375,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.163248,
+              "p95": 11.434586,
+              "max": 12.903647
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.555008,
+              "p95": 0.656384,
+              "max": 2.47808
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.943478,
+              "p95": 1.144434,
+              "max": 1.234272
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.057879,
+              "p95": 0.094657,
+              "max": 0.116017
+            },
+            "long_tasks_ms": [
+              89
+            ],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 3.0
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.5,
+              "p95": 0.800048828125,
+              "max": 87.39990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.199951171875,
+              "p95": 11.199951171875,
+              "max": 20.10009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.800048828125,
+              "p95": 1.10009765625,
+              "max": 1.699951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627432278,
+            "end": 1792627444279,
+            "pauseAcknowledged": 1792627444386,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 2718,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 3451,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 317,
+            "gap_p50": 264,
+            "gap_p95": 281,
+            "gap_max": 317,
+            "coordinateRequests": 0,
+            "viewUploads": 674,
+            "submitted_scene_gap_ms": {
+              "count": 673,
+              "p50": 11.356201171875,
+              "p95": 33.706298828125,
+              "max": 44.90673828125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 44.90673828125,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.15874,
+              "p95": 11.427292,
+              "max": 13.581546
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.64512,
+              "p95": 0.712704,
+              "max": 2.577408
+            },
+            "native_transform_packets": 673,
+            "wire_bytes": {
+              "count": 679,
+              "p50": 341616,
+              "p95": 341616,
+              "max": 341616
+            },
+            "browser_transform_packets": 679,
+            "parse_ms": {
+              "count": 673,
+              "p50": 0.939279,
+              "p95": 1.134014,
+              "max": 3.187289
+            },
+            "upload_gl_ms": {
+              "count": 673,
+              "p50": 0.059592,
+              "p95": 0.094147,
+              "max": 0.17127
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 679,
+              "p50": 1.400146484375,
+              "p95": 1.900146484375,
+              "max": 2.800048828125
+            },
+            "encode_ms": {
+              "count": 679,
+              "p50": 0.5,
+              "p95": 0.7001953125,
+              "max": 30.39990234375
+            },
+            "upload_ms": {
+              "count": 679,
+              "p50": 7.5,
+              "p95": 11.199951171875,
+              "max": 37.5
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.800048828125,
+              "p95": 1.2998046875,
+              "max": 1.599853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627465979,
+            "end": 1792627477980,
+            "pauseAcknowledged": 1792627478087,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 4731,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 5464,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.410400390625,
+              "p95": 89.5205078125,
+              "max": 90.5087890625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 90.5087890625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.160972,
+              "p95": 11.44809,
+              "max": 13.407308
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.294912,
+              "p95": 0.453632,
+              "max": 2.03776
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 146,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 146,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.739935,
+              "p95": 0.961551,
+              "max": 1.095302
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.044614,
+              "p95": 0.06395,
+              "max": 0.0855
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.10009765625,
+              "p95": 1.5,
+              "max": 1.699951171875
+            },
+            "encode_ms": {
+              "count": 146,
+              "p50": 0.400146484375,
+              "p95": 0.60009765625,
+              "max": 1
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.099853515625,
+              "p95": 10.5,
+              "max": 16.2998046875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.099853515625,
+              "max": 1.300048828125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627478441,
+            "end": 1792627490441,
+            "pauseAcknowledged": 1792627490646,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 5479,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 6217,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 46,
+            "interpolatedSamples": 322,
+            "gap_p50": 263,
+            "gap_p95": 265,
+            "gap_max": 280,
+            "coordinateRequests": 0,
+            "viewUploads": 684,
+            "submitted_scene_gap_ms": {
+              "count": 684,
+              "p50": 11.34912109375,
+              "p95": 33.55078125,
+              "max": 45.000244140625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 45.000244140625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.162905,
+              "p95": 11.407994,
+              "max": 13.949032
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.33792,
+              "p95": 0.592896,
+              "max": 2.213888
+            },
+            "native_transform_packets": 685,
+            "wire_bytes": {
+              "count": 690,
+              "p50": 318028,
+              "p95": 318028,
+              "max": 318028
+            },
+            "browser_transform_packets": 690,
+            "parse_ms": {
+              "count": 685,
+              "p50": 0.730098,
+              "p95": 0.884887,
+              "max": 1.256323
+            },
+            "upload_gl_ms": {
+              "count": 685,
+              "p50": 0.044534,
+              "p95": 0.071785,
+              "max": 0.167223
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 690,
+              "p50": 1.099853515625,
+              "p95": 1.5,
+              "max": 2.800048828125
+            },
+            "encode_ms": {
+              "count": 690,
+              "p50": 0.39990234375,
+              "p95": 0.599853515625,
+              "max": 1.39990234375
+            },
+            "upload_ms": {
+              "count": 690,
+              "p50": 7.199951171875,
+              "p95": 10.5,
+              "max": 34.7998046875
+            },
+            "apply_ms": {
+              "count": 46,
+              "p50": 0.699951171875,
+              "p95": 0.900146484375,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792627511251,
+            "end": 1792627523252,
+            "pauseAcknowledged": 1792627523458,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 7446,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 8185,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "interpolatedSamples": 0,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.357421875,
+              "p95": 89.54638671875,
+              "max": 89.6494140625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 89.6494140625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1074,
+              "p50": 11.167,
+              "p95": 11.398374,
+              "max": 17.599817
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1074,
+              "p50": 0.632832,
+              "p95": 0.6912,
+              "max": 2.889728
+            },
+            "native_transform_packets": 145,
+            "wire_bytes": {
+              "count": 147,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 147,
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.229871,
+              "p95": 0.283711,
+              "max": 0.331381
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.028984,
+              "p95": 0.046797,
+              "max": 0.084399
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.0,
+              "p95": 1.400146484375,
+              "max": 2.10009765625
+            },
+            "encode_ms": {
+              "count": 147,
+              "p50": 0.300048828125,
+              "p95": 0.400146484375,
+              "max": 0.60009765625
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 6.60009765625,
+              "p95": 9.0,
+              "max": 11.800048828125
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.60009765625,
+              "p95": 0.89990234375,
+              "max": 1.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": true,
+            "loop": false,
+            "count": 200,
+            "start": 1792627523814,
+            "end": 1792627535815,
+            "pauseAcknowledged": 1792627535920,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 57,
+              "callbacks": 8200,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 57,
+              "callbacks": 8933,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 45,
+            "interpolatedSamples": 320,
+            "gap_p50": 262,
+            "gap_p95": 293,
+            "gap_max": 296,
+            "coordinateRequests": 0,
+            "viewUploads": 678,
+            "submitted_scene_gap_ms": {
+              "count": 679,
+              "p50": 11.3740234375,
+              "p95": 33.552734375,
+              "max": 55.8525390625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 55.8525390625,
+            "malformed_records": {
+              "frames": 0,
+              "gpu": 0,
+              "native": 0
+            },
+            "malformed_frames_in_window": 0,
+            "scene_cadence_pass": true,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1075,
+              "p50": 11.167221,
+              "p95": 11.44997,
+              "max": 21.102155
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1075,
+              "p50": 0.674816,
+              "p95": 0.728064,
+              "max": 3.067904
+            },
+            "native_transform_packets": 678,
+            "wire_bytes": {
+              "count": 685,
+              "p50": 23928,
+              "p95": 23928,
+              "max": 23928
+            },
+            "browser_transform_packets": 685,
+            "parse_ms": {
+              "count": 678,
+              "p50": 0.220423,
+              "p95": 0.264155,
+              "max": 0.450744
+            },
+            "upload_gl_ms": {
+              "count": 678,
+              "p50": 0.028934,
+              "p95": 0.045465,
+              "max": 0.088756
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 685,
+              "p50": 0.900146484375,
+              "p95": 1.39990234375,
+              "max": 2.60009765625
+            },
+            "encode_ms": {
+              "count": 685,
+              "p50": 0.2998046875,
+              "p95": 0.400146484375,
+              "max": 0.699951171875
+            },
+            "upload_ms": {
+              "count": 685,
+              "p50": 6.699951171875,
+              "p95": 9.699951171875,
+              "max": 37.89990234375
+            },
+            "apply_ms": {
+              "count": 45,
+              "p50": 0.60009765625,
+              "p95": 0.800048828125,
+              "max": 1.10009765625
+            }
+          }
+        ]
+      },
+      "resources": {
+        "d6bcdef3d59f": {
+          "before": {
+            "memory.current": "81936384",
+            "memory.peak": "139702272",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "1154064384",
+            "memory.peak": "3745058816",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        },
+        "972af34aa9c5": {
+          "before": {
+            "memory.current": "1227390976",
+            "memory.peak": "3745058816",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "2513739776",
+            "memory.peak": "4955459584",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        },
+        "37d39cc6b88f": {
+          "before": {
+            "memory.current": "2515824640",
+            "memory.peak": "4955459584",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "3738210304",
+            "memory.peak": "6202413056",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          }
+        },
+        "9b08bed08561": {
+          "before": {
+            "memory.current": "3736244224",
+            "memory.peak": "6202413056",
+            "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+          },
+          "after": {
+            "memory.current": "3874181120",
+            "memory.peak": "6444568576",
+            "memory.events": "low 0\nhigh 2092\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+            "memory.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=67922\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=67763"
+          }
+        }
+      },
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792518029911711961
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+            5671532276,
+            1792518021769776761
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+            5671712276,
+            1792519017247410041
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-egw54m6r",
+        "removed": true
+      },
+      "gc": [
+        {
+          "epoch_ms": 1792627000867.274,
+          "ms": 13.339243014343083,
+          "generation": 2,
+          "collected": 18,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627007413.255,
+          "ms": 29.668809002032503,
+          "generation": 2,
+          "collected": 1227,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627103671.2112,
+          "ms": 31.63316400605254,
+          "generation": 2,
+          "collected": 570,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627141374.0203,
+          "ms": 18.288541003130376,
+          "generation": 2,
+          "collected": 60,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627176153.618,
+          "ms": 15.14515100279823,
+          "generation": 2,
+          "collected": 114,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627270044.5347,
+          "ms": 22.214694996364415,
+          "generation": 2,
+          "collected": 66,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627304763.616,
+          "ms": 16.521104000275955,
+          "generation": 2,
+          "collected": 132,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627401888.6438,
+          "ms": 12.476678006350994,
+          "generation": 2,
+          "collected": 84,
+          "uncollectable": 0
+        },
+        {
+          "epoch_ms": 1792627476199.3752,
+          "ms": 14.839840994682163,
+          "generation": 2,
+          "collected": 180,
+          "uncollectable": 0
+        }
+      ],
+      "loop_stalls": [
+        {
+          "epoch_ms": 1792627000993.6472,
+          "delay_ms": 80.99551202030852,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627001384.5837,
+          "delay_ms": 65.65362299443223,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627001810.4526,
+          "delay_ms": 56.035811023321,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 433, in main\n    run(\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/main.py\", line 606, in run\n    server.run()\n",
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627127968.8572,
+          "delay_ms": 53.818613989278674,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap_external>\", line 1502, in _get_spec\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1634, in find_spec\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 161, in _path_isfile\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 153, in _path_is_mode_type\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 147, in _path_stat\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627254222.279,
+          "delay_ms": 54.90793101489544,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/backend/core/runpod_supervisor.py\", line 380, in reap_orphan_pods\n    claimed = _claimed_pods(workspace_dir) if workspace_dir else {}\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/runpod_supervisor.py\", line 347, in _claimed_pods\n    jobs = MdJob.list_jobs(workspace_dir)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_job.py\", line 551, in list_jobs\n    result.append(cls.load(jdir.name, workspace_dir))\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_job.py\", line 456, in load\n    data = json.loads(path.read_text())\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1030, in read_text\n    return f.read()\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276794.4438,
+          "delay_ms": 52.2889319981914,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276814.7822,
+          "delay_ms": 72.68739902065136,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276835.0044,
+          "delay_ms": 92.91627901257016,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276855.2148,
+          "delay_ms": 113.11468199710362,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276875.4866,
+          "delay_ms": 133.39067000197247,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276895.724,
+          "delay_ms": 153.6289080104325,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276916.0186,
+          "delay_ms": 173.88426800607704,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276936.4731,
+          "delay_ms": 194.38054799684323,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276956.698,
+          "delay_ms": 214.60283600026742,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276976.932,
+          "delay_ms": 234.83714601024985,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627276997.1973,
+          "delay_ms": 255.09750499622896,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627277017.4653,
+          "delay_ms": 275.36358500947244,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627277037.7158,
+          "delay_ms": 295.62407502089627,
+          "stack_tail": [
+            "  File \"/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/uvicorn/server.py\", line 75, in run\n    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n    return runner.run(main)\n",
+            "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n",
+            "  File \"/home/jojo/Work/NADOC/backend/core/md_analysis_runner.py\", line 181, in run_analysis\n    result_path.unlink(missing_ok=True)\n",
+            "  File \"/usr/lib/python3.12/pathlib.py\", line 1344, in unlink\n    os.unlink(self)\n"
+          ]
+        },
+        {
+          "epoch_ms": 1792627383858.2925,
+          "delay_ms": 53.757101006340235,
+          "stack_tail": [
+            "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 991, in exec_module\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1087, in get_code\n",
+            "  File \"<frozen importlib._bootstrap_external>\", line 1186, in get_data\n"
+          ]
+        }
+      ],
+      "launches": [
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3535496,\"started_at\":1792627387.512589,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-lgkfy_lz/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627387668581223,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627387494653396,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-581ymopn/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-egw54m6r/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":true,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        },
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3529268,\"started_at\":1792627257.7400463,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-rb7w9s8q/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627257894570447,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627257711612355,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-j_amhfz0/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-egw54m6r/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":true,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        },
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3516793,\"started_at\":1792627004.1656559,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-uadyunji/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627004320844578,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627004147215164,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-_uwralbs/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-egw54m6r/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":false,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        },
+        {
+          "status": 200,
+          "body": "{\"running\":true,\"available\":true,\"pid\":3523176,\"started_at\":1792627128.4737453,\"scrywrite_live\":\"transactions\",\"scrywrite_socket\":\"/media/jojo/Archive/.nadoc-vr-capture/v-wx5v_hlv/viewer.sock\",\"final_capture\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627128628521075,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"final_capture_launch_snapshot\":{\"configured\":true,\"available\":true,\"source\":\"final_swapchain_before_queue_present\",\"directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor\",\"checked_unix_ns\":1792627128454122242,\"compositor_pid\":3516605,\"event_log\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor/events-3516605.jsonl\",\"reason\":null},\"pose_journal_directory\":\"/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-340_ak2h/journals\",\"submitted_frame_marker\":\"recording\",\"mirror_eye\":\"left\",\"reference_grid\":\"off\",\"timing\":{\"first_frame_ready\":false,\"snapshot_ms\":null,\"process_to_first_frame_ms\":null,\"launch_to_first_frame_ms\":null,\"click_to_first_frame_ms\":null,\"job_snapshot_ms\":0.0,\"first_frame_cpu_ms\":null,\"display_period_ms\":null},\"log_path\":\"/media/jojo/Archive/cpb-egw54m6r/tmp/nadoc-vr-1000.log\",\"steamvr_running\":true,\"dashboard_running\":true,\"desktop_overlay_running\":false,\"native_desktop_available\":true}"
+        }
+      ],
+      "runtime_cleanup": [
+        {
+          "pid": 3535496,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-581ymopn",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-lgkfy_lz"
+          ]
+        },
+        {
+          "pid": 3529268,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-j_amhfz0",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-rb7w9s8q"
+          ]
+        },
+        {
+          "pid": 3516793,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-_uwralbs",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-uadyunji"
+          ]
+        },
+        {
+          "pid": 3523176,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-340_ak2h",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-wx5v_hlv"
+          ]
+        }
+      ],
+      "transport_outliers": [
+        {
+          "file": "37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/ballstick-false-transport.json",
+          "start": 1792627288450.2,
+          "duration": 129.40000000596046,
+          "requestStart": 113.2000000178814,
+          "response": 15.900000005960464
+        },
+        {
+          "file": "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+          "start": 1792627188702.3,
+          "duration": 143,
+          "requestStart": 134.10000002384186,
+          "response": 8.399999976158142
+        },
+        {
+          "file": "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stick-false-transport.json",
+          "start": 1792627188868.9,
+          "duration": 95,
+          "requestStart": 0.5999999940395355,
+          "response": 5.299999982118607
+        }
+      ],
+      "log_sha256": "f5aa6963b3a25fc0efba58440623d1c215eae71514f1a8c61f55d1b35fed87f0",
+      "configuration": "Final dedicated factory via diagnostic wrapper; four CPD jobs; ballstick/stick/vdw, raw/Smooth; 12 seconds per window"
+    }
+  },
+  "validation": {
+    "focused_passes": 100,
+    "additional_rechecks_passes": 16,
+    "test_smart": {
+      "decision": "FAST",
+      "passed": 14659,
+      "failed": 9,
+      "errors": 4,
+      "skipped": 92,
+      "seconds": 149.28,
+      "deferred_verbatim": "  DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "remaining_prior_debt": [
+        "test_native_streptavidin_proof adsorption/biotin_tether unverified",
+        "test_namd_input_provenance old-job status mismatch",
+        "test_scadnano photoproduct context_coordinates mismatch",
+        "test_photoproduct_api fail-closed export",
+        "four test_cpd_preview fixture errors"
+      ],
+      "cleared_additional_failures": [
+        "test_vr_motion native socket: short Archive TMPDIR passes",
+        "two test_alpine_worker socket cases: all 12 worker tests pass with short Archive TMPDIR",
+        "test_native_auto_proof[full] capture timing budget: focused rerun passes in 0.09 s call"
+      ]
+    },
+    "slow_test_triage": {
+      "prior_report_stale_on_dry_run": true,
+      "fresh_report": {
+        "per_test_budget_sec": 5.0,
+        "total_test_seconds": 542.0,
+        "n_tests": 14761,
+        "sim_running": false,
+        "sim_reason": "",
+        "slowest_files_15": [
+          {
+            "file": "tests/test_headless_oxdna_build.py",
+            "seconds": 43.4,
+            "n_tests": 45,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_oxdna_relaxation.py",
+            "seconds": 23.4,
+            "n_tests": 248,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_native_placement_review_gate.py",
+            "seconds": 23.0,
+            "n_tests": 22,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_cluster_join_api.py",
+            "seconds": 21.8,
+            "n_tests": 17,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_part_immutable_recovery.py",
+            "seconds": 16.9,
+            "n_tests": 36,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_project_revisions.py",
+            "seconds": 15.0,
+            "n_tests": 23,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_part_immutable_persistence.py",
+            "seconds": 10.4,
+            "n_tests": 27,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_vr_representation_loading.py",
+            "seconds": 9.7,
+            "n_tests": 14,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_part_coating_evaluation.py",
+            "seconds": 7.7,
+            "n_tests": 27,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_alpine_worker.py",
+            "seconds": 7.3,
+            "n_tests": 12,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_cluster_join_constraints.py",
+            "seconds": 7.0,
+            "n_tests": 14,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_headless_spec_build.py",
+            "seconds": 6.5,
+            "n_tests": 81,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_native_streptavidin_proof.py",
+            "seconds": 6.1,
+            "n_tests": 20,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_job_archive.py",
+            "seconds": 6.0,
+            "n_tests": 22,
+            "n_slow_marked": 0
+          },
+          {
+            "file": "tests/test_part_immutable_creation.py",
+            "seconds": 5.9,
+            "n_tests": 19,
+            "n_slow_marked": 0
+          }
+        ],
+        "violators": [
+          {
+            "nodeid": "tests/test_native_placement_review_gate.py::test_collection_error_reports_source_markers_without_broadening_execution_scope[syntax]",
+            "seconds": 18.77
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_sequences_an_unsequenced_design",
+            "seconds": 5.39
+          },
+          {
+            "nodeid": "tests/test_alpine_worker.py::test_transfer_keeps_running_after_api_process_is_killed",
+            "seconds": 5.01
+          }
+        ],
+        "slowest_25": [
+          {
+            "nodeid": "tests/test_native_placement_review_gate.py::test_collection_error_reports_source_markers_without_broadening_execution_scope[syntax]",
+            "seconds": 18.77,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_sequences_an_unsequenced_design",
+            "seconds": 5.39,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_alpine_worker.py::test_transfer_keeps_running_after_api_process_is_killed",
+            "seconds": 5.01,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_equilibration_timeline_extracts_finite_tau",
+            "seconds": 3.77,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_oracle_fires_on_non_completed_job",
+            "seconds": 3.59,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+            "seconds": 2.93,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+            "seconds": 2.74,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+            "seconds": 2.73,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_from_build_spec",
+            "seconds": 2.66,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_project_collaboration_api.py::test_lease_api_returns_read_only_and_can_auto_fork",
+            "seconds": 2.55,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+            "seconds": 2.4,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_relaxed_measurement_fires_without_production",
+            "seconds": 2.37,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_project_revisions.py::test_overlapping_identical_autosave_adopts_winning_head",
+            "seconds": 2.29,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_steer_field_session_follows_a_waypoint_path",
+            "seconds": 2.25,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_part_immutable_recovery.py::test_preparation_refuses_mutated_manifest_and_keeps_exact_full_payload",
+            "seconds": 2.2,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+            "seconds": 2.15,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[True]",
+            "seconds": 2.14,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_steer_field_session_magnitude_per_waypoint",
+            "seconds": 2.11,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+            "seconds": 2.07,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_field_ready_oracle_fires_on_unsequenced_specimen",
+            "seconds": 2.05,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+            "seconds": 2.03,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_design_identity_api.py::test_autosave_after_undo_redo_and_further_edit",
+            "seconds": 2.03,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_native_protein_input_proof.py::test_revision_peer_transfer_contains_and_verifies_source_closure",
+            "seconds": 2.02,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_runpod_script.py::TestChainScriptActuallyRuns::test_stall_watchdog_kills_a_wedged_step",
+            "seconds": 2.01,
+            "slow_marked": false
+          },
+          {
+            "nodeid": "tests/test_snupi_job.py::test_kill_pid_terminates_detached_process",
+            "seconds": 2.0,
+            "slow_marked": false
+          }
+        ]
+      },
+      "focused_call_seconds": {
+        "placement_collection_syntax": 0.17,
+        "headless_mock_field_specimen": 0.59,
+        "alpine_transfer_subprocess": 1.2
+      },
+      "decision": "No reclassification or budget changes: mocked/small work passes individually; Archive/socket-path and broad-run contention are distinct from intrinsically heavy tests."
+    },
+    "harness_corrections": [
+      "Initial focused invocation incorrectly supplied multiple target files; runner accepts one target per invocation.",
+      "Initial bootstrap test assumed zero frozen objects, but this interpreter starts with 375; corrected to require import leaves existing count unchanged.",
+      "Initial tour-test filename incorrect; corrected to tests/test_vr_tours.py, 50 passed."
+    ],
+    "diff_check": true,
+    "start_shell_syntax": true
+  },
+  "limitations": [
+    "Historical 929/361/147 ms uploads did not have GC instrumentation; their causes are not retrospectively proven.",
+    "Patched long raw run separately recorded a 273 ms browser encoding long task.",
+    "Final raw waits of 113/134 ms before requestStart remain; response times 15.9/8.4 ms, no overlapping backend GC.",
+    "Submitted-eye evidence does not establish physical headset continuity or comfort."
+  ],
+  "cleanup": {
+    "pending": false,
+    "removed_bytes": 2861310864,
+    "removed_paths": [
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626343483099999",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626467706089895",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147",
+      "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/freeze",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/freeze.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/tmp",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-before.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-retry.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-retry",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/tours.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/final.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/focused-final.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/final",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/validation-scratch.txt",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/rechecks.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/smart.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-before",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/focused.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-baseline",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/gc-baseline.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/smart-plan.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/runtime-inventory.json",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/before.log",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/vr-publication-20261021/before",
+      "/media/jojo/Archive/vp.Fo5FVC"
+    ],
+    "active_fd_maps_environment_references": [],
+    "all_removed": true,
+    "private_workspaces_removed": true,
+    "retained_review_bytes": 645696,
+    "workspace_prefixed_files_remaining": [],
+    "preserved_processes_verified_after_cleanup": true
+  },
+  "review": [
+    ".development-artifacts/vr-publication-20261021/review/cpd-ballstick.png",
+    ".development-artifacts/vr-publication-20261021/review/isomer4-vdw.png"
+  ],
+  "runtime_inventory": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800",
+      "bytes": 112600,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792626162686604685,
+        "vrserver": {
+          "launcher_pid": 3480415,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792626163135957364,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3480546,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626162671773800/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3480547,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626343483099999",
+      "bytes": 10385,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792626343498143721,
+        "vrserver": {
+          "launcher_pid": 3489812,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792626343943808331,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3489910,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626343483099999/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3489911,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626467706089895",
+      "bytes": 10385,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792626467721156891,
+        "vrserver": {
+          "launcher_pid": 3492986,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792626468167127037,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3493121,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626467706089895/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3493122,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402",
+      "bytes": 125132,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792626595275193149,
+        "vrserver": {
+          "launcher_pid": 3496487,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792626595853307541,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3496600,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626595260125402/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3496601,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147",
+      "bytes": 128339,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792626751209365595,
+        "vrserver": {
+          "launcher_pid": 3505281,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792626751885834399,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3505377,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792626751191298147/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3505378,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189",
+      "bytes": 189618,
+      "launcher": {
+        "persistent_configuration_changes": false,
+        "started_wall_time_ns": 1792627002651471828,
+        "vrserver": {
+          "launcher_pid": 3516483,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrserver",
+            "-waitformonitor"
+          ]
+        },
+        "compositor": {
+          "started_wall_time_ns": 1792627003223302796,
+          "capture_enabled": true,
+          "persistent_configuration_changes": false,
+          "replaced_pid": null,
+          "layer_library": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0/libnadoc_present_capture.so",
+          "layer_sha256": "3881375a8ca017d02dd80f346edb41d8238d1923877539cd09834d4379148735",
+          "pid": 3516605,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrcompositor-launcher.sh"
+          ],
+          "capture_mode": "pixels",
+          "status": "spawned_display_not_yet_verified",
+          "graphics_environment": {
+            "DISPLAY": ":0",
+            "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "__NV_PRIME_RENDER_OFFLOAD": "1",
+            "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+            "__VK_LAYER_NV_optimus": "NVIDIA_only",
+            "VK_LOADER_DRIVERS_SELECT": "nvidia_icd.json",
+            "VK_LAYER_PATH": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/layers/3881375a8ca017d0",
+            "VK_INSTANCE_LAYERS": "VK_LAYER_NADOC_present_capture",
+            "NADOC_VR_CAPTURE_DIR": "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/runtime-1792627002635349189/compositor",
+            "NADOC_VR_CAPTURE_MODE": "pixels",
+            "NADOC_VR_CAPTURE_MAX_BYTES": "134217728",
+            "NADOC_VR_CAPTURE_COMPRESSED_BYTES": "1342177280"
+          }
+        },
+        "vrmonitor": {
+          "launcher_pid": 3516606,
+          "argv": [
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/run-in-sniper",
+            "--filesystem=/home/jojo/.local/share/Steam/steamapps/common/SteamVR",
+            "--",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/vrenv.sh",
+            "/home/jojo/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+            "-nokillprocess",
+            "-startupappid",
+            "250820",
+            "-startupreason",
+            "steamvr_vrstartup",
+            "-startupapptype",
+            "7"
+          ]
+        }
+      }
+    }
+  ],
+  "implementation_sha256": {
+    "server_bootstrap.py": "d9e5dadc31fe25b95780ff911231d74ffef440cf3c6243267ea28f424eba5524",
+    "start.sh": "d1aabbb8d27d69c8e54a42033eef2b4e874fe18fb9896f07152589cd929e2d7e",
+    "justfile": "99771908db1b21e6c78457c1673e501930f0248dbdd1f296bb180989e7ef9e13",
+    "tests/test_server_bootstrap.py": "76dfff9c8a89bd556f0a3db3b3f69c49d57c1afd7bb205f66b928f9dc2451162",
+    "tests/test_vr_server_pipe_ready.py": "cd610a401a14c3e0a229e8f182aef70f4b699da248f96c38f65f5661f8ddbdd3",
+    "tests/test_dev_reload.py": "03e96c85e42620143023d87944624d76ad74748f14fbddbd5984a031429ff8ea",
+    "tools/vr_capture/launch_compositor.py": "44c46a1ecf5e3426e51a96aaab478fe7c79ee6c84720e44440b9e5bb3c43fb7e",
+    "tools/vr_workflows/publication_probe.py": "4fad2ea75eb054e356f4f3c2d0eec2763b20e5a3a14954cde9631d3b64c5cb75",
+    "tools/vr_workflows/tour_catalog.py": "22a70afbdb6358d003d0d94ab15e10e14ce62510508bd9d51e324e8cf34440d1",
+    "frontend/playwright.smoke.config.js": "17435d23539606dca35dc7a6b0d467b72b1d4fd7720068d68a15aba82b006ca9",
+    "frontend/playwright.vr-simulations.config.js": "83e88eede0a701d301feb416a68e8af2f0f9d6ab22b22c401bee9aada50f900b",
+    "frontend/e2e/vr_cpd_playback.spec.js": "7bc56bef860c9bd7bdf9a1878328edd9ea1fc65660209be95741c6577e800872"
+  },
+  "diagnostic_label_note": "Measured logs use VR_GC_STALL; final diagnostic label is VR_GC_COLLECTION because it also records short generation-2 collections.",
+  "preserved_processes": [
+    219468,
+    1669173,
+    1669386,
+    2923940
+  ]
+}

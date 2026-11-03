@@ -1,0 +1,507 @@
+{
+  "job_id": "29c5b267380f",
+  "parent_job": "e4a49b2057a5",
+  "design_name": "2hb_1xT",
+  "frames": 2000,
+  "time_ns": [
+    0.01,
+    20.0
+  ],
+  "native_spacing_ps": 10.000000029814057,
+  "shared_heavy_atoms": 1963,
+  "local_heavy_atoms": 126,
+  "common_wc_pairs": 42,
+  "local_wc_pairs": 4,
+  "coordinate_unwrapping_applied": true,
+  "parameters": {
+    "timestep": "4",
+    "rigidbonds": "all",
+    "structure": "2hb_1xT_hmr.psf",
+    "langevindamping": "5",
+    "constraints": "off",
+    "extrabondsfile": "mgh_extrabonds.txt",
+    "wrapall": "on"
+  },
+  "atoms": 21436,
+  "initial_config_box_A": [
+    [
+      44.147,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      66.635,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      113.568
+    ]
+  ],
+  "statistics": {
+    "local_heavy_rmsd_A": {
+      "min": 0.5135014506662385,
+      "mean": 2.0518683539541724,
+      "max": 3.562983006345346,
+      "p05": 1.0089912893033446,
+      "p95": 2.9575572017037
+    },
+    "dna_heavy_rmsd_A": {
+      "min": 0.9006490193542913,
+      "mean": 6.231909230428274,
+      "max": 8.846131387307343,
+      "p05": 3.5224368696901682,
+      "p95": 7.85349413909722
+    },
+    "wc_fraction": {
+      "min": 0.8095238095238095,
+      "mean": 0.9663095238095238,
+      "max": 1.0,
+      "p05": 0.9047619047619048,
+      "p95": 1.0
+    },
+    "local_wc_fraction": {
+      "min": 0.25,
+      "mean": 0.940375,
+      "max": 1.0,
+      "p05": 0.75,
+      "p95": 1.0
+    }
+  },
+  "blocks": [
+    {
+      "time_ns": [
+        0,
+        5
+      ],
+      "local_heavy_rmsd_A": {
+        "min": 0.5135014506662385,
+        "mean": 1.2472761026798134,
+        "max": 1.9473762737571998,
+        "p05": 0.7902201083084528,
+        "p95": 1.6920759606669311
+      },
+      "dna_heavy_rmsd_A": {
+        "min": 0.9006490193542913,
+        "mean": 4.105459652696056,
+        "max": 6.0896161367779476,
+        "p05": 2.020667180342136,
+        "p95": 5.697413561871919
+      },
+      "wc_fraction": {
+        "min": 0.8809523809523809,
+        "mean": 0.9699047619047619,
+        "max": 1.0,
+        "p05": 0.9285714285714286,
+        "p95": 1.0
+      },
+      "local_wc_fraction": {
+        "min": 0.5,
+        "mean": 0.9395,
+        "max": 1.0,
+        "p05": 0.75,
+        "p95": 1.0
+      }
+    },
+    {
+      "time_ns": [
+        5,
+        10
+      ],
+      "local_heavy_rmsd_A": {
+        "min": 1.1130729794883678,
+        "mean": 1.9422046888230964,
+        "max": 2.7784049851901043,
+        "p05": 1.3201302579466943,
+        "p95": 2.6347217951521658
+      },
+      "dna_heavy_rmsd_A": {
+        "min": 5.738214154468503,
+        "mean": 7.200632860935676,
+        "max": 8.846131387307343,
+        "p05": 6.317235583570814,
+        "p95": 8.282613319253215
+      },
+      "wc_fraction": {
+        "min": 0.8571428571428571,
+        "mean": 0.962047619047619,
+        "max": 1.0,
+        "p05": 0.9047619047619048,
+        "p95": 1.0
+      },
+      "local_wc_fraction": {
+        "min": 0.25,
+        "mean": 0.9155,
+        "max": 1.0,
+        "p05": 0.75,
+        "p95": 1.0
+      }
+    },
+    {
+      "time_ns": [
+        10,
+        15
+      ],
+      "local_heavy_rmsd_A": {
+        "min": 1.832030727371878,
+        "mean": 2.4296193366275842,
+        "max": 3.2849503267627393,
+        "p05": 2.023076102456708,
+        "p95": 3.083413736639719
+      },
+      "dna_heavy_rmsd_A": {
+        "min": 5.857644478350478,
+        "mean": 7.127970207054377,
+        "max": 8.042588943223976,
+        "p05": 6.46454988323353,
+        "p95": 7.894630778978965
+      },
+      "wc_fraction": {
+        "min": 0.8095238095238095,
+        "mean": 0.9657142857142857,
+        "max": 1.0,
+        "p05": 0.9047619047619048,
+        "p95": 1.0
+      },
+      "local_wc_fraction": {
+        "min": 0.5,
+        "mean": 0.9585,
+        "max": 1.0,
+        "p05": 0.75,
+        "p95": 1.0
+      }
+    },
+    {
+      "time_ns": [
+        15,
+        20
+      ],
+      "local_heavy_rmsd_A": {
+        "min": 2.0094502976674704,
+        "mean": 2.588373287686195,
+        "max": 3.562983006345346,
+        "p05": 2.1766712368331333,
+        "p95": 3.163046545184167
+      },
+      "dna_heavy_rmsd_A": {
+        "min": 5.619411228152296,
+        "mean": 6.493574201026988,
+        "max": 7.634118890393725,
+        "p05": 5.9712325259445205,
+        "p95": 7.322830533430694
+      },
+      "wc_fraction": {
+        "min": 0.8333333333333334,
+        "mean": 0.9675714285714285,
+        "max": 1.0,
+        "p05": 0.9047619047619048,
+        "p95": 1.0
+      },
+      "local_wc_fraction": {
+        "min": 0.5,
+        "mean": 0.948,
+        "max": 1.0,
+        "p05": 0.75,
+        "p95": 1.0
+      }
+    }
+  ],
+  "pair_occupancy": [
+    {
+      "a": "D001:THY28",
+      "b": "D002:ADE31",
+      "local": false,
+      "occupancy": 0.9735,
+      "last5ns": 0.972
+    },
+    {
+      "a": "D001:ADE1",
+      "b": "D002:THY23",
+      "local": false,
+      "occupancy": 0.923,
+      "last5ns": 0.89
+    },
+    {
+      "a": "D001:THY19",
+      "b": "D002:ADE40",
+      "local": false,
+      "occupancy": 0.9635,
+      "last5ns": 0.958
+    },
+    {
+      "a": "D001:THY17",
+      "b": "D002:ADE42",
+      "local": false,
+      "occupancy": 0.984,
+      "last5ns": 0.994
+    },
+    {
+      "a": "D000:ADE13",
+      "b": "D002:THY5",
+      "local": false,
+      "occupancy": 0.9805,
+      "last5ns": 0.98
+    },
+    {
+      "a": "D000:THY4",
+      "b": "D002:ADE47",
+      "local": false,
+      "occupancy": 0.9535,
+      "last5ns": 0.954
+    },
+    {
+      "a": "D001:THY26",
+      "b": "D002:ADE33",
+      "local": false,
+      "occupancy": 0.983,
+      "last5ns": 0.988
+    },
+    {
+      "a": "D000:ADE5",
+      "b": "D002:THY46",
+      "local": false,
+      "occupancy": 0.9735,
+      "last5ns": 0.978
+    },
+    {
+      "a": "D001:ADE29",
+      "b": "D002:THY30",
+      "local": false,
+      "occupancy": 0.9315,
+      "last5ns": 0.95
+    },
+    {
+      "a": "D000:THY9",
+      "b": "D002:ADE9",
+      "local": true,
+      "occupancy": 0.943,
+      "last5ns": 0.968
+    },
+    {
+      "a": "D001:THY2",
+      "b": "D002:ADE22",
+      "local": false,
+      "occupancy": 0.9825,
+      "last5ns": 0.962
+    },
+    {
+      "a": "D001:THY13",
+      "b": "D002:ADE11",
+      "local": false,
+      "occupancy": 0.9545,
+      "last5ns": 0.984
+    },
+    {
+      "a": "D001:THY11",
+      "b": "D002:ADE13",
+      "local": false,
+      "occupancy": 0.9835,
+      "last5ns": 0.99
+    },
+    {
+      "a": "D000:THY12",
+      "b": "D002:ADE6",
+      "local": false,
+      "occupancy": 0.97,
+      "last5ns": 0.97
+    },
+    {
+      "a": "D000:ADE3",
+      "b": "D002:THY48",
+      "local": false,
+      "occupancy": 0.948,
+      "last5ns": 0.966
+    },
+    {
+      "a": "D001:THY4",
+      "b": "D002:ADE20",
+      "local": false,
+      "occupancy": 0.9855,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D001:GUA3",
+      "b": "D002:CYT21",
+      "local": false,
+      "occupancy": 0.9605,
+      "last5ns": 0.95
+    },
+    {
+      "a": "D000:GUA11",
+      "b": "D002:CYT7",
+      "local": false,
+      "occupancy": 0.9615,
+      "last5ns": 0.952
+    },
+    {
+      "a": "D001:GUA14",
+      "b": "D002:CYT10",
+      "local": true,
+      "occupancy": 0.943,
+      "last5ns": 0.936
+    },
+    {
+      "a": "D000:CYT2",
+      "b": "D002:GUA49",
+      "local": false,
+      "occupancy": 0.9695,
+      "last5ns": 0.954
+    },
+    {
+      "a": "D000:CYT15",
+      "b": "D002:GUA3",
+      "local": false,
+      "occupancy": 0.97,
+      "last5ns": 0.966
+    },
+    {
+      "a": "D000:CYT6",
+      "b": "D002:GUA45",
+      "local": false,
+      "occupancy": 0.978,
+      "last5ns": 0.97
+    },
+    {
+      "a": "D001:CYT24",
+      "b": "D002:GUA35",
+      "local": false,
+      "occupancy": 0.977,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D000:GUA14",
+      "b": "D002:CYT4",
+      "local": false,
+      "occupancy": 0.964,
+      "last5ns": 0.964
+    },
+    {
+      "a": "D001:GUA7",
+      "b": "D002:CYT17",
+      "local": false,
+      "occupancy": 0.9755,
+      "last5ns": 0.97
+    },
+    {
+      "a": "D000:GUA10",
+      "b": "D002:CYT8",
+      "local": false,
+      "occupancy": 0.9755,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D001:GUA8",
+      "b": "D002:CYT16",
+      "local": false,
+      "occupancy": 0.967,
+      "last5ns": 0.984
+    },
+    {
+      "a": "D001:CYT21",
+      "b": "D002:GUA38",
+      "local": false,
+      "occupancy": 0.9845,
+      "last5ns": 0.984
+    },
+    {
+      "a": "D001:GUA5",
+      "b": "D002:CYT19",
+      "local": false,
+      "occupancy": 0.9725,
+      "last5ns": 0.984
+    },
+    {
+      "a": "D001:GUA10",
+      "b": "D002:CYT14",
+      "local": false,
+      "occupancy": 0.9735,
+      "last5ns": 0.978
+    },
+    {
+      "a": "D001:GUA12",
+      "b": "D002:CYT12",
+      "local": false,
+      "occupancy": 0.9665,
+      "last5ns": 0.944
+    },
+    {
+      "a": "D001:GUA22",
+      "b": "D002:CYT37",
+      "local": false,
+      "occupancy": 0.977,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D001:GUA20",
+      "b": "D002:CYT39",
+      "local": false,
+      "occupancy": 0.979,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D000:GUA1",
+      "b": "D002:CYT50",
+      "local": false,
+      "occupancy": 0.975,
+      "last5ns": 0.992
+    },
+    {
+      "a": "D001:GUA25",
+      "b": "D002:CYT34",
+      "local": false,
+      "occupancy": 0.9645,
+      "last5ns": 0.942
+    },
+    {
+      "a": "D001:GUA16",
+      "b": "D002:CYT43",
+      "local": true,
+      "occupancy": 0.9205,
+      "last5ns": 0.918
+    },
+    {
+      "a": "D001:CYT6",
+      "b": "D002:GUA18",
+      "local": false,
+      "occupancy": 0.9795,
+      "last5ns": 0.982
+    },
+    {
+      "a": "D001:GUA27",
+      "b": "D002:CYT32",
+      "local": false,
+      "occupancy": 0.9615,
+      "last5ns": 0.962
+    },
+    {
+      "a": "D001:CYT9",
+      "b": "D002:GUA15",
+      "local": false,
+      "occupancy": 0.97,
+      "last5ns": 0.98
+    },
+    {
+      "a": "D001:GUA23",
+      "b": "D002:CYT36",
+      "local": false,
+      "occupancy": 0.965,
+      "last5ns": 0.972
+    },
+    {
+      "a": "D001:GUA18",
+      "b": "D002:CYT41",
+      "local": false,
+      "occupancy": 0.9665,
+      "last5ns": 0.97
+    },
+    {
+      "a": "D000:GUA7",
+      "b": "D002:CYT44",
+      "local": true,
+      "occupancy": 0.955,
+      "last5ns": 0.97
+    }
+  ]
+}

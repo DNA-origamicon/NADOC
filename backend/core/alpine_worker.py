@@ -140,7 +140,10 @@ class WorkerClient:
             atomic_json(state_path(job, workspace), {
                 'id': uuid.uuid4().hex, 'done': False,
                 'submission': submission_identity(job),
-                'download_status': {'state': 'downloading'},
+                'download_status': {
+                    'state': 'queued',
+                    'enqueued_at': (job.download_status or {}).get('enqueued_at', time.time()),
+                },
             })
         result = await self._rpc('fetch_outputs', job_id=job.job_id,
                                  workspace=str(Path(workspace).resolve()))
@@ -164,7 +167,8 @@ class Worker:
 
     async def transfer(self, job_id, workspace):
         from backend.core.md_job import MdJob
-        from backend.core.md_executor import fetch_outputs
+        from backend.core.md_executor import _fetch_outputs_admitted
+        from backend.core.alpine_download_queue import transfer_slot
         workspace = Path(workspace)
         job = MdJob.load(job_id, workspace)
         transfer_id = uuid.uuid4().hex
@@ -181,7 +185,8 @@ class Worker:
         # Only write transfer-owned state. Never race the API's job.json writer.
         job.save = save_transfer
         try:
-            result = await fetch_outputs(job, workspace, conn=self.conn)
+            async with transfer_slot(job, workspace):
+                result = await _fetch_outputs_admitted(job, workspace, conn=self.conn)
             return result
         except BaseException:
             job.download_status = {**(job.download_status or {}), 'state': 'interrupted'}
@@ -195,7 +200,10 @@ class Worker:
         if method == 'ping':
             return True
         if method == 'fetch_outputs':
-            key = (str(Path(args['workspace']).resolve()), args['job_id'])
+            from backend.core.md_job import MdJob
+            job = MdJob.load(args['job_id'], Path(args['workspace']))
+            key = (str(Path(args['workspace']).resolve()), args['job_id'],
+                   job.slurm_job_id, job.queued_at)
             task = self.transfers.get(key)
             if task is None or task.done():
                 task = asyncio.create_task(self.transfer(**args))

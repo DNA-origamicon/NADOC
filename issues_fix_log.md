@@ -103,6 +103,19 @@ source-reset and downstream-refusal coverage is linked from the
 [connection plan](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#ordinary-connection-qualification--october-28-2026).
 Broad regression results remain separate in the current handoff.
 
+## Validation intake — 2026-11-02 / follow-up 2026-11-03
+
+- ISSUE-109 resolved after explicit user-authorized review: only allocate a DS
+  connector after its native bridge boundary arrives. Reusable zero-scale meshes
+  remain supported for actual collapsed native endpoints during playback.
+- Root cause: playback mesh reuse broadened allocation to missing native records;
+  test and picking registration still relied on absence. Initial hypothesis that
+  this was only an assertion mismatch was incomplete: placeholders were pick candidates.
+- Original failing oracle retained. 53 frontend and 90 native placement tests passed;
+  explicit review acknowledged incident `20261103T064355-2dbec3347e96` and gate is clear.
+- Post-acknowledgement: 53 focused frontend tests, 23 smoke tests and both YggDNAsil browser tests pass; live backend reports review_required=false with zero incidents. Test artifacts cleaned up.
+- ISSUE-110 trajectory buffer failure remains unrelated and open. `main.js` LOC delta: 0.
+
 ## Baselines (at loop start, 2026-06-05)
 
 - `frontend/src/main.js` LOC: 9600
@@ -766,6 +779,32 @@ then reused the valid result for an identical current pose. Full frontend suite:
 7,906 passed, one skipped. Broader validation and frame-rate limits are retained
 in `.development-artifacts/vr-join-20261013/verification-summary.json`.
 
+### ISSUE-97 — Exact grouped Ball+Stick rendering (2026-10-15, physical validation pending)
+
+Root-cause chain supported by measurements: dense exported atom meshes → costly
+small hardware instances despite exact indexing → GPU frame cost around 13 ms →
+application images reused at approximately 45/90 Hz → speed-dependent temporal
+landmark splitting in the user's recording. Grouping eight indexed instances
+cuts the measured live GPU cost to approximately 8.5 ms and raises mean app cadence
+to 87.343 Hz; occasional missed refreshes and physical confirmation remain open.
+
+Failed hypothesis: plain vertex indexing alone did not materially improve live
+cadence. Offline blend/culling/normal simplifications did not give a useful isolated
+gain; only exact grouping was promoted. A diagnostic wrapper also disconnected
+the browser, causing competing desktop rendering and inflated timing. That sample
+is retained separately; configuring the actual ELF and reattaching the same viewer
+restored the valid measurement condition. No SteamVR setting was changed.
+
+Implementation is in `view_indexed_mesh.hpp` and View Tools stream/render wiring,
+with bounded derived storage and fallback. Eight native tests passed without skips:
+34 grouped exact color/depth/stencil/ID comparisons, 12 fallback comparisons and
+75765 ordered vertex records; ordinary indexing and previous shader/group tests
+also pass. Fifty tour checks passed. Live scene and browser were verified, and the
+user was asked for the fresh two-second torso capture. GPU OOM cleanup is statically
+reviewed, not a forced live-driver failure test. `main.js` LOC delta: **0**.
+
+Evidence: [.development-artifacts/vr-temporal-fix-20261015/index.html](.development-artifacts/vr-temporal-fix-20261015/index.html).
+
 
 2026-10-14 — ISSUE-81 root cause: variant-blind `getattr` in two full-history scans repeatedly invoked Pydantic missing-field handling; the cluster-restoration helper additionally copied an unchanged object. No speculative algorithm replacement was attempted. The pre-existing benchmark first required a response-contract adapter repair; its frozen reconstruction functions remain unchanged. The unchanged timing gate and all 14 full-output comparisons pass after type discrimination. Evidence is in the feature-history audit directory.
 
@@ -1171,3 +1210,60 @@ screenshots inspected. `just smoke`: 23 passed; `just lint`: passed. Cleanup
 verified no test workspace files, test project stores, or isolated bridge key
 remained; 9,439,400 bytes of preview/Vite scratch removed. Compact evidence:
 `.development-artifacts/crossover-group-drag-20261103/validation.json`.
+
+2026-10-20 — ISSUE-98 VR numpad hit planes: an oblique ray aimed at the
+rendered 0.070 panel-local button face failed the production hit assertion before
+the fix, then passed with explicit surface depth. Generic numeric controls also
+now precede their disabled background rows. No ray thresholds or target sizes
+changed. Existing simulation tour checks Cancel without seeking and Apply popup
+closure. The user's active viewer is preserved; live four-profile and through-lens
+verification are deferred to MV-48. Frontend main.js delta for this fix: 0.
+
+ISSUE-98 validation: rebuilt deployed viewer; native simulation-panel,
+simulation-trajectory and sidebar-unit CTests all pass (3/3). Placement audit,
+task Python Ruff and whitespace checks pass. Additional menu-spacing target
+cannot compile: its existing fixture still assigns removed `jobScroll` and
+`viewScroll` fields (line 146); no production workaround was added. The first
+CTest invocation through the variadic just wrapper lost shell regex quoting;
+using the same validation guard directly ran the unchanged selection successfully.
+Tour catalog focused validation: 50 passed. No backend/frontend runtime behavior
+changed in this popup fix; frontend main.js task delta remains zero.
+
+2026-10-21 — ISSUE-99: bounded immutable VR vertex-template cache and direct current-instance packing remove repeated mesh allocation; settled native style acknowledgements no longer rebuild the desktop display and pause trajectories. Added byte-parity/cache-invalidation and repeated-style regression tests. App validation covers all four CPD isomers and two 24HB jobs; quantitative results and limitations are in `docs/audits/cpd_vr_hitches_20261021.json`. Main.js task LOC delta: 0. Through-lens review remains MV-49.
+
+2026-10-21 — ISSUE-100: overhang-orientation test cleanup now closes menus after deferred listener binding rather than only removing their DOM. Repairs a full-suite teardown exception discovered during ISSUE-99 validation; no application runtime change or main.js growth.
+
+2026-10-21 — ISSUE-101: negotiated absolute transform streaming retains native mesh resources and reuses fenced instance buffers. Exact CPU/GPU/pixel parity regressions and resident CPD/24HB app measurements are recorded in `docs/audits/vr_transform_stream_20261021.json`. Full snapshots remain the compatibility/structural-change path. Main.js task delta: zero. Physical review: MV-50.
+
+2026-10-21 — ISSUE-102: replace tiny per-vector transform reads with bounded 48 KiB blocks. Exact scalar-oracle, malformed-packet and production GL byte/pixel checks pass. Native preparation improves on 24HB but median playback cadence does not; retain as CPU headroom and prioritize broader rendering/publication work over more decoder tuning. Evidence: `docs/audits/vr_final_pass_20261021.json`. Main.js task delta: zero.
+
+
+2026-10-21 — ISSUE-103 investigation: added bounded GPU group-size sweeps and
+post-timing snapshot exports. Fixed diagnostic replay to apply backend camera
+rotation and include current dense sphere meshes in probes. App captures, exact
+pixel group checks, offscreen negative control and 50 tour tests pass. No measured
+case justifies changing production defaults; analytic sphere rendering remains
+the substantial next task. Main.js task delta: zero.
+
+
+2026-10-21 — ISSUE-104: Smooth prepares each pair before a slower, delivery-aware
+presentation clock, retaining seven intermediate fractions and exact endpoints.
+Eligible sphere/bond groups halve vertex records without geometry/shader changes;
+final same-scene repeats improve GPU time by 2.5–4.7% with exact color/depth/ID
+parity. Sphere-only packing, smaller indices and reordered triangles did not
+establish a consistent gain. Full frontend and smoke pass; production GL tests
+cover packed/full buffers, transform reuse and shadow transitions. App measurements
+and cleanup are in `docs/audits/vr_gpu_iterations_20261021.json`. Physical review:
+MV-51. Main.js task delta: zero.
+
+2026-10-21 — ISSUE-104 publication follow-up: GC callbacks and event-loop sampling
+tie a 148 ms pre-handler delay to a 149.6 ms generation-2 collection. A dedicated
+server startup factory collects import temporaries and freezes the permanent
+startup graph once; later cycles stay collectible. Controlled 60-second upload
+maxima improve 160.8→31.8 ms raw and 58.8→26.7 ms Smooth. All four isomers pass
+24 atomistic windows; remaining browser request/encoding outliers are separately
+recorded. A startup race now waits for the actual SteamVR server pipe. Existing
+sessions were not restarted; the factory activates on the next normal start.
+100 focused checks and 16 targeted rechecks pass. FAST suite retains documented
+chemistry/provenance debt; no guards or fidelity were weakened. Evidence and
+cleanup: `docs/audits/vr_publication_20261021.json`. Main.js task delta: zero.

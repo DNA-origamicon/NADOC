@@ -10,7 +10,7 @@
  *   - rebuild on store changes (design / geometry / report / assembly mode):
  *     marker anchors = bead keys `helix:bp:dir` of the flagged domain;
  *   - refresh() every frame: average the LIVE bead positions via
- *     helixCtrl.lookupEntry (tracks unfold / cadnano view / expanded spacing /
+ *     helixCtrl.lookupEntry (tracks unfold / expanded spacing /
  *     deform / cluster moves), project, place. Static geometry is the fallback.
  */
 import * as THREE from 'three'

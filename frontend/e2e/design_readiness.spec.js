@@ -8,6 +8,12 @@ const API = `${process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8002'}/api`
 const badge = page => page.locator('[data-role="design-readiness"]')
 const trigger = page => page.locator('[data-role="readiness-trigger"]')
 
+async function showReadiness(page) {
+  await expect(badge(page)).not.toBeVisible()
+  await page.locator('.menu-item').filter({ hasText: 'View' }).first().hover()
+  await page.locator('#menu-view-design-readiness').click()
+}
+
 async function refreshDesign(page, doc) {
   await page.evaluate(docId => {
     const channel = new BroadcastChannel('nadoc-design')
@@ -33,6 +39,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   await expect(page.locator('#welcome-screen')).toBeVisible()
   await expect(badge(page)).not.toBeVisible()
   await loadScaffoldedPart(page, { doc, name: 'design_readiness' })
+  await showReadiness(page)
   const { design } = await (await page.request.get(`${API}/design`, { headers })).json()
   const strand = design.strands.find(s => s.strand_type === 'scaffold')
   const scaffold = strand.domains[0]
@@ -83,6 +90,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   const pathview = await context.newPage()
   const pathErrors = trackConsoleErrors(pathview)
   await pathview.goto(`/cadnano-editor.html?doc=${doc}`)
+  await showReadiness(pathview)
   await expect(trigger(pathview)).toContainText('4/5 readiness')
   await trigger(pathview).hover()
   await pathview.locator('[data-action="staple_sequences"]').click()
@@ -104,6 +112,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   const simulationPage = await popupPromise
   const simulationErrors = trackConsoleErrors(simulationPage)
   await expect(simulationPage.locator('#welcome-screen')).not.toBeVisible()
+  await showReadiness(simulationPage)
   await expect(trigger(simulationPage)).toContainText('Sim recommended')
   await expect(simulationPage.locator('#tab-content-dynamics')).toBeVisible()
   expect(new URL(simulationPage.url()).searchParams.get('doc')).toBe(doc)
@@ -120,7 +129,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   })
   await simulationPage.evaluate(() => window.dispatchEvent(new Event('nadoc:sim-jobs-changed')))
   await expect(badge(simulationPage)).toHaveAttribute('data-state', 'ready')
-  await expect(badge(simulationPage)).not.toBeVisible()
+  await expect(badge(simulationPage)).toBeVisible()
   await simulationPage.unroute('**/api/design/readiness')
   await simulationPage.evaluate(() => window.dispatchEvent(new Event('nadoc:sim-jobs-changed')))
   await expect(badge(simulationPage)).toHaveAttribute('data-state', 'simulation_recommended')
@@ -170,6 +179,7 @@ test('extrusion needs scaffold and staple routing before readiness passes', asyn
   const doc = `e2e-readiness-extrusion-${Date.now()}`
   const headers = { 'X-NADOC-Doc': doc }
   await loadScaffoldedPart(page, { doc, name: 'readiness_extrusion' })
+  await showReadiness(page)
   const snapshot = await (await page.request.get(`${API}/design`, { headers })).json()
   const response = await page.request.post(`${API}/design/frame-extrusion`, {
     headers,

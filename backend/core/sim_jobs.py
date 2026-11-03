@@ -39,7 +39,7 @@ def _production_state(stages: list[dict]) -> str:
     if st == "failed":
         return "failed"
     if st in ("running", "pending"):
-        return "running"
+        return st
     return "none"
 
 

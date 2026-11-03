@@ -28,6 +28,7 @@ import { nativeCorePaired } from '../shared/aptamer.js'
 
 import * as THREE from 'three'
 import { baseKey } from './base_ref.js'
+import { isVisibleInstance } from './base_pick.js'
 import { createPolymerizationPreview } from './polymerization_preview.js'
 import { selfClosingPolymerSeam } from './polymer_seams.js'
 import { LazyMap } from './lazy_map.js'
@@ -609,9 +610,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _AY = new THREE.Vector3(0, 1, 0)
 
   const axisArrows = []   // each: see push() below
-  let _axisArrowsVisible = true  // set false by cadnano mode; respected by setDetailLevel
+  let _axisArrowsVisible = true  // global axis visibility; respected by setDetailLevel
   // Cached value of the last `setAxisShaftMode()` call. Used by
-  // setAxisArrowsVisible(true) so cadnano exit restores the correct
+  // setAxisArrowsVisible(true) to restore the correct
   // mutually-exclusive shaft visibility rather than turning every shaft on
   // (which would render both the deformed curve and the straight chord
   // simultaneously for single-segment curved helices). Matches the deform
@@ -625,7 +626,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // in cylinder LOD). Called every lerp frame → keep it to a couple of lookups.
   const _axisColRep = (helixId, bp) =>
     _repColumnRep.get(`${helixId}:${bp}`) ?? (_detailLevel === 2 ? 'cylinders' : 'full')
+  const _hiddenAxisColumns = new Set()
+  const _hiddenAxisRanges = new Set()
   const _axisSegOn = (helixId, lo, hi) =>
+    _axisArrowsVisible && !_hiddenNucKeys.has(`h:${helixId}`) &&
+    !(_refHidden && _refOnlyHelixIds.has(helixId)) &&
+    !_hiddenAxisRanges.has(`${helixId}:${lo}:${hi}`) &&
     _axisColRep(helixId, lo) === 'full' && _axisColRep(helixId, hi) === 'full'
 
   // Apply mode-based visibility to every axis arrow.  Extracted so
@@ -757,7 +763,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // a line straight through the gap. For these helices we build the same
       // per-segment cylinder array used by non-curved helices below and skip
       // the single shaft entirely.
-      const useSegments = !isCurved || (axDef?.segments?.length ?? 0) > 1
+      const useSegments = Boolean(axDef?.residue_transformed) || !isCurved || (axDef?.segments?.length ?? 0) > 1
       // Native oligos have a backbone, not a duplex axis. Full uses the same
       // strand-colored direction cones as every ordinary strand. Keep the
       // axis metadata for cylinder LOD, but never overlay an axis tube.
@@ -893,6 +899,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         bp_hi:   helix.bp_start + helix.length_bp - 1,
         isCurved,
         isNative: isNativeFold,
+        residueTransformed: Boolean(axDef?.residue_transformed),
         // True when this helix renders its axis via per-segment cylinders
         // rather than a single shaft. Set for every non-curved helix and for
         // curved helices with bp-range gaps between segments (so the gap
@@ -958,7 +965,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _segDir = new THREE.Vector3()
   const _segQ   = new THREE.Quaternion()
   function _layStraightSegments(arrow, baseStart, baseEnd) {
-    if (arrow.isCurved || !arrow.segments?.length) return
+    if (arrow.residueTransformed || arrow.isCurved || !arrow.segments?.length) return
     _segDir.set(baseEnd.x - baseStart.x, baseEnd.y - baseStart.y, baseEnd.z - baseStart.z)
     const dlen = _segDir.length()
     if (dlen < 0.001) return
@@ -1498,6 +1505,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function _writeCylGlow(glowMesh, srcMesh, domEntries) {
     let n = 0
     for (const dom of domEntries) {
+      if (!isVisibleInstance(srcMesh, dom.cylIdx)) continue
       srcMesh.getMatrixAt(dom.cylIdx, _tMatrix)
       _tMatrix.decompose(_tPos, _cylQ, _tScale)
       _tScale.x *= GLOW_CYL_FACTOR; _tScale.z *= GLOW_CYL_FACTOR
@@ -1626,7 +1634,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   //   'h:<helix_id>'                   — hide the whole helix (helix-level cluster)
   //   'd:<strand_id>:<domain_index>'   — hide specific domain (domain-level cluster)
   let _hiddenNucKeys = new Set()
+  let _staplesHidden = false
   const _isNucHidden = (nuc, copy = nuc?.copy_k ?? 0) =>
+    (_staplesHidden && nuc.strand_type !== 'scaffold') ||
     _hiddenNucKeys.has('h:' + nuc.helix_id) ||
     (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index)) ||
     _hiddenNucKeys.has(baseKey(nuc, copy))
@@ -2852,7 +2862,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // other (the second hand-multiplied the first's factor back in). This is the
   // single writer for the no-override case; _applyRepOverrides is the single writer
   // when overrides are active. A future fourth factor is a new term, not a new sweep.
-  const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0 || _hiddenNucKeys.size > 0
+  const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0 || _hiddenNucKeys.size > 0 || _staplesHidden
   function _applyAlphaChannel() {
     if (!_anyAlpha() && !_repAlphaReady) { _refreshMergedCylinderRuns(); return }
     _disableMergedCylinders()
@@ -2877,7 +2887,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     if (!_hasReference) return
     // Helical axis arrows of reference-only helices: hard-hide when reference is
     // hidden; restore via the normal shaft-mode logic when shown (respecting the
-    // cadnano global axis gate).
+    // global axis gate).
     if (_refHidden && _refOnlyHelixIds.size) {
       for (const arrow of axisArrows) {
         if (!_refOnlyHelixIds.has(arrow.helixId)) continue
@@ -3403,7 +3413,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *  both shaft and straightShaft on simultaneously. */
     setAxisShaftMode(mode) {
       _currentShaftMode = mode
-      if (!_axisArrowsVisible) return  // cadnano has the global toggle off — defer.
+      if (!_axisArrowsVisible) return  // the global toggle is off — defer.
       _applyShaftModeVisibility(mode)
     },
 
@@ -3941,37 +3951,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * Uses scale=0 to hide instances without rebuilding.
      */
     setStapleVisibility(visible) {
-      for (const entry of backboneEntries) {
-        if (entry.nuc.strand_type === 'scaffold') continue
-        _setBeadScale(entry, visible ? 1.0 : 0)
-      }
-      for (const entry of coneEntries) {
-        if (entry.strandId === null) continue
-        const isScaffold = strandTypeById.get(entry.strandId) === 'scaffold'
-        if (isScaffold) continue
-        const r = (!visible || entry.isCrossHelix) ? 0 : entry.coneRadius
-        _setConeXZScale(entry, r)
-      }
-      for (const entry of slabEntries) {
-        if (entry.nuc.strand_type === 'scaffold') continue
-        if (!visible) {
-          // A zero-scale matrix cannot later yield its orientation, so retain the
-          // exact live pose. This is display state, never authored geometry.
-          iSlabs.getMatrixAt(entry.id, _tMatrix)
-          _tMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
-          if (_physDir.lengthSq() > 1e-12) entry._preHideSlabMatrix = _tMatrix.clone()
-          _tMatrix.compose(_tPos, _slabRescaleQ, _tScale.set(0, 0, 0))
-          iSlabs.setMatrixAt(entry.id, _tMatrix)
-        } else if (entry._preHideSlabMatrix) {
-          entry._preHideSlabMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
-          _tMatrix.compose(_tPos, _slabRescaleQ,
-            _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-          iSlabs.setMatrixAt(entry.id, _tMatrix)
-          entry._preHideSlabMatrix = null
-        }
-      }
-      iSlabs.instanceMatrix.needsUpdate = true
-      _refreshSlabConnectors()
+      _staplesHidden = !visible
+      this.setHiddenNucs(_hiddenNucKeys)
     },
 
     /**
@@ -4053,8 +4034,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /**
      * Returns a snapshot of every backbone bead's current rendered position,
-     * keyed by "helix_id:bp_index:direction".  Used by cadnano_view to capture
-     * the unfold-layout positions before starting the cadnano lerp animation.
+     * keyed by "helix_id:bp_index:direction", for position diagnostics.
      * @returns {Map<string, THREE.Vector3>}
      */
     snapshotPositions() {
@@ -4065,67 +4045,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         map.set(key, entry.pos.clone())
       }
       return map
-    },
-
-    /**
-     * Lerp bead positions from unfold-layout positions toward cadnano flat
-     * two-track positions.  Called by cadnano_view on each animation frame.
-     *
-     * @param {Map<string, THREE.Vector3>} cadnanoPosMap
-     *   Target positions keyed by "helix_id:bp_index:direction".
-     * @param {number} t  Lerp factor [0, 1]; 0 = unfold layout, 1 = cadnano flat.
-     * @param {Map<string, THREE.Vector3>} unfoldPosMap
-     *   Current positions at t=0 (unfold layout), same key format.
-     *   Typically the cadnano_view's snapshot of entry.pos at unfold-activation time.
-     */
-    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
-      // 1. Backbone beads.
-      for (const entry of backboneEntries) {
-        if (entry.nuc.helix_id.startsWith('__ext_')) continue
-        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const cp = cadnanoPosMap.get(key)
-        const up = unfoldPosMap.get(key)
-        if (!cp || !up) continue
-
-        entry.pos.set(
-          up.x + (cp.x - up.x) * t,
-          up.y + (cp.y - up.y) * t,
-          up.z + (cp.z - up.z) * t,
-        )
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
-        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-      }
-      iSpheres.instanceMatrix.needsUpdate = true
-      iCubes.instanceMatrix.needsUpdate   = true
-
-      // 2. Cones — cross-helix cones remain hidden (same as unfold mode).
-      for (const cone of coneEntries) {
-        const fe = _nucToEntry.get(cone.fromNuc)
-        const te = _nucToEntry.get(cone.toNuc)
-        if (!fe || !te) continue
-
-        const isCrossHelix = cone.isCrossHelix
-        _physDir.copy(te.pos).sub(fe.pos)
-        const dist = _physDir.length()
-        const h    = Math.max(0.001, dist)
-        _physDir.divideScalar(dist || 1)
-        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-        cone.coneHeight = h
-
-        const r = isCrossHelix ? 0 : cone.coneRadius
-        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
-        iCones.setMatrixAt(cone.id, _tMatrix)
-      }
-      iCones.instanceMatrix.needsUpdate = true
-
-      // 3. Slabs — hide in cadnano mode (beads are flat, orientation meaningless).
-      for (const slab of slabEntries) {
-        _tMatrix.compose(_tPos.set(0, 0, 0), ID_QUAT, _tScale.set(0, 0, 0))
-        iSlabs.setMatrixAt(slab.id, _tMatrix)
-      }
-      iSlabs.instanceMatrix.needsUpdate = true
-      _refreshSlabConnectors()
     },
 
     /**
@@ -5357,9 +5276,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Show or hide all axis sticks (per-domain segments + curved tube shaft). Persists across LOD changes.
      *
      *  When making visible, re-applies the current shaft mode (`_currentShaftMode`)
-     *  rather than flipping every mesh to visible. This matters on cadnano exit:
-     *  if the user toggled to straight view before entering cadnano, we want to
-     *  restore straightShaft-only visibility on exit, not show BOTH the
+     *  rather than flipping every mesh to visible. In straight view, restore
+     *  straightShaft-only visibility without showing both the
      *  deformed curve and the straight chord for single-segment curved helices. */
     setAxisArrowsVisible(visible) {
       _axisArrowsVisible = visible
@@ -6139,7 +6057,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /**
      * Show or hide nucleotides by cluster membership.
-     * Keys use two formats:
+     * Keys accept baseKey(nuc, copy), plus the legacy container formats:
      *   'h:<helix_id>'                 — hide the whole helix (helix-level cluster)
      *   'd:<strand_id>:<domain_index>' — hide specific domain (domain-level cluster)
      * This lets two domain-level clusters sharing the same helix be toggled independently.
@@ -6149,6 +6067,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      */
     setHiddenNucs(keys) {
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
+      // Axis meshes are not instanced nucleotides. Map hidden domains onto
+      // their duplex columns so both straight and curved axes follow containers.
+      // The shared visibility controller expands every UI selector (including
+      // the movable-cluster eye button) to base keys; use _isNucHidden below
+      // so those keys and legacy helix/domain selectors share the same gate.
+      _hiddenAxisColumns.clear()
+      for (const strand of design.strands ?? []) {
+        for (const [di, domain] of (strand.domains ?? []).entries()) {
+          if (!_hiddenNucKeys.has(`d:${strand.id}:${di}`)) continue
+          const lo = Math.min(domain.start_bp, domain.end_bp)
+          const hi = Math.max(domain.start_bp, domain.end_bp)
+          for (let bp = lo; bp <= hi; bp++) _hiddenAxisColumns.add(`${domain.helix_id}:${bp}`)
+        }
+      }
+      for (const entry of backboneEntries) {
+        if (_isNucHidden(entry.nuc, entry._copy ?? 0)) {
+          _hiddenAxisColumns.add(`${entry.nuc.helix_id}:${entry.nuc.bp_index}`)
+        }
+      }
+      _hiddenAxisRanges.clear()
+      if (_hiddenAxisColumns.size) for (const arrow of axisArrows) {
+        for (const range of [arrow, ...(arrow.segments ?? [])]) {
+          for (let bp = range.bp_lo; bp <= range.bp_hi; bp++) {
+            if (!_hiddenAxisColumns.has(`${arrow.helixId}:${bp}`)) continue
+            _hiddenAxisRanges.add(`${arrow.helixId}:${range.bp_lo}:${range.bp_hi}`)
+            break
+          }
+        }
+      }
+      _applyShaftModeVisibility(_currentShaftMode)
 
       for (const entry of backboneEntries) {
         _setBeadScale(entry, _isNucHidden(entry.nuc, entry._copy ?? 0) ? 0 : _beadScale)
@@ -6175,6 +6123,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _refreshSlabConnectors()
       _ensureAlphaInstalled()
       if (_repActive) _applyRepOverrides(); else _applyAlphaChannel()
+      _refreshCylGlow()
     },
 
     /** Temporarily suppress complete helices while an authoritative structural

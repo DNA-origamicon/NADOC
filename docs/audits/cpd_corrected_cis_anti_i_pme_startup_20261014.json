@@ -1,0 +1,25 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-pme-qualification-v1-service/completion_wake_ack.json",
+    "sha256": "471ac66c55acd369ecf6db790cf28c3fa39ab291f6bca20d0bcf2071f41530c6"
+  },
+  "native_replay": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-pme-qualification-v1/completion_audit.json",
+    "sha256": "7409a32adffa93a74f08f8d139870e39e8e36d4cca696ec2af3285725fde3784"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-startup-anti-v1/launch_receipt.json",
+    "sha256": "cd9d010f3c5001c84148c2f4bf307447f131cc0bd8fe3f8d701f8242ee076175"
+  },
+  "plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-startup-anti-v1/plan.json",
+    "sha256": "3b7482d17457f26c3cb261ce02a97f01bdf9473b75863730e8e30485c00bd906"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-startup-anti-v1/handoff.json",
+    "sha256": "45fe83bcde55ccd0938f773f4a9637a594097a2bffa8a466e4c0575ea01e1a2b"
+  },
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

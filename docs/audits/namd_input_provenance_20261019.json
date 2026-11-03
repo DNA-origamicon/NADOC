@@ -1,0 +1,33 @@
+{
+  "scope": "NAMD preparation receipts and shared job-list evidence labels",
+  "schema": "nadoc.namd-prepared-inputs.v1",
+  "capture": [
+    "relaxation preparation after final config audits, before autostart",
+    "production/ensemble package creation",
+    "ion-transport child after final metadata update"
+  ],
+  "comparison": [
+    "normalized frozen design including cluster/nucleotide transforms, proteins and CPDs",
+    "SHA-256 of prepared package inputs including topology, coordinates, parameters, configs, scripts and available initial seeds",
+    "declared generated checkpoint dependencies",
+    "recorded preparation settings"
+  ],
+  "excluded_claims": [
+    "solver binary identity",
+    "remote execution attestation",
+    "scientific validity"
+  ],
+  "legacy_policy": "No retrospective receipt or job mutation on list/detail reads. Existing jobs use Input comparison incomplete; known legacy mismatches still show changed. oxDNA remains on legacy evidence.",
+  "unsupported_policy": "Missing/external/dynamic dependencies or unqualified Tcl/colvars dependencies leave coverage incomplete.",
+  "performance": "Versioned active-design cache and bounded file/snapshot caches keyed by inode, size, mtime and ctime; changed files are rehashed. No trajectory hashing.",
+  "validation": {
+    "backend": "88 tests passed: receipt logic, API list/detail, legacy behavior and ensemble preparation",
+    "frontend": "32 tests passed: rendered labels, tooltips and shared row models",
+    "real_package_probes": {
+      "6d6c46163a00": "117 recorded files, complete, matching",
+      "edb512c46112": "25 recorded files, complete, matching"
+    },
+    "real_probe_safety": "Receipts created only in temporary directories and removed; original jobs and simulation inputs untouched.",
+    "git_diff_check": "passed"
+  }
+}

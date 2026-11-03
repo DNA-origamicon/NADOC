@@ -1,0 +1,5483 @@
+{
+  "date": "2026-10-21",
+  "conditions": {
+    "smooth": false,
+    "desktop_3d": false,
+    "window_ms": 12000,
+    "frame_rate_saved_hz": 12,
+    "headset_target_hz": 90,
+    "gpu": "RTX 3080 Ti 12 GiB",
+    "source_precision": "unchanged Float64; existing Float32 display transport",
+    "system": "At initial sampling ~23 GiB available RAM, zero memory PSI; CPU mostly idle. Existing swap occupancy alone does not establish current pressure. User servers and Alpine sessions preserved."
+  },
+  "changes": [
+    "Bounded local vertex template cache; current instance matrix/color packing directly into typed arrays.",
+    "Settled native style acknowledgement does not rebuild desktop representation or pause trajectory.",
+    "Harness removes setup CDP interception, uses real launch click, waits for style readiness, selects requested job explicitly, supports legacy absent snapshot and 24HB resident/default comparisons."
+  ],
+  "attempts": {
+    "baseline": {
+      "interpretation": "Before packing optimization; setup CDP interception active.",
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-rw6ib2nx",
+        "removed": true
+      },
+      "metrics": {
+        "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "start": 1792565238103,
+            "end": 1792565250209,
+            "desktopBefore": {
+              "rendered": 376,
+              "callbacks": 2113,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 376,
+              "callbacks": 2847,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 172,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.30419921875,
+              "p95": 89.60205078125,
+              "max": 212.45849609375
+            },
+            "scene_gaps_over_125ms": 1,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.159515,
+              "p95": 11.459144,
+              "max": 14.19628
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.771072,
+              "p95": 1.292288,
+              "max": 2.972672
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.577097,
+              "p95": 1.767994,
+              "max": 1.879121
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.27256,
+              "p95": 0.544347,
+              "max": 0.60479
+            },
+            "long_tasks_ms": [
+              124
+            ],
+            "capture_ms": {
+              "count": 147,
+              "p50": 4.900146484375,
+              "p95": 7.300048828125,
+              "max": 123.300048828125
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 55.10009765625,
+              "p95": 59.5,
+              "max": 80.300048828125
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.7998046875,
+              "p95": 1.10009765625,
+              "max": 1.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "start": 1792565261344,
+            "end": 1792565273570,
+            "desktopBefore": {
+              "rendered": 376,
+              "callbacks": 3508,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 376,
+              "callbacks": 4248,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.52685546875,
+              "p95": 89.658447265625,
+              "max": 99.099609375
+            },
+            "scene_gaps_over_125ms": 0,
+            "native_frame_ms": {
+              "count": 1095,
+              "p50": 11.161359,
+              "p95": 11.533334,
+              "max": 14.389452
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1095,
+              "p50": 0.351232,
+              "p95": 0.652288,
+              "max": 2.295808
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 0.762886,
+              "p95": 0.913718,
+              "max": 0.964172
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.082865,
+              "p95": 0.159628,
+              "max": 0.231743
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 3.199951171875,
+              "p95": 4.5,
+              "max": 7.400146484375
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 31.0,
+              "p95": 34.2998046875,
+              "max": 37.5
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.7001953125,
+              "p95": 1.0,
+              "max": 1.10009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "start": 1792565282931,
+            "end": 1792565295053,
+            "desktopBefore": {
+              "rendered": 376,
+              "callbacks": 4804,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 376,
+              "callbacks": 5537,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.385498046875,
+              "p95": 89.787353515625,
+              "max": 156.469482421875
+            },
+            "scene_gaps_over_125ms": 1,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.159086,
+              "p95": 11.496526,
+              "max": 19.971895
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.905216,
+              "p95": 1.016832,
+              "max": 2.429952
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.842726,
+              "p95": 0.968901,
+              "max": 1.057186
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.210724,
+              "p95": 0.348602,
+              "max": 0.639936
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 2.60009765625,
+              "p95": 4.699951171875,
+              "max": 8.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 34.699951171875,
+              "p95": 38.39990234375,
+              "max": 164.699951171875
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.699951171875,
+              "p95": 0.900146484375,
+              "max": 1.5
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2274929,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-ipqpetmt",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-p7srrwka"
+          ]
+        }
+      ]
+    },
+    "profile": {
+      "interpretation": "Launch timed out before viewer start.",
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-3k73hs84",
+        "removed": true
+      },
+      "runtime_cleanup": []
+    },
+    "profile-bound": {
+      "interpretation": "Single-isomer ballstick CPU profile; setup interception active.",
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-pp7j_hb8",
+        "removed": true
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2282954,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-x0t41kbx",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-cevmajs6"
+          ]
+        }
+      ]
+    },
+    "optimized": {
+      "interpretation": "Packing optimization all CPD, before settled style fix; setup interception active.",
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        },
+        {
+          "job": "972af34aa9c5",
+          "passed": true
+        },
+        {
+          "job": "37d39cc6b88f",
+          "passed": true
+        },
+        {
+          "job": "9b08bed08561",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792518029911711961
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+            5671532276,
+            1792518021769776761
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+            5671712276,
+            1792519017247410041
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-jkg521gj",
+        "removed": true
+      },
+      "metrics": {
+        "972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "start": 1792565708910,
+            "end": 1792565721116,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 1519,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 2258,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 165,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.37841796875,
+              "p95": 89.538818359375,
+              "max": 223.491455078125
+            },
+            "scene_gaps_over_125ms": 1,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1093,
+              "p50": 11.158635,
+              "p95": 11.456171,
+              "max": 13.378696
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1093,
+              "p50": 0.714752,
+              "p95": 0.843776,
+              "max": 3.093504
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.647261,
+              "p95": 2.0746,
+              "max": 2.612115
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.265126,
+              "p95": 0.348261,
+              "max": 0.559617
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.400146484375,
+              "p95": 1.800048828125,
+              "max": 2.7001953125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 55.5,
+              "p95": 60.0,
+              "max": 193.0
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.7998046875,
+              "p95": 1.10009765625,
+              "max": 1.599853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "start": 1792565731999,
+            "end": 1792565744107,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 2905,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 3638,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.401611328125,
+              "p95": 89.6044921875,
+              "max": 100.547607421875
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.157232,
+              "p95": 11.443228,
+              "max": 13.74427
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.387072,
+              "p95": 0.449536,
+              "max": 3.319808
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.762365,
+              "p95": 1.0214,
+              "max": 1.153687
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.08048,
+              "p95": 0.12828,
+              "max": 0.216344
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 30.2001953125,
+              "p95": 34.699951171875,
+              "max": 41.10009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.099853515625,
+              "max": 1.39990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "start": 1792565753482,
+            "end": 1792565765709,
+            "desktopBefore": {
+              "rendered": 54,
+              "callbacks": 4194,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 54,
+              "callbacks": 4934,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.42236328125,
+              "p95": 89.626220703125,
+              "max": 100.708984375
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1095,
+              "p50": 11.147124,
+              "p95": 11.501236,
+              "max": 13.175697
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1095,
+              "p50": 0.78848,
+              "p95": 0.866304,
+              "max": 3.279872
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 0.917947,
+              "p95": 1.177783,
+              "max": 1.449861
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.207658,
+              "p95": 0.324698,
+              "max": 0.830844
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 0.900146484375,
+              "p95": 1.199951171875,
+              "max": 1.900146484375
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 34.5,
+              "p95": 39.2998046875,
+              "max": 53.599853515625
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.60009765625,
+              "p95": 0.800048828125,
+              "max": 1.300048828125
+            }
+          }
+        ],
+        "d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "start": 1792565620441,
+            "end": 1792565632648,
+            "desktopBefore": {
+              "rendered": 127,
+              "callbacks": 982,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 127,
+              "callbacks": 1721,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.391845703125,
+              "p95": 89.596923828125,
+              "max": 100.636962890625
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1093,
+              "p50": 11.161208,
+              "p95": 11.505322,
+              "max": 14.768884
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1093,
+              "p50": 0.712704,
+              "p95": 0.845824,
+              "max": 3.122176
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 1.601184,
+              "p95": 1.843607,
+              "max": 2.04846
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.275035,
+              "p95": 0.378338,
+              "max": 0.564115
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.400146484375,
+              "p95": 1.800048828125,
+              "max": 3.300048828125
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 55.5,
+              "p95": 59.5,
+              "max": 82.300048828125
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.800048828125,
+              "p95": 1.2001953125,
+              "max": 1.39990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "start": 1792565642002,
+            "end": 1792565654109,
+            "desktopBefore": {
+              "rendered": 127,
+              "callbacks": 2276,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 127,
+              "callbacks": 3009,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.35205078125,
+              "p95": 89.54931640625,
+              "max": 91.508544921875
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.164435,
+              "p95": 11.456881,
+              "max": 13.361663
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.386048,
+              "p95": 0.45568,
+              "max": 3.29728
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.765831,
+              "p95": 0.943985,
+              "max": 1.142196
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.080831,
+              "p95": 0.114344,
+              "max": 0.136736
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.400146484375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 30.800048828125,
+              "p95": 34.0,
+              "max": 36.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.300048828125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "start": 1792565663488,
+            "end": 1792565675595,
+            "desktopBefore": {
+              "rendered": 127,
+              "callbacks": 3565,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 127,
+              "callbacks": 4289,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 142,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 271,
+            "coordinateRequests": 0,
+            "viewUploads": 143,
+            "submitted_scene_gap_ms": {
+              "count": 143,
+              "p50": 78.421875,
+              "p95": 89.71240234375,
+              "max": 268.14697265625
+            },
+            "scene_gaps_over_125ms": 1,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.154146,
+              "p95": 11.453185,
+              "max": 13.653188
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.801792,
+              "p95": 0.88576,
+              "max": 3.090432
+            },
+            "parse_ms": {
+              "count": 143,
+              "p50": 0.899241,
+              "p95": 1.134522,
+              "max": 1.791339
+            },
+            "upload_gl_ms": {
+              "count": 143,
+              "p50": 0.20296,
+              "p95": 0.292617,
+              "max": 0.507729
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 144,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.900146484375
+            },
+            "upload_ms": {
+              "count": 144,
+              "p50": 34.599853515625,
+              "p95": 40.0,
+              "max": 78.60009765625
+            },
+            "apply_ms": {
+              "count": 144,
+              "p50": 0.60009765625,
+              "p95": 1.0,
+              "max": 1.2001953125
+            }
+          }
+        ],
+        "37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "start": 1792565811341,
+            "end": 1792565823484,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 2164,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 2899,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.432373046875,
+              "p95": 89.559814453125,
+              "max": 89.787353515625
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1087,
+              "p50": 11.143278,
+              "p95": 11.519601,
+              "max": 17.334154
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1087,
+              "p50": 0.70656,
+              "p95": 0.836608,
+              "max": 3.017728
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 1.638404,
+              "p95": 1.860239,
+              "max": 2.114925
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.278361,
+              "p95": 0.404056,
+              "max": 0.587298
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.5,
+              "p95": 2.099853515625,
+              "max": 2.300048828125
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 54.900146484375,
+              "p95": 58.400146484375,
+              "max": 64.39990234375
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.800048828125,
+              "p95": 1.199951171875,
+              "max": 1.7001953125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "start": 1792565839340,
+            "end": 1792565851447,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 3844,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 4577,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.51611328125,
+              "p95": 89.785400390625,
+              "max": 100.60791015625
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.153246,
+              "p95": 11.527206,
+              "max": 13.95757
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.387072,
+              "p95": 0.451584,
+              "max": 2.516992
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.764199,
+              "p95": 0.977788,
+              "max": 1.033222
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.082584,
+              "p95": 0.1283,
+              "max": 0.180568
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.400146484375,
+              "max": 1.60009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 30.699951171875,
+              "p95": 35.699951171875,
+              "max": 48.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.10009765625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "start": 1792565867382,
+            "end": 1792565879504,
+            "desktopBefore": {
+              "rendered": 42,
+              "callbacks": 5526,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 42,
+              "callbacks": 6260,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 102,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.458740234375,
+              "p95": 89.69873046875,
+              "max": 111.907470703125
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1085,
+              "p50": 11.141144,
+              "p95": 11.50212,
+              "max": 13.36911
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1085,
+              "p50": 0.789504,
+              "p95": 0.862208,
+              "max": 3.293184
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 0.841814,
+              "p95": 1.05351,
+              "max": 1.552874
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.210914,
+              "p95": 0.329716,
+              "max": 0.580586
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 0.900146484375,
+              "p95": 1.2998046875,
+              "max": 1.60009765625
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 35.099853515625,
+              "p95": 45.0,
+              "max": 62.7001953125
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.699951171875,
+              "p95": 0.900146484375,
+              "max": 1.199951171875
+            }
+          }
+        ],
+        "9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792565932855,
+            "end": 1792565945103,
+            "desktopBefore": {
+              "rendered": 56,
+              "callbacks": 2600,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 56,
+              "callbacks": 3341,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.45068359375,
+              "p95": 89.539306640625,
+              "max": 111.886474609375
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1096,
+              "p50": 11.145283,
+              "p95": 11.478326,
+              "max": 13.335729
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1096,
+              "p50": 0.694272,
+              "p95": 0.825344,
+              "max": 2.802688
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 1.636621,
+              "p95": 1.937593,
+              "max": 2.076273
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.27237,
+              "p95": 0.414756,
+              "max": 0.556451
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.400146484375,
+              "p95": 2.0,
+              "max": 2.60009765625
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 55.5,
+              "p95": 60.199951171875,
+              "max": 69.199951171875
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.800048828125,
+              "p95": 1.2001953125,
+              "max": 1.900146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792565972986,
+            "end": 1792565985096,
+            "desktopBefore": {
+              "rendered": 56,
+              "callbacks": 5006,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 56,
+              "callbacks": 5739,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 78.332275390625,
+              "p95": 89.622802734375,
+              "max": 91.55419921875
+            },
+            "scene_gaps_over_125ms": 0,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.148168,
+              "p95": 11.464259,
+              "max": 13.541764
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.395264,
+              "p95": 0.462848,
+              "max": 3.014656
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.763938,
+              "p95": 0.929738,
+              "max": 1.001313
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.079939,
+              "p95": 0.126938,
+              "max": 0.190306
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1,
+              "p95": 1.39990234375,
+              "max": 2.099853515625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 30.5,
+              "p95": 34.10009765625,
+              "max": 38.699951171875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.0,
+              "max": 1.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792566008006,
+            "end": 1792566020231,
+            "desktopBefore": {
+              "rendered": 56,
+              "callbacks": 7107,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 56,
+              "callbacks": 7845,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 145,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 146,
+            "submitted_scene_gap_ms": {
+              "count": 146,
+              "p50": 78.517822265625,
+              "p95": 89.677490234375,
+              "max": 145.142822265625
+            },
+            "scene_gaps_over_125ms": 1,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1094,
+              "p50": 11.142538,
+              "p95": 11.490979,
+              "max": 13.328086
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1094,
+              "p50": 0.777216,
+              "p95": 0.850944,
+              "max": 3.032064
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 0.863746,
+              "p95": 1.106179,
+              "max": 1.261158
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 0.209933,
+              "p95": 0.336759,
+              "max": 0.503952
+            },
+            "long_tasks_ms": [
+              55
+            ],
+            "capture_ms": {
+              "count": 147,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.60009765625
+            },
+            "upload_ms": {
+              "count": 147,
+              "p50": 34.5,
+              "p95": 38.199951171875,
+              "max": 48.0
+            },
+            "apply_ms": {
+              "count": 147,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.300048828125
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2299024,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-ic4da7v8",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-l3_l2ql4"
+          ]
+        },
+        {
+          "pid": 2295152,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-u6fidoh3",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-8k00pc0h"
+          ]
+        },
+        {
+          "pid": 2288255,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-k1wh8kuj",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-xcx9yzrv"
+          ]
+        },
+        {
+          "pid": 2291634,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-ncq0tcn7",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-ipez2h8x"
+          ]
+        }
+      ]
+    },
+    "large-default": {
+      "interpretation": "Fixture preparation failed for absent legacy design.json; no viewer launched.",
+      "runtime_cleanup": []
+    },
+    "large-default-legacy": {
+      "interpretation": "Native style reapply paused playback; second job wrong selection (fixed harness).",
+      "result": [
+        {
+          "job": "8466ccc17eff",
+          "passed": false
+        },
+        {
+          "job": "2f281ba1a83a",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/job.json": "8f2d26cce68f09d3109b72ed881238940e393a7522f47af37b24c4dab6a55f67",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/design.json": "4389e67244cc95b7c27cc6cfc2ef7b384a2b15eb7e951f9db48a04e01ad851af",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_300K_NPT_ENM_k0p5_p10.dcd": [
+            196054100,
+            1791446098516404932
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_04_300K_NPT_MGHH_only_p10.dcd": [
+            49013812,
+            1791488260627813339
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_0S_300K_NPT_settle_fixed_dna_p100.dcd": [
+            1470403956,
+            1791446318260159729
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-oyyff_h1",
+        "removed": true
+      },
+      "metrics": {
+        "8466ccc17eff": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792566136616,
+            "end": 1792566148616,
+            "desktopBefore": {
+              "rendered": 381,
+              "callbacks": 1465,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 381,
+              "callbacks": 2052,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 1,
+            "coordinateRequests": 3,
+            "viewUploads": 4,
+            "submitted_scene_gap_ms": {
+              "count": 5,
+              "p50": 2244.916015625,
+              "p95": 4121.613525390625,
+              "max": 4121.613525390625
+            },
+            "scene_gaps_over_125ms": 5,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 298,
+              "p50": 33.493401,
+              "p95": 33.685129,
+              "max": 1631.07578
+            },
+            "native_frames_over_16_67ms": 298,
+            "gpu_ms": {
+              "count": 298,
+              "p50": 26.39872,
+              "p95": 27.843584,
+              "max": 29.287424
+            },
+            "parse_ms": {
+              "count": 5,
+              "p50": 78.699035,
+              "p95": 162.907955,
+              "max": 162.907955
+            },
+            "upload_gl_ms": {
+              "count": 5,
+              "p50": 10.419548,
+              "p95": 15.865472,
+              "max": 15.865472
+            },
+            "long_tasks_ms": [
+              69,
+              319,
+              654,
+              69,
+              299,
+              928,
+              69
+            ],
+            "capture_ms": {
+              "count": 3,
+              "p50": 59.5,
+              "p95": 60.699951171875,
+              "max": 60.699951171875
+            },
+            "upload_ms": {
+              "count": 3,
+              "p50": 3104.89990234375,
+              "p95": 3312.89990234375,
+              "max": 3312.89990234375
+            },
+            "apply_ms": {
+              "count": 8,
+              "p50": 20.39990234375,
+              "p95": 3969.800048828125,
+              "max": 3969.800048828125
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792566163893,
+            "end": 1792566175894,
+            "desktopBefore": {
+              "rendered": 381,
+              "callbacks": 2902,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 381,
+              "callbacks": 3496,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 1,
+            "coordinateRequests": 0,
+            "viewUploads": 1,
+            "submitted_scene_gap_ms": {
+              "count": 2,
+              "p50": 4769.441162109375,
+              "p95": 4769.441162109375,
+              "max": 4769.441162109375
+            },
+            "scene_gaps_over_125ms": 2,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 904,
+              "p50": 11.165312,
+              "p95": 11.289844,
+              "max": 1016.608932
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 904,
+              "p50": 4.809728,
+              "p95": 6.74816,
+              "max": 7.223296
+            },
+            "parse_ms": {
+              "count": 2,
+              "p50": 57.077839,
+              "p95": 57.077839,
+              "max": 57.077839
+            },
+            "upload_gl_ms": {
+              "count": 2,
+              "p50": 6.725779,
+              "p95": 6.725779,
+              "max": 6.725779
+            },
+            "long_tasks_ms": [
+              685,
+              808,
+              54,
+              206,
+              549
+            ],
+            "capture_ms": {
+              "count": 1,
+              "p50": 47.199951171875,
+              "p95": 47.199951171875,
+              "max": 47.199951171875
+            },
+            "upload_ms": {
+              "count": 1,
+              "p50": 3987.699951171875,
+              "p95": 3987.699951171875,
+              "max": 3987.699951171875
+            },
+            "apply_ms": {
+              "count": 2,
+              "p50": 565.60009765625,
+              "p95": 565.60009765625,
+              "max": 565.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792566186480,
+            "end": 1792566199361,
+            "desktopBefore": {
+              "rendered": 381,
+              "callbacks": 4057,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 381,
+              "callbacks": 4841,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 8,
+            "gap_p50": 1981,
+            "gap_p95": 2050,
+            "gap_max": 2050,
+            "coordinateRequests": 13,
+            "viewUploads": 13,
+            "submitted_scene_gap_ms": {
+              "count": 13,
+              "p50": 1105.83642578125,
+              "p95": 1440.88330078125,
+              "max": 1440.88330078125
+            },
+            "scene_gaps_over_125ms": 13,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 385,
+              "p50": 33.485967,
+              "p95": 33.715266,
+              "max": 49.304693
+            },
+            "native_frames_over_16_67ms": 385,
+            "gpu_ms": {
+              "count": 385,
+              "p50": 21.68832,
+              "p95": 23.282688,
+              "max": 24.470528
+            },
+            "parse_ms": {
+              "count": 13,
+              "p50": 16.428104,
+              "p95": 113.465939,
+              "max": 113.465939
+            },
+            "upload_gl_ms": {
+              "count": 13,
+              "p50": 1.607416,
+              "p95": 35.229798,
+              "max": 35.229798
+            },
+            "long_tasks_ms": [
+              142
+            ],
+            "capture_ms": {
+              "count": 14,
+              "p50": 14.400146484375,
+              "p95": 16.7998046875,
+              "max": 16.7998046875
+            },
+            "upload_ms": {
+              "count": 13,
+              "p50": 804.0,
+              "p95": 1108.0,
+              "max": 1108.0
+            },
+            "apply_ms": {
+              "count": 50,
+              "p50": 12.60009765625,
+              "p95": 23.800048828125,
+              "max": 25.2001953125
+            }
+          }
+        ],
+        "2f281ba1a83a": []
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2308827,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-4d7n9uoi",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-egni7dxe"
+          ]
+        },
+        {
+          "pid": 2305884,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-dft3lofe",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-d1hftu8p"
+          ]
+        }
+      ]
+    },
+    "large-resident": {
+      "interpretation": "Four exact resident frames; native style feedback and CDP interception confounded.",
+      "result": [
+        {
+          "job": "8466ccc17eff",
+          "passed": false
+        },
+        {
+          "job": "2f281ba1a83a",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/job.json": "8f2d26cce68f09d3109b72ed881238940e393a7522f47af37b24c4dab6a55f67",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/design.json": "4389e67244cc95b7c27cc6cfc2ef7b384a2b15eb7e951f9db48a04e01ad851af",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_300K_NPT_ENM_k0p5_p10.dcd": [
+            196054100,
+            1791446098516404932
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_04_300K_NPT_MGHH_only_p10.dcd": [
+            49013812,
+            1791488260627813339
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_0S_300K_NPT_settle_fixed_dna_p100.dcd": [
+            1470403956,
+            1791446318260159729
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-fs0q2ss5",
+        "removed": true
+      },
+      "metrics": {
+        "8466ccc17eff": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566378078,
+            "end": 1792566390079,
+            "desktopBefore": {
+              "rendered": 387,
+              "callbacks": 1418,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 387,
+              "callbacks": 1954,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 6,
+            "gap_p50": 1422,
+            "gap_p95": 2178,
+            "gap_max": 2178,
+            "coordinateRequests": 0,
+            "viewUploads": 3,
+            "submitted_scene_gap_ms": {
+              "count": 4,
+              "p50": 5142.274658203125,
+              "p95": 5305.865966796875,
+              "max": 5305.865966796875
+            },
+            "scene_gaps_over_125ms": 4,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 324,
+              "p50": 33.476332,
+              "p95": 33.806239,
+              "max": 938.163795
+            },
+            "native_frames_over_16_67ms": 306,
+            "gpu_ms": {
+              "count": 324,
+              "p50": 25.213952,
+              "p95": 27.879424,
+              "max": 32.130048
+            },
+            "parse_ms": {
+              "count": 4,
+              "p50": 73.216048,
+              "p95": 73.918343,
+              "max": 73.918343
+            },
+            "upload_gl_ms": {
+              "count": 4,
+              "p50": 14.175081,
+              "p95": 14.387041,
+              "max": 14.387041
+            },
+            "long_tasks_ms": [
+              82,
+              807,
+              723,
+              61,
+              265,
+              566,
+              93,
+              286,
+              547
+            ],
+            "capture_ms": {
+              "count": 3,
+              "p50": 69.60009765625,
+              "p95": 82.0,
+              "max": 82.0
+            },
+            "upload_ms": {
+              "count": 3,
+              "p50": 3737.800048828125,
+              "p95": 4354.5,
+              "max": 4354.5
+            },
+            "apply_ms": {
+              "count": 57,
+              "p50": 19.599853515625,
+              "p95": 42.10009765625,
+              "max": 314.699951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566401313,
+            "end": 1792566413314,
+            "desktopBefore": {
+              "rendered": 387,
+              "callbacks": 2558,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 387,
+              "callbacks": 3177,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 1,
+            "coordinateRequests": 0,
+            "viewUploads": 2,
+            "submitted_scene_gap_ms": {
+              "count": 3,
+              "p50": 1954.514404296875,
+              "p95": 3764.41796875,
+              "max": 3764.41796875
+            },
+            "scene_gaps_over_125ms": 2,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 971,
+              "p50": 11.15856,
+              "p95": 11.412625,
+              "max": 1094.863412
+            },
+            "native_frames_over_16_67ms": 6,
+            "gpu_ms": {
+              "count": 971,
+              "p50": 4.763648,
+              "p95": 6.5536,
+              "max": 53.489664
+            },
+            "parse_ms": {
+              "count": 3,
+              "p50": 70.849373,
+              "p95": 74.995077,
+              "max": 74.995077
+            },
+            "upload_gl_ms": {
+              "count": 3,
+              "p50": 5.59291,
+              "p95": 5.606667,
+              "max": 5.606667
+            },
+            "long_tasks_ms": [
+              258,
+              552,
+              214,
+              217,
+              616
+            ],
+            "capture_ms": {
+              "count": 2,
+              "p50": 36.699951171875,
+              "p95": 36.699951171875,
+              "max": 36.699951171875
+            },
+            "upload_ms": {
+              "count": 2,
+              "p50": 4082.900146484375,
+              "p95": 4082.900146484375,
+              "max": 4082.900146484375
+            },
+            "apply_ms": {
+              "count": 21,
+              "p50": 16.699951171875,
+              "p95": 26.199951171875,
+              "max": 141.89990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566424506,
+            "end": 1792566437051,
+            "desktopBefore": {
+              "rendered": 387,
+              "callbacks": 3775,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 387,
+              "callbacks": 4557,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 37,
+            "gap_p50": 46,
+            "gap_p95": 699,
+            "gap_max": 715,
+            "coordinateRequests": 0,
+            "viewUploads": 18,
+            "submitted_scene_gap_ms": {
+              "count": 18,
+              "p50": 670.382080078125,
+              "p95": 804.35986328125,
+              "max": 804.35986328125
+            },
+            "scene_gaps_over_125ms": 18,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 375,
+              "p50": 33.484208,
+              "p95": 33.728434,
+              "max": 35.012115
+            },
+            "native_frames_over_16_67ms": 375,
+            "gpu_ms": {
+              "count": 375,
+              "p50": 22.685696,
+              "p95": 23.63392,
+              "max": 25.137152
+            },
+            "parse_ms": {
+              "count": 18,
+              "p50": 16.876476,
+              "p95": 17.788201,
+              "max": 17.788201
+            },
+            "upload_gl_ms": {
+              "count": 18,
+              "p50": 1.766354,
+              "p95": 2.739844,
+              "max": 2.739844
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 19,
+              "p50": 12.0,
+              "p95": 13.900146484375,
+              "max": 13.900146484375
+            },
+            "upload_ms": {
+              "count": 18,
+              "p50": 674.199951171875,
+              "p95": 777.300048828125,
+              "max": 777.300048828125
+            },
+            "apply_ms": {
+              "count": 149,
+              "p50": 12.0,
+              "p95": 15.099853515625,
+              "max": 19.5
+            }
+          }
+        ],
+        "2f281ba1a83a": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566476284,
+            "end": 1792566488285,
+            "desktopBefore": {
+              "rendered": 111,
+              "callbacks": 998,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 111,
+              "callbacks": 1625,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 5,
+            "gap_p50": 112,
+            "gap_p95": 2108,
+            "gap_max": 2108,
+            "coordinateRequests": 0,
+            "viewUploads": 3,
+            "submitted_scene_gap_ms": {
+              "count": 4,
+              "p50": 2613.67626953125,
+              "p95": 5238.585205078125,
+              "max": 5238.585205078125
+            },
+            "scene_gaps_over_125ms": 4,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 315,
+              "p50": 33.494677,
+              "p95": 33.717044,
+              "max": 982.793539
+            },
+            "native_frames_over_16_67ms": 315,
+            "gpu_ms": {
+              "count": 315,
+              "p50": 26.12736,
+              "p95": 28.291072,
+              "max": 29.24032
+            },
+            "parse_ms": {
+              "count": 4,
+              "p50": 104.018684,
+              "p95": 147.295968,
+              "max": 147.295968
+            },
+            "upload_gl_ms": {
+              "count": 4,
+              "p50": 12.884731,
+              "p95": 13.932436,
+              "max": 13.932436
+            },
+            "long_tasks_ms": [
+              60,
+              55,
+              368,
+              551,
+              59,
+              239,
+              559
+            ],
+            "capture_ms": {
+              "count": 2,
+              "p50": 47.89990234375,
+              "p95": 47.89990234375,
+              "max": 47.89990234375
+            },
+            "upload_ms": {
+              "count": 2,
+              "p50": 4331.699951171875,
+              "p95": 4331.699951171875,
+              "max": 4331.699951171875
+            },
+            "apply_ms": {
+              "count": 55,
+              "p50": 19.60009765625,
+              "p95": 26.5,
+              "max": 242.39990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566501369,
+            "end": 1792566513371,
+            "desktopBefore": {
+              "rendered": 111,
+              "callbacks": 2347,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 111,
+              "callbacks": 2975,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 1,
+            "coordinateRequests": 0,
+            "viewUploads": 1,
+            "submitted_scene_gap_ms": {
+              "count": 2,
+              "p50": 2613.256103515625,
+              "p95": 2613.256103515625,
+              "max": 2613.256103515625
+            },
+            "scene_gaps_over_125ms": 2,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 922,
+              "p50": 11.160184,
+              "p95": 11.337205,
+              "max": 904.74742
+            },
+            "native_frames_over_16_67ms": 6,
+            "gpu_ms": {
+              "count": 922,
+              "p50": 5.005312,
+              "p95": 6.767616,
+              "max": 7.304192
+            },
+            "parse_ms": {
+              "count": 2,
+              "p50": 54.130114,
+              "p95": 54.130114,
+              "max": 54.130114
+            },
+            "upload_gl_ms": {
+              "count": 2,
+              "p50": 5.155484,
+              "p95": 5.155484,
+              "max": 5.155484
+            },
+            "long_tasks_ms": [
+              320,
+              234,
+              556
+            ],
+            "capture_ms": {
+              "count": 1,
+              "p50": 37.10009765625,
+              "p95": 37.10009765625,
+              "max": 37.10009765625
+            },
+            "upload_ms": {
+              "count": 1,
+              "p50": 2546.699951171875,
+              "p95": 2546.699951171875,
+              "max": 2546.699951171875
+            },
+            "apply_ms": {
+              "count": 2,
+              "p50": 190.099853515625,
+              "p95": 190.099853515625,
+              "max": 190.099853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566521964,
+            "end": 1792566534333,
+            "desktopBefore": {
+              "rendered": 111,
+              "callbacks": 3429,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 111,
+              "callbacks": 4207,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 40,
+            "gap_p50": 40,
+            "gap_p95": 674,
+            "gap_max": 675,
+            "coordinateRequests": 0,
+            "viewUploads": 18,
+            "submitted_scene_gap_ms": {
+              "count": 18,
+              "p50": 703.57275390625,
+              "p95": 737.3759765625,
+              "max": 737.3759765625
+            },
+            "scene_gaps_over_125ms": 18,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 369,
+              "p50": 33.487224,
+              "p95": 33.750276,
+              "max": 34.963435
+            },
+            "native_frames_over_16_67ms": 369,
+            "gpu_ms": {
+              "count": 369,
+              "p50": 21.551104,
+              "p95": 23.25504,
+              "max": 24.823808
+            },
+            "parse_ms": {
+              "count": 18,
+              "p50": 16.377402,
+              "p95": 17.373716,
+              "max": 17.373716
+            },
+            "upload_gl_ms": {
+              "count": 18,
+              "p50": 1.645778,
+              "p95": 2.275226,
+              "max": 2.275226
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 19,
+              "p50": 11.699951171875,
+              "p95": 15.099853515625,
+              "max": 15.099853515625
+            },
+            "upload_ms": {
+              "count": 18,
+              "p50": 673.89990234375,
+              "p95": 680.89990234375,
+              "max": 680.89990234375
+            },
+            "apply_ms": {
+              "count": 148,
+              "p50": 11.60009765625,
+              "p95": 16.0,
+              "max": 21.300048828125
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2315755,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-ilk_yqbk",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-warc9xdq"
+          ]
+        },
+        {
+          "pid": 2312957,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-zm4qm4h4",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-7qbdje5n"
+          ]
+        }
+      ]
+    },
+    "large-resident-clean": {
+      "interpretation": "Synthetic launch timed out before viewer start.",
+      "result": [
+        {
+          "job": "2f281ba1a83a",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-c8fvznyl",
+        "removed": true
+      },
+      "metrics": {
+        "2f281ba1a83a": []
+      },
+      "runtime_cleanup": []
+    },
+    "large-resident-click": {
+      "interpretation": "Real launch and removed interception; native feedback still paused playback.",
+      "result": [
+        {
+          "job": "2f281ba1a83a",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-30b_xnpa",
+        "removed": true
+      },
+      "metrics": {
+        "2f281ba1a83a": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566700947,
+            "end": 1792566712948,
+            "desktopBefore": {
+              "rendered": 145,
+              "callbacks": 680,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 145,
+              "callbacks": 1294,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 59,
+            "gap_p50": 84,
+            "gap_p95": 186,
+            "gap_max": 285,
+            "coordinateRequests": 0,
+            "viewUploads": 14,
+            "submitted_scene_gap_ms": {
+              "count": 15,
+              "p50": 435.55712890625,
+              "p95": 1742.611083984375,
+              "max": 1742.611083984375
+            },
+            "scene_gaps_over_125ms": 15,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 314,
+              "p50": 33.489429,
+              "p95": 33.806582,
+              "max": 993.952124
+            },
+            "native_frames_over_16_67ms": 314,
+            "gpu_ms": {
+              "count": 314,
+              "p50": 25.7024,
+              "p95": 28.601344,
+              "max": 29.243392
+            },
+            "parse_ms": {
+              "count": 15,
+              "p50": 73.700762,
+              "p95": 200.762101,
+              "max": 200.762101
+            },
+            "upload_gl_ms": {
+              "count": 15,
+              "p50": 7.881221,
+              "p95": 13.601721,
+              "max": 13.601721
+            },
+            "long_tasks_ms": [
+              60,
+              57,
+              62,
+              60,
+              65,
+              61,
+              56,
+              62,
+              58,
+              64,
+              62,
+              60,
+              74,
+              261,
+              585,
+              59,
+              239
+            ],
+            "capture_ms": {
+              "count": 14,
+              "p50": 52.0,
+              "p95": 62.7001953125,
+              "max": 62.7001953125
+            },
+            "upload_ms": {
+              "count": 14,
+              "p50": 494.89990234375,
+              "p95": 1406.0,
+              "max": 1406.0
+            },
+            "apply_ms": {
+              "count": 75,
+              "p50": 20.099853515625,
+              "p95": 33.5,
+              "max": 145.10009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566720436,
+            "end": 1792566732436,
+            "desktopBefore": {
+              "rendered": 145,
+              "callbacks": 1681,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 145,
+              "callbacks": 2287,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 34,
+            "gap_p50": 86,
+            "gap_p95": 145,
+            "gap_max": 163,
+            "coordinateRequests": 0,
+            "viewUploads": 22,
+            "submitted_scene_gap_ms": {
+              "count": 23,
+              "p50": 156.39892578125,
+              "p95": 960.293701171875,
+              "max": 1686.593017578125
+            },
+            "scene_gaps_over_125ms": 20,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 909,
+              "p50": 11.155525,
+              "p95": 11.488969,
+              "max": 994.143816
+            },
+            "native_frames_over_16_67ms": 2,
+            "gpu_ms": {
+              "count": 909,
+              "p50": 4.274176,
+              "p95": 6.339584,
+              "max": 7.051264
+            },
+            "parse_ms": {
+              "count": 23,
+              "p50": 54.314291,
+              "p95": 58.308893,
+              "max": 58.322328
+            },
+            "upload_gl_ms": {
+              "count": 23,
+              "p50": 5.569227,
+              "p95": 6.478468,
+              "max": 7.50107
+            },
+            "long_tasks_ms": [
+              63,
+              52,
+              51,
+              50,
+              51,
+              241,
+              560,
+              250,
+              588
+            ],
+            "capture_ms": {
+              "count": 22,
+              "p50": 37.60009765625,
+              "p95": 44.10009765625,
+              "max": 46.199951171875
+            },
+            "upload_ms": {
+              "count": 22,
+              "p50": 108.0,
+              "p95": 920.10009765625,
+              "max": 1548.0
+            },
+            "apply_ms": {
+              "count": 38,
+              "p50": 23.300048828125,
+              "p95": 39.699951171875,
+              "max": 140.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566738765,
+            "end": 1792566750876,
+            "desktopBefore": {
+              "rendered": 145,
+              "callbacks": 2611,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 145,
+              "callbacks": 3344,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 85,
+            "gap_max": 88,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 67.1669921875,
+              "p95": 101.28857421875,
+              "max": 201.023193359375
+            },
+            "scene_gaps_over_125ms": 7,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 362,
+              "p50": 33.48961,
+              "p95": 33.819568,
+              "max": 36.472409
+            },
+            "native_frames_over_16_67ms": 362,
+            "gpu_ms": {
+              "count": 362,
+              "p50": 22.595584,
+              "p95": 23.45984,
+              "max": 24.828928
+            },
+            "parse_ms": {
+              "count": 146,
+              "p50": 16.433578,
+              "p95": 17.524238,
+              "max": 123.193555
+            },
+            "upload_gl_ms": {
+              "count": 146,
+              "p50": 1.607537,
+              "p95": 2.414706,
+              "max": 3.078649
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 12.2998046875,
+              "p95": 14.699951171875,
+              "max": 16.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 29.89990234375,
+              "p95": 40.099853515625,
+              "max": 88.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 12.099853515625,
+              "p95": 14.2001953125,
+              "max": 16.39990234375
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2322474,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-tpogatim",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-harhme71"
+          ]
+        }
+      ]
+    },
+    "large-resident-final": {
+      "interpretation": "Both runtime fixes; first job predates native readiness wait, second includes it.",
+      "result": [
+        {
+          "job": "8466ccc17eff",
+          "passed": true
+        },
+        {
+          "job": "2f281ba1a83a",
+          "passed": true
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/job.json": "8f2d26cce68f09d3109b72ed881238940e393a7522f47af37b24c4dab6a55f67",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/design.json": "4389e67244cc95b7c27cc6cfc2ef7b384a2b15eb7e951f9db48a04e01ad851af",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_300K_NPT_ENM_k0p5_p10.dcd": [
+            196054100,
+            1791446098516404932
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_04_300K_NPT_MGHH_only_p10.dcd": [
+            49013812,
+            1791488260627813339
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_0S_300K_NPT_settle_fixed_dna_p100.dcd": [
+            1470403956,
+            1791446318260159729
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-ttttu6yb",
+        "removed": true
+      },
+      "metrics": {
+        "8466ccc17eff": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566894842,
+            "end": 1792566907062,
+            "desktopBefore": {
+              "rendered": 362,
+              "callbacks": 1155,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 362,
+              "callbacks": 1783,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 110,
+            "gap_p50": 83,
+            "gap_p95": 152,
+            "gap_max": 981,
+            "coordinateRequests": 0,
+            "viewUploads": 29,
+            "submitted_scene_gap_ms": {
+              "count": 27,
+              "p50": 368.699951171875,
+              "p95": 1161.600830078125,
+              "max": 1552.865234375
+            },
+            "scene_gaps_over_125ms": 27,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 317,
+              "p50": 33.495096,
+              "p95": 33.770226,
+              "max": 982.902688
+            },
+            "native_frames_over_16_67ms": 317,
+            "gpu_ms": {
+              "count": 317,
+              "p50": 26.169344,
+              "p95": 28.264448,
+              "max": 29.070336
+            },
+            "parse_ms": {
+              "count": 27,
+              "p50": 70.639675,
+              "p95": 78.202204,
+              "max": 137.563778
+            },
+            "upload_gl_ms": {
+              "count": 27,
+              "p50": 6.667743,
+              "p95": 11.649482,
+              "max": 13.028727
+            },
+            "long_tasks_ms": [
+              58,
+              58,
+              58,
+              61,
+              65,
+              54,
+              68,
+              61,
+              64,
+              65,
+              66,
+              55,
+              211,
+              588,
+              82,
+              53,
+              57,
+              55,
+              54,
+              56,
+              56,
+              54,
+              55,
+              58,
+              57,
+              58,
+              53,
+              62,
+              66,
+              55,
+              64
+            ],
+            "capture_ms": {
+              "count": 29,
+              "p50": 48.900146484375,
+              "p95": 58.199951171875,
+              "max": 69.60009765625
+            },
+            "upload_ms": {
+              "count": 28,
+              "p50": 313.699951171875,
+              "p95": 741.89990234375,
+              "max": 1131.400146484375
+            },
+            "apply_ms": {
+              "count": 127,
+              "p50": 18.699951171875,
+              "p95": 29.599853515625,
+              "max": 34.900146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566914954,
+            "end": 1792566927079,
+            "desktopBefore": {
+              "rendered": 362,
+              "callbacks": 2202,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 362,
+              "callbacks": 2813,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 121,
+            "gap_p50": 84,
+            "gap_p95": 143,
+            "gap_max": 924,
+            "coordinateRequests": 0,
+            "viewUploads": 63,
+            "submitted_scene_gap_ms": {
+              "count": 64,
+              "p50": 156.421875,
+              "p95": 189.674560546875,
+              "max": 1630.9658203125
+            },
+            "scene_gaps_over_125ms": 59,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 926,
+              "p50": 11.15588,
+              "p95": 11.497183,
+              "max": 926.85908
+            },
+            "native_frames_over_16_67ms": 7,
+            "gpu_ms": {
+              "count": 926,
+              "p50": 4.283392,
+              "p95": 6.275072,
+              "max": 6.960128
+            },
+            "parse_ms": {
+              "count": 64,
+              "p50": 54.876077,
+              "p95": 74.264521,
+              "max": 78.269944
+            },
+            "upload_gl_ms": {
+              "count": 64,
+              "p50": 5.456852,
+              "p95": 6.135619,
+              "max": 6.553313
+            },
+            "long_tasks_ms": [
+              55,
+              212,
+              573,
+              50,
+              52,
+              53,
+              51,
+              50,
+              54,
+              51
+            ],
+            "capture_ms": {
+              "count": 64,
+              "p50": 36.89990234375,
+              "p95": 44.800048828125,
+              "max": 47.800048828125
+            },
+            "upload_ms": {
+              "count": 64,
+              "p50": 117.10009765625,
+              "p95": 134.800048828125,
+              "max": 847.699951171875
+            },
+            "apply_ms": {
+              "count": 130,
+              "p50": 20.300048828125,
+              "p95": 28.60009765625,
+              "max": 39.7998046875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566933835,
+            "end": 1792566945949,
+            "desktopBefore": {
+              "rendered": 362,
+              "callbacks": 3159,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 362,
+              "callbacks": 3881,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 143,
+            "gap_p50": 83,
+            "gap_p95": 85,
+            "gap_max": 175,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 143,
+              "p50": 67.179931640625,
+              "p95": 100.918212890625,
+              "max": 201.135986328125
+            },
+            "scene_gaps_over_125ms": 7,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 362,
+              "p50": 33.489918,
+              "p95": 33.791867,
+              "max": 36.303922
+            },
+            "native_frames_over_16_67ms": 362,
+            "gpu_ms": {
+              "count": 362,
+              "p50": 22.598656,
+              "p95": 23.529472,
+              "max": 25.62048
+            },
+            "parse_ms": {
+              "count": 143,
+              "p50": 16.164785,
+              "p95": 17.266558,
+              "max": 18.382373
+            },
+            "upload_gl_ms": {
+              "count": 143,
+              "p50": 1.598927,
+              "p95": 2.369004,
+              "max": 3.279135
+            },
+            "long_tasks_ms": [
+              155,
+              70
+            ],
+            "capture_ms": {
+              "count": 145,
+              "p50": 12.0,
+              "p95": 14.5,
+              "max": 15.800048828125
+            },
+            "upload_ms": {
+              "count": 145,
+              "p50": 30.800048828125,
+              "p95": 39.0,
+              "max": 85.60009765625
+            },
+            "apply_ms": {
+              "count": 145,
+              "p50": 11.60009765625,
+              "p95": 13.5,
+              "max": 18.10009765625
+            }
+          }
+        ],
+        "2f281ba1a83a": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792566984446,
+            "end": 1792566996602,
+            "desktopBefore": {
+              "rendered": 96,
+              "callbacks": 1175,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 96,
+              "callbacks": 1800,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 127,
+            "gap_p50": 81,
+            "gap_p95": 153,
+            "gap_max": 157,
+            "coordinateRequests": 0,
+            "viewUploads": 41,
+            "submitted_scene_gap_ms": {
+              "count": 39,
+              "p50": 301.581298828125,
+              "p95": 368.744384765625,
+              "max": 395.03173828125
+            },
+            "scene_gaps_over_125ms": 39,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 363,
+              "p50": 33.496329,
+              "p95": 33.810868,
+              "max": 40.64126
+            },
+            "native_frames_over_16_67ms": 363,
+            "gpu_ms": {
+              "count": 363,
+              "p50": 27.364352,
+              "p95": 29.07648,
+              "max": 30.257152
+            },
+            "parse_ms": {
+              "count": 39,
+              "p50": 69.452426,
+              "p95": 77.60209,
+              "max": 77.944497
+            },
+            "upload_gl_ms": {
+              "count": 39,
+              "p50": 6.339104,
+              "p95": 8.610823,
+              "max": 9.232405
+            },
+            "long_tasks_ms": [
+              56,
+              65,
+              65,
+              57,
+              65,
+              56,
+              63,
+              66,
+              55,
+              67,
+              61,
+              56,
+              62,
+              65,
+              56,
+              67,
+              68,
+              65,
+              67,
+              68,
+              58,
+              67,
+              66,
+              63,
+              68,
+              67,
+              61,
+              60,
+              64,
+              55,
+              64,
+              63,
+              56,
+              69,
+              67,
+              55,
+              65,
+              65,
+              58,
+              60,
+              55
+            ],
+            "capture_ms": {
+              "count": 41,
+              "p50": 54.300048828125,
+              "p95": 59.0,
+              "max": 59.7001953125
+            },
+            "upload_ms": {
+              "count": 40,
+              "p50": 237.300048828125,
+              "p95": 299.800048828125,
+              "max": 309.599853515625
+            },
+            "apply_ms": {
+              "count": 128,
+              "p50": 20.300048828125,
+              "p95": 31.099853515625,
+              "max": 37.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792567010141,
+            "end": 1792567022248,
+            "desktopBefore": {
+              "rendered": 96,
+              "callbacks": 2498,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 96,
+              "callbacks": 3120,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 131,
+            "gap_p50": 86,
+            "gap_p95": 140,
+            "gap_max": 161,
+            "coordinateRequests": 0,
+            "viewUploads": 77,
+            "submitted_scene_gap_ms": {
+              "count": 77,
+              "p50": 156.292236328125,
+              "p95": 189.994140625,
+              "max": 245.7587890625
+            },
+            "scene_gaps_over_125ms": 74,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1079,
+              "p50": 11.146586,
+              "p95": 11.620327,
+              "max": 22.597998
+            },
+            "native_frames_over_16_67ms": 7,
+            "gpu_ms": {
+              "count": 1079,
+              "p50": 4.744192,
+              "p95": 7.016448,
+              "max": 7.775232
+            },
+            "parse_ms": {
+              "count": 77,
+              "p50": 54.241349,
+              "p95": 70.234789,
+              "max": 82.845929
+            },
+            "upload_gl_ms": {
+              "count": 77,
+              "p50": 5.569506,
+              "p95": 6.706431,
+              "max": 7.028385
+            },
+            "long_tasks_ms": [
+              116,
+              54,
+              50,
+              55,
+              51,
+              54,
+              58,
+              52,
+              57,
+              53,
+              53,
+              53,
+              53,
+              51,
+              52,
+              52,
+              50,
+              50,
+              50,
+              55,
+              50,
+              55,
+              53,
+              50,
+              52,
+              52,
+              53,
+              52
+            ],
+            "capture_ms": {
+              "count": 78,
+              "p50": 37.800048828125,
+              "p95": 47.60009765625,
+              "max": 50.400146484375
+            },
+            "upload_ms": {
+              "count": 77,
+              "p50": 108.599853515625,
+              "p95": 125.800048828125,
+              "max": 127.800048828125
+            },
+            "apply_ms": {
+              "count": 132,
+              "p50": 23.0,
+              "p95": 30.199951171875,
+              "max": 41.0
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 4,
+            "start": 1792567029659,
+            "end": 1792567041766,
+            "desktopBefore": {
+              "rendered": 96,
+              "callbacks": 3511,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 96,
+              "callbacks": 4242,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 85,
+            "gap_max": 88,
+            "coordinateRequests": 0,
+            "viewUploads": 145,
+            "submitted_scene_gap_ms": {
+              "count": 145,
+              "p50": 67.271240234375,
+              "p95": 100.69384765625,
+              "max": 134.071533203125
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 361,
+              "p50": 33.491939,
+              "p95": 33.792576,
+              "max": 44.574462
+            },
+            "native_frames_over_16_67ms": 361,
+            "gpu_ms": {
+              "count": 361,
+              "p50": 22.7328,
+              "p95": 23.7568,
+              "max": 25.45664
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 16.387031,
+              "p95": 17.285689,
+              "max": 18.280047
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 1.603984,
+              "p95": 2.167142,
+              "max": 2.678884
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 12.39990234375,
+              "p95": 14.10009765625,
+              "max": 16.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 29.5,
+              "p95": 36.699951171875,
+              "max": 67.5
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 11.7998046875,
+              "p95": 13.800048828125,
+              "max": 14.89990234375
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2331056,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-vfyod16s",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-vczg0khz"
+          ]
+        },
+        {
+          "pid": 2328116,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-4hnpah_i",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-wpdvxx56"
+          ]
+        }
+      ]
+    },
+    "cpd-final": {
+      "interpretation": "Both fixes, real launch, no setup interception, native readiness wait.",
+      "result": [
+        {
+          "job": "d6bcdef3d59f",
+          "passed": true
+        },
+        {
+          "job": "972af34aa9c5",
+          "passed": true
+        },
+        {
+          "job": "37d39cc6b88f",
+          "passed": true
+        },
+        {
+          "job": "9b08bed08561",
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "972af34aa9c5": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567274365,
+            "end": 1792567286473,
+            "desktopBefore": {
+              "rendered": 59,
+              "callbacks": 1526,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 59,
+              "callbacks": 2259,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.371826171875,
+              "p95": 89.555908203125,
+              "max": 89.80078125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 157.985595703125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.161814,
+              "p95": 11.486203,
+              "max": 14.290985
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.722944,
+              "p95": 0.852992,
+              "max": 3.007488
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.619138,
+              "p95": 1.861703,
+              "max": 2.167978
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.286758,
+              "p95": 0.397727,
+              "max": 0.698921
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 1.800048828125,
+              "max": 2.60009765625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.699951171875,
+              "p95": 10.7001953125,
+              "max": 20.400146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.099853515625,
+              "max": 1.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567295849,
+            "end": 1792567307955,
+            "desktopBefore": {
+              "rendered": 59,
+              "callbacks": 2816,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 59,
+              "callbacks": 3548,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.439208984375,
+              "p95": 89.564453125,
+              "max": 90.7685546875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 148.771240234375,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.166962,
+              "p95": 11.448729,
+              "max": 12.908839
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.39936,
+              "p95": 0.468992,
+              "max": 2.966528
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.761349,
+              "p95": 0.942008,
+              "max": 1.016698
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.082044,
+              "p95": 0.119965,
+              "max": 0.210515
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.39990234375,
+              "max": 1.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.10009765625,
+              "p95": 10,
+              "max": 11.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.099853515625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567317808,
+            "end": 1792567329914,
+            "desktopBefore": {
+              "rendered": 59,
+              "callbacks": 4112,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 59,
+              "callbacks": 4845,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 157,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.41748046875,
+              "p95": 89.61962890625,
+              "max": 234.607177734375
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 234.607177734375,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.161148,
+              "p95": 11.427248,
+              "max": 14.404243
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.77824,
+              "p95": 0.85504,
+              "max": 3.334144
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.82093,
+              "p95": 1.056673,
+              "max": 1.803494
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.208751,
+              "p95": 0.307757,
+              "max": 0.572624
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.2998046875,
+              "max": 1.5
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.699951171875,
+              "p95": 9.800048828125,
+              "max": 153.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 1.0,
+              "max": 1.300048828125
+            }
+          }
+        ],
+        "d6bcdef3d59f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567184526,
+            "end": 1792567196632,
+            "desktopBefore": {
+              "rendered": 115,
+              "callbacks": 966,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 115,
+              "callbacks": 1699,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.37548828125,
+              "p95": 89.710693359375,
+              "max": 100.589111328125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 156.391845703125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.160629,
+              "p95": 11.417052,
+              "max": 13.595079
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.719872,
+              "p95": 0.850944,
+              "max": 3.094528
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.609932,
+              "p95": 1.94475,
+              "max": 2.275331
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.267452,
+              "p95": 0.455986,
+              "max": 0.629422
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.400146484375,
+              "p95": 1.800048828125,
+              "max": 3.099853515625
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.89990234375,
+              "p95": 10.800048828125,
+              "max": 26.900146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7998046875,
+              "p95": 1.10009765625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567206513,
+            "end": 1792567218622,
+            "desktopBefore": {
+              "rendered": 115,
+              "callbacks": 2285,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 115,
+              "callbacks": 3018,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 87,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.422607421875,
+              "p95": 89.607177734375,
+              "max": 89.765380859375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 152.968994140625,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.155258,
+              "p95": 11.464318,
+              "max": 13.846368
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.38912,
+              "p95": 0.459776,
+              "max": 3.250176
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.754165,
+              "p95": 0.954742,
+              "max": 1.214981
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.077856,
+              "p95": 0.124674,
+              "max": 0.14922
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.099853515625,
+              "p95": 1.39990234375,
+              "max": 1.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.099853515625,
+              "p95": 9.5,
+              "max": 11.800048828125
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.0,
+              "max": 1.60009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567227969,
+            "end": 1792567240076,
+            "desktopBefore": {
+              "rendered": 115,
+              "callbacks": 3573,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 115,
+              "callbacks": 4303,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 110,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.38623046875,
+              "p95": 89.6103515625,
+              "max": 111.537841796875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 127.3388671875,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.170956,
+              "p95": 11.447454,
+              "max": 13.041926
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.813056,
+              "p95": 0.888832,
+              "max": 3.19488
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.875363,
+              "p95": 1.149728,
+              "max": 1.330197
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.196588,
+              "p95": 0.256842,
+              "max": 0.42128
+            },
+            "long_tasks_ms": [
+              71
+            ],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.2001953125,
+              "max": 1.39990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7,
+              "p95": 9.900146484375,
+              "max": 11.5
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 1.0,
+              "max": 1.300048828125
+            }
+          }
+        ],
+        "37d39cc6b88f": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567368568,
+            "end": 1792567380676,
+            "desktopBefore": {
+              "rendered": 45,
+              "callbacks": 1662,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 45,
+              "callbacks": 2395,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.45361328125,
+              "p95": 89.6220703125,
+              "max": 89.956298828125
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 154.01806640625,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1083,
+              "p50": 11.161414,
+              "p95": 11.455816,
+              "max": 24.073362
+            },
+            "native_frames_over_16_67ms": 1,
+            "gpu_ms": {
+              "count": 1083,
+              "p50": 0.704512,
+              "p95": 0.83968,
+              "max": 3.154944
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.644114,
+              "p95": 1.910603,
+              "max": 2.265339
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.284002,
+              "p95": 0.478057,
+              "max": 0.640692
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.5,
+              "p95": 2.0,
+              "max": 2.400146484375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.89990234375,
+              "p95": 10.7001953125,
+              "max": 13.89990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7998046875,
+              "p95": 1.0,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567390032,
+            "end": 1792567402140,
+            "desktopBefore": {
+              "rendered": 45,
+              "callbacks": 2950,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 45,
+              "callbacks": 3683,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 86,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.38671875,
+              "p95": 89.56103515625,
+              "max": 100.67724609375
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 149.372314453125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.17555,
+              "p95": 11.444143,
+              "max": 14.041344
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.403456,
+              "p95": 0.470016,
+              "max": 2.642944
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.766417,
+              "p95": 0.957687,
+              "max": 1.141171
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.083146,
+              "p95": 0.117781,
+              "max": 0.206157
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.400146484375,
+              "max": 1.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.199951171875,
+              "p95": 14.10009765625,
+              "max": 28.10009765625
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.699951171875,
+              "p95": 1.10009765625,
+              "max": 1.400146484375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567411489,
+            "end": 1792567423594,
+            "desktopBefore": {
+              "rendered": 45,
+              "callbacks": 4237,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 45,
+              "callbacks": 4970,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 143,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 166,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.4365234375,
+              "p95": 89.597412109375,
+              "max": 223.2275390625
+            },
+            "scene_gaps_over_125ms": 1,
+            "scene_window_max_gap_ms": 223.2275390625,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.164156,
+              "p95": 11.450073,
+              "max": 13.215915
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.807936,
+              "p95": 0.88064,
+              "max": 2.893824
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.894577,
+              "p95": 1.163983,
+              "max": 1.441724
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.198743,
+              "p95": 0.290755,
+              "max": 0.448091
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.0,
+              "p95": 1.300048828125,
+              "max": 1.7998046875
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.699951171875,
+              "p95": 10.5,
+              "max": 148.699951171875
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.900146484375,
+              "max": 1.400146484375
+            }
+          }
+        ],
+        "9b08bed08561": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567464332,
+            "end": 1792567476439,
+            "desktopBefore": {
+              "rendered": 94,
+              "callbacks": 1702,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 94,
+              "callbacks": 2435,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.399169921875,
+              "p95": 89.63427734375,
+              "max": 91.291015625
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 157.550048828125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.166438,
+              "p95": 11.493921,
+              "max": 13.410927
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.771072,
+              "p95": 0.912384,
+              "max": 3.520512
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 1.624125,
+              "p95": 1.834079,
+              "max": 1.989701
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.272501,
+              "p95": 0.404128,
+              "max": 0.529723
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.800048828125,
+              "p95": 2.2998046875,
+              "max": 2.800048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.7998046875,
+              "p95": 11.2001953125,
+              "max": 32.39990234375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.800048828125,
+              "p95": 1.10009765625,
+              "max": 1.39990234375
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567486308,
+            "end": 1792567498417,
+            "desktopBefore": {
+              "rendered": 94,
+              "callbacks": 3021,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 94,
+              "callbacks": 3754,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.449462890625,
+              "p95": 89.62744140625,
+              "max": 156.314697265625
+            },
+            "scene_gaps_over_125ms": 3,
+            "scene_window_max_gap_ms": 164.322021484375,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.159423,
+              "p95": 11.491385,
+              "max": 14.218659
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.392192,
+              "p95": 0.4608,
+              "max": 2.717696
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.762459,
+              "p95": 0.999695,
+              "max": 1.231959
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.076804,
+              "p95": 0.11731,
+              "max": 0.169418
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.300048828125,
+              "p95": 1.699951171875,
+              "max": 2.300048828125
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 7.0,
+              "p95": 33.10009765625,
+              "max": 97.0
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.7001953125,
+              "p95": 1.0,
+              "max": 1.599853515625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567507288,
+            "end": 1792567519395,
+            "desktopBefore": {
+              "rendered": 94,
+              "callbacks": 4279,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 94,
+              "callbacks": 5012,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 144,
+            "gap_p50": 83,
+            "gap_p95": 84,
+            "gap_max": 85,
+            "coordinateRequests": 0,
+            "viewUploads": 144,
+            "submitted_scene_gap_ms": {
+              "count": 144,
+              "p50": 78.43701171875,
+              "p95": 89.588134765625,
+              "max": 111.529296875
+            },
+            "scene_gaps_over_125ms": 0,
+            "scene_window_max_gap_ms": 165.4541015625,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1084,
+              "p50": 11.155244,
+              "p95": 11.470205,
+              "max": 12.980196
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1084,
+              "p50": 0.77312,
+              "p95": 0.848896,
+              "max": 2.894848
+            },
+            "parse_ms": {
+              "count": 145,
+              "p50": 0.90138,
+              "p95": 1.181054,
+              "max": 1.524058
+            },
+            "upload_gl_ms": {
+              "count": 145,
+              "p50": 0.193393,
+              "p95": 0.260819,
+              "max": 0.446347
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 146,
+              "p50": 1.10009765625,
+              "p95": 1.5,
+              "max": 1.89990234375
+            },
+            "upload_ms": {
+              "count": 146,
+              "p50": 6.7001953125,
+              "p95": 10.300048828125,
+              "max": 33.900146484375
+            },
+            "apply_ms": {
+              "count": 146,
+              "p50": 0.60009765625,
+              "p95": 0.900146484375,
+              "max": 1.7998046875
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2347592,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-mwt4_lu0",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-kk6kzzlv"
+          ]
+        },
+        {
+          "pid": 2344052,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-7wrmydwn",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-5q82uj1d"
+          ]
+        },
+        {
+          "pid": 2336900,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-eq3ewggo",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-yc5e84vz"
+          ]
+        },
+        {
+          "pid": 2340550,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-r4c2ldsz",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-nrgo88wn"
+          ]
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/job.json": "b7ebccf5d4f82742d014dd33689d558290ca65293bfa33854cf0a86ff32a2160",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/design.json": "0ebff44c455ad8bd5c5947f81ed521ff0cf3a75a6f0605bd7878134aca74703b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/d6bcdef3d59f/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792519016282043875
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/job.json": "cadc4f08bfe2dc7525c1fc60d6a2f5566603f7c5db4824a63d36b2bb721f9cf9",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/design.json": "12522a8ca71e1c3a0492f90301f23a17d521f2c4e834993086cff3a387bbde6b",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/972af34aa9c5/package/2hb_1xT_CPD_cis-anti-I_namd_solvated/output/2hb_1xT_CPD_cis-anti-I_01_production_20ns_k0.dcd": [
+            5671568276,
+            1792518029911711961
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/job.json": "d6cfd14609338a03cf74c3015840bcba391596b23efb7ce096567e035d28cd4c",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/design.json": "137d39d05eb90dd056a0e6d6b87a23b3d969f26a72aacd9c3c37c9aaf9653256",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/37d39cc6b88f/package/2hb_1xT_CPD_trans-syn-I_namd_solvated/output/2hb_1xT_CPD_trans-syn-I_01_production_20ns_k0.dcd": [
+            5671532276,
+            1792518021769776761
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/job.json": "a023cd42af52611fbeb4c9a1bfb33c12cc81a9608afac083d4d2af2e568ef7de",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/design.json": "723a3fefd646aa1c9015aaa94515af194480878fe5fc7181f072e844efd1a0a5",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/9b08bed08561/package/2hb_1xT_CPD_trans-syn-II_namd_solvated/output/2hb_1xT_CPD_trans-syn-II_01_production_20ns_k0.dcd": [
+            5671712276,
+            1792519017247410041
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-_3fajwuj",
+        "removed": true
+      }
+    },
+    "large-default-final": {
+      "interpretation": "Both fixes and native readiness wait; default selected ranges and streaming. All six windows stayed playing; both jobs failed unchanged throughput gate (>80 endpoints in 12 seconds). Resource throttling qualifies streaming measurements.",
+      "result": [
+        {
+          "job": "8466ccc17eff",
+          "passed": false
+        },
+        {
+          "job": "2f281ba1a83a",
+          "passed": false
+        }
+      ],
+      "sources": {
+        "before": {
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/job.json": "8f2d26cce68f09d3109b72ed881238940e393a7522f47af37b24c4dab6a55f67",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/design.json": "4389e67244cc95b7c27cc6cfc2ef7b384a2b15eb7e951f9db48a04e01ad851af",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_300K_NPT_ENM_k0p5_p10.dcd": [
+            196054100,
+            1791446098516404932
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_04_300K_NPT_MGHH_only_p10.dcd": [
+            49013812,
+            1791488260627813339
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/8466ccc17eff/package/24hb_0xT_namd_solvated/output/24hb_0xT_0S_300K_NPT_settle_fixed_dna_p100.dcd": [
+            1470403956,
+            1791446318260159729
+          ],
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/job.json": "9841de84f99ca83b79e9a9a3f9f8a87aad76ff5d2614552f892178ca399174a4",
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/design.json": null,
+          "/home/jojo/Work/NADOC/workspace/md_jobs/2f281ba1a83a/package/24hb_0xT_namd_solvated/output/24hb_0xT_01_production_200ns_k0.dcd": [
+            38005361308,
+            1789407969383100890
+          ]
+        },
+        "unchanged": true
+      },
+      "cleanup": {
+        "private_workspace": "/media/jojo/Archive/cpb-2d1xhhh3",
+        "removed": true
+      },
+      "metrics": {
+        "8466ccc17eff": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792567593247,
+            "end": 1792567605456,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 243,
+              "callbacks": 1545,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 243,
+              "callbacks": 2202,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 47,
+            "gap_p50": 112,
+            "gap_p95": 1141,
+            "gap_max": 1979,
+            "coordinateRequests": 18,
+            "viewUploads": 29,
+            "submitted_scene_gap_ms": {
+              "count": 29,
+              "p50": 301.761474609375,
+              "p95": 1005.23828125,
+              "max": 1239.83642578125
+            },
+            "scene_gaps_over_125ms": 29,
+            "scene_window_max_gap_ms": 1239.83642578125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 364,
+              "p50": 33.481999,
+              "p95": 33.793783,
+              "max": 40.553584
+            },
+            "native_frames_over_16_67ms": 364,
+            "gpu_ms": {
+              "count": 364,
+              "p50": 27.387904,
+              "p95": 28.961792,
+              "max": 29.698048
+            },
+            "parse_ms": {
+              "count": 29,
+              "p50": 71.780676,
+              "p95": 79.48194,
+              "max": 94.09804
+            },
+            "upload_gl_ms": {
+              "count": 29,
+              "p50": 6.569445,
+              "p95": 9.582459,
+              "max": 9.870571
+            },
+            "long_tasks_ms": [
+              55,
+              53,
+              53,
+              51,
+              53,
+              67,
+              59,
+              62,
+              66,
+              55,
+              63,
+              53,
+              64,
+              53,
+              64,
+              60,
+              54,
+              54,
+              66,
+              62,
+              55,
+              54,
+              60,
+              54,
+              53,
+              62,
+              54,
+              66,
+              56,
+              66,
+              63,
+              64
+            ],
+            "capture_ms": {
+              "count": 31,
+              "p50": 48.199951171875,
+              "p95": 57.699951171875,
+              "max": 58.300048828125
+            },
+            "upload_ms": {
+              "count": 30,
+              "p50": 261.099853515625,
+              "p95": 501.0,
+              "max": 693.89990234375
+            },
+            "apply_ms": {
+              "count": 67,
+              "p50": 21.0,
+              "p95": 29.5,
+              "max": 48.5
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792567618495,
+            "end": 1792567630602,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 243,
+              "callbacks": 2870,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 243,
+              "callbacks": 3569,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 15,
+            "gap_p50": 95,
+            "gap_p95": 4501,
+            "gap_max": 4501,
+            "coordinateRequests": 10,
+            "viewUploads": 13,
+            "submitted_scene_gap_ms": {
+              "count": 15,
+              "p50": 413.0751953125,
+              "p95": 3283.969970703125,
+              "max": 3283.969970703125
+            },
+            "scene_gaps_over_125ms": 13,
+            "scene_window_max_gap_ms": 3283.969970703125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1072,
+              "p50": 11.156701,
+              "p95": 11.478424,
+              "max": 15.488971
+            },
+            "native_frames_over_16_67ms": 0,
+            "gpu_ms": {
+              "count": 1072,
+              "p50": 4.760576,
+              "p95": 6.467584,
+              "max": 7.069696
+            },
+            "parse_ms": {
+              "count": 15,
+              "p50": 52.639511,
+              "p95": 54.879441,
+              "max": 54.879441
+            },
+            "upload_gl_ms": {
+              "count": 15,
+              "p50": 4.767036,
+              "p95": 6.707651,
+              "max": 6.707651
+            },
+            "long_tasks_ms": [
+              50,
+              58
+            ],
+            "capture_ms": {
+              "count": 13,
+              "p50": 37,
+              "p95": 42.60009765625,
+              "max": 42.60009765625
+            },
+            "upload_ms": {
+              "count": 13,
+              "p50": 112.699951171875,
+              "p95": 573.0,
+              "max": 573.0
+            },
+            "apply_ms": {
+              "count": 34,
+              "p50": 18.5,
+              "p95": 35.39990234375,
+              "max": 58.10009765625
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": true,
+            "count": 35,
+            "start": 1792567637837,
+            "end": 1792567650057,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 243,
+              "callbacks": 3927,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 243,
+              "callbacks": 4650,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 61,
+            "gap_p50": 83,
+            "gap_p95": 833,
+            "gap_max": 967,
+            "coordinateRequests": 23,
+            "viewUploads": 72,
+            "submitted_scene_gap_ms": {
+              "count": 72,
+              "p50": 100.4560546875,
+              "p95": 737.144775390625,
+              "max": 904.88427734375
+            },
+            "scene_gaps_over_125ms": 25,
+            "scene_window_max_gap_ms": 904.88427734375,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 365,
+              "p50": 33.477094,
+              "p95": 33.820316,
+              "max": 37.631379
+            },
+            "native_frames_over_16_67ms": 365,
+            "gpu_ms": {
+              "count": 365,
+              "p50": 22.460416,
+              "p95": 23.284736,
+              "max": 24.45824
+            },
+            "parse_ms": {
+              "count": 72,
+              "p50": 16.591066,
+              "p95": 17.798789,
+              "max": 19.753763
+            },
+            "upload_gl_ms": {
+              "count": 72,
+              "p50": 1.751382,
+              "p95": 2.700171,
+              "max": 3.112775
+            },
+            "long_tasks_ms": [],
+            "capture_ms": {
+              "count": 73,
+              "p50": 12.0,
+              "p95": 13.599853515625,
+              "max": 15.89990234375
+            },
+            "upload_ms": {
+              "count": 73,
+              "p50": 34.39990234375,
+              "p95": 193.60009765625,
+              "max": 360.39990234375
+            },
+            "apply_ms": {
+              "count": 82,
+              "p50": 14.10009765625,
+              "p95": 24.60009765625,
+              "max": 27.900146484375
+            }
+          }
+        ],
+        "2f281ba1a83a": [
+          {
+            "name": "play",
+            "representation": "ballstick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567688065,
+            "end": 1792567700193,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 85,
+              "callbacks": 1172,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 85,
+              "callbacks": 1803,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 59,
+            "gap_p50": 101,
+            "gap_p95": 713,
+            "gap_max": 2730,
+            "coordinateRequests": 17,
+            "viewUploads": 34,
+            "submitted_scene_gap_ms": {
+              "count": 32,
+              "p50": 301.60205078125,
+              "p95": 401.977294921875,
+              "max": 2211.548828125
+            },
+            "scene_gaps_over_125ms": 32,
+            "scene_window_max_gap_ms": 2211.548828125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 362,
+              "p50": 33.486855,
+              "p95": 33.829457,
+              "max": 35.638859
+            },
+            "native_frames_over_16_67ms": 362,
+            "gpu_ms": {
+              "count": 362,
+              "p50": 27.096064,
+              "p95": 28.745728,
+              "max": 30.02368
+            },
+            "parse_ms": {
+              "count": 33,
+              "p50": 70.418296,
+              "p95": 80.794903,
+              "max": 186.928233
+            },
+            "upload_gl_ms": {
+              "count": 33,
+              "p50": 6.796186,
+              "p95": 10.447548,
+              "max": 10.885301
+            },
+            "long_tasks_ms": [
+              59,
+              55,
+              65,
+              64,
+              66,
+              63,
+              55,
+              67,
+              56,
+              62,
+              58,
+              72,
+              57,
+              67,
+              64,
+              60,
+              61,
+              56,
+              64,
+              56,
+              62,
+              63,
+              56,
+              113,
+              55,
+              54,
+              65,
+              56,
+              72,
+              56,
+              66,
+              64,
+              65,
+              64,
+              56
+            ],
+            "capture_ms": {
+              "count": 34,
+              "p50": 53.5,
+              "p95": 61.199951171875,
+              "max": 61.89990234375
+            },
+            "upload_ms": {
+              "count": 33,
+              "p50": 224.599853515625,
+              "p95": 369.39990234375,
+              "max": 406.10009765625
+            },
+            "apply_ms": {
+              "count": 68,
+              "p50": 20.900146484375,
+              "p95": 30.39990234375,
+              "max": 42.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "stick",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567714190,
+            "end": 1792567726298,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 85,
+              "callbacks": 2499,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 85,
+              "callbacks": 3141,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 76,
+            "gap_p50": 87,
+            "gap_p95": 631,
+            "gap_max": 936,
+            "coordinateRequests": 22,
+            "viewUploads": 53,
+            "submitted_scene_gap_ms": {
+              "count": 55,
+              "p50": 178.734619140625,
+              "p95": 581.044189453125,
+              "max": 916.1474609375
+            },
+            "scene_gaps_over_125ms": 51,
+            "scene_window_max_gap_ms": 916.1474609375,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 1080,
+              "p50": 11.152148,
+              "p95": 11.585671,
+              "max": 23.635973
+            },
+            "native_frames_over_16_67ms": 4,
+            "gpu_ms": {
+              "count": 1080,
+              "p50": 5.172224,
+              "p95": 6.759424,
+              "max": 7.3984
+            },
+            "parse_ms": {
+              "count": 55,
+              "p50": 54.826341,
+              "p95": 71.143058,
+              "max": 79.031682
+            },
+            "upload_gl_ms": {
+              "count": 55,
+              "p50": 5.846416,
+              "p95": 6.812685,
+              "max": 9.463112
+            },
+            "long_tasks_ms": [
+              50,
+              52,
+              59,
+              54,
+              57,
+              53,
+              54,
+              52,
+              52,
+              52,
+              51,
+              56,
+              103,
+              50,
+              52,
+              50,
+              58,
+              53,
+              51
+            ],
+            "capture_ms": {
+              "count": 54,
+              "p50": 38.2001953125,
+              "p95": 49.5,
+              "max": 50.7998046875
+            },
+            "upload_ms": {
+              "count": 54,
+              "p50": 119.5,
+              "p95": 325.39990234375,
+              "max": 471.199951171875
+            },
+            "apply_ms": {
+              "count": 87,
+              "p50": 22.10009765625,
+              "p95": 28.400146484375,
+              "max": 33.199951171875
+            }
+          },
+          {
+            "name": "play",
+            "representation": "vdw",
+            "smooth": false,
+            "loop": false,
+            "count": 200,
+            "start": 1792567733247,
+            "end": 1792567745458,
+            "playedThrough": true,
+            "desktopBefore": {
+              "rendered": 85,
+              "callbacks": 3495,
+              "focused": true,
+              "hidden": false
+            },
+            "desktopAfter": {
+              "rendered": 85,
+              "callbacks": 4215,
+              "focused": true,
+              "hidden": false
+            },
+            "frames": 74,
+            "gap_p50": 83,
+            "gap_p95": 699,
+            "gap_max": 1287,
+            "coordinateRequests": 21,
+            "viewUploads": 85,
+            "submitted_scene_gap_ms": {
+              "count": 86,
+              "p50": 67.24658203125,
+              "p95": 502.586669921875,
+              "max": 1240.1923828125
+            },
+            "scene_gaps_over_125ms": 12,
+            "scene_window_max_gap_ms": 1240.1923828125,
+            "scene_cadence_pass": false,
+            "gpu_missing_frames": 0,
+            "native_frame_ms": {
+              "count": 365,
+              "p50": 33.489073,
+              "p95": 33.831445,
+              "max": 35.367874
+            },
+            "native_frames_over_16_67ms": 365,
+            "gpu_ms": {
+              "count": 365,
+              "p50": 22.59968,
+              "p95": 23.528448,
+              "max": 25.191424
+            },
+            "parse_ms": {
+              "count": 86,
+              "p50": 16.539083,
+              "p95": 17.61561,
+              "max": 18.289803
+            },
+            "upload_gl_ms": {
+              "count": 86,
+              "p50": 1.582375,
+              "p95": 2.205934,
+              "max": 2.692775
+            },
+            "long_tasks_ms": [
+              93
+            ],
+            "capture_ms": {
+              "count": 86,
+              "p50": 12.099853515625,
+              "p95": 14.10009765625,
+              "max": 17.39990234375
+            },
+            "upload_ms": {
+              "count": 86,
+              "p50": 32.699951171875,
+              "p95": 72.800048828125,
+              "max": 129.7998046875
+            },
+            "apply_ms": {
+              "count": 86,
+              "p50": 13,
+              "p95": 23.599853515625,
+              "max": 32.60009765625
+            }
+          }
+        ]
+      },
+      "runtime_cleanup": [
+        {
+          "pid": 2360118,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-2ifkwtvl",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-wn06w6lw"
+          ]
+        },
+        {
+          "pid": 2352458,
+          "removed": true,
+          "directories": [
+            "/media/jojo/Archive/NADOC_archive/runtime/vr-capture/viewer-0yz1mguy",
+            "/media/jojo/Archive/.nadoc-vr-capture/v-jj_8s0zv"
+          ]
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Submitted eye evidence is not physical through-lens comfort validation (MV-49).",
+    "12 Hz exact saved frames are discrete motion samples; interpolation was disabled for fidelity comparisons.",
+    "24HB resident-final first job started before native-readiness wait was added; exclude its startup-related outliers from steady-state conclusions.",
+    "Default loading and resident diagnostics use same saved coordinates; resident four-frame loops alter selection size only.",
+    "Large-default validation scope reached MemoryHigh=6 GiB (MemoryMax=8 GiB), with memory.high and socket throttling events but no OOM. Streaming pauses cannot be attributed purely to disk or model size; resident GPU cost separately exceeds the headset budget."
+  ],
+  "checks": {
+    "placement_audit": "clear",
+    "task_ruff": "passed",
+    "lint": "five pre-existing F401 errors in unchanged HEAD files; zero added errors",
+    "memory_lint": {
+      "errors": [
+        "project_cpd_strand_builder >1000 lines",
+        "project_exp_predictor not indexed",
+        "project_native_vr >1000 lines"
+      ],
+      "preexisting_native_vr_head_lines": 1881,
+      "task_native_vr_head_added_lines": 16
+    },
+    "frontend_initial": {
+      "assertions_passed": 8384,
+      "skipped": 1,
+      "files_passed": 724,
+      "exit_code": 1,
+      "error": "Unchanged overhang_orientation_menu.test.js left deferred context-menu bindings after jsdom destruction; test teardown repaired (ISSUE-100)."
+    },
+    "metrics_tests": {
+      "passed": 3
+    },
+    "tour_tests": {
+      "passed": 50
+    },
+    "smoke": {
+      "passed": 23,
+      "cleanup": "1 project revision store and 6 prefixed artifacts removed by teardown; no prefixed workspace files remain."
+    },
+    "task_main_js_net_lines": 0,
+    "frontend_final": {
+      "exit_code": 0,
+      "passed": 8384,
+      "skipped": 1,
+      "files": 724,
+      "unhandled_errors": 0,
+      "duration_seconds": 140.02
+    },
+    "git_diff_check": "passed",
+    "resource_snapshot": "live observation returned cgroup memory metrics"
+  },
+  "cleanup": {
+    "completed_benchmark_raw": {
+      "files": 532,
+      "bytes": 805809458,
+      "active_references": [],
+      "removed_directories": [
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/baseline",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/profile",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/profile-bound",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/optimized",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-default",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-default-legacy",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-resident",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-resident-clean",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-resident-click",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-resident-final",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/cpd-final",
+        "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021/large-default-final"
+      ],
+      "verified_removed": true
+    },
+    "preserved_user_processes": [
+      1669167,
+      1669173,
+      1669176,
+      219468
+    ],
+    "final_source_metadata_and_dcd_stats_unchanged": true,
+    "source_items_rechecked": 20,
+    "remaining_diagnostic_logs_and_scratch": {
+      "files": 653,
+      "bytes": 14419184,
+      "active_references": [],
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-hitches-20261021"
+    },
+    "task_artifact_directory_removed": true,
+    "retained": "Reusable implementation/tests, playback documentation, issue/manual-review notes, and this compact audit; raw images, profiles, logs and private fixtures removed. Deployed native binaries and unrelated artifacts preserved."
+  },
+  "residual_cpd_publication": {
+    "job": "972af34aa9c5",
+    "style": "vdw",
+    "scene_gap_ms": 234.607177734375,
+    "upload_bytes": 572128,
+    "browser_upload_ms": 153.39990234375,
+    "resource_response_ms": 12.4,
+    "backend_write_end_ms": 9.7205249912804,
+    "capture_max_ms": 1.5,
+    "native_frame_max_ms": 14.404243,
+    "browser_long_tasks": 0,
+    "interpretation": "Delay precedes backend handling or lies in browser/proxy scheduling. Exact cause unresolved; not attributed to disk, GC or CPU contention without evidence."
+  },
+  "visual_review": {
+    "adjustment": "Existing place-scene-in-view launch option; no molecular transforms changed by benchmark.",
+    "checks": "Both submitted eyes contain >100 molecular class pixels for every completed style.",
+    "inspected": [
+      "baseline CPD ballstick",
+      "final cis-anti-I VDW left eye",
+      "resident-final 24HB production ballstick left eye"
+    ],
+    "result": "Identifiable molecular output in submitted eye images; physical headset continuity not checked.",
+    "captures": [
+      {
+        "capture": "cpd-final/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 86803,
+            "image_sha256": "726100d325a8628f16bbd94e16dbbf5ac201d92211cbd899eadafdccc3a5e4a4"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 90222,
+            "image_sha256": "007cc92fa36722bd57cde2eaae72d9f7353c0f0f42fbc176dfa97ba95a743910"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 52873,
+            "image_sha256": "f18e32a543122c472b53fac376346472c2727a66a42a3b7498d71ae11dd7bd4a"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 54183,
+            "image_sha256": "b06d1f5017426a8b8aab14167c1ed3d3243b881487b8fa755789cc0afc85d495"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/9b08bed08561/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 129724,
+            "image_sha256": "fe1f46beaa17332aa2e639ed083ff94221f7a8f8776f0e53b92a0b6b324f0a40"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 134198,
+            "image_sha256": "df67d0e5d4de7d7bb5f80ee946b8c89337746a33a6814b4055ba2a92aed58876"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 90748,
+            "image_sha256": "f67b45f739a717b1d104197a5e6b465341ffa528a19bb828819cf973eff75244"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 93123,
+            "image_sha256": "1b0c2083d7695e207a23a73a387cfafec4ca41f84e91b43a0c34ef713f3c031d"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 55931,
+            "image_sha256": "1b728280aa66a891113ad1999005f267a948367af7f4b91a23fa987d963099f3"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 56642,
+            "image_sha256": "b29c2b2efef2e6b6c76300ff4943f570c053e24c97a9cc8894b279c66b8ea1a7"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/37d39cc6b88f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 123353,
+            "image_sha256": "fa2757e8000a26cca350abf0139c72b5016ac5266e6754e17a1f698f97d3c8f3"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 128483,
+            "image_sha256": "de809473b8c79536491c137b0954fe897af65c2e67449d2e485bbf0fa9e7695c"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 92656,
+            "image_sha256": "2aaf244247b9fb9b51ca2fa89a015f1440cfdd66b6b5bca5d3b2197182d2deff"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 92758,
+            "image_sha256": "7f1579fa8954204cbfee3c53d129f199a59971dbbf240209c950b804af9e70f7"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 55425,
+            "image_sha256": "fb9e23c0ac20fad73cdbce1e6bc385e278c3e111d7abc1df17be59d9e438b7aa"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 54770,
+            "image_sha256": "c37363a9f04fb1e236607f26dca6916c31ac14b2c668f0e92a4c4942469a3e64"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/d6bcdef3d59f/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 135241,
+            "image_sha256": "346f36a776e99d188dcb09391779b1aa7a3cbec6d66f2ca27bb11b9f5861ee79"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 137830,
+            "image_sha256": "967a66b2e9087ef06e1131f9b6db2f2e7e36351be0089b90ed9cc5da01f10702"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 90874,
+            "image_sha256": "d8dc71d9597d1452f053c0458fba667990b132ebcf663be30f5a9f5a48aca51e"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 94883,
+            "image_sha256": "526e67afe28888a6756c139d71fd6f8495da45fa5b82ca9f77ba4b505fdb7307"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 55960,
+            "image_sha256": "c726626f84329e59eaf5bb1d6bd8bf08f4568decf5c660d25cfc5cccbf7ddc99"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 57149,
+            "image_sha256": "b209dd6fec75a6a69c473dfe3cd63f04c4f3b53bb0d128ee93fcf8aedfb887ee"
+          }
+        ]
+      },
+      {
+        "capture": "cpd-final/972af34aa9c5/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 125172,
+            "image_sha256": "45b357d6540a748bbbba70a26d246b49dd636c676adc3ff78194f68a80398531"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 132397,
+            "image_sha256": "00caa1af7c779c6eb76e8a856fe218b935d46057608743d5983320c0e88eeca9"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 108233,
+            "image_sha256": "35dbb67c361408386db49ac552f5d9eba257d1aba58a2f0a39aeed6488a324d5"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 106229,
+            "image_sha256": "7f6f0d71183b0f6ab74353837a49e866aeee33f51568a712c15866dedb819946"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 83640,
+            "image_sha256": "b55af9e7863c1445943f23d9d197e11d8993151b916422f40db7b66b6154f8ad"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 82140,
+            "image_sha256": "940ef934d49ac2665d1cf8c161c861a37dd8e9aef86ba7b7de99642efb22fd7c"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 123078,
+            "image_sha256": "f293021a6578a25c0ddcd7034aa86f582cd38fbd5b1bb51dad76255f026f9b52"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 121029,
+            "image_sha256": "d56b8779bb4b0a9375b108aaf8b134468c28fe65d8a18db75613566b99dc261a"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 100306,
+            "image_sha256": "40c8e6d6e57a2d876da0902c17ad68834dab2cff3353b7842ad7bf0ec46576a0"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 99353,
+            "image_sha256": "dcd1cce9971a3358f06ecaaca95624d8a193d8a7236d1f514646e02867ae4b6b"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 79535,
+            "image_sha256": "fda96a5e2bc1ac711e013f75d74a1aed21c795fe69340b1b4df6c2242dab5f68"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 78687,
+            "image_sha256": "9421bde8fed62e63e6fe782636d0469186bd62d21dc52fe5b8e3924d7f6ce3a5"
+          }
+        ]
+      },
+      {
+        "capture": "large-resident-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 112527,
+            "image_sha256": "096f8d70ca682079072ed940ded139b1e780685389ad10a9c86b0bc17141f5c1"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 111149,
+            "image_sha256": "7e90f3496c9ad2c4d7a44449a6608e5533dd5bf019b5742873b069790a43ba99"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 110297,
+            "image_sha256": "d6edd6e2d84883e731299ce3cad5f3487e1289f960e6e04497d10a86a9469c6a"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 108054,
+            "image_sha256": "303e2aaac244b41ca8e40f6515d97f7589583acda3ad1ec0d25046ef897f4d7f"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 84138,
+            "image_sha256": "793c3f1b6f744bf651564d16164e4f3d3b3ab700ffcdcebe9dbe46d16c19ce46"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 82686,
+            "image_sha256": "86dba72600c1812d012b6f01004c2589a1ac3ebd2b2c70da8e1907b23cac73a2"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/2f281ba1a83a/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 123990,
+            "image_sha256": "0641449e1c66eff43459cc06cd724de887e6e517b14c8221eec9d6bcba19afd7"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 121304,
+            "image_sha256": "a1b5b44f4865f5f3366517e4c673fb0de84a5a3ed6d49871e441324f31d7ee84"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-ballstick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 100246,
+            "image_sha256": "553971f496cda64104f1db710bf59830c247093f17ab9dc17a2695d9dd951ec6"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 99228,
+            "image_sha256": "1e7945a3c6a093652af77ce37b56b75b926d2360a7f723ebe0ddb0248dc70e43"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-stick",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 79474,
+            "image_sha256": "63820cf0bee38a58806d6a9e4c237748a95186f021d094f84cc945cb4ebc3e37"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 78573,
+            "image_sha256": "bb0abc7719a9770afc7f121e41bf7a644540c4da5ed7f867151cc814c4d646ff"
+          }
+        ]
+      },
+      {
+        "capture": "large-default-final/8466ccc17eff/vr_cpd_playback-CPD-defaul-b59d4-adence-and-submitted-stereo-chromium/stereo-vdw",
+        "eyes": [
+          {
+            "eye": "left",
+            "molecular_pixels": 112399,
+            "image_sha256": "3a8edb511c399108b0f172de83d78aadcba3f8581bafd5fecaa2ae017c73a22e"
+          },
+          {
+            "eye": "right",
+            "molecular_pixels": 110978,
+            "image_sha256": "227a4afc56eb60d108323822edefac9c32913c794599fa99be3972625f768efc"
+          }
+        ]
+      }
+    ]
+  },
+  "large_validation_resource_sample": {
+    "nadoc-validation-2349146-10842.scope": {
+      "memory.current": "6158704640",
+      "memory.peak": "6444666880",
+      "memory.events": "low 0\nhigh 1932\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 42283",
+      "memory.pressure": "some avg10=0.11 avg60=0.33 avg300=0.21 total=1044166\nfull avg10=0.11 avg60=0.33 avg300=0.21 total=1033677"
+    }
+  },
+  "profile_summary": {
+    "source": "profile-bound ballstick, 12 s CPU sample",
+    "idle_ms": 9639,
+    "vr_geometry_visit_ms": 453.54,
+    "gc_ms": 201.1,
+    "querySelectorAll_ms": 196.35,
+    "fetch_ms": 175,
+    "add_ms": 142.14,
+    "interpretation": "Baseline repeated local mesh traversal/packing was a measurable allocation cost; no claim every later hitch is GC."
+  },
+  "system_sampling": {
+    "samples": 239,
+    "scope": "240-second startup/baseline/profile observation, not every final run",
+    "median_cpu_idle_percent": 92.0,
+    "median_iowait_percent": 0.0,
+    "median_swap_in_kib_s": 12.0,
+    "max_swap_in_kib_s": 8292.0
+  }
+}

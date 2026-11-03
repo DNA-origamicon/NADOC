@@ -291,6 +291,12 @@ def _job_to_summary(job: MdJob) -> JobSummary:
     )
 
 
+def _dcd_has_display_frames(path: Path) -> bool:
+    from backend.core.md_import import dcd_has_display_frames
+
+    return dcd_has_display_frames(path)
+
+
 def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
     package_dir = job.package_dir(_workspace())
     output_dir = package_dir / "output"
@@ -314,7 +320,7 @@ def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
                 output_dir / f"{seg.name}.dcd",
                 package_dir / f"{seg.name}.dcd",
             )
-            if d.exists() and d.stat().st_size > 0
+            if d.exists() and d.stat().st_size > 0 and _dcd_has_display_frames(d)
         ]
         if dcds:
             return seg.name, max(dcds, key=lambda d: d.stat().st_mtime)
@@ -425,6 +431,11 @@ async def _run_md_analysis(
                 break
             await asyncio.sleep(0.01 if qualname.endswith("_bin") else 0.25)
         return await task
+    except RuntimeError as exc:
+        # Worker exceptions cross the process boundary as type-prefixed text.
+        if str(exc).startswith("MemoryBudgetExceeded:"):
+            raise HTTPException(413, str(exc).partition(":")[2].strip()) from exc
+        raise
     except asyncio.CancelledError:
         md_analysis_runner.cancel(job_id, kind)
         raise
@@ -590,6 +601,19 @@ _FLEX_PROGRESS_PATHS: dict[tuple[str, str], Path] = {}
 
 
 async def _run_md_flex(request, job_id, kind, analysis, args, *, timeout_s=600.0):
+    # Desktop and native VR share this route. Warm artifacts need no analysis
+    # process/import startup; decode away from the API loop so VR polling continues.
+    def read_cached():
+        from backend.core import md_trajectory
+
+        function = getattr(md_trajectory, analysis)
+        cached_reader = getattr(function, "read_cached", None)
+        options = {"include_model": True} if analysis == "md_rmsf_atomistic" else {}
+        return cached_reader(*args, **options) if cached_reader is not None else None
+
+    cached = await run_in_threadpool(read_cached)
+    if cached is not None:
+        return cached
     fd, name = tempfile.mkstemp(prefix='nadoc_md_flex_', suffix='.json')
     os.close(fd)
     path = Path(name)
@@ -2149,7 +2173,12 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
         if k in type(body).model_fields
         and (k == "protocol" or k in preset.locked or k not in explicit)
     }
-    return body.model_copy(update=updates) if updates else body
+    if not updates:
+        return body
+    resolved = body.model_copy(update=updates)
+    # Preset defaults are not explicit caller choices (notably for CPD safety).
+    resolved.__pydantic_fields_set__ = explicit
+    return resolved
 
 
 def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> CreateJobRequest:
@@ -2566,11 +2595,16 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             from backend.core.cpd_forcefield import (  # noqa: PLC0415
                 CpdCapabilityError,
                 assert_cpd_simulation_supported,
+                design_has_photoproducts,
             )
 
             try:
                 assert_cpd_simulation_supported(design, path="NAMD job creation")
                 body = _apply_photoproduct_integrator_policy(design, body)
+                if design_has_photoproducts(design) and body.draft:
+                    # Validate and freeze formed-product packages before offering Run
+                    # or remote submission. Creation must never execute the package.
+                    body = body.model_copy(update={"draft": False, "autostart": False})
             except CpdCapabilityError as exc:
                 raise HTTPException(400, str(exc)) from exc
         name = (design.metadata.name or "design").replace(" ", "_")
@@ -2958,60 +2992,18 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
 
 
 def _measured_ns_per_day(job: MdJob) -> Optional[tuple[float, float, str]]:
-    """``(ns_per_day, timestep_fs, segment_name)`` measured from this job's own NAMD logs.
-
-    THE point of this: the atom-count model (:func:`md_optimize.predict_ns_per_day`) is
-    calibrated against one machine and is badly wrong on another — on this box it read
-    **7.5x low** for a 62.7k-atom 2hb (model 29.5 ns/day at 2 fs, measured 220), which
-    turned a ~2-day estimate into "17 days".  A job that has actually run carries the
-    real number in its logs, so prefer it and keep the model only for a package that has
-    never run a step.
-
-    The timestep is read from the MATCHING manifest segment, never from
-    ``relax_protocol_settings.timestep_fs`` — those disagree in the wild (a fast-ladder
-    package records 4.0 there while every ladder segment runs at 2.0), and a wrong dt
-    silently rescales the answer by 2x.  A log we cannot pair with a segment is skipped
-    rather than guessed at.
-
-    Production segments are preferred: they are unrestrained and at the production
-    timestep, so they are the closest analogue to the run being estimated.  A restrained
-    ENM ladder segment is the fallback — a little pessimistic (extra bonds cost time),
-    which is the safe direction for a wall-clock estimate.
-    """
-    from backend.core.namd_metrics import benchmark_ns_per_day  # noqa: PLC0415
-
-    package_dir = job.package_dir(_workspace())
+    """Timing from a completed job with verified outputs and matching local hardware."""
+    from backend.core.namd_planning import qualified_job_timing
+    from backend.core.namd_timing import matches_local
+    if str(getattr(job.status,'value',job.status))!='completed':return None
+    package_dir=job.package_dir(_workspace())
     try:
-        manifest = json.loads((package_dir / "manifest.json").read_text())
-    except (OSError, ValueError):
-        return None
-    # Segment name → its timestep.  Only these are measurable: the minimisation slot
-    # does no timed dynamics and a reseed is zero-step.
-    dt_by_name: dict[str, float] = {}
-    for seg in manifest.get("segments") or []:
-        name, dt = seg.get("name"), seg.get("timestep_fs")
-        if name and isinstance(dt, (int, float)) and dt > 0:
-            dt_by_name[str(name)] = float(dt)
-    if not dt_by_name:
-        return None
-
-    def _rank(name: str) -> tuple[int, float]:
-        # Production first, then newest log.
-        is_prod = "production" in name.lower()
-        try:
-            mtime = (package_dir / f"{name}.log").stat().st_mtime
-        except OSError:
-            mtime = 0.0
-        return (1 if is_prod else 0, mtime)
-
-    for name in sorted(dt_by_name, key=_rank, reverse=True):
-        log = package_dir / f"{name}.log"
-        if not log.is_file():
-            continue
-        rate = benchmark_ns_per_day(log)
-        if rate and rate > 0:
-            return rate, dt_by_name[name], name
-    return None
+        manifest=json.loads((package_dir/'manifest.json').read_text())
+        timing=qualified_job_timing(package_dir,manifest)
+    except (OSError,ValueError):return None
+    if not timing or not timing['gpu_resident']:return None
+    if not matches_local(timing['provenance'],devices=job.devices or '0',threads=job.threads):return None
+    return timing['ns_per_day'],timing['timestep_fs'],timing['segment']
 
 
 def _throughput_estimate(
@@ -3021,6 +3013,8 @@ def _throughput_estimate(
     *,
     force_resident: Optional[bool] = None,
     measured: Optional[tuple[float, float, str]] = None,
+    devices: str = '0',
+    threads: int = 16,
 ) -> dict:
     """``{est_ns_per_day, est_hours, throughput_source}`` for a run — advisory only.
 
@@ -3030,7 +3024,8 @@ def _throughput_estimate(
     steps/day x dt.  ``est_*`` are ``None`` when nothing can be estimated, which is the
     signal for the panel to say nothing rather than guess.
     """
-    from backend.core.md_optimize import gpu_resident_pays, predict_ns_per_day
+    from backend.core.md_optimize import gpu_resident_pays
+    from backend.core.namd_timing import local_step_ms
 
     if length_ns <= 0:
         return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
@@ -3043,10 +3038,12 @@ def _throughput_estimate(
         resident = (
             force_resident if force_resident is not None else gpu_resident_pays(n_atoms)
         )
-        ns_per_day = predict_ns_per_day(n_atoms, gpu_resident=bool(resident)) * (
-            timestep_fs / 4.0
-        )
-        source = "model"
+        ms_step = local_step_ms(n_atoms, resident=bool(resident), devices=devices, threads=threads)
+        if ms_step is None:
+            return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None,
+                    "timing_note": "No matching current-engine timing evidence for this hardware, mode and size."}
+        ns_per_day = 86.4*timestep_fs/ms_step
+        source = "current-engine-probes"
     else:
         return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
 
@@ -3075,7 +3072,6 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     or vice versa.
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
-    from backend.core.md_protocols import mgh_slow_release_segments
     from backend.core.md_vram import estimate_profile_from_design
 
     body = _apply_relax_preset(body)
@@ -3087,41 +3083,46 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     try:
         design = design_state.get_or_404().without_reference_geometry()
         profile = await run_in_threadpool(
-            estimate_profile_from_design, design, padding_nm=body.padding_nm
+            estimate_profile_from_design, design, padding_nm=body.padding_nm,
+            box_mode=body.box_mode,box_size_nm=body.box_size_nm,
+            nacl_mM=0 if body.salt_mode=='screening' else body.ion_conc_mM,
+            mgcl2_mM=12.5 if body.salt_mode=='screening' else body.mg_conc_mM,
         )
         if not profile:
             return {**forecast(target, 0), "skipped": True}
         n_atoms = profile["dna_atoms"] if body.protocol == IMPLICIT_GBIS_PROTOCOL else (
-            profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+            profile.get('atom_upper_bound',profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"])
         )
-        # Mirrors prepare_mgh_slow_release's RE-AUDIT CONCLUDED resolution: declash
-        # (and therefore the forecast's gentle-tier sizing) applies ONLY when
-        # explicitly requested — an unspecified request is off, not auto-detected.
-        soft = body.force_soft or bool(body.declash)
-        # The ladder timestep the RUN will really use — the same tiers prepare applies,
-        # with the user's explicit choice as the base.  This used to read `body.fast`
-        # alone, so a job with an explicit relax_timestep_fs got a disk forecast and an
-        # ETA computed from a timestep it never ran at.
-        base_fs = (
-            float(body.relax_timestep_fs)
-            if body.relax_timestep_fs is not None
-            else (4.0 if body.fast else 2.0)
-        )
-        if body.force_soft:
-            timestep_fs = min(1.0, base_fs)
-        elif soft:  # declash / 2+xT inserts / extensions → the gentle 2 fs tier
-            timestep_fs = min(2.0, base_fs)
-        else:
-            timestep_fs = base_fs
-        _, segments = mgh_slow_release_segments("est", timestep_fs=timestep_fs)
-        predicted = namd_run_output_bytes(segments, n_atoms)
-        length_ns = sum(int(s.steps) for s in segments) * timestep_fs / 1_000_000.0
+        # Use the same emitted stage table as the wizard: soft starts, disabled
+        # DCD output, stage overrides and mixed timesteps all affect this quote.
+        from backend.api.routes_md_plan import ProtocolPlanRequest, protocol_plan
+        from backend.core.namd_runtime import local_compute,completion_quote
+        request=ProtocolPlanRequest(**{**body.model_dump(), 'n_atoms_hint': n_atoms})
+        plan=await protocol_plan(request,include_box_preview=False)
+        stages=plan['stages']
+        predicted=namd_run_output_bytes([
+            (int(stage['steps']),int(stage['params'].get('dcdfreq',0))) for stage in stages
+        ],n_atoms)
+        length_ns=sum(float(stage['ns']) for stage in stages)
+        work=[dict(role=stage['role'],steps=stage['steps'],
+                   gpu_resident=str(stage['params'].get('gpuresident','off')).lower() in ('on','yes','true','1'),
+                   pairlistdist=stage['params'].get('pairlistdist',13.5),
+                   pmegridspacing=stage['params'].get('pmegridspacing',1.5),
+                   margin=stage['params'].get('margin',3)) for stage in stages]
+        compute=local_compute(n_atoms,work,devices=body.devices,threads=body.threads,
+            box_nm=profile.get('resource_box_nm') or profile.get('box_nm'))
+        quote=completion_quote(compute,target='local',n_atoms=n_atoms,stages=work,output_bytes=predicted)
+        timing=dict(est_hours=round(quote['known_hours'],2) if quote.get('available') else None,
+                    est_ns_per_day=None,completion=quote,
+                    throughput_source='stage-runtime-model' if compute else None,
+                    timing_note='Preparation, startup, health checks and processing included; planning range, not a guarantee.'
+                    if compute else 'No timing coverage for this hardware.')
     except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
         logger.warning("estimate_md_disk failed (allowing launch): %s", exc)
         return {**forecast(target, 0), "skipped": True}
     return {
         **forecast(target, predicted),
-        **_throughput_estimate(n_atoms, length_ns, timestep_fs),
+        **timing,
         "n_atoms": n_atoms,
         "length_ns": round(length_ns, 3),
     }
@@ -3135,15 +3136,16 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
     if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
         # Seeded job: the atomistic model is resolved later from the source snapshot, so
         # pre-flight cannot size it. Preparation still builds only a full solvent box.
-        return {"skipped": True, "tier": "ok"}
+        return {"skipped": False, "tier": "unknown",
+                "reason": "Seeded-run memory requirements have not been characterized. Select Alpine or RunPod."}
     try:
         # Judge the resolved request exactly as preparation will, including preset padding.
         resolved = _apply_relax_preset(body)
         if resolved.protocol == IMPLICIT_GBIS_PROTOCOL:
             return {
-                "skipped": True,
-                "tier": "ok",
-                "reason": "implicit_solvent_has_no_water_box",
+                "skipped": False,
+                "tier": "unknown",
+                "reason": "Implicit-solvent memory requirements have not been characterized. Select Alpine or RunPod.",
             }
         design = design_state.get_or_404().without_reference_geometry()
         advice = await run_in_threadpool(
@@ -3151,11 +3153,30 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
             design,
             padding_nm=resolved.padding_nm,
             devices=resolved.devices,
+            gpu_resident_mode=resolved.gpu_resident or 'auto',
+            box_mode=resolved.box_mode,
+            box_size_nm=resolved.box_size_nm,
+            nacl_mM=0.0 if resolved.salt_mode=='screening' else resolved.ion_conc_mM,
+            mgcl2_mM=12.5 if resolved.salt_mode=='screening' else resolved.mg_conc_mM,
+            threads=resolved.threads,
+            stage_overrides=resolved.stage_overrides,
         )
         return advice
-    except Exception as exc:  # noqa: BLE001 — a preflight must never block a launch
-        logger.warning("preflight_md_vram failed (allowing launch): %s", exc)
-        return {"skipped": True, "tier": "ok"}
+    except Exception as exc:  # noqa: BLE001 — unknown sizing must not authorize a launch
+        logger.warning("preflight_md_vram could not establish a memory budget: %s", exc)
+        return {"skipped": False, "tier": "unknown", "reason": "Memory requirements could not be determined. Retry sizing or select a larger compute target."}
+
+
+@router.get('/md/jobs/{job_id}/resource-estimate')
+async def prepared_md_resource_estimate(job_id: str) -> dict:
+    """Expected stage peaks and separate admission ceilings for a saved package."""
+    from backend.core.namd_resources import prepared_resource_summary
+    job=_load_job(job_id)
+    try:
+        return await run_in_threadpool(prepared_resource_summary,job.package_dir(_workspace()),
+                                      threads=job.threads,devices=job.devices)
+    except (OSError,ValueError,KeyError) as exc:
+        raise HTTPException(409,detail=f'Prepared resource forecast unavailable: {exc}') from exc
 
 
 def _psf_atom_count(psf_path: Path) -> int:
@@ -3219,15 +3240,28 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
         for frac in (0.10, 0.40, 0.50)
     ]
     predicted = namd_run_output_bytes(segments, n_atoms)
+    timing=_throughput_estimate(n_atoms,plan['length_ns'],timestep_fs,
+        force_resident=plan['force_resident'],
+        measured=_measured_ns_per_day(job) if plan['force_resident'] is not False else None,
+        devices=job.devices,threads=job.threads)
+    from backend.core.namd_runtime import local_compute,completion_quote
+    from backend.core.md_optimize import gpu_resident_pays
+    mode=plan['force_resident'] if plan['force_resident'] is not None else gpu_resident_pays(n_atoms)
+    work=[dict(role='production',steps=steps,gpu_resident=mode) for steps,_ in segments]
+    compute=local_compute(n_atoms,work,devices=job.devices,threads=job.threads) if n_atoms else None
+    if compute and str(timing.get('throughput_source') or '').startswith('measured:') and timing.get('est_hours'):
+        # Keep a verified parent rate while adding the same lifecycle accounting.
+        factor=timing['est_hours']/compute['hours']
+        for field in ('hours','low_hours','high_hours'):compute[field]*=factor
+    quote=completion_quote(compute,target='local',n_atoms=n_atoms,stages=work,
+        prepared=True,output_bytes=predicted)
+    if quote.get('available'):
+        timing.update(est_hours=round(quote['known_hours'],2),
+            timing_note='Startup, health checks and trajectory processing included; retries and contention additional.')
     return {
         **forecast(package_dir if package_dir.exists() else _workspace(), predicted),
-        **_throughput_estimate(
-            n_atoms,
-            plan["length_ns"],
-            timestep_fs,
-            force_resident=plan["force_resident"],
-            measured=_measured_ns_per_day(job),
-        ),
+        **timing,
+        "completion": quote,
         "n_atoms": n_atoms,
         "total_steps": total_steps,
         "length_ns": plan["length_ns"],
@@ -3311,7 +3345,7 @@ def _default_namd_run_dir() -> Path:
 
 
 @router.get("/md/run-dir-status")
-def md_run_dir_status(path: Optional[str] = None) -> dict:
+def md_run_dir_status(path: Optional[str] = None, engine: str = "namd") -> dict:
     """Validate the run directory shown by the wizard.
 
     The default is created by NADOC. An explicit browser preference is never created here:
@@ -3319,7 +3353,11 @@ def md_run_dir_status(path: Optional[str] = None) -> dict:
     would hide the error the user needs to see.
     """
     is_default = not bool(path)
-    target = _default_namd_run_dir() if is_default else Path(path).expanduser()
+    folders = {"namd": "md_jobs", "oxdna": "oxdna_jobs", "lammps": "lammps_jobs",
+               "mrdna": "mrdna_jobs", "cando": "cando_jobs", "snupi": "snupi_jobs", "blade": "blade_jobs"}
+    if engine not in folders:
+        raise HTTPException(400, f"Unknown simulation engine: {engine}")
+    target = (_workspace() / folders[engine]) if is_default else Path(path).expanduser()
     if is_default:
         try:
             target.mkdir(parents=True, exist_ok=True)
@@ -3328,7 +3366,7 @@ def md_run_dir_status(path: Optional[str] = None) -> dict:
                 "ok": False,
                 "path": str(target),
                 "default": True,
-                "detail": f"Could not create NADOC's NAMD jobs folder: {exc}",
+                "detail": f"Could not create NADOC's {engine} jobs folder: {exc}",
             }
     exists = target.exists()
     is_dir = target.is_dir() if exists else False
@@ -3877,8 +3915,13 @@ async def _prepare_job_bg(
             # takes an md_protocols kwarg.
             seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
             seed_kwargs["box_size_nm"] = body.box_size_nm
+        from backend.core.namd_resources import prepare_with_memory_budget
+        # The validated preparation envelope covers explicit-solvent DNA; other
+        # material/protocol paths keep their separate preparation implementation.
+        bounded_prep=body.protocol != IMPLICIT_GBIS_PROTOCOL and not seed_kwargs_graphene and seed_solute_coords is None
+        prepare_args=(prepare_with_memory_budget,prepare) if bounded_prep else (prepare,)
         package_subdir, name_stem, segments = await run_in_threadpool(
-            prepare,
+            *prepare_args,
             local_design,
             job_dir,
             ion_conc_mM=ion_conc_mM,
@@ -4015,6 +4058,10 @@ async def _prepare_job_bg(
                 force_gpu_resident=(body.gpu_resident == "on"),
             )
         _audit_external_force_configs(job_dir / package_subdir)
+        from backend.core.namd_input_provenance import capture as capture_namd_inputs
+        receipt_job = MdJob.load(job_id, ws)
+        receipt_job.package_subdir = package_subdir
+        await run_in_threadpool(capture_namd_inputs, receipt_job, ws)
         logger.info(
             "prep %s: done; package=%s name_stem=%s segments=%d",
             job_id,
@@ -4638,7 +4685,9 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
             d["health_samples_total"] = full_health_count
         d["failure_details"] = _failure_diagnostics(j)
         _decorate_terminal_segment_progress(j, d, ws)
-        d.update(legacy_job_status(_md_job_fingerprint(j), current_fp, engine="namd"))
+        from backend.core.namd_input_provenance import job_status as namd_input_status
+        d.update(namd_input_status(j, ws, legacy_job_status(
+            _md_job_fingerprint(j), current_fp, engine="namd")))
         # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
         # uncached size comes back None (frontend renders it blank) and is filled in by
         # the background warm below, appearing on the next poll.
@@ -4735,7 +4784,9 @@ async def get_md_job(job_id: str) -> dict:
         row = _minimization_from_package(job.package_dir(_workspace()))
         if row is not None:
             d["minimization"] = asdict(row)
-    d.update(legacy_job_status(_md_job_fingerprint(job), current_active_design_fingerprint(), engine="namd"))
+    from backend.core.namd_input_provenance import job_status as namd_input_status
+    legacy = legacy_job_status(_md_job_fingerprint(job), current_active_design_fingerprint(), engine="namd")
+    d.update(await run_in_threadpool(namd_input_status, job, _workspace(), legacy))
     d["early_stop_pending"] = pending_early_stop(job_id, _workspace())
     return d
 
@@ -4744,12 +4795,8 @@ async def get_md_job(job_id: str) -> dict:
 async def copy_md_job(job_id: str) -> dict:
     """Copy settings without launching; relaxation copies remain unprepared drafts."""
     source = _load_job(job_id)
-    used_seeds = [
-        seed
-        for job in MdJob.list_jobs(_workspace())
-        for seed in (job.namd_seed, job.ensemble_seed)
-        if seed is not None
-    ]
+    used_seeds = await run_in_threadpool(MdJob.saved_seeds, _workspace())
+    used_seeds.update(seed for seed in (source.namd_seed, source.ensemble_seed) if seed is not None)
     copied_seed = random_seed(exclude=used_seeds)
 
     if source.run_kind == "production":
@@ -4819,6 +4866,8 @@ async def get_md_job_display(job_id: str) -> dict:
         manifest = package_dir / "manifest.json"
 
     segment_name, dcd_path = _latest_display_segment(job)
+    if dcd_path is not None and not _dcd_has_display_frames(dcd_path):
+        dcd_path = None  # The file may have been replaced since segment selection.
     ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(
         job
     )
@@ -4865,10 +4914,19 @@ async def get_md_job_display(job_id: str) -> dict:
         has_live_frame=bool(live_marker),
     )
 
+    # The viewer can show the actual prepared input before a simulation writes
+    # output. Keep this derived single frame separate from trajectory/results.
+    starting_structure = None
+    if manifest.exists() and dcd_path is None and not graphene_only:
+        from backend.core.md_starting_structure import starting_structure_display
+
+        starting_structure = await asyncio.to_thread(starting_structure_display, manifest)
+
     return {
         "job_id": job.job_id,
         "status": job.status.value,
         "ready": ready,
+        "starting_structure_config": str(starting_structure) if starting_structure else None,
         "not_ready_code": (not_ready or {}).get("code"),
         "not_ready_reason": (not_ready or {}).get("reason", ""),
         "config_path": str(manifest.resolve()) if manifest.exists() else None,
@@ -4933,6 +4991,15 @@ async def delete_md_job(job_id: str) -> dict:
             "removing the folder would leave the files behind with nothing pointing at "
             "them.",
         )
+    from backend.core import alpine_deletion, cluster_ssh
+
+    mgr = cluster_ssh.get_manager()
+    if job.execution_target == "alpine" and job.status == MdStatus.queued and not mgr.is_connected():
+        raise HTTPException(409, "Connect to Alpine before deleting this queued job so it can be cancelled.")
+    try:
+        await alpine_deletion.prepare(ws, job, mgr)
+    except Exception as exc:
+        raise HTTPException(502, f"Alpine deletion has not finished; cleanup will retry on reconnect: {exc}") from exc
     if job_dir.exists():
         shutil.rmtree(job_dir)
     purge_index_entry(ws, "md_jobs", job_id)  # drop archived-job index entry if any
@@ -5081,6 +5148,7 @@ async def md_download_status(job_id: str) -> dict:
     """Persisted, server-owned result-transfer truth; safe across browser reloads."""
     job = _load_job(job_id)
     if (job.download_status or {}).get("state") not in {
+        "queued",
         "verified",
         "downloading",
         "processing",
@@ -6090,6 +6158,8 @@ async def _spawn_md_production_impl(
         child_manifest_path.write_text(
             json.dumps(child_manifest, indent=2), encoding="utf-8"
         )
+        from backend.core.namd_input_provenance import capture as capture_namd_inputs
+        capture_namd_inputs(child, _workspace())
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
     # 'queued' so the submit-review card can size resources + hand it to SLURM
@@ -6493,6 +6563,32 @@ def _save_draft_settings(job: MdJob, body: CreateJobRequest) -> MdJob:
     job.failure_kind = None
     job.save(_workspace())
     return job
+
+
+@router.patch("/md/jobs/{job_id}/preparation")
+async def update_md_draft_preparation(job_id: str, body: dict) -> dict:
+    """Save sidebar preparation edits to an unstarted draft, without rebuilding it."""
+    from pydantic import ValidationError
+
+    job = _load_job(job_id)
+    if job.status != MdStatus.draft or not _job_settings_editable(job):
+        raise HTTPException(409, "Only an unstarted draft can change preparation here.")
+    allowed = {
+        "padding_nm", "box_mode", "box_size_nm", "salt_mode",
+        "mg_conc_mM", "ion_conc_mM", "graphene_temperature_K",
+    }
+    if set(body) - allowed:
+        raise HTTPException(422, "Only box and solvent settings may be changed here.")
+    recorded = job.prep_params or {}
+    try:
+        validated = CreateJobRequest(**{**recorded, **body})
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors()) from exc
+    job.prep_params = {**recorded, **{key: getattr(validated, key) for key in body}}
+    if job.prep_params_set is not None:
+        job.prep_params_set = sorted(set(job.prep_params_set) | set(body))
+    job.save(_workspace())
+    return job.to_dict()
 
 
 @router.put("/md/jobs/{job_id}/settings")
@@ -7135,10 +7231,18 @@ def _size_prepared_job(
     manifest = json.loads(manifest_path.read_text())
     n_atoms = cluster_resources.n_atoms_from_manifest(manifest)
     total_ns = cluster_resources.total_ns_from_manifest(manifest)
+    from backend.core.namd_planning import prepared_stages
+    try:
+        stages=prepared_stages(package_dir,manifest)
+        total_ns=sum(stage['ns'] for stage in stages)
+        stage_warning=None
+    except (OSError,ValueError,KeyError) as exc:
+        stages=None
+        stage_warning=f'Prepared stage settings could not be resolved: {exc}. Memory and timing are provisional.'
+    box_nm=[float(v)/10 for v in manifest['box_ang']] if manifest.get('box_ang') else None
     # Resolve the partition first (forced or auto-pick) so we can look up the LEARNED
     # Alpine throughput for that exact partition + size bucket.  A learned value beats
-    # both the local-GPU metrics (wrong hardware for a CPU target) and the size guess;
-    # fall back to local metrics, then to the size-based guess inside recommend().
+    # the size guess. Unqualified or local-device timings never stand in for Alpine.
     selected_gres = gres_type or (job.requested_resources or {}).get(
         "gres_type"
     ) or (job.resources or {}).get("gres_type")
@@ -7149,6 +7253,7 @@ def _size_prepared_job(
         safety_factor=safety_factor,
         partition=partition,
         gres_type=selected_gres,
+        stages=stages,box_nm=box_nm,prepared=True,
     )
     chosen_partition = chosen["partition"]
     selected_gres = chosen.get("gres_type")
@@ -7159,10 +7264,7 @@ def _size_prepared_job(
         n_atoms=n_atoms,
         gres_type=selected_gres,
     )
-    if measured is None:
-        measured = cluster_resources.latest_ns_per_day(
-            package_dir / "output" / "metrics.jsonl"
-        )
+    # Local logs are different hardware and must never become an Alpine rate.
     resources = cluster_resources.recommend(
         profile,
         n_atoms=n_atoms,
@@ -7171,7 +7273,13 @@ def _size_prepared_job(
         safety_factor=safety_factor,
         partition=chosen_partition,
         gres_type=selected_gres,
+        stages=stages,box_nm=box_nm,prepared=True,
     )
+    if stage_warning:
+        resources['notes'].append(stage_warning)
+        resources['memory']['in_measured_domain']=False
+        resources['memory']['limitations'].append(stage_warning)
+        resources['timing_qualified']=False
     return {
         "n_atoms": n_atoms,
         "total_ns": total_ns,

@@ -499,3 +499,39 @@ def test_md_display_design_for_job_returns_design_and_name(tmp_path, monkeypatch
 def test_md_display_design_for_job_unknown_id(tmp_path, monkeypatch):
     monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
     assert routes_md.md_display_design_for_job("nope") == (None, None)
+
+
+def test_sidebar_preparation_patch_persists_only_requested_settings(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(design_name="Gerling", protocol="mgh", name_stem="", package_subdir="")
+    job.status = MdStatus.draft
+    job.prep_params = {"protocol": "mgh", "threads": 7, "padding_nm": 6,
+                       "anchors": [{"kind": "strand", "strandId": "s1"}]}
+    job.prep_params_set = ["threads"]
+    job.save(tmp_path)
+    result = asyncio.run(routes_md.update_md_draft_preparation(job.job_id, {"padding_nm": 3.5}))
+    saved = MdJob.load(job.job_id, tmp_path)
+    assert result["prep_params"]["padding_nm"] == 3.5
+    assert saved.prep_params == {**job.prep_params, "padding_nm": 3.5}
+    assert saved.prep_params_set == ["padding_nm", "threads"]
+    assert saved.status == MdStatus.draft
+
+
+def test_sidebar_preparation_patch_cannot_change_a_run_or_protocol(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    import pytest
+
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(design_name="D", protocol="mgh", name_stem="", package_subdir="")
+    job.status = MdStatus.draft
+    job.prep_params = {"padding_nm": 6}
+    job.save(tmp_path)
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(routes_md.update_md_draft_preparation(job.job_id, {"threads": 8}))
+    assert error.value.status_code == 422
+    job.status = MdStatus.running
+    job.save(tmp_path)
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(routes_md.update_md_draft_preparation(job.job_id, {"padding_nm": 3.5}))
+    assert error.value.status_code == 409
+    assert MdJob.load(job.job_id, tmp_path).prep_params["padding_nm"] == 6

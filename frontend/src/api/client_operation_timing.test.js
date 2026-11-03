@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { importDesign, getGeometry, getStraightGeometry, listActiveJobs, resetRevisionWatermark, resizeStrandEnds, addNick, forcedLigation, addDeformation, createSweep, undo, redo, refreshNativeVRScene } from './client.js'
+import { _syncFromDesignResponse, importDesign, getGeometry, getStraightGeometry, listActiveJobs, resetRevisionWatermark, resizeStrandEnds, addNick, forcedLigation, addDeformation, createSweep, editFeature, undo, redo, refreshNativeVRScene } from './client.js'
 import { store } from '../state/store.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationTiming, markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 import { clearProcessLog, processLogSnapshot } from '../perf/process_log.js'
@@ -16,6 +16,7 @@ const vrMutations = [
   ['bend', options => addDeformation('bend', 0, 10, {}, [], false, [], options)],
   ['twist', options => addDeformation('twist', 0, 10, {}, [], false, [], options)],
   ['sweep', options => createSweep({}, options)],
+  ['sweep edit', options => editFeature(0, {}, options)],
   ['undo', options => undo(options)], ['redo', options => redo(options)],
 ]
 it.each(vrMutations)('%s starts VR export from the committed revision before desktop synchronization', async (_, mutate) => {
@@ -177,4 +178,86 @@ it('dispatches VR export immediately, before synchronous desktop rebuild work ca
   // behind the caller's synchronous scene/store subscribers.
   expect(fetch).toHaveBeenCalledOnce()
   expect(await result).toEqual({ published: true })
+})
+
+ it.each(vrMutations.filter(([name]) => ['bend', 'twist', 'sweep', 'sweep edit'].includes(name)))('%s defers geometry and starts export before fetching desktop geometry', async (_, mutate) => {
+  const events = []
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    if (options.method === 'POST') {
+      expect(options.headers['X-NADOC-Skip-Geometry']).toBe('1')
+      return response({ design: design(), revision: 7 })
+    }
+    expect(url).toContain('/design/geometry')
+    events.push('geometry')
+    return response({ nucleotides: [], helix_axes: [] })
+  }))
+  await mutate({ deferGeometry: true, onCommitted: () => events.push('committed') })
+  expect(events).toEqual(['committed', 'geometry'])
+ })
+
+it('keeps untouched helices when Nick defers a partial geometry response', async () => {
+  const untouched = { helix_id: 'other', bp_index: 1 }
+  store.setState({ currentGeometry: [untouched, { helix_id: 'h', bp_index: 1 }] })
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    if (options.method === 'POST') return response({ design: design(), revision: 7, deferred_geometry_helix_ids: ['h'] })
+    expect(url).toContain('/design/geometry?helix_ids=h')
+    return response({ nucleotides: [{ helix_id: 'h', bp_index: 2 }], helix_axes: [], partial_geometry: true, changed_helix_ids: ['h'] })
+  }))
+  await addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, { deferGeometry: true })
+  expect(store.getState().currentGeometry).toEqual([untouched, { helix_id: 'h', bp_index: 2 }])
+  expect(store.getState().currentGeometry[0]).toBe(untouched)
+  expect(store.getState().lastPartialChangedHelixIds).toEqual(['h'])
+})
+
+it('applies a deferred commit and its geometry together, with no intermediate stale scene', async () => {
+  const previous = design(), oldGeometry = [{ helix_id: 'old' }]
+  store.setState({ currentDesign: previous, currentGeometry: oldGeometry })
+  let finishGeometry
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => options.method === 'POST'
+    ? response({ design: { ...previous, name: 'committed' }, revision: 7 })
+    : new Promise(resolve => { finishGeometry = resolve })))
+  const changes = []
+  const unsubscribe = store.subscribe((next, prev) => {
+    if (next.currentDesign !== prev.currentDesign || next.currentGeometry !== prev.currentGeometry)
+      changes.push({ design: next.currentDesign, geometry: next.currentGeometry })
+  })
+  try {
+    const pending = addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, { deferGeometry: true })
+    await vi.waitFor(() => expect(finishGeometry).toBeTypeOf('function'))
+    expect(store.getState().currentDesign).toBe(previous)
+    expect(changes).toHaveLength(0)
+    finishGeometry(response({ nucleotides: [{ helix_id: 'new' }], helix_axes: [] }))
+    await pending
+    expect(changes).toHaveLength(1)
+    expect(changes[0].design.name).toBe('committed')
+    expect(changes[0].geometry).toEqual([{ helix_id: 'new' }])
+  } finally { unsubscribe() }
+})
+
+
+it('discards a late deferred geometry update after a newer committed response', async () => {
+  const previous = design()
+  store.setState({ currentDesign: previous, currentGeometry: [] })
+  let finishGeometry
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => options.method === 'POST'
+    ? response({ design: previous, revision: 7 })
+    : new Promise(resolve => { finishGeometry = resolve })))
+  const pending = addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, { deferGeometry: true })
+  await vi.waitFor(() => expect(finishGeometry).toBeTypeOf('function'))
+  const newer = { ...previous, name: 'newer' }, newerGeometry = [{ helix_id: 'newer' }]
+  await _syncFromDesignResponse({ design: newer, revision: 8, nucleotides: newerGeometry, helix_axes: [] })
+  finishGeometry(response({ nucleotides: [{ helix_id: 'stale' }], helix_axes: [] }))
+  await pending
+  expect(store.getState().currentDesign).toBe(newer)
+  expect(store.getState().currentGeometry).toBe(newerGeometry)
+})
+
+it('retains committed history when deferred geometry fails', async () => {
+  const committed = { ...design(), feature_log: [{ id: 'committed-entry' }] }
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => options.method === 'POST'
+    ? response({ design: committed, revision: 7 })
+    : { ...response({ detail: 'geometry unavailable' }), ok: false, status: 500 }))
+  await addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, { deferGeometry: true })
+  expect(store.getState().currentDesign).toBe(committed)
+  expect(traces().some(trace => trace.status === 'Failed')).toBe(true)
 })

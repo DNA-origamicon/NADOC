@@ -20,7 +20,7 @@ it('switches create/stop availability, copies a usable guest link, and resets af
   el('[data-create]').click()
   await vi.waitFor(() => expect(el('[data-stop-host]').disabled).toBe(false))
   expect(el('[data-create]').disabled).toBe(true)
-  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Start presentation', 'End presentation', 'Reset link', 'Copy link', 'Copy password', 'Print meeting target', 'Print large tracking QR'])
+  expect([...el('dialog').querySelectorAll('button')].map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Close', 'Start presentation', 'End presentation', 'Reset link', 'Copy link', 'Copy password', 'Print guest invitation'])
   expect(el('select, textarea, [data-clip-options]')).toBeNull()
   el('[data-copy-link]').click()
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledOnce())
@@ -306,4 +306,28 @@ it('allocates on open without export, starts from Presentation, keeps the link o
     expect(links.get('part:alpha').url).toBe('https://example.test/3')
     expect(exportView).toHaveBeenCalledOnce()
   } finally { ui.dispose() }
+})
+
+it('keeps a failed VR start retryable without opening a desktop dialog', async () => {
+  document.body.innerHTML = '<button id="menu-presentation-start"></button>'
+  const { ui } = setup({ exportView: async () => { throw Error('Export unavailable') } })
+  const { createVRShare } = await import('../scene/vr_share.js')
+  const vr = createVRShare({ request: async () => ({ ok: true }) })
+  await vr.activate({ sequence: 1, action: 'start' })
+  await vi.waitFor(() => expect(vr.state()).toMatchObject({ failed: true, busy: false, startAvailable: true }))
+  expect(el('#share-link-dialog').showModal).not.toHaveBeenCalled()
+  // A host-status refresh resets the inactive toolbar; the setup error must persist.
+  el('.presentation-error').textContent = ''
+  expect(vr.state().failed).toBe(true)
+  ui.dispose()
+})
+
+it('shows a masked display password on the host without changing either invitation URL', async () => {
+ const value={...share,qrUrl:'https://example.test/#invite=unchanged-qr&entry=qr',displayPassword:'display-secret'}
+ const {ui,clipboard}=setup({fetch:vi.fn(async()=>({ok:true,json:async()=>({shares:[value]})}))})
+ ui.show();await vi.waitFor(()=>expect(el('[data-display-password]')).not.toBeNull())
+ expect(el('[data-display-password]').type).toBe('password')
+ expect(el('[data-link]').value).toBe(share.url)
+ el('[data-copy-display-password]').click();await vi.waitFor(()=>expect(clipboard.writeText).toHaveBeenCalledWith(value.displayPassword))
+ ui.dispose()
 })

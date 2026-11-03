@@ -616,11 +616,15 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       const title = document.createElement('strong')
       title.textContent = `Formed product · ${lesion.stereochemistry ?? 'cis-syn'} TT-CPD`
       card.appendChild(title)
-      if (lesion.bond_relaxation?.bond_count) {
+      if (lesion.bond_relaxation?.bond_count || lesion.bond_relaxation?.backbone_fixed || lesion.bond_relaxation?.flanking_bases_fixed) {
         const report = lesion.bond_relaxation
         const note = document.createElement('div')
         note.className = 'dim'
-        note.textContent = `Local bond relaxation: RMS bond-length error ${(report.rms_error_before_nm * 10).toFixed(2)} → ${(report.rms_error_after_nm * 10).toFixed(2)} Å.${report.remaining_strain ? ' Some attachment bonds remain strained.' : ''}`
+        note.textContent = report.flanking_bases_fixed
+          ? 'Six-residue CPD starting geometry: adjacent sugars/backbones moved; flanking bases fixed. Not qualified for simulation.'
+          : report.backbone_fixed
+          ? `Base-only CPD: backbone fixed. Sugar–base attachment lengths: ${report.glycosidic_distances_nm.map(n => (n * 10).toFixed(2)).join(' / ')} Å. Not relaxed for simulation.`
+          : `Local bond relaxation: RMS bond-length error ${(report.rms_error_before_nm * 10).toFixed(2)} → ${(report.rms_error_after_nm * 10).toFixed(2)} Å.${report.remaining_strain ? ' Some attachment bonds remain strained.' : ''}`
         if (report.clashes_after) {
           note.textContent += ` Close atom contacts: ${report.clashes_before.count} → ${report.clashes_after.count}; severe clashes: ${report.clashes_before.severe_count} → ${report.clashes_after.severe_count}.`
         }
@@ -638,7 +642,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
         unresolved.textContent = 'Legacy scadnano identity is unresolved; simulation is blocked.'
         card.appendChild(unresolved)
       }
-      if (Object.keys(lesion.design_coordinates ?? {}).length) {
+      if (Object.keys(lesion.design_coordinates ?? {}).length && !lesion.bond_relaxation?.backbone_fixed && !lesion.bond_relaxation?.flanking_bases_fixed) {
         const relax = document.createElement('button')
         relax.className = 'primary-btn cpd-relax-btn'
         relax.textContent = 'Relax CPD bonds and clashes'

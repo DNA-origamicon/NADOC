@@ -1165,8 +1165,33 @@ def export_pdb(
     scalar_by_key: Optional[dict[tuple, float]] = None,
     scalar_metadata: Optional[dict] = None,
 ) -> str:
+    """Legacy simulation-facing heavy-atom export; CPDs require full topology."""
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+    reject_photoproduct_design(
+        design, path="legacy PDB exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
+    return export_coordinate_pdb(
+        design, non_std_bonds=non_std_bonds, box_margin_nm=box_margin_nm,
+        model=model, viewer_terminals=viewer_terminals,
+        scalar_by_key=scalar_by_key, scalar_metadata=scalar_metadata,
+    )
+
+
+def export_coordinate_pdb(
+    design: Design,
+    non_std_bonds: Optional[list[tuple[int, int]]] = None,
+    box_margin_nm: float = 5.0,
+    model: Optional[AtomisticModel] = None,
+    viewer_terminals: bool = False,
+    scalar_by_key: Optional[dict[tuple, float]] = None,
+    scalar_metadata: Optional[dict] = None,
+) -> str:
     """
-    Export the design as a PDB file string.
+    Export design coordinates and display bonds, including formed CPDs.
+
+    This is visualization/geometry output, not a simulation topology. Simulation
+    callers must use the full CHARMM topology builder for photoproducts.
 
     Parameters
     ----------
@@ -1190,14 +1215,6 @@ def export_pdb(
         Full PDB file contents, ready to write to disk.
     """
     import math
-
-    from backend.core.cpd_forcefield import reject_photoproduct_design
-
-    reject_photoproduct_design(
-        design,
-        path="legacy PDB exporter",
-        supported_path="the full-topology explicit-solvent NAMD workflow",
-    )
 
     if non_std_bonds is None:
         non_std_bonds = []
@@ -1297,6 +1314,8 @@ def export_pdb(
         "REMARK  Coordinates in Angstroms.  CHARMM36 atom names.",
         "REMARK  Non-standard bonds (if any) listed as LINK records.",
     ]
+    if design.photoproduct_junctions:
+        lines.append("REMARK  CPD coordinate visualization only; not a simulation topology.")
     if viewer_terminals:
         lines.append(
             "REMARK  Viewer termini: unlinked residue-1 P/OP1/OP2 omitted; O5' is the unphosphorylated 5' end."
@@ -1656,7 +1675,7 @@ def build_multiframe_pdb_template(
     treat None as "fall back to per-frame export_pdb", never as an error: the point of the
     guard is that a silently mis-mapped splice would corrupt every exported coordinate.
     """
-    fn = export_pdb_fn or export_pdb
+    fn = export_pdb_fn or export_coordinate_pdb
     text = fn(design, model=model, viewer_terminals=False)
     atoms = model.atoms
 

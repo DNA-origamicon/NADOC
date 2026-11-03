@@ -3,8 +3,8 @@
 WHY THIS EXISTS.  Every throughput decision in the MD stack used to come from constants
 measured once, on one machine, on one design:
 
-    md_optimize.K_GPU_RESIDENT / K_OFFLOAD   6hbx100_90deg on an RTX 2080 Super
-    md_optimize._SMALL_SYSTEM_RESIDENT_PENALTY = 0.89   RTX 3080 Ti, +p16
+    legacy throughput constants   6hbx100_90deg on an RTX 2080 Super
+    legacy small-system penalty = 0.89   RTX 3080 Ti, +p16
     md_protocols._RESIDENT_MIN_ATOMS = 100_000          same source
 
 exp52 (2026-08-05) measured the same question on THIS box — RTX 2080 SUPER, +p8, the
@@ -15,6 +15,9 @@ constant is simply not portable, and it was being applied as if it were.
 So: run the two-step probe, on this machine, and use the number that comes back.  A
 measurement takes tens of seconds and is cached per (machine, build, system size); a wrong
 constant costs 2x on every run forever.
+
+User-facing completion estimates now use namd_timing's current-engine evidence;
+these historical examples explain the probe's origin, not current qualification.
 
 This module NEVER changes a setting on its own.  It returns numbers.  What to do with them
 is the caller's decision, and — per the wizard's contract — the user's.

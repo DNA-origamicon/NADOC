@@ -1,0 +1,21 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-anti-v1-service/completion_wake_ack.json",
+    "sha256": "fb92cb22d900b65cdc6b3c95a4bb80414bfef9a6099698d581f4fd1ad6b1b2bf"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-anti-v1/completion_audit.json",
+    "sha256": "127fba3715940e956e1ec2437b0ac50f74a67961bf0978c9ebf8303df8050741"
+  },
+  "matched_control_launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-control-v1/launch_receipt.json",
+    "sha256": "b29c28af5420fd75c79f17a487b2bb1862b7cf706b8acd670e565225b60f7914"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-control-v1/handoff.json",
+    "sha256": "c4ec5ac837d74a59d992f671e62e550a0266b19c7a5fbfd2852b4d97cd0bde8f"
+  },
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0
+}

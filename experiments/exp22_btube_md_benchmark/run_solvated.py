@@ -40,7 +40,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.core.models import Design
 from backend.core.gromacs_package import build_gromacs_package
-from backend.core.namd_solvate import build_namd_solvated_package, get_solvation_stats
+from backend.core.namd_solvate import build_namd_solvated_package
 
 NADOC_PATH = ROOT / "workspace" / "B_tube.nadoc"
 OUT   = Path(__file__).parent / "results"

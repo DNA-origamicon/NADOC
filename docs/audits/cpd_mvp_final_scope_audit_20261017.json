@@ -1,0 +1,109 @@
+{
+  "date_utc": "2026-10-18T03:30:29.486241+00:00",
+  "outcome": "Finite MVP campaign complete with provisional numerical models and explicitly insufficient physical-validation/sensitivity evidence. No production release.",
+  "policy_authority": {
+    "file": "/home/jojo/Work/NADOC/docs/cpd_minimum_viable_namd_policy_20261017.json",
+    "missing_reference_rule": "Report provisional numerical qualification and validation gap; do not invent a reference or declare equivalence.",
+    "allowed_finite_outcomes": "Freeze the provisional model for the tested scope, identify a specific substantial discrepancy, or close insufficient evidence."
+  },
+  "models": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "manifest": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/minimum-viable-candidates-v4/tt-cpd-cis-anti-i/manifest.json",
+      "manifest_sha256": "fca83f73ccdf270a70f34f534c11325f5cfe011159429a11a7268c92a3b9c722",
+      "numerical_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cgenff_numerical_panel_20261017.json",
+      "file_integrity_passed": true,
+      "qualification": "Provisional numerical MVP, internal six-T scope only; physical validation insufficient."
+    },
+    {
+      "product": "tt-cpd-cis-syn",
+      "manifest": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/minimum-viable-candidates-v4/tt-cpd-cis-syn/manifest.json",
+      "manifest_sha256": "0bbf3b5fc67cc956b936ffbf489f6dda12a5ec32718d6d911b5fdbed9b8b9cee",
+      "numerical_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cis_syn_external_numerical_20261017.json",
+      "file_integrity_passed": true,
+      "qualification": "Provisional numerical MVP, internal six-T scope only; physical validation insufficient."
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "manifest": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/minimum-viable-candidates-v4/tt-cpd-trans-syn-i/manifest.json",
+      "manifest_sha256": "a8d078855b7a5c34a4039c548a018b6cb839a0c8f0b687196cfc46bfe0a5932a",
+      "numerical_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cgenff_numerical_panel_20261017.json",
+      "file_integrity_passed": true,
+      "qualification": "Provisional numerical MVP, internal six-T scope only; physical validation insufficient."
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "manifest": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/minimum-viable-candidates-v4/tt-cpd-trans-syn-ii/manifest.json",
+      "manifest_sha256": "c7c335bb64af45d16198ef0406626ddc2bd1369294ec4bc806af239e64007a89",
+      "numerical_audit": "/home/jojo/Work/NADOC/docs/audits/cpd_cgenff_numerical_panel_20261017.json",
+      "file_integrity_passed": true,
+      "qualification": "Provisional numerical MVP, internal six-T scope only; physical validation insufficient."
+    }
+  ],
+  "completion_audit": [
+    {
+      "requirement": "Every formation-admitted isomer has externally sourced isolated model",
+      "evidence": "Four verified package manifests; direct CGenFF4.0/library5.0 returns including newcis-syn. Formation roster retained with primary trans-syn-II correction.",
+      "verdict": "met for admitted roster"
+    },
+    {
+      "requirement": "Separate stereochemical qualification; ordinaryMD noninterconversion",
+      "evidence": "Independent returned RDKit graph/stereo; canonical rounded starts; allsavedframe22center checks for eachisomer.",
+      "verdict": "met for tested scope"
+    },
+    {
+      "requirement": "Complete DNA topology/parameters and numerical admission",
+      "evidence": "Charge-conserving provisional transfer, independent parent comparison, finiteenergy/force loading, stagedminimization/twoseeds/twostarts, restart and1fs/2fs diagnostics.",
+      "verdict": "met for tested scope"
+    },
+    {
+      "requirement": "Physical accuracy/equivalence and original uncertainty hypothesis",
+      "evidence": "No calibrated variant family, relevant experimental-context panel or adequate equilibrium sampling. NumericalNVE threshold is not physicalequivalence.",
+      "verdict": "closed as insufficient under existing policy, not claimed achieved"
+    },
+    {
+      "requirement": "Finite budget, stop criteria, no unwarranted refinement",
+      "evidence": "All registered jobs terminal;3131.489165677429s total; shared48h and1h numericalpanel ceilings respected; no automatic extension or fit.",
+      "verdict": "met"
+    },
+    {
+      "requirement": "Archive bulk, preserved history, isolated production",
+      "evidence": "Package paths and all nativeoutputs under Archive; historical failures and legacycis-syn retained; no modelregistry/normalgeometry replacement.",
+      "verdict": "met"
+    }
+  ],
+  "excluded_or_pending": [
+    {
+      "isomer": "cis-anti-II",
+      "formation_status": "ordered_identity_provenance_pending",
+      "context": "Anti products and multiple cis-anti products observed; exact ordered-II assignment to be checked in primary structural evidence."
+    },
+    {
+      "isomer": "trans-anti-I",
+      "formation_status": "not_admitted_pending_resolved_attachment_order",
+      "context": "Trans-anti TT photoproduct class established in telomeric DNA; ordered I versus II not resolved by class-level evidence."
+    },
+    {
+      "isomer": "trans-anti-II",
+      "formation_status": "not_admitted_pending_resolved_attachment_order",
+      "context": "Same class-level evidence as trans-anti-I; separate ordered qualification required."
+    },
+    {
+      "isomer": "cis-syn-II",
+      "formation_status": "formation_not_established_for_adjacent_DNA",
+      "context": "Review reports no formation evidence for adjacent cis-syn-II in dinucleotides or longer DNA; theoretical registry entry is insufficient."
+    }
+  ],
+  "scope_limits": [
+    "Internal lesion endpoints in six-T engineering chains only; no terminal or mixedisomer qualification.",
+    "Two embeddings are distinct but not certified thermodynamic basins.",
+    "1fs admission is21ps/branch including10ps restrained;2fs test is1ps NVE only.",
+    "Matched-reference charge transfer remains provisional; CGenFFpenalties not uncertainty bounds.",
+    "No melting,yield,genomicformation,equilibrium or experimentalagreement claims.",
+    "Cis-syn NMRdeposition has been recovered/mapped but no NAMD comparison performed."
+  ],
+  "expectations_results": "Each per-panel audit lists prospective expectations and measured outcomes. All numerical gates passed; physical equivalence remains insufficient.",
+  "native_seconds_used": 3131.489165677429,
+  "active_job": null,
+  "next_action": "Retain provisional files for stated scope. Further energetic refinement requires applicable prespecified substantial-observable discrepancy or a chemical/numerical admission failure; no automatic additional campaign."
+}

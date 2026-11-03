@@ -1,4 +1,6 @@
 import { initRecordLauncher } from './ui/record_launcher.js'
+import { dnaSilhouetteEntries } from './scene/annotation_targets.js'
+import { openVRSweepEdit } from './scene/vr_sweep_edit.js'
 import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
@@ -164,7 +166,6 @@ import { openQuantumDotDialog } from './ui/quantum_dot_dialog.js'
 import { initConjugateManager }    from './ui/conjugate_manager.js'
 import { initNanoparticleConjugateManager } from './ui/nanoparticle_conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
-import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangSceneSync } from './scene/overhang_scene_sync.js'
@@ -262,6 +263,7 @@ import { initMenuFlyouts } from './ui/menu_flyouts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
+import { initCircleGraph } from './ui/circle_graph.js'
 import { initViewMenuPills } from './ui/view_menu_pills.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -288,7 +290,7 @@ import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMultiView, multiViewDesignCentroid } from './ui/multi_view.js'
 import { initMultiOverlay } from './ui/multi_overlay.js'
-import { applyComparisonRepresentation } from './ui/comparison_representations.js'
+import { applyComparisonRepresentation, oxdnaPreviewInputsChanged } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { standardizeSimulationCardOrder } from './ui/simulation_card_order.js'
@@ -339,6 +341,7 @@ import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
 import { initDesignReadinessHost } from './ui/design_readiness_host.js'
+import { initZoomVolume } from './scene/zoom_volume.js'
 import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
@@ -362,12 +365,11 @@ async function main() {
   const {
     scene, camera, renderer, controls,
     switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
-    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,
-    pushControls, popControls,
     addFrameCallback, removeFrameCallback,
-    setRenderFn, resetRenderFn, isStandardRender,
+    setRenderFn, resetRenderFn, isStandardRender, setRenderingPaused,
     setNativeVRActive, setNativeVRDesktopEnabled,
   } = initScene(canvas, { placementStore: store })
   const referenceModels = initReferenceModels({ scene, camera, canvas, controls, onImported: () => _hideWelcome(), onSelected: () => selectionManager?.clearSelection() })
@@ -380,8 +382,8 @@ async function main() {
   initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
     getPartCentroid: fallback => multiViewDesignCentroid(store.getState(), fallback), document })
 
-  // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
-  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
+  // Bundle shared scene context for camera and renderer access.
+  const sceneCtx = { scene, camera, renderer, controls, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
   // ── World-origin axes (toggleable via View > Toggle Origin Axes). On by
   // default for an EMPTY part: a new/empty file shows the XYZ origin triad as an
@@ -763,7 +765,7 @@ async function main() {
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
     getDomainEndTable: () => {
       const state = store.getState()
-      const displayOnlyPose = state.cadnanoActive || state.unfoldActive ||
+      const displayOnlyPose = state.unfoldActive ||
         state.deformVisuActive === false
       return displayOnlyPose
         ? bluntEnds?.getVRToolEndTable?.() ?? []
@@ -979,7 +981,7 @@ async function main() {
   _showOverhangLengthDialog = overhangDialog.show
 
   // Circular (loop) staples are flagged purely by the warning highlight in the 3D
-  // + cadnano views (driven by store.loopStrandIds). There is intentionally no
+  // + the separate 2D editor (driven by store.loopStrandIds). There is intentionally no
   // auto-nick suggestion UI — the user linearizes manually via the generic
   // "Nick here" context-menu action.
 
@@ -1038,9 +1040,6 @@ async function main() {
   designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
   // …and follow the RMSF scalar recolour (oxDNA flexibility map).
   designRenderer.setScalarArcUpdater?.((colorByKey) => unfoldView.applyFemArcColors(colorByKey))
-
-  // ── Cadnano mode ─────────────────────────────────────────────────────────
-  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
 
   // ── Expanded helix spacing (Q) ───────────────────────────────────────────
   const expandedSpacing = initExpandedSpacing(
@@ -1217,16 +1216,6 @@ async function main() {
   }, { capture: true }), { capture: true })
 
 
-  // ── Cadnano-active watchdog ──────────────────────────────────────────────────
-  // Logs whenever cadnanoActive unexpectedly transitions while debugging.
-  store.subscribe((newState, prevState) => {
-    if (!window._cnDebug) return
-    if (newState.cadnanoActive !== prevState.cadnanoActive) {
-      console.warn(`[CN f${window._cnFrame}] cadnanoActive changed: ${prevState.cadnanoActive} → ${newState.cadnanoActive}`,
-        new Error().stack.split('\n').slice(2, 6).join('\n'))
-    }
-  })
-
   // ── Overhang Name overlay ────────────────────────────────────────────────────
   // Subscription is handled inside initOverhangNameOverlay via store.subscribe.
   const overhangNameOverlay = initOverhangNameOverlay(scene, store)
@@ -1275,7 +1264,9 @@ async function main() {
   // post-boot, so the lazy reference is resolved by then.)
   const _restoreDesignHeavy = () => {
     if (atomisticRenderer.getMode?.() !== 'off') {
-      _atomSurface.invalidateAtomCache()
+      // The native cache follows design edits, not simulation poses. Reuse it
+      // so Off restores positions immediately instead of leaving the last MD
+      // pose visible while an unnecessary atomistic rebuild is in flight.
       return _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
     }
     if (_atomSurface.getSurfaceMode?.() !== 'off') {
@@ -1431,17 +1422,23 @@ async function main() {
   })
   // Echo a run's conditions back into the oxDNA cards (used by both the panel's
   // click-a-job handler and the Chain Simulations click-a-queued-stage handler).
+  let _restoringOxdnaConfig = false
+  const _saveOxdnaElements = () => {
+    if (!_restoringOxdnaConfig) oxdnaPanel?.onRunElementsChanged?.()
+  }
   const _oxdnaApplyConfig = (cfg = {}) => {
-    efieldSetup?.applyConfig?.(cfg.field)
-    oxdnaFloorSetup?.applyConfig?.(cfg.surface)
-    // The floor card's applyConfig does not fire its onChange, so the capture-strand
-    // prerequisite gate has to be re-synced by hand — and BEFORE the strands echo, or
-    // a job that ran on a surface comes back with its strands checkbox still disabled
-    // (and setSurfaceEnabled would then force the echoed-on toggle back off).
-    oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
-    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
-    oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
-    oxdnaSurfaceAnchorsSetup?.applyConfig?.(cfg.surfaceAnchors || cfg.surface_anchors)
+    _restoringOxdnaConfig = true
+    try {
+      efieldSetup?.applyConfig?.(cfg.field)
+      oxdnaFloorSetup?.applyConfig?.(cfg.surface)
+      // Restore the prerequisite gate BEFORE the strands echo, or
+      // a job that ran on a surface comes back with its strands checkbox still disabled
+      // (and setSurfaceEnabled would then force the echoed-on toggle back off).
+      oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+      oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
+      oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
+      oxdnaSurfaceAnchorsSetup?.applyConfig?.(cfg.surfaceAnchors || cfg.surface_anchors)
+    } finally { _restoringOxdnaConfig = false }
   }
   const oxdnaLive = initOxdnaLive({
     oxdnaDisplay,
@@ -1664,7 +1661,7 @@ async function main() {
     // Field changed (gizmo drag / input edit): if a live session is running, update it —
     // re-aim the field live (magnitude/dir) or recompose the engine if the field was just
     // toggled on/off. The anchor halo no longer keys off the field, so it needs no refresh.
-    onChange: () => oxdnaLive?.onElementsChanged?.(),
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _saveOxdnaElements() },
     // Total base count → scales the arrow's force range so big origami get finer
     // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
     getBaseCount: () => store.getState().currentGeometry?.length || 0,
@@ -1717,6 +1714,7 @@ async function main() {
       oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
       _syncSurfaceAnchorsGate()
       oxdnaPanel?.refreshControls?.()
+      _saveOxdnaElements()
     },
   })
   initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay, ionPaths: mdIonPaths })
@@ -1742,7 +1740,7 @@ async function main() {
     ids: { enable: 'oxdna-peg-enable', controls: 'oxdna-peg-controls',
       shape: 'oxdna-peg-shape', size: 'oxdna-peg-size', density: 'oxdna-peg-density',
       offx: 'oxdna-peg-offx', offy: 'oxdna-peg-offy', seed: 'oxdna-peg-seed', status: 'oxdna-peg-status' },
-    onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay() },
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay(); _saveOxdnaElements() },
     generateSequence: (len) => api.generateRandomSequence(len),
   })
   oxdnaSurfaceStrandsSetup.setSurfaceEnabled(oxdnaFloorSetup.isEnabled())   // initial gate
@@ -1760,8 +1758,8 @@ async function main() {
     engine: 'oxdna',
     getSelection: _anchorSelectionState,
     // The halo is driven by the shared `nadoc:anchors-change` listener above (all five
-    // engines); this callback only recomposes a running live session.
-    onChange: () => oxdnaLive?.onElementsChanged?.(),
+    // engines); also persist edits to the selected unstarted relaxation.
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _saveOxdnaElements() },
   })
   // Surface anchors are authored separately from fixed structure anchors, but use the
   // same selection resolver, row focus and purple-halo behaviour. Their simulation
@@ -1769,7 +1767,7 @@ async function main() {
   const oxdnaSurfaceAnchorsSetup = initOxdnaAnchorsSetup({
     engine: 'oxdna-surface',
     getSelection: _anchorSelectionState,
-    onChange: () => oxdnaPanel?.refreshControls?.(),
+    onChange: () => { oxdnaPanel?.refreshControls?.(); _saveOxdnaElements() },
     ids: {
       toggle: 'oxdna-anchors-toggle', arrow: 'oxdna-anchors-arrow', body: 'oxdna-anchors-body',
       add: 'oxdna-surface-anchors-add', clear: 'oxdna-surface-anchors-clear',
@@ -2076,6 +2074,9 @@ async function main() {
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
+  const zoomVolume = initZoomVolume({ document, scene, canvas, store, api, designRenderer, assemblyRenderer,
+    ensureAtoms: () => _atomSurface.ensureAtoms(), getProteinGeometry: () => proteinSubsystem.getGeometry(), getAssemblyCluster: () => _selectedAssemblyCluster, getRenderCamera, addFrameCallback, removeFrameCallback })
+  if (DEBUG) window.__NADOC_ZOOM_VOLUME__ = zoomVolume
   // Opt-in field diagnostic for the intermittent atomistic reload loop.
   // It prints one paste-ready JSON line five seconds after the first loading
   // request, with direct caller stacks plus live renderer/design state. Keep it
@@ -2161,43 +2162,6 @@ async function main() {
 
   const sequenceOverlay = initSequenceOverlay(scene, store)
 
-  // ── Cadnano position reapply on geometry or design change ───────────────────
-  // Registered here — after initSequenceOverlay — so that this fires AFTER the
-  // sequence overlay's subscriber, which rebuilds letter sprites at raw 3D
-  // positions whenever geometry/design change.  Firing last ensures cadnano
-  // positions are applied on top of both the unfold-view offsets (applied by
-  // unfold_view's subscriber, registered much earlier) and the sequence overlay
-  // rebuild.  It fires on design change too because API responses sometimes
-  // deliver currentDesign and currentGeometry in two separate store.setState
-  // calls (design first, geometry fetched async).
-  store.subscribe((newState, prevState) => {
-    if (!cadnanoView.isActive()) return
-    const geoChg = newState.currentGeometry !== prevState.currentGeometry
-    const desChg = newState.currentDesign   !== prevState.currentDesign
-    if (geoChg || desChg) {
-      if (window._cnDebug)
-        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
-      cadnanoView.reapplyPositions()
-    }
-  })
-
-  // ── Cadnano compensator for async deform_view straightGeometry fetch ────────
-  // When a design has deformations/cluster_transforms, deform_view.js fires an
-  // async getStraightGeometry() fetch on currentGeometry change.  Once the fetch
-  // resolves it calls store.setState({ straightGeometry, straightHelixAxes }),
-  // which would normally trigger deform_view's own subscriber to reapply 3D
-  // positions — but that subscriber is now guarded against cadnanoActive.
-  // This subscriber fires instead and restores the cadnano layout.
-  store.subscribe((newState, prevState) => {
-    if (!cadnanoView.isActive()) return
-    if (newState.straightGeometry  !== prevState.straightGeometry ||
-        newState.straightHelixAxes !== prevState.straightHelixAxes) {
-      if (window._cnDebug)
-        console.log(`[CN f${window._cnFrame}] cadnanoView reapply — straightGeometry updated`)
-      cadnanoView.reapplyPositions()
-    }
-  })
-
   // ── Browser dev-tools debug helpers (window._nadocDebug) — see scene/debug/devtools_helpers.js ──
   window._nadocDebug = initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs, selectionManager, scene })
   window._nadocDebug.cpdWeld = cpdWeldOverlay   // await _nadocDebug.cpdWeld.loadForJob(...)
@@ -2208,7 +2172,7 @@ async function main() {
     document.getElementById('canvas-area'),
     camera,
     controls,
-    () => nucleotideLocalBox(navigationGeometry(store.getState())),
+    () => nucleotideLocalBox(navigationGeometry(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())),
   )
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
@@ -2221,20 +2185,6 @@ async function main() {
     // Atomistic representation has no 2D-unfold layout — block entering and explain.
     if (!unfoldView.isActive() && store.getState().atomisticMode !== 'off') {
       showToast('Unfold view is not available in atomistic representation — exit atomistic first')
-      return
-    }
-
-    // U key while cadnano is active: exit cadnano but stay in unfold view,
-    // rather than toggling unfold off (which would break cadnano's internal state).
-    if (cadnanoView.isActive()) {
-      await cadnanoView.deactivate({ keepUnfold: true })
-      if (!slicePlane.isVisible()) {
-        crossSectionMinimap.clearSlice()
-        crossSectionMinimap.hide()
-        sliceHighlighter.clear()
-      }
-      document.getElementById('mode-indicator').textContent =
-        '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
       return
     }
 
@@ -2280,61 +2230,11 @@ async function main() {
       : 'NADOC · WORKSPACE'
   }
 
-  async function _toggleCadnano() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) return
-    if (isDeformActive()) return
-
-    // Atomistic representation has no 2D-cadnano layout — block entering and explain.
-    if (!cadnanoView.isActive() && store.getState().atomisticMode !== 'off') {
-      showToast('Cadnano view is not available in atomistic representation — exit atomistic first')
-      return
-    }
-
-    // Same deformation guard as unfold view.
-    if (!cadnanoView.isActive()) {
-      const hasDeformations       = !!(currentDesign?.deformations?.length)
-      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
-        const [x, y, z, w] = ct.rotation
-        const [tx, ty, tz] = ct.translation
-        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
-            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
-      }) ?? false
-      const { deformVisuActive } = store.getState()
-      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
-        showToast('Deformations are active — turn off Deformed View in the View menu, then enter cadnano mode')
-        return
-      }
-      expandedSpacing.forceOff()
-    }
-    await cadnanoView.toggle()
-    const active = cadnanoView.isActive()
-    if (!active && !slicePlane.isVisible()) {
-      // Cadnano slice indicator was hidden — clear minimap and base highlights.
-      crossSectionMinimap.clearSlice()
-      crossSectionMinimap.hide()
-      sliceHighlighter.clear()
-    }
-    document.getElementById('mode-indicator').textContent = active
-      ? 'CADNANO MODE — two-track 2D view · [K] to exit'
-      : unfoldView.isActive()
-        ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
-        : 'NADOC · WORKSPACE'
-  }
-
   // _toggleAssembly removed — assembly mode is entered by opening/creating a .nass file,
   // not by a toggle. _enterAssemblyMode / _exitAssemblyMode are used instead.
 
-  async function _toggleDeformView() {
+  async function _toggleDeformView({ animate = true } = {}) {
     if (isDeformActive()) return
-    // Geometry in cadnano / unfold mode is at straight positions already (both
-    // views require deform to be off). Toggling deform from inside those views
-    // is meaningless and racy — the lerp would fight whichever overlay owns
-    // bead positions. Surface the rule with a toast and return.
-    if (cadnanoView.isActive()) {
-      showToast('Exit cadnano mode (K) before toggling deformed view')
-      return
-    }
     if (unfoldView.isActive()) {
       showToast('Exit unfold view (U) before toggling deformed view')
       return
@@ -2353,13 +2253,13 @@ async function main() {
     if (!hasDeformations && !hasEffectiveTransform) return
     if (deformView.isActive()) {
       // Turn OFF: animate to straight geometry so user can compare before/after.
-      deformView.deactivate()
+      deformView.deactivate({ animate })
       _setMenuToggle('menu-view-deform', false)
       document.getElementById('mode-indicator').textContent =
         'STRAIGHT VIEW — geometry without deformations · click Deformed View to return'
     } else {
       // Turn ON: animate back to deformed geometry.
-      await deformView.activate()
+      await deformView.activate({ animate })
       _setMenuToggle('menu-view-deform', true)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     }
@@ -2421,14 +2321,8 @@ async function main() {
     getDesign:      () => store.getState().currentDesign,
     getHelixAxes:   () => store.getState().currentHelixAxes,
     onOffsetChange: (offsetNm, plane) => {
-      // In cadnano mode the slice plane is in YZ orientation but offsetNm encodes
-      // bp_index × RISE on the cadnano X-axis.  The minimap and highlight logic
-      // both assume XY (Z-axis bundles), so we remap the plane to 'XY' here.
-      // The BP formula  bp = round(bp_start + (offsetNm − axis_start.z) / RISE)
-      // then gives the correct result because axis_start.z ≈ bp_start × RISE.
-      const effectivePlane = store.getState().cadnanoActive ? 'XY' : plane
-      crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
-      sliceHighlighter.update(offsetNm, effectivePlane)
+      crossSectionMinimap.update(offsetNm, plane, designRenderer.getBackboneEntries())
+      sliceHighlighter.update(offsetNm, plane)
     },
     onPreviewToggle: (enabled) => {
       // "Show preview" checkbox in the slice extrude popup → persist + sync overhang ghost.
@@ -2901,7 +2795,25 @@ async function main() {
   _renderRecentMenu()
 
   // ── Close Session ─────────────────────────────────────────────────────────────
+  let _sessionClosing = false
   async function _closeSession() {
+    if (_sessionClosing) return
+    _sessionClosing = true
+    // Large designs can spend hundreds of milliseconds drawing each frame.
+    // Preserve the last frame while saving, so rendering cannot starve the
+    // save response or teardown. Resume even if saving/closing fails.
+    setRenderingPaused(true)
+    const progress = showOpProgress('Closing session', 'Saving changes and releasing the model…', { indeterminate: true })
+    try {
+      await _saveAndCloseSession()
+    } finally {
+      hideOpProgress(progress)
+      setRenderingPaused(false)
+      _sessionClosing = false
+    }
+  }
+
+  async function _saveAndCloseSession() {
     // Tell every other NADOC tab (cadnano editors AND any other 3D windows)
     // to self-close. window.close() succeeds for tabs that were opened via
     // window.open() — tabs the user opened by typing a URL or duplicating
@@ -3216,9 +3128,6 @@ async function main() {
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
-    // Hard-exit cadnano mode if active or mid-transition — synchronously restores
-    // ortho camera/controls and axis arrows before the design state is cleared.
-    cadnanoView.forceExit()
     deformExitTool()
     jointRenderer?.exitDefineMode()
     if (_translateRotateActive) {
@@ -3253,19 +3162,13 @@ async function main() {
     // simulation result can be rebound to the next design's geometry.
     oxdnaSurfaceStrandsSetup?.applyConfig?.(null)
     surfaceStrandsOverlay?.clear?.()
-    // Reset representation to Full — deactivates atomistic/surface renderers,
-    // resets the representation radio, and hides mode-specific option rows.
-    _setRepresentation('full')
-    // Reset camera to the same position as initial page load
-    camera.position.set(6, 3, 18)
-    controls.target.set(6, 3, 0)
-    camera.up.set(0, 1, 0)
-    controls.enabled = true
-    controls.update()
+    // Release simulation caches and clear the model before representation reset;
+    // otherwise Full rebuilds the outgoing trajectory/model only to discard it.
+    oxdnaDisplay.discardForDocumentReset()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
-      unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
+      unfoldHelixOrder: null, unfoldActive: false,
       straightGeometry: null, straightHelixAxes: null,
       isolatedStrandId: null,
       strandGroups: [],
@@ -3276,6 +3179,15 @@ async function main() {
       activeClusterId: null,
       translateRotateActive: false, nucleotideTransformActive: false,
     })
+    // Reset representation to Full — deactivates atomistic/surface renderers,
+    // resets the representation radio, and hides mode-specific option rows.
+    _setRepresentation('full')
+    // Reset camera to the same position as initial page load
+    camera.position.set(6, 3, 18)
+    controls.target.set(6, 3, 0)
+    camera.up.set(0, 1, 0)
+    controls.enabled = true
+    controls.update()
     _setWorkspacePath(null)
   }
 
@@ -3320,7 +3232,6 @@ async function main() {
     '#view-tools [data-vt="undefinedBases"]',
     '#view-tools [data-vt="deform"]',
     '#view-tools [data-vt="unfold"]',
-    '#view-tools [data-vt="cadnano2d"]',
   ]
   let _hiddenStripEls = []
 
@@ -3418,7 +3329,8 @@ async function main() {
   function _centerOnStrand(strandId) {
     const { currentGeometry } = store.getState()
     if (!currentGeometry) return
-    const nucs = currentGeometry.filter(n => n.strand_id === strandId)
+    const nucs = navigationGeometry(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())
+      .filter(n => n.strand_id === strandId)
     if (!nucs.length) return
     let sx = 0, sy = 0, sz = 0
     for (const n of nucs) { sx += n.backbone_position[0]; sy += n.backbone_position[1]; sz += n.backbone_position[2] }
@@ -3435,7 +3347,7 @@ async function main() {
     const { assemblyActive } = state
     const box = assemblyActive
       ? assemblyVolumes.getBoundingBox() ?? assemblyRenderer.getBoundingBox()
-      : nucleotideLocalBox(navigationGeometry(state))
+      : nucleotideLocalBox(navigationGeometry(state, visibilityController?.getEffectiveHiddenBaseKeys()))
     const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
     if (!pose) return
     controls.target.copy(pose.target)
@@ -3448,7 +3360,7 @@ async function main() {
   function _selectionBBox() {
     const st = store.getState()
     const refs = st.selection?.items ?? []
-    return selectionBBox(navigationGeometry(st), {
+    return selectionBBox(navigationGeometry(st, visibilityController?.getEffectiveHiddenBaseKeys()), {
       strandIds: new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)),
       domainRefs: new Set(refs.filter(ref => ref.kind === 'domain')
         .map(ref => `${ref.strandId}:${ref.domainIndex}`)),
@@ -3937,7 +3849,7 @@ async function main() {
     document.getElementById(`menu-view-orbit-${m}`)?.addEventListener('click', () => _setOrbitMode(m))
   }
   // Must precede _setOrbitMode — Multiscale reads the helix-axis field on construction.
-  setNavScaleProvider(makeSegmentCache(() => navigationDesign(store.getState())))
+  setNavScaleProvider(makeSegmentCache(() => navigationDesign(store.getState(), visibilityController?.getEffectiveHiddenBaseKeys())))
   _setOrbitMode('multiscale')  // default: zoom-to-cursor, scale-aware, no stall
 
   // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────
@@ -3980,7 +3892,6 @@ async function main() {
 
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
 
-  document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
 
   document.getElementById('btn-open-editor')?.addEventListener('click', () => {
     // Editor must edit the SAME backend document as this 3D tab → carry our doc id.
@@ -4034,6 +3945,7 @@ async function main() {
   // ui/view_menu_pills.js. `_setMenuToggle` (43-use shared util) stays here and is
   // injected. The factory registers its store subscriber + runs the initial
   // import-visibility sync at this exact point → subscription order preserved.
+  initCircleGraph({ store })
   initViewMenuPills({ store, setMenuToggle: _setMenuToggle })
 
   // ── Browser tab title ────────────────────────────────────────────────────────
@@ -4096,7 +4008,6 @@ async function main() {
       dimensionsTool?.close?.()
       jointRenderer.exitDefineMode()
       selectionManager.clearSelection()
-      cadnanoView.forceExit()
       if (_isUnfoldActive()) await _toggleUnfold()
       expandedSpacing.forceOff()
       if (!deformView.isActive()) await deformView.activate()
@@ -4174,7 +4085,6 @@ async function main() {
     setUndefinedHighlightOn: (v) => _undefinedHighlight.setOn(v),
     toggleDeformView: () => _toggleDeformView(),
     toggleUnfold: () => _toggleUnfold(),
-    toggleCadnano: () => _toggleCadnano(),
     toggleClashes: () => clashOverlay.toggle(),
     getClashesOn: () => clashOverlay.isOn(),
   })
@@ -4307,7 +4217,13 @@ async function main() {
 
   document.getElementById('unhide-all-btn')?.addEventListener('click', async () => {
     if (store.getState().assemblyActive) await unhideAssemblyVisualization({ store, api })
-    else { visibilityController?.unhideAll(); clusterPanel?.resetVisibility?.(); spreadsheet?.refresh?.() }
+    else {
+      visibilityController?.unhideAll()
+      await visibilityController?.flushPersistence()
+      await nanoparticleSubsystem.unhideAll()
+      clusterPanel?.resetVisibility?.()
+      spreadsheet?.refresh?.()
+    }
     // "Unhide All" must make the restored structure observable. In particular,
     // recover tabs whose camera/target was poisoned before finite-safe framing
     // shipped, and include elements that were outside a view framed around only
@@ -4336,7 +4252,6 @@ async function main() {
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,
     toggleUnfold:             _toggleUnfold,
-    toggleCadnano:            _toggleCadnano,
     toggleHelicalAxisLines:   _toggleHelicalAxisLines,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
     saveAssemblyAsGuarded:    () => _fileSave.saveAssemblyAsGuarded(),
@@ -4390,6 +4305,8 @@ async function main() {
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
   initAnnotations({
+    getDnaSilhouetteEntries: refs => dnaSilhouetteEntries(refs, store.getState().currentDesign, designRenderer,
+      [atomisticRenderer, _atomSurface.getRegionVdwRenderer?.(), _atomSurface.getRegionBallstickRenderer?.(), _atomSurface.getRegionStickRenderer?.()]),
     getAssemblyRenderer: () => assemblyRenderer,
     store, api, scene, getCamera: getRenderCamera, addFrameCallback, removeFrameCallback,
     getEntries: () => designRenderer.getBackboneEntries?.() ?? [],
@@ -4546,58 +4463,6 @@ async function main() {
     return rows
   }
 
-  window.nadocHelixLabelDrift = function nadocHelixLabelDrift(opts = {}) {
-    const rows = window.nadocHelixLabelTable(opts)
-    const isCadnano = !!store.getState().cadnanoActive
-    const drift = rows.map(row => {
-      const [rx, ry, rz] = row.ringPos3d ?? [null, null, null]
-      const [lx, ly, lz] = row.labelPos3d ?? [null, null, null]
-      const dx = lx - rx
-      const dy = ly - ry
-      const dz = lz - rz
-      const gapNm = Math.sqrt(dx*dx + dy*dy + dz*dz)
-      const gapBpZ = dz / 0.334
-      const ringBpFromZ = rz / 0.334
-      const labelBpFromZ = lz / 0.334
-      const ringBpError = isCadnano ? ringBpFromZ - row.ringBp : null
-      const labelGapError = isCadnano ? Math.abs(gapBpZ) - 1 : null
-      return {
-        helix: row.helixLabel,
-        helixId: row.helixId,
-        domainBp: row.domainBp,
-        ringBp: row.ringBp,
-        side: row.openSide,
-        ovhg: row.overhangId,
-        ringBpFromZ: isCadnano ? +ringBpFromZ.toFixed(3) : null,
-        labelBpFromZ: isCadnano ? +labelBpFromZ.toFixed(3) : null,
-        ringBpError: isCadnano ? +ringBpError.toFixed(3) : null,
-        labelGapBpZ: isCadnano ? +gapBpZ.toFixed(3) : null,
-        labelGapError: isCadnano ? +labelGapError.toFixed(3) : null,
-        sideOk: isCadnano ? Math.sign(gapBpZ) === Math.sign(row.openSide) : null,
-        gapNm: +gapNm.toFixed(3),
-        ringPos: row.ringPos3d?.map(v => +v.toFixed(3)).join(','),
-        labelPos: row.labelPos3d?.map(v => +v.toFixed(3)).join(','),
-      }
-    }).sort((a, b) =>
-      Number(a.helix) - Number(b.helix) ||
-      a.ringBp - b.ringBp ||
-      String(a.ovhg ?? '').localeCompare(String(b.ovhg ?? ''))
-    )
-    const mismatches = drift.filter(row => {
-      if (!isCadnano) return false
-      return Math.abs(row.ringBpError) > 0.01 ||
-        Math.abs(row.labelGapError) > 0.01 ||
-        row.sideOk === false
-    })
-    console.table(drift)
-    if (mismatches.length) {
-      console.warn(`nadocHelixLabelDrift: ${mismatches.length} mismatch(es)`)
-      console.table(mismatches)
-    } else {
-      console.log(`nadocHelixLabelDrift: no caDNAno bp/gap mismatches in ${drift.length} label(s)`)
-    }
-    return { rows: drift, mismatches }
-  }
 
   // ── Assembly helix label debug ────────────────────────────────────────────
   // Usage: nadocAssemblyLabelTable()           — all instances
@@ -5810,7 +5675,9 @@ async function main() {
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
     showSeekPreview: createFeatureSeekPreview(scene),
-    onEditSweep: (entry, index) => sweepPanel.edit(entry, index),
+    onEditSweep: (entry, index, options) => options?.nativeVR
+      ? openVRSweepEdit({ entry, index, api, getState: store.getState })
+      : sweepPanel.edit(entry, index),
     onEditExtrude: (entry, index) => extrudeHistoryEditor.open(entry, index),
     api: {
       ...api,
@@ -6050,7 +5917,7 @@ async function main() {
     store.subscribe((newState, prevState) => {
       // Snap orbit target to design centroid when geometry first appears.
       if (!prevState.currentGeometry && newState.currentGeometry?.length) {
-        const c = _geomCentroid(newState.currentGeometry)
+        const c = _geomCentroid(navigationGeometry(newState, visibilityController?.getEffectiveHiddenBaseKeys()))
         if (c) { controls.target.copy(c); controls.update() }
       }
     })
@@ -6223,12 +6090,7 @@ async function main() {
   // particles appear/disappear without requiring the user to re-pick oxDNA.
   store.subscribe((newState, prevState) => {
     if (_currentRepr !== 'oxdna') return
-    if (newState.simulationTabActive === prevState.simulationTabActive &&
-        newState.showReferenceGeometry === prevState.showReferenceGeometry &&
-        newState.currentDesign === prevState.currentDesign &&
-        newState.strandColors === prevState.strandColors &&
-        newState.strandGroups === prevState.strandGroups &&
-        newState.loopStrandIds === prevState.loopStrandIds) return
+    if (!oxdnaPreviewInputsChanged(newState, prevState)) return
     void _setRepresentation('oxdna')
   })
 
@@ -6263,14 +6125,24 @@ async function main() {
 
   // ── Reference geometry show/hide (translucent backdrop strands) ───────────────
   // The cadnano-editor window has its own independent toggle (separate store).
-  document.getElementById('menu-view-reference')?.addEventListener('click', () => {
-    const show = store.getState().showReferenceGeometry !== false  // default shown
-    store.setState({ showReferenceGeometry: !show })
-    _setMenuToggle('menu-view-reference', !show)  // pill ON when reference is shown
+  const _referenceViewButton = document.getElementById('menu-view-reference')
+  const _hasReferenceGeometry = state =>
+    (state.currentDesign?.strands ?? []).some(strand => strand.is_reference)
+  function _syncReferenceViewButton(state) {
+    const available = _hasReferenceGeometry(state)
+    if (_referenceViewButton) _referenceViewButton.disabled = !available
+    _setMenuToggle('menu-view-reference', available && state.showReferenceGeometry !== false)
+  }
+  _referenceViewButton?.addEventListener('click', () => {
+    const state = store.getState()
+    if (!_hasReferenceGeometry(state)) return
+    store.setState({ showReferenceGeometry: state.showReferenceGeometry === false })
   })
+  _syncReferenceViewButton(store.getState())
   store.subscribe((newState, prevState) => {
-    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
-      _setMenuToggle('menu-view-reference', newState.showReferenceGeometry !== false)
+    if (newState.currentDesign !== prevState.currentDesign ||
+        newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
+      _syncReferenceViewButton(newState)
     }
   })
 
@@ -6525,9 +6397,9 @@ async function main() {
   setNativePromptHandler(opts => vrPrompts.ask(opts))
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
-  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
+  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, delivery: () => vrViewTools.delivery, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
-  const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
+  const vrViewTools = createVRViewTools({scene,getState:store.getState,subscribe:fn=>store.subscribe(fn,'vr-view-tools'),activateDeform:()=>_toggleDeformView({animate:false}),waitForTool:key=>key==='clashes'?clashOverlay.whenReady():undefined,onError:message=>showToast(message,{severity:'error'})})
   const vrJoin = createVRJoin({ api, getState: store.getState, transaction: _vrToolTransaction, sendFeedback: _sendVRToolExecution,
     getDocumentToken: () => `${getDocId() ?? ''}:${store.getState().currentDesign?.id ?? ''}`,
     resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target),
@@ -6551,7 +6423,7 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active) },
+    onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active); if(active)void vrViewTools.prepare().catch(()=>{}) },
     onNativePoll: () => { void vrJoin.publish(); void vrPrompts.publish(); void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
     renderer,
     scene,
@@ -6661,7 +6533,7 @@ async function main() {
         // live-MD payload handoffs), serialize rapid requests, then publish the
         // acknowledged desktop state back to the companion.
         _vrStyleApply = _vrStyleApply.then(async () => {
-          await _setRepresentation(event.representation)
+          await _reprSwitcher.ensureRepresentation(event.representation)
           _setColoringMode(event.coloring); vrViewTools.refresh()
           await vrSession.publishNativeState?.()
         }).catch(error => {
@@ -6927,9 +6799,24 @@ async function main() {
     showAboutFileModal({ api, path: _workspacePath })
   })
 
+  document.getElementById('menu-help-nanobase-inventory')?.addEventListener('click', async () => {
+    const { showNanobaseInventory } = await import('./ui/nanobase_inventory.js')
+    showNanobaseInventory()
+  })
+
+  document.getElementById('menu-help-image-evaluation')?.addEventListener('click', async () => {
+    const { showImageEvaluation } = await import('./ui/image_evaluation.js')
+    showImageEvaluation()
+  })
+
   document.getElementById('menu-help-generate-design')?.addEventListener('click', async () => {
     const { showGenerateDesign } = await import('./ui/generate_design.js')
     showGenerateDesign({ api, store })
+  })
+
+  document.getElementById('menu-help-yggdnasil')?.addEventListener('click', async () => {
+    const { showYggDNAsil } = await import('./ui/yggdnasil.js')
+    showYggDNAsil()
   })
 
   let tJunctionPreview = null
@@ -7123,7 +7010,7 @@ async function main() {
     fretChecker.refreshIfFret()
 
     // Pin unligated-crossover ⚠ markers to live bead midpoints so they
-    // track the crossover through unfold view, cadnano view, expanded
+    // track the crossover through unfold view, expanded
     // helix spacing, the deform tool, and cluster move/rotate. Cheap —
     // at most a few sprites per design. Cursor (when over the canvas)
     // drives the hover-fade so the user can see through markers to the

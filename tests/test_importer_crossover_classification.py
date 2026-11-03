@@ -8,6 +8,8 @@ scadnano-style loopouts).
 
 from __future__ import annotations
 
+import pytest
+
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.crossover_positions import extract_crossovers_from_strands
 from backend.core.models import (
@@ -269,7 +271,8 @@ def test_from_json_backfill_idempotent():
     assert len(twice.forced_ligations) == 1
 
 
-def test_from_json_reclassifies_non_neighbour_crossovers_as_fls():
+@pytest.mark.parametrize("second_bp", [10, 11])
+def test_from_json_reclassifies_non_neighbour_crossovers_as_fls(second_bp):
     """Crossover records whose two halves share a bp index but whose helices
     aren't lattice-neighbours at that bp must be reclassified as
     ForcedLigations on load (older cadnano imports kept them as Crossovers).
@@ -283,12 +286,14 @@ def test_from_json_reclassifies_non_neighbour_crossovers_as_fls():
         strand_type=StrandType.SCAFFOLD,
         domains=[
             Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
-            Domain(helix_id="h2", start_bp=10, end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h2", start_bp=second_bp, end_bp=20, direction=Direction.REVERSE),
         ],
     )
     bad_xo = Crossover(
+        id="preserved-extra-thymines",
+        extra_bases="TT",
         half_a=HalfCrossover(helix_id="h0", index=10, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="h2", index=10, strand=Direction.REVERSE),
+        half_b=HalfCrossover(helix_id="h2", index=second_bp, strand=Direction.REVERSE),
     )
     d = Design(
         helices=[h0, h_far],
@@ -300,8 +305,11 @@ def test_from_json_reclassifies_non_neighbour_crossovers_as_fls():
     assert len(reloaded.crossovers) == 0
     assert len(reloaded.forced_ligations) == 1
     fl = reloaded.forced_ligations[0]
+    assert fl.id == bad_xo.id
+    assert fl.extra_bases == "TT"
     assert (fl.three_prime_helix_id, fl.three_prime_bp) == ("h0", 10)
-    assert (fl.five_prime_helix_id, fl.five_prime_bp) == ("h2", 10)
+    assert (fl.five_prime_helix_id, fl.five_prime_bp) == ("h2", second_bp)
+    assert Design.from_json(reloaded.to_json()).forced_ligations == reloaded.forced_ligations
 
 
 def test_from_json_keeps_valid_neighbour_crossovers():

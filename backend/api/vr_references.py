@@ -52,11 +52,19 @@ def session_state(request, *, reader=None):
 
 @router.get('/vr/references')
 def get_references(request: Request):
-    return read_references(request)
+    return read_references(request, unavailable_on_forbidden=True)
 
 
-def read_references(request, *, reader=None):
-    state = session_state(request, reader=reader)
+def read_references(request, *, reader=None, unavailable_on_forbidden=False):
+    try:
+        state = session_state(request, reader=reader)
+    except HTTPException as error:
+        if error.status_code != 403 or not unavailable_on_forbidden:
+            raise
+        # Every desktop browser polls this optional native bridge, including
+        # remote Tailscale clients. An inaccessible bridge has no session for
+        # that browser; do not expose local state or relax the write guard.
+        return {'session': None}
     if not state:
         return {'session': None}
     event = None

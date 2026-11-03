@@ -42,7 +42,7 @@ import { withSurfaceProgress } from '../api/surface_progress_request.js'
 const ATOM_NEUTRAL_DESIGN_FIELDS = new Set([
   'metadata', 'id', 'view_volumes', 'camera_poses', 'animations', 'group_organization',
   'feature_log', 'feature_log_cursor', 'feature_log_sub_cursor', 'recipe_root',
-  'repair_draft', 'visibility_state',
+  'repair_draft', 'visibility_state', 'annotations', 'annotations_enabled',
 ])
 
 // Stable signature for a design's per-region surface columns — used to skip a
@@ -666,7 +666,14 @@ export function initAtomSurfaceDisplay({
     // (switching full→atomistic would drop strand/base/cluster colouring).
     if (mode !== 'off') _refreshAtomColors()
     if (_deferToOverlay) return
-    if (mode !== 'off' && !_atomDataCache) {
+    if (mode !== 'off' && _atomDataCache) {
+      // Simulation controllers replace the renderer's model without replacing
+      // this native-design cache. Re-selecting the same mode does not rebuild
+      // the renderer, so restore its data as well as its colors and mode.
+      atomisticRenderer.update(_atomDataCache)
+      _refreshAtomColors()
+      atomisticRenderer.highlight(atomSelectionForState(store.getState()))
+    } else if (mode !== 'off') {
       const toastToken = ++_atomToastToken
       showPersistentToast('Loading atomistic model…', {
         diagnostic: {
@@ -680,7 +687,7 @@ export function initAtomSurfaceDisplay({
       })
       try {
         const data = await _ensureAtomData()
-        if (data && atomisticRenderer.getMode() === mode) {
+        if (data && atomisticRenderer.getMode() === mode && !getSimOverlayWillDriveHeavy('atomistic')) {
           atomisticRenderer.update(data)
           _refreshAtomColors()
           atomisticRenderer.highlight(atomSelectionForState(store.getState()))
@@ -859,6 +866,7 @@ export function initAtomSurfaceDisplay({
   })
 
   return {
+    ensureAtoms: _ensureAtomData,
     applySurfaceMode: _applySurfaceMode,
     selectSurfaceDetail: _selectSurfaceDetail,
     refreshSurfaceRegions: () => _applyRegionSurfaceOverlay(store.getState().currentDesign, true),

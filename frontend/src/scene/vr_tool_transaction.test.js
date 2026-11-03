@@ -6,7 +6,7 @@ import {
 } from './vr_tool_transaction.js'
 
 describe('native VR tool transaction coordinator', () => {
-  it('captures an exact committed feature and undoes only that tail entry', async () => {
+  it.each([false, true])('captures an exact committed feature and forwards deferred Undo (deferred=%s)', async deferred => {
     let state = { currentDesign: { feature_log: [] } }
     const undoDesign = vi.fn(async () => {
       state = { currentDesign: { feature_log: [] } }
@@ -32,10 +32,12 @@ describe('native VR tool transaction coordinator', () => {
       reason: 'committed',
       transaction: { featureLogEntryId: 'vr-edit-1', targetCount: 12 },
     })
-    await expect(coordinator.undo({ tool: 'move_rotate' })).resolves.toMatchObject({
+    const onCommitted = vi.fn()
+    await expect(coordinator.undo({ tool: 'move_rotate', ...(deferred ? { onCommitted, deferGeometry: true } : {}) })).resolves.toMatchObject({
       accepted: true, reason: 'undone',
     })
     expect(undoDesign).toHaveBeenCalledOnce()
+    if (deferred) expect(undoDesign).toHaveBeenCalledWith({ onCommitted, deferGeometry: true })
     expect(coordinator.snapshot().committed).toBeNull()
   })
 

@@ -1,0 +1,128 @@
+{
+  "scope": "Illustrative native router runs only; not extrapolated to the complete atlas.",
+  "examples": [
+    {
+      "lattice": "honeycomb",
+      "helices": 6,
+      "paired_length_bp": 100,
+      "mode": "seamless",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        674
+      ],
+      "exceeds_7249": false,
+      "integrity_errors": [],
+      "warnings": []
+    },
+    {
+      "lattice": "honeycomb",
+      "helices": 6,
+      "paired_length_bp": 100,
+      "mode": "seamed",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        756
+      ],
+      "exceeds_7249": false,
+      "integrity_errors": [
+        "end/turn scaffold crossover h_XY_0_1[-2] has only 2 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple.",
+        "end/turn scaffold crossover h_XY_1_1[-2] has only 2 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple."
+      ],
+      "warnings": []
+    },
+    {
+      "lattice": "honeycomb",
+      "helices": 6,
+      "paired_length_bp": 1208,
+      "mode": "seamless",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        7332
+      ],
+      "exceeds_7249": true,
+      "integrity_errors": [],
+      "warnings": []
+    },
+    {
+      "lattice": "honeycomb",
+      "helices": 6,
+      "paired_length_bp": 1208,
+      "mode": "seamed",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        7308
+      ],
+      "exceeds_7249": true,
+      "integrity_errors": [
+        "end/turn scaffold crossover h_XY_0_1[-2] has only 2 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple.",
+        "end/turn scaffold crossover h_XY_1_1[-2] has only 2 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple.",
+        "end/turn scaffold crossover h_XY_1_0[1208] has only 1 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple.",
+        "end/turn scaffold crossover h_XY_1_-1[1208] has only 1 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple."
+      ],
+      "warnings": []
+    },
+    {
+      "lattice": "square",
+      "helices": 4,
+      "paired_length_bp": 100,
+      "mode": "seamless",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        460
+      ],
+      "exceeds_7249": false,
+      "integrity_errors": [],
+      "warnings": []
+    },
+    {
+      "lattice": "square",
+      "helices": 4,
+      "paired_length_bp": 100,
+      "mode": "seamed",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        512
+      ],
+      "exceeds_7249": false,
+      "integrity_errors": [],
+      "warnings": []
+    },
+    {
+      "lattice": "square",
+      "helices": 4,
+      "paired_length_bp": 1812,
+      "mode": "seamless",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        7308
+      ],
+      "exceeds_7249": true,
+      "integrity_errors": [],
+      "warnings": []
+    },
+    {
+      "lattice": "square",
+      "helices": 4,
+      "paired_length_bp": 1812,
+      "mode": "seamed",
+      "router_valid": true,
+      "scaffold_strands": 1,
+      "routed_nt": [
+        7296
+      ],
+      "exceeds_7249": true,
+      "integrity_errors": [
+        "end/turn scaffold crossover h_XY_1_1[1812] has only 1 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple.",
+        "end/turn scaffold crossover h_XY_1_0[1812] has only 1 bp ssDNA clearance to a staple domain (need \u22653); crossover is buried in / abuts a staple."
+      ],
+      "warnings": []
+    }
+  ]
+}

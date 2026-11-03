@@ -1,3 +1,4 @@
+import { loopSkipGlyphKind, applyLoopSkipGlyphMaterial, configureLoopSkipGlyph } from '../scene/loop_skip_glyph.js'
 import { selectionHaloShader, installSelectionHalo } from '../scene/selection_halo.js'
 import { installSelectionTint, selectionBaseCompiler } from '../scene/selection_tint.js'
 import { bakePreparedAssemblyInstances } from '../scene/prepared_assembly_instances.js'
@@ -51,14 +52,15 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
     if (!MATERIALS.has(m.type) && !m.isLineMaterial) fail(`Unsupported material ${m.type}; this view cannot yet be packaged`)
     const impostor = preparedImpostorSpec(m)
     const compile = selectionBaseCompiler(m)
+    const loopSkipGlyph = loopSkipGlyphKind(compile)
     const alpha = compile === instanceAlphaOnBeforeCompile
     const hullCutouts = compile === hullCutoutShader ? m.userData.hullCutouts : null
     const sectionCap = compile === sectionCapShader
     const selectionHalo = compile === selectionHaloShader
-    if (!hullCutouts && !impostor && !alpha && !sectionCap && !selectionHalo && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
+    if (!loopSkipGlyph && !hullCutouts && !impostor && !alpha && !sectionCap && !selectionHalo && compile !== THREE.Material.prototype.onBeforeCompile) fail(`Custom shader on ${m.name || m.type} is not yet supported; keep using the editor for this view`)
     const data = m.isLineMaterial ? encodeWideLineMaterial(m) : m.toJSON(meta)
     delete data.userData
-    materials.set(m.uuid, { ...data, instanceAlpha: alpha, sectionCap, ...(selectionHalo ? { selectionHalo: true } : {}), ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
+    materials.set(m.uuid, { ...data, ...(loopSkipGlyph ? { loopSkipGlyph } : {}), instanceAlpha: alpha, sectionCap, ...(selectionHalo ? { selectionHalo: true } : {}), ...(hullCutouts ? { hullCutouts } : {}), ...(impostor ? { impostor } : {}),
       sectionPlanes: (m.clippingPlanes ?? []).map(p => [...p.normal.toArray(), p.constant]),
       clipIntersection: m.clipIntersection, clipShadows: m.clipShadows,
       colors: Object.fromEntries(COLOR_KEYS.filter(k => m[k]?.isColor).map(k => [k, m[k].toArray()])) })
@@ -93,7 +95,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
   }
   const root = node(scene)
   const sectioned = [...materials.values()].some(m => m.sectionCap || m.sectionPlanes.length)
-  const packageData = { format: 'nadoc-prepared-scene', version: [...materials.values()].some(m => m.hullCutouts?.length) ? 6 : view?.overlay ? 5 : [...materials.values()].some(m => m.impostor) ? 4 : [...materials.values()].some(m => m.wideLine) ? 3 : sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
+  const packageData = { format: 'nadoc-prepared-scene', version: [...materials.values()].some(m => m.loopSkipGlyph) ? 7 : [...materials.values()].some(m => m.hullCutouts?.length) ? 6 : view?.overlay ? 5 : [...materials.values()].some(m => m.impostor) ? 4 : [...materials.values()].some(m => m.wideLine) ? 3 : sectioned ? 2 : 1, threeRevision: THREE.REVISION, units: 'nm',
     title: String(title).slice(0, 200), sourceHash, view, capabilities: ['static-visible-scene', 'orbit'],
     camera, navigation, background: scene.background?.isColor ? `#${scene.background.getHexString()}` : background,
     render: { localClippingEnabled: !!renderer?.localClippingEnabled, toneMapping: renderer?.toneMapping ?? THREE.NoToneMapping, toneMappingExposure: renderer?.toneMappingExposure ?? 1, outputColorSpace: renderer?.outputColorSpace ?? THREE.SRGBColorSpace, clearColor: renderer?.getClearColor(new THREE.Color()).getHex() ?? 0, clearAlpha: renderer?.getClearAlpha() ?? 0 },
@@ -104,7 +106,7 @@ export function prepareScene({ scene, camera, navigation = new Float64Array(), t
 
 /** Validate before creating GPU resources or giving image URLs to Three.js. */
 export function validateScene(data) {
-  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2, 3, 4, 5, 6].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
+  if (data?.format !== 'nadoc-prepared-scene' || ![1, 2, 3, 4, 5, 6, 7].includes(data.version) || data.threeRevision !== THREE.REVISION || data.units !== 'nm') fail('Unsupported viewer package version')
   validateSharedOverlay(data)
   validateViewTools(data.view?.viewTools)
   validateSharedVisualization(data.view?.visualization)
@@ -156,6 +158,7 @@ export function validateScene(data) {
     if (m.hullCutouts != null) { validateHullCutouts(m.hullCutouts); if (m.hullCutouts.length && data.version < 6) fail('Unsupported hull cutout version'); if (m.impostor || m.instanceAlpha || m.sectionCap || !['MeshPhongMaterial', 'MeshBasicMaterial', 'LineBasicMaterial'].includes(m.type)) fail('Unsupported hull cutout material') }
     if (m.impostor != null && (data.version < 4 || m.type !== 'MeshPhongMaterial' || !Number.isFinite(m.impostor.radius) || m.impostor.radius <= 0 || typeof m.impostor.instanceAlpha !== 'boolean' || m.instanceAlpha || m.sectionCap || m.wideLine)) fail('Invalid sphere impostor')
     if (m.selectionHalo != null && (m.selectionHalo !== true || m.type !== 'PointsMaterial' || m.impostor || m.instanceAlpha || m.sectionCap || m.hullCutouts || m.wideLine)) fail('Invalid selection halo')
+    if (m.loopSkipGlyph != null && (data.version < 7 || !['loop','skip'].includes(m.loopSkipGlyph) || m.type !== 'MeshBasicMaterial' || m.instanceAlpha || m.sectionCap || m.selectionHalo || m.hullCutouts || m.impostor || m.wideLine)) fail('Invalid loop/skip glyph')
     if (m.sectionCap != null && typeof m.sectionCap !== 'boolean') fail('Invalid section cap')
     if (m.sectionPlanes && (!Array.isArray(m.sectionPlanes) || m.sectionPlanes.length > 16 || m.sectionPlanes.some(p => !finiteVector(p, 4) || Math.abs(Math.hypot(...p.slice(0, 3)) - 1) > .001))) fail('Invalid section planes')
     for (const [key, value] of Object.entries(m)) if ((key === 'map' || key.endsWith('Map')) && value != null && !textures.has(value)) fail('Missing material texture')
@@ -243,6 +246,7 @@ export async function loadPreparedScene(buffer) {
         materials[m.uuid] = material
         if (m.impostor.instanceAlpha) enableImpostorInstanceAlpha(material)
       }
+      if (m.loopSkipGlyph) applyLoopSkipGlyphMaterial(materials[m.uuid],m.loopSkipGlyph)
       if (m.hullCutouts) applyHullCutouts(materials[m.uuid], m.hullCutouts)
       if (m.instanceAlpha) applyInstanceAlphaMaterial(materials[m.uuid])
       if (m.selectionHalo) installSelectionHalo(materials[m.uuid])
@@ -268,6 +272,8 @@ export async function loadPreparedScene(buffer) {
     const restore = (o, spec) => {
       if (spec.wideLine) o = restoreWideLine(o)
       o.frustumCulled = spec.frustumCulled
+      const glyphKind=loopSkipGlyphKind(o.material?.onBeforeCompile)
+      if(glyphKind)configureLoopSkipGlyph(o,glyphKind)
 
       if ((Array.isArray(o.material) ? o.material : [o.material]).some(m => m?.onBeforeCompile === sectionCapShader)) {
         o.onAfterRender = renderer => renderer.clearStencil()

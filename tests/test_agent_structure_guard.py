@@ -176,3 +176,26 @@ def test_molecular_history_change_requires_a_complete_render_refresh():
     after.cluster_transforms[0].translation[0] += 1
     assert not _diff_is_cluster_only(before,after)
     assert _topology_diff_field(before,after) == 'atomistic_reference'
+
+
+def test_saved_main_loadout_requires_a_recorded_publication_contract(tmp_path):
+    """ISSUE-171: native construction is proven, but Save adds an unlogged branch."""
+    from backend.core.design_loadouts import decode_snapshot
+    from backend.core.project_revisions import refresh_active_revision
+    from experiments.recorded_review_process import structural_value
+    from scripts.agent_structure_guard import audit
+
+    source = part().design
+    assert audit(source)['status'] == 'verified'
+    saved = refresh_active_revision(tmp_path / 'revisions', source)
+    before, after = structural_value(source), structural_value(saved)
+    assert {key for key in before if before[key] != after[key]} == {
+        'loadouts', 'active_loadout_id',
+    }
+    assert saved.loadouts[0].name == 'Main'
+    assert saved.feature_log == source.feature_log
+    branch = decode_snapshot(saved.loadouts[0].design_snapshot_gz_b64)
+    assert audit(branch)['status'] == 'verified'
+    with pytest.raises(ProcessRequired, match='active_loadout_id, loadouts'):
+        publish(saved, tmp_path / 'must-not-publish.nadoc')
+    assert not (tmp_path / 'must-not-publish.nadoc').exists()

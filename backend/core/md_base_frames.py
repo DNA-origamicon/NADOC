@@ -10,6 +10,13 @@ import numpy as np
 _RING_NAMES = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
 
 
+def ordered_ring_indices(atoms):
+    """Chemical ring order, independent of PSF/PDB atom storage order."""
+    names = ("N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4") if "N9" in atoms else (
+        "N1", "C2", "N3", "C4", "C5", "C6")
+    return np.asarray([atoms[name] for name in names if name in atoms], dtype=np.int64)
+
+
 def base_frame_layout(ctx):
     """Cache residue-ring indices for P-bearing bases and recovered O5' termini."""
     cached = ctx.get("full_base_layout")
@@ -20,7 +27,7 @@ def base_frame_layout(ctx):
     rings = []
     for anchor in anchors:
         atoms = u.atoms[int(anchor)].residue.atoms
-        rings.append(np.asarray([int(a.index) for a in atoms if str(a.name) in _RING_NAMES]))
+        rings.append(ordered_ring_indices({str(a.name): int(a.index) for a in atoms}))
     # Group by ring size so centers/least-squares planes are batched per frame.
     groups = []
     for size in sorted({len(r) for r in rings if len(r) >= 5}):
@@ -31,12 +38,15 @@ def base_frame_layout(ctx):
     return cached
 
 
-def measured_base_frames(raw_nm, anchor_indices, groups, aligned_anchors, rotation, box_nm):
+def measured_base_frames(raw_nm, anchor_indices, groups, aligned_anchors, rotation, box_nm,
+                         *, inward_out=None):
     """Ring centroids and plane normals in the caller's exact display frame.
 
     Image every ring atom relative to its own residue anchor BEFORE averaging:
     averaging wrapped positions first loses the ring when it straddles a cell face.
     Missing/degenerate rings remain NaN so consumers can use their legacy fallback.
+    If inward_out is supplied, groups must use ordered_ring_indices; complete
+    rings replace its fallback vectors with measured in-plane chemical directions.
     """
     n = len(anchor_indices)
     centers = np.full((n, 3), np.nan)
@@ -57,4 +67,14 @@ def measured_base_frames(raw_nm, anchor_indices, groups, aligned_anchors, rotati
         normal *= np.where((normal * orient).sum(axis=1) < 0, -1, 1)[:, None]
         valid = singular[:, 1] > 1e-8
         tangents[rows[valid]] = normal[valid]
+        if inward_out is not None and indices.shape[1] in (6, 9):
+            # N1→C4 (pyrimidine), N9→C6 (purine): a named ring span.
+            # P→C1' can be almost perpendicular to a puckered CPD base plane;
+            # projecting that sugar vector produces arbitrary in-plane rotations.
+            opposite = 3 if indices.shape[1] == 6 else 4
+            inward = delta[:, opposite] - delta[:, 0]
+            inward -= (inward * normal).sum(axis=1)[:, None] * normal
+            length = np.linalg.norm(inward, axis=1)
+            good = valid & (length > 1e-8)
+            inward_out[rows[good]] = inward[good] / length[good, None]
     return centers, tangents

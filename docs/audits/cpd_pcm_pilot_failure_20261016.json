@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-17T02:23:21.769596+00:00",
+  "diagnosis": {
+    "engine_bohr_to_angstrom": 0.52917721067,
+    "campaign_bohr_to_angstrom": 0.529177210903,
+    "max_reported_delta": 4.183165813742562e-09,
+    "predicted_ratio": 1.000000000440306,
+    "max_conversion_corrected_delta": 1.7763568394002505e-15,
+    "native_energy_hartree": -1963.9948553785655,
+    "scf_completed": true,
+    "cavity_warning": true,
+    "accepted": false,
+    "decision": "Wrapper geometry gate used a different Bohr conversion constant; tiny uniform scaling is not molecular motion. Independently reject warning-bearing PCM result pending cavity discretization check."
+  },
+  "native_scf_energy_verified": -1963.9948553785655,
+  "accepted": false,
+  "assessment": "One native SCF converged in354s; wrapper failed unit consistency, and PCM warning independently blocks scientific acceptance. No alternate conformer calculation completed.",
+  "sources": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/original_qm/output.dat",
+      "sha256": "87f24d434405553e9be58106e981820b2bb7d3cd337a97fb92848e7e53ba3a61"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/original_qm_runner.log",
+      "sha256": "8cca906720d66ee29246158c06df4359c9f196a94c05f2888b09ef130a027041"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/original_qm/returned_geometry_angstrom.npy",
+      "sha256": "3c4877fc655cc72834c5ec063698c060bb171d04b75ccb78ef8551f68a985b8e"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pcm-pilot-v1/failure.json",
+      "sha256": "21093b37ed13a510370e59adf57030e6854f47f2ff67b4d5136feb0adf65fde1"
+    }
+  ],
+  "next": "V2 engine-consistent coordinate units, same1e-10A gate; one0.2A2 cavity attempt with warning rejection, then stop PCMSolver branch if warning recurs.",
+  "reference": "https://github.com/PCMSolver/pcmsolver/issues/206",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

@@ -475,6 +475,8 @@ export function partitionExtraBaseUpdates(updates) {
     m.set(u.direction | 0, {
       pos: u.backbone_position,
       normal: [u.nx ?? 0, u.ny ?? 0, u.nz ?? 0],
+      ...(u.tx !== undefined ? { axis: [u.tx, u.ty, u.tz] } : {}),
+      ...(u.measured_base && u.base_position ? { center: u.base_position } : {}),
     })
   }
   return { real, simXb }
@@ -483,6 +485,8 @@ export function partitionExtraBaseUpdates(updates) {
 const _simNorm = new THREE.Vector3()
 const _simTan  = new THREE.Vector3()
 const _simAxis = new THREE.Vector3()
+const _simInward = new THREE.Vector3()
+const _simMeasuredAxis = new THREE.Vector3()
 const _simBasis = new THREE.Matrix4()
 
 /**
@@ -497,16 +501,19 @@ const _simBasis = new THREE.Matrix4()
  * of the native atom-template frame used by default crossover placements.
  */
 export function simSlabQuaternion(baseNormal, helixAxis, out) {
-  _simAxis.copy(helixAxis)
-  _simTan.crossVectors(_simAxis, baseNormal)
-  if (_simTan.lengthSq() < 1e-12) {
-    // baseNormal ∥ axis — pick any perpendicular so the basis stays well-formed.
-    _simTan.set(1, 0, 0).cross(baseNormal)
-    if (_simTan.lengthSq() < 1e-12) _simTan.set(0, 1, 0).cross(baseNormal)
+  _simAxis.copy(helixAxis).normalize()
+  if (_simAxis.lengthSq() < 1e-12) _simAxis.set(0, 1, 0)
+  // A sheared basis is not a rotation. Quaternion conversion can jump between
+  // branches as the trajectory moves; match ordinary measured Full slabs.
+  _simInward.copy(baseNormal).addScaledVector(_simAxis, -baseNormal.dot(_simAxis))
+  if (_simInward.lengthSq() < 1e-12) {
+    _simInward.set(1, 0, 0).cross(_simAxis)
+    if (_simInward.lengthSq() < 1e-12) _simInward.set(0, 1, 0).cross(_simAxis)
   }
-  _simTan.normalize()
-  _simBasis.makeBasis(_simTan, _simAxis, baseNormal)
-  return out.setFromRotationMatrix(_simBasis)
+  _simInward.normalize()
+  _simTan.crossVectors(_simAxis, _simInward).normalize()
+  _simBasis.makeBasis(_simTan, _simAxis, _simInward)
+  return out.setFromRotationMatrix(_simBasis).normalize()
 }
 
 /**
@@ -522,8 +529,9 @@ export function simSlabQuaternion(baseNormal, helixAxis, out) {
  * @param {ArrayLike<number>} pos  real backbone position (nm) [x,y,z]
  * @param {ArrayLike<number>} baseNormal  per-frame a1 [nx,ny,nz]
  * @param {THREE.Vector3} avgAx average helix axis (slab in-plane reference)
+ * @param {object|null} frame measured axis and ring center, when supplied by MD
  */
-export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, baseNormal, avgAx) {
+export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, baseNormal, avgAx, frame = null) {
   _uPt.set(pos[0], pos[1], pos[2])
   _uMat.compose(_uPt, ID_QUAT, _uScl.set(1, 1, 1))
   beadsMesh.setMatrixAt(idx, _uMat)
@@ -531,8 +539,9 @@ export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, base
   _simNorm.set(baseNormal?.[0] ?? 0, baseNormal?.[1] ?? 0, baseNormal?.[2] ?? 0)
   if (_simNorm.lengthSq() < 1e-12) _simNorm.set(0, 0, 1)
   _simNorm.normalize()
-  simSlabQuaternion(_simNorm, avgAx, _uQuat)
-  _uSlab.copy(_uPt).addScaledVector(_simNorm, SLAB_OFFSET)
+  simSlabQuaternion(_simNorm, frame?.axis ? _simMeasuredAxis.fromArray(frame.axis) : avgAx, _uQuat)
+  if (frame?.center) _uSlab.fromArray(frame.center)
+  else _uSlab.copy(_uPt).addScaledVector(_simNorm, SLAB_OFFSET)
   _uMat.compose(_uSlab, _uQuat, _uScl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
   slabsMesh.setMatrixAt(idx, _uMat)
 }

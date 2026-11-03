@@ -13,8 +13,10 @@ class SidebarControls:
             while live.state['sidebars'][1]['offset']>0:scroll_page(live,1,-1)
         for attempt in range(100):
             if any(c.get('id')==identifier for c in live.state['controls']):
-                click(live,1,identifier,self.preset,self.trials)
-                (self.output/'sidebar-reaches.json').write_text(json.dumps(self.trials,indent=2))
+                try:
+                    click(live,1,identifier,self.preset,self.trials)
+                finally:
+                    (self.output/'sidebar-reaches.json').write_text(json.dumps(self.trials,indent=2))
                 return
             before=live.state['sidebars'][1]['offset']
             scroll_page(live,1,1)

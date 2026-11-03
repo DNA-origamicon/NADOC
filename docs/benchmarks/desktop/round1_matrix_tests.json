@@ -1,0 +1,32 @@
+[
+  {
+    "file": "test_matrix_conversion.py",
+    "exit_code": 0,
+    "stdout": ".................                                                        [100%]\n============================= slowest 10 durations =============================\n1.30s setup    tests/test_matrix_conversion.py::test_float64_conversion_matches_original_bits_and_owns_values[c]\n\n(9 durations < 0.005s hidden.  Use -vv to show these durations.)\n17 passed in 1.40s\n",
+    "stderr": "uv run python scripts/test_focused.py 'tests/test_matrix_conversion.py' -q\n"
+  },
+  {
+    "file": "test_assembly_fk_core.py",
+    "exit_code": 0,
+    "stdout": ".............                                                            [100%]\n============================= slowest 10 durations =============================\n1.26s setup    tests/test_assembly_fk_core.py::test_build_inst_by_id_maps_every_instance\n\n(9 durations < 0.005s hidden.  Use -vv to show these durations.)\n13 passed in 1.36s\n",
+    "stderr": "uv run python scripts/test_focused.py 'tests/test_assembly_fk_core.py' -q\n"
+  },
+  {
+    "file": "test_assembly_connectors_core.py",
+    "exit_code": 0,
+    "stdout": "...........................                                              [100%]\n============================= slowest 10 durations =============================\n1.27s setup    tests/test_assembly_connectors_core.py::test_build_frame_from_normal_is_orthonormal_with_z_along_normal\n\n(9 durations < 0.005s hidden.  Use -vv to show these durations.)\n27 passed in 1.37s\n",
+    "stderr": "uv run python scripts/test_focused.py 'tests/test_assembly_connectors_core.py' -q\n"
+  },
+  {
+    "file": "test_assembly_models.py",
+    "exit_code": 0,
+    "stdout": "......................................                                   [100%]\n=============================== warnings summary ===============================\ntests/test_assembly_models.py::test_assembly_from_json_falls_back_to_v1_for_legacy_payloads\n  /home/jojo/Work/NADOC/tests/test_assembly_models.py:686: DeprecationWarning: Assembly.from_json: legacy v1 wire format detected (no format_version=2 / instances_v2).  This payload still loads, but new writes will emit v2 only.  Re-save to migrate the file in place.\n    restored = Assembly.from_json(legacy_text)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n============================= slowest 10 durations =============================\n1.17s setup    tests/test_assembly_models.py::test_part_source_inline_type\n0.89s call     tests/test_assembly_models.py::test_undo_cap_enforced_for_large_assembly\n0.13s call     tests/test_assembly_models.py::test_undo_cap_formula_shrinks_with_size\n0.01s teardown tests/test_assembly_models.py::test_undo_cap_enforced_for_large_assembly\n\n(6 durations < 0.005s hidden.  Use -vv to show these durations.)\n38 passed, 1 warning in 2.37s\n",
+    "stderr": "uv run python scripts/test_focused.py 'tests/test_assembly_models.py' -q\n"
+  },
+  {
+    "file": "test_models.py",
+    "exit_code": 0,
+    "stdout": "..............                                                           [100%]\n============================= slowest 10 durations =============================\n1.21s setup    tests/test_models.py::test_vec3_to_array\n\n(9 durations < 0.005s hidden.  Use -vv to show these durations.)\n14 passed in 1.30s\n",
+    "stderr": "uv run python scripts/test_focused.py 'tests/test_models.py' -q\n"
+  }
+]

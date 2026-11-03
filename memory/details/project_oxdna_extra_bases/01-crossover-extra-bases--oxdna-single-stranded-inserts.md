@@ -33,8 +33,8 @@ All wiring is in `backend/physics/oxdna_interface.py`:
 - `crossover_extra_base_junctions(design)` — mirrors the atomistic `extra_base_xover_src`
   rule: an extra-base crossover inserts on the **owning strand** at the domain→domain
   transition (`prev.helix_id != next.helix_id and prev.end_bp == next.start_bp`).
-  Keyed strand-scoped `(strand_id, prev_domain_index)`. Crossover-only (forced
-  ligations out of scope). Base identity comes from the `extra_bases` chars, NOT from
+  Keyed strand-scoped `(strand_id, prev_domain_index)`. Forced ligations additionally
+  match both directed endpoints, without the same-BP/inter-helix restriction. Base identity comes from the `extra_bases` chars, NOT from
   `strand.sequence` (which excludes them — so inserts do not consume `seq_idx`).
   **Owning-strand selection (reciprocal-crossover bug, fixed 2026-06-25):** register
   each crossover at ONLY its owning (src) half — the half sitting at a domain 3′ end,

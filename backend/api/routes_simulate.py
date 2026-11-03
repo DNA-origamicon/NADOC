@@ -129,11 +129,15 @@ async def get_recommendation(devices: str = "0", assembly: bool = False) -> dict
 
 @router.get("/simulate/jobs")
 async def list_simulate_jobs(
-    design_source_path: str | None = None, show_all: bool = False, assembly: bool = False
+    design_source_path: str | None = None, show_all: bool = False, assembly: bool = False,
+    snapshot: bool = False,
 ) -> list[dict]:
-    """The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
+    """The UNIFIED simulation job list — every simulation for the active design,
     normalized into one common node shape (see :mod:`backend.core.sim_jobs`) so the
     Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in the SAME hierarchical list.
+
+    ``snapshot`` returns local saved metadata immediately; live status and artifact
+    checks are supplied by a subsequent normal request.
 
     Reuses the exact enrichment ``routes_oxdna.list_oxdna_jobs`` does (reconcile status,
     out-of-date fingerprint, on-disk size) plus the LAMMPS reconcile, then normalizes +
@@ -143,7 +147,24 @@ async def list_simulate_jobs(
     from backend.api.assembly import _WORKSPACE_DIR
     from backend.core import sim_jobs
 
-    ws = _WORKSPACE_DIR
+    from backend.core.simulation_runtime import workspace
+
+    ws = workspace(_WORKSPACE_DIR)
+    project_id = None
+    if assembly:
+        from backend.api import assembly_state
+
+        current = assembly_state.get_assembly()
+        if current is None:
+            return []
+        project_id = f"flat_{current.id}"
+    if snapshot:
+        from backend.core.sim_job_snapshot import read_snapshot
+
+        nodes = await run_in_threadpool(read_snapshot, ws)
+        return await run_in_threadpool(
+            _finish_simulate_nodes, nodes, ws, design_source_path, show_all, project_id, True
+        )
     import asyncio
     from backend.api import (
         routes_oxdna, routes_lammps, routes_mrdna, routes_cando,
@@ -169,20 +190,12 @@ async def list_simulate_jobs(
             nodes.extend(normalize(row) for row in rows)
         except Exception:
             continue  # Malformed data from one engine must not hide other engines.
-    project_id = None
-    if assembly:
-        from backend.api import assembly_state
-
-        current = assembly_state.get_assembly()
-        if current is None:
-            return []
-        project_id = f"flat_{current.id}"
     return await run_in_threadpool(
         _finish_simulate_nodes, nodes, ws, design_source_path, show_all, project_id
     )
 
 
-def _finish_simulate_nodes(nodes, ws, design_source_path, show_all, project_id=None):
+def _finish_simulate_nodes(nodes, ws, design_source_path, show_all, project_id=None, snapshot=False):
     from backend.core import sim_jobs
 
     assembly_project_id = project_id
@@ -209,7 +222,7 @@ def _finish_simulate_nodes(nodes, ws, design_source_path, show_all, project_id=N
             ): node
             for node in nodes
         }
-        for record in ProjectArtifactCatalog(ws).project_metadata(project_id):
+        for record in ProjectArtifactCatalog(ws).project_metadata(project_id, refresh_local=not snapshot):
             engine = record.get("engine")
             if engine not in {"md", "oxdna"}:
                 continue

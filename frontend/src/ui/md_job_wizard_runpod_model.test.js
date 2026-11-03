@@ -1,11 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import {
   budgetHours, budgetState, estimateRows, runpodEstimateKey, runpodPlanShape,
-  runpodReadiness, selectedRow, storageRows,
+  runpodReadiness, selectedRow, selectedBudget, storageRows,
 } from './md_job_wizard_runpod_model.js'
 
 const stage = (role, steps, ns, dcdfreq = 5000) =>
   ({ role, steps, ns, params: { dcdfreq } })
+
+it('uses the selected card’s planning cost and staging rate for the budget gate', () => {
+  const preview = { gpus: [
+    { key: 'cheap', total_cost: 10, planning_cost: 15, usd_per_hour: 1 },
+    { key: 'fast', total_cost: 12, planning_cost: 18, usd_per_hour: 4 },
+  ], storage: { staging: { minutes: 30, usd: .5 } } }
+  expect(selectedBudget(preview, 'cheap', 18).estimated_usd).toBe(15.5)
+  expect(selectedBudget(preview, 'fast', 18)).toEqual({ budget_usd: 18, estimated_usd: 20, over_budget: true })
+})
+
+it('invalidates a quote for a changed neighbor list, PME spacing or execution mode', () => {
+  const shape = { stages: [{ role: 'relaxation', steps: 1000, pairlistdist: 13.5, pmegridspacing: 1.5, gpu_resident: true }] }
+  for (const change of [{ pairlistdist: 24 }, { pmegridspacing: .75 }, { gpu_resident: false }]) {
+    expect(runpodEstimateKey({ ...shape, stages: [{ ...shape.stages[0], ...change }] })).not.toBe(runpodEstimateKey(shape))
+  }
+})
+
+it('leaves conditional resident mode for the server to resolve against atom count', () => {
+  const plan={stages:[{role:'ladder',steps:1000,ns:.004,
+    params:{gpuresident:'on'},conditional_params:{gpuresident:'Depends on atom count'}}]}
+  expect(runpodPlanShape(plan).stages[0].gpu_resident).toBeNull()
+})
 
 // A ladder whose first chunk runs slow (the soft 1 fs chunk) and the rest at 4 fs.
 const RELAX_PLAN = {
@@ -69,12 +91,12 @@ describe('runpodPlanShape', () => {
 
   it('carries steps and dcd_freq per stage for the disk forecast', () => {
     const s = runpodPlanShape(PROD_PLAN)
-    expect(s.stages).toEqual([{ steps: 1_250_000, dcd_freq: 2500 }])
+    expect(s.stages).toEqual([expect.objectContaining({ steps: 1_250_000, dcd_freq: 2500, role: 'production', timestep_fs: 4 })])
   })
 
-  it('never emits a zero dcd_freq', () => {
+  it('preserves disabled trajectory output', () => {
     const s = runpodPlanShape({ stages: [stage('ladder', 100, 0.4, 0)] })
-    expect(s.stages[0].dcd_freq).toBe(1)
+    expect(s.stages[0].dcd_freq).toBe(0)
   })
 
   it('survives a missing plan', () => {
@@ -176,7 +198,7 @@ describe('estimateRows', () => {
 
   it('shows relaxation and production separately plus a total', () => {
     const labels = estimateRows(ROW, shape).map(r => r[0])
-    expect(labels).toEqual(['Relaxation ladder', 'Production', 'Total'])
+    expect(labels).toEqual(['Relaxation ladder', 'Production', 'Estimated compute'])
   })
 
   it('captions an intended production length as not yet planned', () => {
@@ -294,4 +316,9 @@ describe('runpodReadiness — the gate', () => {
     expect(runpodReadiness({ ...ok,
       budget: { over: false, estimated: 6.21, balanceUsd: null } }).ready).toBe(true)
   })
+})
+
+it('invalidates the cost estimate when padding changes',()=>{
+ const shape=runpodPlanShape(RELAX_PLAN)
+ expect(runpodEstimateKey({...shape,padding_nm:6})).not.toBe(runpodEstimateKey({...shape,padding_nm:3.5}))
 })

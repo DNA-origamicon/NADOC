@@ -55,6 +55,7 @@ import {
 } from './instance_alpha.js'
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
+import { buildAtomSerialIndex } from './atom_serial_index.js'
 
 const sharedColors = { mode: 'cpk', strands: new Map(), bases: new Map(), scalar: null }
 let _vdwScale = 1.0
@@ -276,7 +277,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   function _rebuild(data) {
     _clearScene()
     const table = _state.atoms = makeAtomTable(data)
-    if (_state.mode === 'off' || !table.count) { _notifyAtoms(); return }
+    if (_state.mode === 'off' || !table.count) { _weldOverlay?.update(null); _notifyAtoms(); return }
 
     const bonds = data?.bonds ?? []
     _state.topologyBonds = bonds
@@ -350,8 +351,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       // legacy object array can be sparse/reordered, so map serial → row.
       let rowOfSerial = null
       if (!table.columnar || table.raw.serial) {
-        rowOfSerial = new Map()
-        for (let i = 0; i < n; i++) rowOfSerial.set(table.serial(i), i)
+        rowOfSerial = buildAtomSerialIndex(table)
       }
       const ends = [0, 0]
       const idx = new Int32Array(nBonds * 2)
@@ -386,6 +386,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
 
     // Re-apply last known highlight state after geometry rebuild
     _applyColors(_state.lastSel)
+    _updateWeldFromAtoms()
     _notifyAtoms()
   }
 
@@ -441,6 +442,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
       }
       _state.bondMesh.instanceMatrix.needsUpdate = true
     }
+    _updateWeldFromAtoms()
     return true
   }
 
@@ -571,9 +573,19 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   }
 
   // Optional CPD weld overlay (scene/cpd_weld_overlay.js). It is driven from inside
-  // applyPositionLerp so its markers are computed from the SAME placement that positions
-  // the atom instances — see the note there.
+  // static rebuilds, coordinate updates and applyPositionLerp, so its markers use
+  // the SAME placement as the atom instances.
   let _weldOverlay = null
+  function _updateWeldFromAtoms() {
+    if (!_weldOverlay) return
+    const table = _state.atoms
+    let rows
+    _weldOverlay.update(serial => {
+      rows ??= new Map(Array.from({length:table.count}, (_, row) => [table.serial(row), row]))
+      const row = rows.get(serial)
+      return row == null ? null : [table.x(row), table.y(row), table.z(row)]
+    })
+  }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -714,6 +726,25 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         }
       }
       return offset === positions.length ? positions : positions.slice(0, offset)
+    },
+
+    /** Exact rendered instances, including bonds; preserve the native impostor shader. */
+    silhouetteEntries(predicate) {
+      if (_state.mode === 'off') return []
+      const out = [], rows = new Set()
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          if (!predicate(_state.atoms.get(group[i]))) continue
+          rows.add(group[i])
+          out.push({ instMesh: _state.elementMeshes[el], id: i })
+        }
+      }
+      const indices = _state.bondAtomIdx
+      if (_state.bondMesh) for (let i = 0; i < (indices?.length ?? 0) / 2; i++) {
+        if (rows.has(indices[i * 2]) && rows.has(indices[i * 2 + 1]))
+          out.push({ instMesh: _state.bondMesh, id: i })
+      }
+      return out
     },
 
     /** Build live glow entries for all atoms belonging to the supplied nucleotides. */
@@ -932,25 +963,19 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         const arr = transforms[id]
         if (Array.isArray(arr) && arr.length === 16) mats[id] = new THREE.Matrix4().set(...arr)
       }
-      const v = new THREE.Vector3()
-      const touched = new Set()
       const table = _state.atoms
-      for (const [el, group] of Object.entries(_state.elementAtoms)) {
-        const mesh = _state.elementMeshes[el]
-        if (!mesh) continue
-        for (let i = 0; i < group.length; i++) {
-          const r = group[i]
-          const hid = table.helixId(r)
-          const sid = (typeof hid === 'string' && hid.startsWith(PFX))
-            ? hid.slice(PFX.length) : null
-          const m = sid ? mats[sid] : null
-          v.set(table.x(r), table.y(r), table.z(r))
-          if (m) v.applyMatrix4(m)
-          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementScale[el]))
-          touched.add(mesh)
-        }
+      const positions = new Float64Array(table.count * 3)
+      const v = new THREE.Vector3()
+      for (let row = 0; row < table.count; row++) {
+        const hid = table.helixId(row)
+        const id = typeof hid === 'string' && hid.startsWith(PFX) ? hid.slice(PFX.length) : null
+        v.set(table.x(row), table.y(row), table.z(row))
+        if (id && mats[id]) v.applyMatrix4(mats[id])
+        v.toArray(positions, row * 3)
       }
-      for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
+      // Atoms and bond cylinders must consume the same transformed coordinates.
+      // Row offsets also support sparse/non-contiguous source atom serials.
+      _applySnapshot(positions, _snapshotOffsets(row => row * 3))
     },
 
     /** Restore every protein to its design pose (clear OxDNA-display transforms). */
