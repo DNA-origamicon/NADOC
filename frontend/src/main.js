@@ -6822,6 +6822,11 @@ async function main() {
     showGenerateDesign({ api, store })
   })
 
+  document.getElementById('menu-help-yggdnasil')?.addEventListener('click', async () => {
+    const { showYggDNAsil } = await import('./ui/yggdnasil.js')
+    showYggDNAsil()
+  })
+
   let tJunctionPreview = null
   let tJunctionLoading = false
   document.getElementById('menu-help-t-junctions')?.addEventListener('click', async () => {

@@ -1,0 +1,50 @@
+.ygg-modal { width: min(1120px, 96vw); max-width: 1120px; }
+.ygg { color: var(--text-primary, #ddd); font-size: 13px; }
+.ygg p { line-height: 1.5; }
+.ygg-kicker { color: #7fcbb4; letter-spacing: .09em; text-transform: uppercase; font-size: 11px; }
+.ygg-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 12px; background: #172822; border-radius: 8px; }
+.ygg input, .ygg select, .ygg button { font: inherit; color: inherit; background: #202b29; border: 1px solid #52645e; border-radius: 4px; padding: 6px; }
+.ygg input[type=number] { width: 76px; }
+.ygg button { cursor: pointer; }
+.ygg :focus-visible { outline: 2px solid #9be4c4; outline-offset: 2px; }
+.ygg-layout { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(0, 2fr); gap: 22px; }
+.ygg-detail { padding: 8px 16px; min-width: 0; }
+.ygg-detail h2 { font-size: 30px; margin: 4px 0; }
+.ygg-footprint { height: 220px; padding: 14px; border-radius: 8px; background: #111c19; }
+.ygg svg { width: 100%; height: 100%; fill: #73c7a6; }
+.ygg-side { height: 70px; margin-top: 12px; }
+.ygg-caption { color: #abbcb5; font-size: 12px; }
+.ygg-budget { height: 6px; background: #35413d; border-radius: 5px; overflow: hidden; }
+.ygg-budget i { display: block; height: 100%; background: #73c7a6; }
+.ygg-method { margin-top: 16px; border-top: 1px solid #52645e; padding-top: 12px; }
+.ygg-method summary { cursor: pointer; }
+
+.ygg-screen-summary { border-left: 3px solid #88baa8; padding: 8px 12px; background: #1c2c26; }
+.ygg-screen { border-radius: 4px; padding: 8px; background: #243c32; }
+.ygg-screen--excluded { background: #50322c; color: #ffcfba; }
+/* Spatial tree with a compact structure inspector. */
+.ygg-modal { width: min(1400px, 97vw); max-width: 1400px; }
+.ygg-layout { grid-template-columns: minmax(0, 1.8fr) minmax(290px, 1fr); gap: 16px; }
+.ygg-tree-column { min-width: 0; }
+.ygg-tree-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #152724; border-radius: 8px 8px 0 0; }
+.ygg-tree-view { height: clamp(310px, calc(100dvh - 390px), 560px); position: relative; overflow: hidden; border: 1px solid #304c42; border-radius: 0 0 8px 8px; background: #0b1616; }
+.ygg-tree-view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ygg-3d-labels { position: absolute; inset: 0; pointer-events: none; }
+.ygg .ygg-node-label { position: absolute; top: 0; left: 0; padding: 2px 5px; border: 0; border-radius: 4px; font-size: 11px; color: #cadbd2; background: #0b1616c9; pointer-events: auto; white-space: nowrap; }
+.ygg .ygg-node-label.is-selected { color: #fff; border: 1px solid #c7f0dc; background: #335447; }
+.ygg-branch-label { position: absolute; top: 0; left: 0; font-size: 12px; font-weight: 600; letter-spacing: .15em; }
+.ygg .square { color: #72dabb; }
+.ygg .honeycomb { color: #eebd72; }
+.ygg .excluded { color: #d88b83; }
+.ygg-hover { position: absolute; bottom: 8px; left: 8px; right: 8px; padding: 8px; background: #172c27ed; border: 1px solid #5c8877; border-radius: 4px; pointer-events: none; font-size: 12px; }
+.ygg-tree-legend { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 10px; font-size: 11px; }
+.ygg-node-picker { display: flex; align-items: center; gap: 10px; }
+.ygg-node-picker select { min-width: 0; flex: 1; }
+.ygg-neighbors { display: flex; gap: 8px; margin: 10px 0; }
+.ygg-neighbors button { flex: 1; }
+.ygg button:disabled { opacity: .45; cursor: default; }
+.ygg-detail { padding: 4px 10px; }
+.ygg-detail h2 small { font-size: 16px; font-weight: normal; color: #c0d3ca; }
+.ygg-footprint { height: 170px; }
+.ygg-side { height: 50px; }
+@media(max-width: 850px) { .ygg-layout { grid-template-columns: 1fr; } .ygg-tree-view { height: 420px; } }
