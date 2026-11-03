@@ -129,14 +129,86 @@ def test_route_forwards_resolved_box_and_stage_settings(monkeypatch):
     assert seen['nacl_mM']==150 and seen['mgcl2_mM']==5
 
 
-def test_preparation_is_refused_before_allocating_when_budget_unavailable(monkeypatch,tmp_path):
+@pytest.mark.parametrize('atoms', [3_000_000, 4_000_000])
+def test_preparation_is_refused_before_allocating_when_budget_unavailable(monkeypatch,tmp_path,atoms):
     from backend.core import md_vram,memory_budget
     from backend.core.namd_resources import prepare_with_memory_budget
     monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory'))
-    monkeypatch.setattr(md_vram,'estimate_profile_from_design',lambda *a,**k:dict(atom_upper_bound=3_000_000))
+    monkeypatch.setattr(md_vram,'estimate_profile_from_design',lambda *a,**k:dict(atom_upper_bound=atoms))
     monkeypatch.setattr(memory_budget.psutil,'virtual_memory',lambda:SimpleNamespace(available=6*1024**3))
     def forbidden(*a,**k):pytest.fail('Preparation started without the required budget')
     with pytest.raises(MemoryError):prepare_with_memory_budget(forbidden,object(),tmp_path/'job')
+
+
+@pytest.mark.parametrize('atoms', [3_300_000, 3_300_001, 4_000_000])
+def test_preparation_reserves_ram_above_compact_domain(monkeypatch,tmp_path,atoms):
+    import json
+    from backend.core import md_vram,memory_budget
+    from backend.core.namd_resources import prepare_with_memory_budget
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory'))
+    monkeypatch.setattr(md_vram,'estimate_profile_from_design',lambda *a,**k:dict(atom_upper_bound=atoms))
+    monkeypatch.setattr(memory_budget.psutil,'virtual_memory',lambda:SimpleNamespace(available=32*1024**3))
+    monkeypatch.setattr(memory_budget,'reclaim_discretionary_memory',lambda:None)
+    design=object()
+    def prepare(received,job_dir,**kwargs):
+        assert received is design and kwargs == {'padding_nm':6}
+        assert memory_budget.simulation_active()
+        receipt=json.loads((job_dir/'preparation_resources.json').read_text())
+        assert receipt['ram_mib']==preparation_memory_mib(atoms)
+        if atoms > 3_300_000:
+            assert receipt['expected_peak_ram_mib'] is None
+            assert receipt['basis']=='legacy-preparation-memory-allowance'
+        return 'prepared'
+    assert prepare_with_memory_budget(prepare,design,tmp_path/'job',padding_nm=6)=='prepared'
+    assert not memory_budget.simulation_active()
+
+
+@pytest.mark.parametrize('profile', [None, {'atom_upper_bound':0}, {'atom_upper_bound':float('nan')}, {'atom_upper_bound':float('inf')}])
+def test_preparation_rejects_unknown_atom_count(monkeypatch,tmp_path,profile):
+    from backend.core import md_vram
+    from backend.core.namd_resources import prepare_with_memory_budget
+    monkeypatch.setattr(md_vram,'estimate_profile_from_design',lambda *a,**k:profile)
+    def forbidden(*a,**k):pytest.fail('Preparation started without an estimate')
+    with pytest.raises(MemoryError,match='positive finite atom count'):
+        prepare_with_memory_budget(forbidden,object(),tmp_path/'job')
+
+
+def test_preparation_preempts_backfill_and_waits_for_analysis_lease(monkeypatch,tmp_path):
+    import threading
+    from backend.core import md_vram,memory_budget,trajectory_priority
+    from backend.core.namd_resources import prepare_with_memory_budget
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory'))
+    monkeypatch.setattr(trajectory_priority,'_directory',lambda:tmp_path)
+    monkeypatch.setattr(md_vram,'estimate_profile_from_design',lambda *a,**k:dict(atom_upper_bound=4_000_000))
+    monkeypatch.setattr(memory_budget.psutil,'virtual_memory',lambda:SimpleNamespace(available=32*1024**3))
+    monkeypatch.setattr(memory_budget,'reclaim_discretionary_memory',lambda:None)
+    lease=memory_budget.analysis_activity_lease()
+    lease.__enter__()
+    waiting=threading.Event()
+    released=threading.Event()
+    def backfill():
+        try:
+            if waiting.wait(5) and trajectory_priority.foreground_active():
+                lease.__exit__(None,None,None)
+                released.set()
+        finally:
+            lease.__exit__(None,None,None)
+    thread=threading.Thread(target=backfill)
+    thread.start()
+    def progress(*args):
+        waiting.set()
+    def prepare(*args,**kwargs):
+        assert released.is_set()
+        assert trajectory_priority.foreground_active()
+        assert memory_budget.simulation_active()
+        return 'prepared'
+    try:
+        assert prepare_with_memory_budget(prepare,object(),tmp_path/'job',progress=progress)=='prepared'
+    finally:
+        thread.join(6)
+        lease.__exit__(None,None,None)
+    assert not trajectory_priority.foreground_active()
+    assert not memory_budget.simulation_active()
 
 
 def test_adaptive_minimization_accepts_only_the_canonical_bounded_controller(tmp_path):

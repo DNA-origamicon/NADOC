@@ -68,23 +68,45 @@ def preparation_expected_mib(atoms, *, extra_bonds=2_600_000):
 def prepare_with_memory_budget(prepare, design, job_dir, **kwargs):
     """Reserve explicit-DNA preparation before allocating solvent/topology arrays."""
     import json
+    import time
+    from contextlib import ExitStack
     from backend.core.md_vram import estimate_profile_from_design
-    from backend.core.memory_budget import reserve,MemoryBudgetExceeded,reclaim_discretionary_memory
+    from backend.core.memory_budget import reserve,MemoryBudgetExceeded,WorkloadBusy,reclaim_discretionary_memory
+    from backend.core.trajectory_priority import foreground_work
     screening=kwargs.get('salt_mode')=='screening'
     profile=estimate_profile_from_design(design,padding_nm=kwargs.get('padding_nm',6),
         box_mode=kwargs.get('box_mode','rotation'),box_size_nm=kwargs.get('box_size_nm'),
         atomistic_model=kwargs.get('atomistic_model'),nacl_mM=0 if screening else kwargs.get('ion_conc_mM',0),
         mgcl2_mM=12.5 if screening else kwargs.get('mg_conc_mM',12.5))
-    if not profile or not 0<profile['atom_upper_bound']<=3_300_000:
-        raise MemoryBudgetExceeded('Local preparation is outside the characterized atom-count envelope')
+    if not profile or not math.isfinite(profile['atom_upper_bound']) or profile['atom_upper_bound'] <= 0:
+        raise MemoryBudgetExceeded('Cannot estimate local preparation memory: a positive finite atom count is required')
+    # Remote jobs also build their packages locally. Above the measured compact
+    # domain, retain the larger legacy allowance rather than imposing an atom
+    # cutoff unrelated to available host RAM. This is not engine certification.
     required=preparation_memory_mib(profile['atom_upper_bound'])
     receipt=dict(atom_upper_bound=profile['atom_upper_bound'],ram_mib=required,
         expected_peak_ram_mib=preparation_expected_mib(profile['atom_upper_bound']),
-        extra_bonds_allowance=2_600_000,basis='origami-20261102-compact-preparation-v2',confidence=None)
+        extra_bonds_allowance=2_600_000,
+        basis=('origami-20261102-compact-preparation-v2' if profile['atom_upper_bound'] <= 3_300_000
+               else 'legacy-preparation-memory-allowance'),confidence=None)
     Path(job_dir).mkdir(parents=True,exist_ok=True)
     (Path(job_dir)/'preparation_resources.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    reclaim_discretionary_memory()
-    with reserve(required*1024**2,kind='simulation',label='NAMD DNA preparation'):
+    with ExitStack() as stack:
+        # A user submission takes priority over disposable trajectory backfill.
+        # Keep demand published until preparation finishes, and wait for the
+        # analysis lease to be released before admitting any large allocations.
+        stack.enter_context(foreground_work())
+        reclaim_discretionary_memory()
+        notified = False
+        while True:
+            try:
+                stack.enter_context(reserve(required*1024**2,kind='simulation',label='NAMD DNA preparation'))
+                break
+            except WorkloadBusy:
+                if not notified and kwargs.get('progress'):
+                    kwargs['progress']('topology', 0, 'Waiting for trajectory analysis to release local preparation resources…')
+                    notified = True
+                time.sleep(.1)
         return prepare(design,job_dir,**kwargs)
 
 

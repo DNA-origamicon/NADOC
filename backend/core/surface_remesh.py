@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.sparse import csr_matrix
+from backend.core.spatial_workers import spatial_workers
 from scipy.spatial import cKDTree
 from backend.core.surface_progress import report
 
@@ -162,7 +163,7 @@ def remesh_sharp_patches(
         return mesh
     vertices[local_ids] = current
     # Only query affected/new vertices; unchanged ownership stays byte-identical.
-    lookup = cKDTree(original).query(vertices[active], workers=-1)[1]
+    lookup = cKDTree(original).query(vertices[active], workers=spatial_workers())[1]
 
     def owners(values):
         if not values:

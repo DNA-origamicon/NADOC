@@ -12,6 +12,7 @@ from itertools import product
 import math
 
 import numpy as np
+from backend.core.spatial_workers import spatial_workers
 from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
@@ -148,7 +149,7 @@ def continuous_cloud_surface(
     )
     faces = faces[keep].astype(np.int32)
     report("Assigning surface identity")
-    _, nearest_atom = cKDTree(positions).query(verts, workers=-1)
+    _, nearest_atom = cKDTree(positions).query(verts, workers=spatial_workers())
     return SurfaceMesh(
         verts,
         faces,

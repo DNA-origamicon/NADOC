@@ -4116,11 +4116,12 @@ def _vertex_rmsf(mesh, atoms, rmsf_by_key: dict) -> list:
     the mesh by the SAME viridis ramp/scale as the beads. Mirrors
     ``surface._assign_vertex_strand_ids`` but resolves to the flexibility value."""
     import numpy as np
+    from backend.core.spatial_workers import spatial_workers
     from scipy.spatial import cKDTree
 
     pos = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
     tree = cKDTree(pos)
-    _, nn = tree.query(mesh.vertices, workers=-1)
+    _, nn = tree.query(mesh.vertices, workers=spatial_workers())
     out: list[float] = []
     for i in nn:
         a = atoms[int(i)]

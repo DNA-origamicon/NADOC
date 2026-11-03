@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.sparse import csr_matrix
+from backend.core.spatial_workers import spatial_workers
 from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
@@ -200,7 +201,7 @@ def _assign_vertex_owners(
     """
     positions = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
     tree = cKDTree(positions)
-    _, nearest_idx = tree.query(verts, workers=-1)
+    _, nearest_idx = tree.query(verts, workers=spatial_workers())
     strand_ids = [a.strand_id or "" for a in atoms]
     nuc_ids = [_nuc_key(a) for a in atoms]
     return (
@@ -480,7 +481,7 @@ def compute_surface_from_cloud(
         grid.astype(np.float32), level=0.5, allow_degenerate=False
     )
     verts = (verts * grid_spacing + bbox_min).astype(np.float32)
-    _, nn = cKDTree(positions).query(verts, workers=-1)
+    _, nn = cKDTree(positions).query(verts, workers=spatial_workers())
     vsids = [strand_ids[int(i)] if strand_ids else "" for i in nn]
     vnucs = [nuc_ids[int(i)] if nuc_ids else "" for i in nn]
     return SurfaceMesh(
@@ -756,7 +757,7 @@ def compute_colored_surfaces(
     )
     tree = cKDTree(positions)
     occ = np.argwhere(grid)  # (K, 3) voxel indices
-    _, nn = tree.query(occ * grid_spacing + bbox_min, workers=-1)
+    _, nn = tree.query(occ * grid_spacing + bbox_min, workers=spatial_workers())
     label = np.full(grid.shape, -1, dtype=np.int64)
     label[occ[:, 0], occ[:, 1], occ[:, 2]] = atom_group[nn]
 

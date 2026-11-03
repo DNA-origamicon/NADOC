@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
+from backend.core.spatial_workers import spatial_workers
 from scipy.spatial import cKDTree
 
 logger = logging.getLogger(__name__)
@@ -314,7 +315,7 @@ def count_intact_base_pairs(
     else:
         tree = cKDTree(acc)
     # All candidate contacts, nearest first, then a one-to-one greedy assignment.
-    pairs = tree.query_ball_point(don, r=dist_ang, workers=-1)
+    pairs = tree.query_ball_point(don, r=dist_ang, workers=spatial_workers())
     cand = []
     for di, hits in enumerate(pairs):
         for ai in hits:
@@ -389,7 +390,7 @@ def charge_within_shell(
         tree = cKDTree(dna_xyz, boxsize=L)
     else:
         tree = cKDTree(dna_xyz)
-    dist, _ = tree.query(ion_xyz, k=1, distance_upper_bound=shell_ang, workers=-1)
+    dist, _ = tree.query(ion_xyz, k=1, distance_upper_bound=shell_ang, workers=spatial_workers())
     inside = np.isfinite(dist)
     q_ions = float(charges[ion_idx][inside].sum())
     q_dna = float(charges[dna_idx].sum())
