@@ -1070,3 +1070,24 @@ or compact-position delta. Host6/render-diff22 and actual browser1 pass.
 - 2026-11-03 — ISSUE-168 [x]: attached Sweep segments share source helix rows and labels in cadnano. Native segment/frame identities and feature history remain intact; bp picking and row operations resolve the appropriate members. Focused 12 passed; four real editor cases passed (row alignment, crossovers, coverage/history, undo/redo/reload, nicks and gutter reordering); frontend 9,609 passed / one skipped; smoke 23 passed; lint passed. `test.nadoc` is unchanged and resolves to ten rows. User review: MV-56. Autoscaffold deferred. `main.js` delta 0.
 
 - 2026-11-03 — ISSUE-169 [x]: end-turn selection checks final normalized crossover sites against both staple spans and tries outward alternatives; matched far ends retain a common translation. `test.nadoc` routes one scaffold with the failing −2 turn replaced by −12. FAST 19,994 passed / 19 skipped (FULL deferred), focused clearance 10 and continuation 25 passed, browser routing/undo/redo/reload and visual checks passed, lint passed. Test artifacts removed; no user structure saved.
+
+## ISSUE-170 — Joint crossover drag snapping (2026-11-03)
+
+Selected crossovers are validated as one proposed endpoint edit, so adjoining
+crossovers no longer block one another at their old positions. Every selected
+arc and attached domain is previewed at the common snapped displacement; release
+uses the existing atomic `crossover-move-batch` operation. No crossover tables,
+molecular placement rules, or backend authoring commands changed. `main.js` LOC
+delta: 0 (both composition roots).
+
+Frontend: 9,613 passed / one skipped across 808 files. Fresh public-command
+fixture: batch move, zero occupancy conflicts, guarded publication, reopen and
+independent replay passed. Existing fixture republication exposed ISSUE-171's
+pre-existing loadout replay mismatch and was refused without writing a file.
+
+Final qualification: three browser canvas regressions passed (each internal
+pair separately and both pairs together), with all preview arcs checked and
+screenshots inspected. `just smoke`: 23 passed; `just lint`: passed. Cleanup
+verified no test workspace files, test project stores, or isolated bridge key
+remained; 9,439,400 bytes of preview/Vite scratch removed. Compact evidence:
+`.development-artifacts/crossover-group-drag-20261103/validation.json`.

@@ -1,4 +1,5 @@
 import { quadruplexMarkers } from '../shared/aptamer.js'
+import { crossoverDragEndpoints, crossoverDragFits } from './pathview/crossover_drag.js'
 import { crossoverCellKey } from './pathview/crossover_cells.js'
 import { buildContinuedRows, helixAtRowBp, reorderContinuedRows, rowPaintRanges } from './pathview/continued_rows.js'
 /**
@@ -3479,7 +3480,7 @@ export function initPathview(canvasEl, containerEl, {
    * Compute valid crossover bp indices for the given crossover's helix pair,
    * within [minBp, maxBp], excluding positions occupied by other crossovers.
    */
-  function _getValidXoverBps(xover, minBp, maxBp, origBowDir, isScaf) {
+  function _getValidXoverBps(xover, minBp, maxBp, origBowDir, isScaf, movingCrossovers = [xover]) {
     _ensureDragIndex()
     const isHC = _design?.lattice_type === 'HONEYCOMB'
     const infoA = _rowMap.get(xover.half_a.helix_id)
@@ -3510,8 +3511,13 @@ export function initPathview(canvasEl, containerEl, {
     const trackB = `${xover.half_b.helix_id}_${xover.half_b.strand}`
     const occupiedA = new Set(_xoverPositionsByTrack.get(trackA) ?? [])
     const occupiedB = new Set(_xoverPositionsByTrack.get(trackB) ?? [])
-    occupiedA.delete(xover.half_a.index)
-    occupiedB.delete(xover.half_b.index)
+    for (const moving of movingCrossovers) {
+      for (const half of [moving.half_a, moving.half_b]) {
+        const track = `${half.helix_id}_${half.strand}`
+        if (track === trackA) occupiedA.delete(half.index)
+        if (track === trackB) occupiedB.delete(half.index)
+      }
+    }
 
     // Other domain ranges on each helix+direction (excluding the two dragged domains)
     const doms = _findXoverDomains(xover)
@@ -3536,11 +3542,11 @@ export function initPathview(canvasEl, containerEl, {
       // Check not occupied by another crossover
       if (occupiedA.has(bp) || occupiedB.has(bp)) continue
       // Check resized domains would not overlap other domains
-      if (d0) {
+      if (movingCrossovers.length === 1 && d0) {
         const newLo = Math.min(d0.start_bp, bp), newHi = Math.max(d0.start_bp, bp)
         if (d0Others.some(([lo, hi]) => newLo <= hi && lo <= newHi)) continue
       }
-      if (d1) {
+      if (movingCrossovers.length === 1 && d1) {
         const newLo = Math.min(d1.end_bp, bp), newHi = Math.max(d1.end_bp, bp)
         if (d1Others.some(([lo, hi]) => newLo <= hi && lo <= newHi)) continue
       }
@@ -3580,6 +3586,7 @@ export function initPathview(canvasEl, containerEl, {
     if (_ghostShiftBp) ctx.translate(_ghostShiftBp * BP_W, 0)
     ctx.globalAlpha = alpha
 
+    const endpoints = crossoverDragEndpoints(_xoverDragGroup)
     for (const g of _xoverDragGroup) {
       const { xo, origIdx, d0, d1, isScaf } = g
       if (!d0 || !d1) continue
@@ -3588,32 +3595,35 @@ export function initPathview(canvasEl, containerEl, {
       if (!infoA || !infoB) continue
 
       const ghostBp = origIdx + primaryDelta
+      const info0 = _rowMap.get(d0.helix_id), info1 = _rowMap.get(d1.helix_id)
+      const bodyY0 = d0.direction === 'FORWARD' ? info0.fwdY : info0.revY
+      const bodyY1 = d1.direction === 'FORWARD' ? info1.fwdY : info1.revY
 
       const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
       const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
 
       // ── Ghost strand body on helix A (d0: fixed end → ghostBp) ──────
       {
-        const fixedBp = d0.start_bp
+        const fixedBp = d0.start_bp + (endpoints.get(d0)?.start ? primaryDelta : 0)
         const lo = Math.min(fixedBp, ghostBp)
         const hi = Math.max(fixedBp, ghostBp)
         const x1 = _bpToX(lo)
         const x2 = _bpToX(hi + 1)
         ctx.fillStyle = bodyColor
-        ctx.fillRect(x1, y0 - sThick / 2, x2 - x1, sThick)
+        ctx.fillRect(x1, bodyY0 - sThick / 2, x2 - x1, sThick)
         ctx.fillStyle = cellHiColor
         ctx.fillRect(_bpToX(ghostBp), y0 - half, BP_W, CELL_H)
       }
 
       // ── Ghost strand body on helix B (d1: ghostBp → fixed end) ──────
       {
-        const fixedBp = d1.end_bp
+        const fixedBp = d1.end_bp + (endpoints.get(d1)?.end ? primaryDelta : 0)
         const lo = Math.min(fixedBp, ghostBp)
         const hi = Math.max(fixedBp, ghostBp)
         const x1 = _bpToX(lo)
         const x2 = _bpToX(hi + 1)
         ctx.fillStyle = bodyColor
-        ctx.fillRect(x1, y1 - sThick / 2, x2 - x1, sThick)
+        ctx.fillRect(x1, bodyY1 - sThick / 2, x2 - x1, sThick)
         ctx.fillStyle = cellHiColor
         ctx.fillRect(_bpToX(ghostBp), y1 - half, BP_W, CELL_H)
       }
@@ -4392,7 +4402,7 @@ export function initPathview(canvasEl, containerEl, {
             const gDoms = _findXoverDomains(gxo)
             if (!gDoms) { allDomsOk = false; break }
             const limits = _computeXoverDragLimits(gxo)
-            const validBps = _getValidXoverBps(gxo, limits.minBp, limits.maxBp, gOrigBow, gIsScaf)
+            const validBps = _getValidXoverBps(gxo, limits.minBp, limits.maxBp, gOrigBow, gIsScaf, xoversToDrag)
             const gOrigIdx = gxo.half_a.index
             const deltaSet = new Set(validBps.map(bp => bp - gOrigIdx))
             if (validDeltaSets === null) validDeltaSets = deltaSet
@@ -4402,7 +4412,10 @@ export function initPathview(canvasEl, containerEl, {
             }
             group.push({ xo: gxo, origIdx: gOrigIdx, d0: gDoms.d0, d1: gDoms.d1, isScaf: gIsScaf, origBow: gOrigBow })
           }
-          const validDeltas = allDomsOk && validDeltaSets ? [...validDeltaSets].sort((a, b) => a - b) : []
+          const endpoints = crossoverDragEndpoints(group)
+          const validDeltas = allDomsOk && validDeltaSets
+            ? [...validDeltaSets].filter(delta => crossoverDragFits(_design.strands, endpoints, delta)).sort((a, b) => a - b)
+            : []
           if (validDeltas.length > 0) {
             _xoverDragXover    = xo
             _xoverDragOrigIdx  = xo.half_a.index

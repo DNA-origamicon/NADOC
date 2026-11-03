@@ -100,3 +100,20 @@ chord. It retains the straight caDNAno physical-span mapping and applies overhan
 rotation/translation to each original segment. Regression coverage lives in
 `tests/test_end_resize_deformation.py` (bend/sweep, both ends and polarities,
 long extensions, identity/rotated overhang axes).
+
+## Crossover selection drag — 2026-11-03
+
+Multi-crossover snap candidates now exclude the entire moving selection from
+stationary crossover occupancy, then check the combined endpoint edits against
+all physical domain intervals (`pathview/crossover_drag.js`). Shared domains move
+both selected endpoints. The ghost uses those same endpoint edits and draws each
+body on its domain's actual track. Existing lattice/bow tables and the recorded
+`crossover-move-batch` commit path remain unchanged. Regression targets the
+`test.nadoc` scaffold pair at 116/117 moving together to 127/128; no source design
+is rewritten by the regression.
+
+Qualification: 9,613 frontend tests, three browser gesture cases, the fresh
+recorded save/reopen/replay fixture, 23 smoke tests, and lint passed. Browser
+previews were inspected and scratch removed. The existing source file remains
+unchanged; its pre-existing Main loadout fails the agent publication guard
+(ISSUE-171), so the persistence proof uses fresh public-command construction.
