@@ -5,7 +5,7 @@ const palette = { square: 0x72dabb, honeycomb: 0xeebd72 }
 const v = p => new THREE.Vector3(...p)
 function release(group) {
   const geometries = new Set(), materials = new Set()
-  group.traverse(o => { if (o.geometry) geometries.add(o.geometry); if (o.material) materials.add(o.material) })
+  group.traverse(o => { if (o.isInstancedMesh) o.dispose(); if (o.geometry) geometries.add(o.geometry); if (o.material) materials.add(o.material) })
   geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); group.removeFromParent()
 }
 function tube(points, radius, color) {
@@ -42,47 +42,77 @@ export function createYggTreeViewer(host, onSelect) {
     model = next; selectedId = selection
     release(root); root = new THREE.Group(); scene.add(root); meshes = []; labels.replaceChildren(); labelItems = []
     const byId = new Map(model.nodes.map(n => [n.id, n]))
+    const curvePositions = [], curveColors = []
     for (const stem of model.stems) {
       const n = byId.get(stem.to), sign = stem.lattice === 'square' ? -1 : 1
+      if (stem.shape === 'hollow') {
+        curvePositions.push(sign * 6, 2, 16, ...n.position)
+        const color = new THREE.Color(palette[n.lattice]); curveColors.push(color.r, color.g, color.b, color.r, color.g, color.b)
+        continue
+      }
       root.add(tube([[sign * 6, 2, 0], [sign * 6.5, 3, n.position[2] / 2], n.position], 0.16, palette[n.lattice]))
     }
     for (const edge of model.edges) {
       const a = byId.get(edge.from), b = byId.get(edge.to)
+      if (edge.parameter === 'curvature-counts' || edge.parameter === 'inner-radius') {
+        curvePositions.push(...a.position, ...b.position)
+        const color = new THREE.Color(palette[edge.lattice]); curveColors.push(color.r, color.g, color.b, color.r, color.g, color.b)
+        continue
+      }
       const middle = a.position.map((x, i) => (x + b.position[i]) / 2 + (i === 2 ? 0.15 : 0))
       root.add(tube([a.position, middle, b.position], 0.085, palette[edge.lattice]))
     }
-    const sphere = new THREE.SphereGeometry(0.43, 12, 10)
+    const lines = new THREE.BufferGeometry()
+    lines.setAttribute('position', new THREE.Float32BufferAttribute(curvePositions, 3))
+    lines.setAttribute('color', new THREE.Float32BufferAttribute(curveColors, 3))
+    root.add(new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.65 })))
+    const sphere = new THREE.SphereGeometry(0.43, 8, 6)
     const materials = {
       square: new THREE.MeshStandardMaterial({ color: palette.square, roughness: 0.32, metalness: 0.25 }),
       honeycomb: new THREE.MeshStandardMaterial({ color: palette.honeycomb, roughness: 0.32, metalness: 0.25 }),
       excluded: new THREE.MeshStandardMaterial({ color: 0xbc6a64, roughness: 0.6 }),
       selected: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x719b87, emissiveIntensity: 0.8 }),
     }
-    // Unused materials must be released too (release(root) only sees attached objects).
-    const used = new Set()
-    for (const n of model.nodes) {
-      const chosen = n.id === selectedId
-      const material = materials[chosen ? 'selected' : n.routing.excluded ? 'excluded' : n.lattice]; used.add(material)
-      const mesh = new THREE.Mesh(sphere, material); mesh.position.copy(v(n.position)); mesh.userData.node = n
-      if (chosen) mesh.scale.setScalar(1.65)
-      root.add(mesh); meshes.push(mesh)
-      const neighboring = model.edges.some(e => (e.from === selectedId && e.to === n.id) || (e.to === selectedId && e.from === n.id))
-      if (chosen || neighboring || n.index % Math.max(1, Math.ceil(model.nodes.length / 36)) === 0) {
+    const solids = model.nodes.filter(n => n.shape !== 'hollow'), hollows = model.nodes.filter(n => n.shape === 'hollow')
+    const points = new THREE.InstancedMesh(sphere, materials.square, solids.length)
+    const rings = new THREE.InstancedMesh(new THREE.TorusGeometry(0.4, 0.09, 6, 12), materials.square, hollows.length)
+    points.userData.nodes = solids; rings.userData.nodes = hollows
+    let solidIndex = 0, hollowIndex = 0
+    // Per-instance colors keep the complete atlas in one draw call.
+    points.material.color.set(0xffffff)
+    const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion()
+    const neighbors = new Map()
+    for (const edge of model.edges) {
+      if (edge.from === selectedId) neighbors.set(edge.to, edge)
+      if (edge.to === selectedId) neighbors.set(edge.from, edge)
+    }
+    for (const [i, n] of model.nodes.entries()) {
+      const chosen = n.id === selectedId, curved = n.curvature?.angleRad > 0
+      const scale = chosen ? 1.65 : curved ? 0.28 : 1
+      matrix.compose(v(n.position), rotation, new THREE.Vector3(scale, scale, scale))
+      const target = n.shape === 'hollow' ? rings : points, instance = n.shape === 'hollow' ? hollowIndex++ : solidIndex++
+      target.setMatrixAt(instance, matrix)
+      target.setColorAt(instance, new THREE.Color(chosen ? 0xffffff : n.routing.excluded ? 0xbc6a64 : palette[n.lattice]))
+      const neighboring = neighbors.has(n.id)
+      if (chosen || neighboring || (n.shape === 'hollow' ? i % Math.max(1, Math.ceil(model.nodes.length / 24)) === 0 : (n.id === n.rootId || !n.rootId) && n.index % 3 === 0)) {
         const label = document.createElement('button'); label.type = 'button'; label.className = `ygg-node-label${chosen ? ' is-selected' : ''}`
-        const edge = model.edges.find(e => (e.from === selectedId && e.to === n.id) || (e.to === selectedId && e.from === n.id))
-        const delta = edge ? (edge.to === n.id ? '+' : '−') + edge.deltaHelices : ''
-        label.textContent = `${n.entry.helices}hb${delta ? ` (${delta})` : ''}`
-        label.title = `${n.lattice} · ${n.center} center · ${n.entry.helices} helices × ${n.length} bp`
+        const edge = neighbors.get(n.id)
+        const delta = edge ? (edge.label || (edge.to === n.id ? '+' : '−') + edge.deltaHelices) : ''
+        label.textContent = `${n.label || `${n.entry.helices}hb`}${delta ? ` (${delta})` : ''}`
+        label.title = `${n.shape === 'hollow' ? `Straight hollow · Ro ${n.outerRadiusNm.toFixed(2)} / Ri ${n.innerRadiusNm.toFixed(2)} nm · ` : ''}${n.curvature ? `${n.curvature.angleDeg.toFixed(2)}° · ${n.curvature.loops} inserted / ${n.curvature.skips} deleted · ` : ''}${n.lattice} · ${n.center} center · ${n.entry.helices} helices × ${n.length} bp`
         label.setAttribute('aria-label', label.title); label.tabIndex = -1
         label.addEventListener('click', () => onSelect(n.id)); labels.append(label)
         labelItems.push({ label, position: v(n.position), priority: chosen ? 0 : neighboring ? 1 : 2 })
       }
     }
-    if (!meshes.length) sphere.dispose()
-    for (const material of Object.values(materials)) if (!used.has(material)) material.dispose()
+    root.add(points, rings); meshes.push(points, rings)
+    for (const [name, material] of Object.entries(materials)) if (name !== 'square') material.dispose()
     for (const [lattice, x] of [['square', -13], ['honeycomb', 13]]) {
       const label = document.createElement('span'); label.className = `ygg-branch-label ${lattice}`; label.textContent = lattice.toUpperCase(); labels.append(label)
       labelItems.push({ label, position: v([x, -2, 0]), priority: 0 })
+    }
+    for (const sign of [-1, 1]) if (model.nodes.some(n => n.shape === 'hollow' && (n.lattice === 'square' ? -1 : 1) === sign)) {
+      root.add(tube([[0, -2, 0], [sign * 3, 0, 8], [sign * 6, 2, 16]], 0.22, 0x9b8c66))
     }
     tooltip.hidden = true
     host.dataset.nodes = String(model.nodes.length); host.dataset.edges = String(model.edges.length)
@@ -94,7 +124,8 @@ export function createYggTreeViewer(host, onSelect) {
     const rect = renderer.domElement.getBoundingClientRect()
     pointer.set(2 * (event.clientX - rect.left) / rect.width - 1, 1 - 2 * (event.clientY - rect.top) / rect.height)
     ray.setFromCamera(pointer, camera)
-    return ray.intersectObjects(meshes)[0]?.object.userData.node
+    const hit = ray.intersectObjects(meshes)[0]
+    return hit ? hit.object.userData.nodes[hit.instanceId] : undefined
   }
   let down = null
   function pointerDown(event) { down = [event.clientX, event.clientY] }
@@ -104,7 +135,7 @@ export function createYggTreeViewer(host, onSelect) {
   }
   function hover(event) {
     const n = pick(event); renderer.domElement.style.cursor = n ? 'pointer' : 'grab'; tooltip.hidden = !n
-    if (n) tooltip.textContent = `${n.entry.helices}hb × ${n.length} bp · ${n.lattice} / ${n.center} · ${n.routing.label}`
+    if (n) tooltip.textContent = `${n.shape === 'hollow' ? `Straight hollow · Ro ${n.outerRadiusNm.toFixed(2)} / Ri ${n.innerRadiusNm.toFixed(2)} nm · ` : ''}${n.curvature ? `${n.curvature.angleDeg.toFixed(2)}° · I${n.curvature.loops}/D${n.curvature.skips} · ` : ''}${n.entry.helices}hb × ${n.length} bp · ${n.lattice} / ${n.center} · ${n.routing.label}`
   }
   function leave() { tooltip.hidden = true }
   function keyboard(event) { if (event.key.toLowerCase() === 'f') { event.preventDefault(); reset() } }

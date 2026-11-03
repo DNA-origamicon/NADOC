@@ -1,4 +1,7 @@
 import report from './yggdnasil_routing.json'
+import cylinderReport from './yggdnasil_cylinder_routing.json'
+export const CYLINDER_ROUTING_REPORT = cylinderReport
+const cylinders = new Map(cylinderReport.records.flatMap(r => r.keys.map(key => [key, r])))
 const records = new Map(report.records.map(r => [r.key, r]))
 export const ROUTING_LABELS = {
   parity_obstruction: 'Excluded · parity imbalance',
@@ -8,6 +11,15 @@ export const ROUTING_LABELS = {
   not_screened: 'Not screened',
 }
 export function routingScreen(entry) {
+  if (entry.shape === 'hollow') {
+    const even = entry.points.filter(p => (p.row + p.col) % 2 === 0).length
+    const record = entry.sources.map(s => cylinders.get(s.key)).find(Boolean)
+    const fallback = { even, odd: entry.helices - even, path: null,
+      status: Math.abs(2 * even - entry.helices) > 1 ? 'parity_obstruction' : 'unresolved' }
+    const result = record || fallback
+    return { ...result, excluded: ['parity_obstruction', 'no_path'].includes(result.status),
+      label: !record && result.status === 'unresolved' ? 'Unresolved · native traversal not yet screened' : ROUTING_LABELS[result.status] }
+  }
   const key = `${entry.lattice}:${entry.sources[0].center}:${entry.helices}`
   const record = records.get(key) || { status: 'not_screened', path: null }
   return { ...record, excluded: ['parity_obstruction', 'no_path'].includes(record.status), label: ROUTING_LABELS[record.status] }

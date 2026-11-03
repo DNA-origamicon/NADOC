@@ -8,6 +8,19 @@ test-pinned, routed through extracted modules (NOT back into main.js), gated by 
 exercise — and to measure whether the loop is actually tight (wall-clock, edits-to-green, did a phase
 regress anything).
 
+## Validation intake — 2026-11-02 / follow-up 2026-11-03
+
+- ISSUE-109 resolved after explicit user-authorized review: only allocate a DS
+  connector after its native bridge boundary arrives. Reusable zero-scale meshes
+  remain supported for actual collapsed native endpoints during playback.
+- Root cause: playback mesh reuse broadened allocation to missing native records;
+  test and picking registration still relied on absence. Initial hypothesis that
+  this was only an assertion mismatch was incomplete: placeholders were pick candidates.
+- Original failing oracle retained. 53 frontend and 90 native placement tests passed;
+  explicit review acknowledged incident `20261103T064355-2dbec3347e96` and gate is clear.
+- Post-acknowledgement: 53 focused frontend tests, 23 smoke tests and both YggDNAsil browser tests pass; live backend reports review_required=false with zero incidents. Test artifacts cleaned up.
+- ISSUE-110 trajectory buffer failure remains unrelated and open. `main.js` LOC delta: 0.
+
 ## Baselines (at loop start, 2026-06-05)
 
 - `frontend/src/main.js` LOC: 9600

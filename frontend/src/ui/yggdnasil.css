@@ -40,7 +40,7 @@
 .ygg-tree-legend { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 10px; font-size: 11px; }
 .ygg-node-picker { display: flex; align-items: center; gap: 10px; }
 .ygg-node-picker select { min-width: 0; flex: 1; }
-.ygg-neighbors { display: flex; gap: 8px; margin: 10px 0; }
+.ygg-neighbors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
 .ygg-neighbors button { flex: 1; }
 .ygg button:disabled { opacity: .45; cursor: default; }
 .ygg-detail { padding: 4px 10px; }
@@ -48,3 +48,6 @@
 .ygg-footprint { height: 170px; }
 .ygg-side { height: 50px; }
 @media(max-width: 850px) { .ygg-layout { grid-template-columns: 1fr; } .ygg-tree-view { height: 420px; } }
+.ygg-tree-toolbar { flex-wrap: wrap; gap: 8px; }
+.ygg-side--arc { height: 180px; }
+.ygg-curvature-title strong { color: #eebd72; font-size: 25px; }

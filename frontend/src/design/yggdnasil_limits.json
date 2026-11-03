@@ -1,0 +1,15 @@
+{
+  "rise_nm": 0.334,
+  "helix_pitch_nm": 2.25,
+  "cell_bp": 7,
+  "max_delta_per_cell": 3,
+  "square_skip_period": 48,
+  "scaffold_nt": 7249,
+  "max_angle_deg": 360,
+  "source_sha256": {
+    "backend/core/constants.py": "6ba274236fc0b838442ae8ea660b46c3ac63497b65c65b9014181465455f6a8f",
+    "backend/core/sweep_feasibility.py": "ea819c46993f35ff587819ece5ace78ffa2650f9e75c1c605e954be21f3bfa94",
+    "backend/core/sweep_loop_skips.py": "6fbb09307fe246b50459babcf62cdb428a825eed431685784c928dc91076b006",
+    "backend/core/loop_skip_calculator.py": "5017a7ef1ce9e670f518caec11fdd9e5bea88827db404ec4cab206191df326bd"
+  }
+}

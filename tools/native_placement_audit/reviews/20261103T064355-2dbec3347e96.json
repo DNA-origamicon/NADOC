@@ -1,0 +1,33 @@
+{
+  "incident_id": "20261103T064355-2dbec3347e96",
+  "reviewer": "Codex, user-authorized review on 2026-11-03",
+  "reviewed_at_utc": "2026-11-03T07:08:36.506843+00:00",
+  "report_sha256": "c406ed543173ff9c7108f3d5504e9a05a169243f59a6dd3e315835d4f5a830b4",
+  "review": {
+    "root_cause": "October 29 commit 9cbbf654 added reusable zero-scale DS connector meshes for simulation playback, but also created them when native bridge boundary records were absent. The October 6 authority test correctly required absence in that case. The zero-scale object did not establish displaced molecular coordinates, but it entered connector picking candidates. Restore no mesh before native boundary arrival, retaining reusable collapsed meshes when real native endpoints exist. Original failing assertion is unchanged.",
+    "affected_paths": [
+      "frontend/src/scene/overhang_link_arcs.js::_makeDsLinkerMeshes and its rebuild/applyFemPositions consumers, including partial geometry, fresh loads, metadata refresh and desktop/WebXR shared scene. Each side now waits independently for its native bridge record.",
+      "Assembly connector authority remains unchanged and its missing-backbone rejection test passes. Native full/compact/API producers, bead/slab frames, deformation transport, native VR and molecular exports are unchanged. No phase constants or geometry goldens changed. No authored user design participated in the failed test; its synthetic anchors and absent bridge are preserved in the immutable report and regression fixture."
+    ],
+    "validation": "53 tests passed across linker_authority.native_placement, overhang_link_arcs, helix_renderer.native_placement, geometry_codec.native_placement and placement_scene_guard.native_placement. 90 tests passed across test_native_full_placement (43), test_native_slab_placement (17), test_native_placement_endpoints (5), test_native_placement_history (4), test_native_placement_vr (21). These pre-acknowledgement commands remained nonzero solely because the existing review was pending. Numeric checks verify exact native connector endpoints, unmodified input coordinates, missing-side absence, partial/full/missing rebuild transitions and no picking before records arrive; existing simulation tests verify collapsed native connectors expand and restore in place. Native checks cover forward/reverse, bend/twist, scoped/moved poses, history and desktop/VR parity. No physical-headset review or new molecular-placement visual comparison performed: this patch only suppresses decorative connectors with absent native records. App unblock verification follows explicit acknowledgement.",
+    "regression_tests": [
+      "frontend/src/scene/linker_authority.native_placement.test.js: original missing-bridge assertion plus new partial/full/cleared rebuild and picking regression",
+      "frontend/src/scene/overhang_link_arcs.test.js: updates ds connector anchors and bridge ends, including initially collapsed connectors",
+      "frontend/src/scene/helix_renderer.native_placement.test.js",
+      "frontend/src/viewer/geometry_codec.native_placement.test.js",
+      "frontend/src/viewer/placement_scene_guard.native_placement.test.js",
+      "tests/test_native_full_placement.py",
+      "tests/test_native_slab_placement.py",
+      "tests/test_native_placement_endpoints.py",
+      "tests/test_native_placement_history.py",
+      "tests/test_native_placement_vr.py"
+    ],
+    "evidence": [
+      ".native-placement-review/incidents/20261103T064355-2dbec3347e96/report.json",
+      "git show 9cbbf654 -- frontend/src/scene/overhang_link_arcs.js",
+      "frontend/src/scene/linker_authority.native_placement.test.js",
+      "frontend/src/scene/overhang_link_arcs.test.js",
+      "issues_ledger.md: ISSUE-109"
+    ]
+  }
+}

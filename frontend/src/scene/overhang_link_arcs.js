@@ -860,8 +860,10 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_
   // Find the bridge boundary bead positions from the geometry payload.
   // Fall back to the anchor positions when bridge nucs aren't available
   // yet (initial render); the would-be arc collapses to zero length.
-  const bridgeA = _bridgeBoundaryPos(nucsByStrand, conn.id, 'a', 0) ?? posA.clone()
-  const bridgeB = _bridgeBoundaryPos(nucsByStrand, conn.id, 'b', baseCount - 1) ?? posB.clone()
+  const nativeA = _bridgeBoundaryPos(nucsByStrand, conn.id, 'a', 0)
+  const nativeB = _bridgeBoundaryPos(nucsByStrand, conn.id, 'b', baseCount - 1)
+  const bridgeA = nativeA ?? posA.clone()
+  const bridgeB = nativeB ?? posB.clone()
   group.userData.dsConnectorEnds = { aStart: bridgeA, bStart: bridgeB }
 
   // Connector arcs from each anchor to its bridge boundary bead.
@@ -871,10 +873,14 @@ function _makeDsLinkerMeshes(conn, anchorA, anchorB, nucsByStrand, colorA = ARC_
   // highlight just the clicked half of the duplex.
   const sidA = strandIds?.[0] ?? `__lnk__${conn.id}__a`
   const sidB = strandIds?.[1] ?? `__lnk__${conn.id}__b`
-  for (const [name, pos, bridge, color, sid] of [
-    ['overhangDsConnectorArcA', posA, bridgeA, colorA, sidA],
-    ['overhangDsConnectorArcB', posB, bridgeB, colorB, sidB],
+  for (const [name, pos, bridge, color, sid, native] of [
+    ['overhangDsConnectorArcA', posA, bridgeA, colorA, sidA, nativeA],
+    ['overhangDsConnectorArcB', posB, bridgeB, colorB, sidB, nativeB],
   ]) {
+    // Missing bridge data is not a collapsed native connector. Wait for the
+    // geometry rebuild; retain zero-scale meshes only for real native endpoints
+    // so simulation playback can expand them without replacing their buffers.
+    if (!native) continue
     const points = [pos, _quadraticCtrlBetween(pos, bridge, frame.z), bridge]
     let arc = group.getObjectByName(name)
     if (arc) _updateTube(arc, new THREE.QuadraticBezierCurve3(...points), DS_ARC_RADIUS)

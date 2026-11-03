@@ -2286,3 +2286,26 @@ Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta:
   fix. Existing crossover/terminal-insert checks:48 passed,6 skipped. Both corrected
   Gerling variants pass full native sequence and reciprocal-backbone verification.
 - No atom-placement formula, molecular phase constant, or simulation was changed.
+
+## ISSUE-109 — Linker authority test triggers persistent placement review (2026-11-02)
+
+- [x] Resolved 2026-11-03 after user-authorized review. October 29 commit
+  `9cbbf654` reused zero-scale DS connector meshes for playback, including when
+  native bridge boundary records were absent. The original absence assertion
+  remained valid; the placeholder also entered connector picking candidates.
+- `_makeDsLinkerMeshes` now waits independently for each side's native boundary.
+  Collapsed connectors backed by real native records still expand during playback.
+  No nucleotide coordinates, placement constants or geometry goldens changed.
+- Original regression retained; added partial/full/cleared rebuild, exact endpoint,
+  input immutability and missing-bridge picking checks. 53 focused frontend tests
+  and 90 native full/slab/API/history/VR placement tests passed before acknowledgement.
+- Explicit review recorded for incident `20261103T064355-2dbec3347e96`;
+  `python3 -m tools.native_placement_audit check` reports clear. Immutable original
+  evidence retained; portable acknowledgement is in `tools/native_placement_audit/reviews/`.
+
+## ISSUE-110 — Trajectory buffer expectation differs from actual fill (2026-11-02)
+
+- [ ] Open. `just test-frontend` failed `trajectory_stream.test.js:108`: expected
+  buffered 24, received 72, with limited=true and complete=false.
+- Found during YggDNAsil validation; no trajectory code changed. Root cause and
+  intended fill behavior require investigation. Existing test is the repro.
