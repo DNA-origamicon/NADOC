@@ -1,0 +1,67 @@
+{
+  "counts": {
+    "publication_discovery_records": 2210,
+    "europe_pmc_records": 1849,
+    "accessible_fulltexts": 672,
+    "papers_with_sequence_related_contexts": 230,
+    "reviewed_design_groups": 61,
+    "candidate_design_groups": 17,
+    "reviewed_publications": 36,
+    "mapped_publications": 53,
+    "new_sequence_only_reviewed_groups": 29,
+    "downloaded_supplement_files": 180,
+    "new_repository_files": 8,
+    "registry_review_states": {
+      "unresolved: discovery record, not a verified structure": 1734,
+      "contains_reviewed_structure_groups": 36,
+      "background_or_secondary_source: metadata triage, no design decision": 369,
+      "named_structure_candidate: scope/list verification pending": 17,
+      "likely_out_of_scope: title triage, mixed-design paper not ruled out": 19,
+      "preprint: publication/version reconciliation needed": 35
+    },
+    "fulltext_states": {
+      "no_pmc_fulltext": 743,
+      "fulltext_evidence_triaged": 672,
+      "fulltext_access_failed": 434
+    }
+  },
+  "europe_pmc_queries": [
+    {
+      "query": "(\"scaffolded DNA\" OR \"scaffolded origami\" OR \"DNA nanostructure\" OR \"DNA nanostructures\") AND (staple OR staples) AND FIRST_PDATE:[1900-01-01 TO 2019-12-31]",
+      "hits": 305,
+      "retrieved": 305
+    },
+    {
+      "query": "(\"DNA origami\") AND FIRST_PDATE:[1900-01-01 TO 2019-12-31]",
+      "hits": 1824,
+      "retrieved": 1824
+    }
+  ],
+  "crossref_queries": [
+    {
+      "query": "DNA origami",
+      "url": "https://api.crossref.org/works?query.title=DNA+origami&filter=until-pub-date%3A2019-12-31%2Cfrom-pub-date%3A2000-01-01&rows=1000&select=DOI%2Ctitle%2Cpublished%2Clink%2Ctype%2Crelation%2CURL",
+      "returned": 1000,
+      "total_results": 270284,
+      "limit_note": "Relevance-limited discovery, not an exhaustive Crossref enumeration"
+    },
+    {
+      "query": "scaffolded DNA nanostructures",
+      "url": "https://api.crossref.org/works?query.title=scaffolded+DNA+nanostructures&filter=until-pub-date%3A2019-12-31%2Cfrom-pub-date%3A2000-01-01&rows=1000&select=DOI%2Ctitle%2Cpublished%2Clink%2Ctype%2Crelation%2CURL",
+      "returned": 1000,
+      "total_results": 304213,
+      "limit_note": "Relevance-limited discovery, not an exhaustive Crossref enumeration"
+    }
+  ],
+  "citation_candidates": 30,
+  "citation_metadata_resolved": 13,
+  "limitations": [
+    "Crossref queries relevance-capped, not exhaustive.",
+    "Full-text access failures and non-PMC articles remain unresolved.",
+    "Automated sequence/lattice mentions are not inclusion decisions.",
+    "Grouped variants are not counts of unique structures.",
+    "Complete per-variant staple sets have not been validated.",
+    "Raw imaging data search has not established absence.",
+    "Backward citations scanned only in accessible origami-related references; citation closure is incomplete."
+  ]
+}

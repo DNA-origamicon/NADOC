@@ -1,0 +1,15 @@
+{
+  "score_version": "image_reconstruction_v2",
+  "staple_lists_available": 30,
+  "conceptual_images": 3,
+  "public_raw_datasets_verified": 0,
+  "reviewed_image_groups": 32,
+  "publications_with_reviewed_images": 18,
+  "recovery_queue_groups": 19,
+  "downloaded_design_files": 37,
+  "excluded_downloads": 0,
+  "raw_discovery_records": 1831,
+  "deduplicated_screening_records": 1830,
+  "referenced_assets_verified": 92,
+  "retained_asset_bytes": 1282611693
+}

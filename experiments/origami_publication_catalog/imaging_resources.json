@@ -1,0 +1,50 @@
+[
+  {
+    "doi": "10.1038/nature07971",
+    "accession": "EMD-1612",
+    "kind": "processed_cryo_em_map",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-1612",
+    "scope": "DNA box with controllable lid",
+    "notes": "Processed reconstruction; not raw micrographs or particle stacks."
+  },
+  {
+    "doi": "10.1073/pnas.1215713109",
+    "accession": "EMD-2210",
+    "kind": "processed_cryo_em_map",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-2210",
+    "scope": "Square-lattice pointer object",
+    "notes": "Match deposited object, buffer and processing before simulation comparison."
+  },
+  {
+    "doi": "10.1073/pnas.1215713109",
+    "accession": "4V5X",
+    "kind": "atomic_model",
+    "url": "https://www.rcsb.org/structure/4V5X",
+    "scope": "Square-lattice pointer object",
+    "notes": "Model polymer sequences do not establish completeness of the synthesis staple list; supersedes earlier split PDB entries."
+  },
+  {
+    "doi": "10.1039/c8nr10113b",
+    "accession": "EMD-4653",
+    "kind": "processed_cryo_em_map",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-4653",
+    "scope": "Viral capsid packaging study; origami scope unresolved",
+    "notes": "Map describes capsid; do not assume it resolves the packaged origami."
+  },
+  {
+    "doi": "10.1126/sciadv.aau1157",
+    "accession": "EMD-0028",
+    "kind": "processed_cryo_em_map",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-0028",
+    "scope": "excluded brick-named objects",
+    "notes": "Retained as scope boundary evidence, not included as an eligible design."
+  },
+  {
+    "doi": "10.1126/sciadv.aau1157",
+    "accession": "EMD-4354",
+    "kind": "processed_cryo_em_map",
+    "url": "https://www.ebi.ac.uk/emdb/EMD-4354",
+    "scope": "excluded brick-named objects",
+    "notes": "Retained as scope boundary evidence, not included as an eligible design."
+  }
+]

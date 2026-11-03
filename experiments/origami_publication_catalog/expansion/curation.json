@@ -1,0 +1,581 @@
+[
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Square",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S18; PDF page 25",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Square",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Rectangle",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S21; PDF page 28",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Rectangle",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Five-pointed star",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S24; PDF page 31",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Five-pointed star",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Disk with holes / smiley",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S28; PDF page 35",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Disk with holes / smiley",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Equilateral triangle with rectangular domains",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S31; PDF page 38",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Equilateral triangle with rectangular domains",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Sharp triangle with trapezoidal domains",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S34; PDF page 41",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Sharp triangle with trapezoidal domains",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nature04586",
+    "design": "Tall rectangle / map-pattern substrate",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "Supplementary Fig. S38; PDF page 45",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Tall rectangle / map-pattern substrate",
+    "notes": "Original pre-caDNAno design. Staple sequences inspected in author-hosted supplement. Triangular objects join planar domains; no wireframe edges. Pattern and assembly variants are not counted as new base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1093/synbio/ysy015",
+    "design": "6HB nanotube, 1512-nt scaffold",
+    "lattice": "honeycomb",
+    "sequence_location": "Paper-linked pScaf repository: 6HB source designs and staple CSVs",
+    "characterization": [
+      "negative-stain TEM"
+    ],
+    "family": "pScaf 6HB",
+    "notes": "Separate scaffold variant; brick-named objects in the same paper are excluded.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1093/synbio/ysy015",
+    "design": "6HB nanotube, 2268-nt scaffold",
+    "lattice": "honeycomb",
+    "sequence_location": "Paper-linked pScaf repository: 6HB source designs and staple CSVs",
+    "characterization": [
+      "negative-stain TEM"
+    ],
+    "family": "pScaf 6HB",
+    "notes": "Separate scaffold variant; brick-named objects in the same paper are excluded.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1093/synbio/ysy015",
+    "design": "6HB nanotube, 3024-nt scaffold",
+    "lattice": "honeycomb",
+    "sequence_location": "Paper-linked pScaf repository: 6HB source designs and staple CSVs",
+    "characterization": [
+      "negative-stain TEM"
+    ],
+    "family": "pScaf 6HB",
+    "notes": "Separate scaffold variant; brick-named objects in the same paper are excluded.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1093/synbio/ysy015",
+    "design": "Three-scaffold 6HB nanotube trimer",
+    "lattice": "honeycomb",
+    "sequence_location": "pScaf repository; Fig. 4B\u2013C and connector-staple definitions",
+    "characterization": [
+      "negative-stain TEM"
+    ],
+    "family": "pScaf 6HB",
+    "notes": "Assembly of the 1512/2268/3024-nt variants. Connector completeness needs per-file matching; not counted as a wholly new helix cross-section.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-019-12639-y",
+    "design": "Protein-conductive nanopore NP / NP\u0394C",
+    "lattice": "square",
+    "sequence_location": "Supplementary Table 1 / Supplementary Data spreadsheet MOESM3",
+    "characterization": [
+      "AFM",
+      "confocal fluorescence",
+      "ionic-current recordings"
+    ],
+    "family": "Protein-conductive nanopore",
+    "notes": "NP and NP\u0394C differ in cholesterol anchors. Confocal/current assays are functional, not 3D structural imaging. Methods explicitly specify square lattice.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/ncomms9102",
+    "design": "42-helix two-layer walking track",
+    "lattice": "honeycomb",
+    "sequence_location": "Supplementary Fig. 9 and Table 1",
+    "characterization": [
+      "TEM"
+    ],
+    "family": "Plasmonic walker track",
+    "notes": "Methods explicitly specify honeycomb packing. The separate 3D origami in Table 2 is not assumed identical.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-017-02127-6",
+    "design": "Modular honeycomb bundle: straight and hinge variants",
+    "lattice": "honeycomb",
+    "sequence_location": "Supplementary Data spreadsheet MOESM4; reference pool and replacement staples",
+    "characterization": [
+      "TEM"
+    ],
+    "family": "Modular hinge bundle",
+    "notes": "Grouped variant family; paper reports dozens of hinge configurations. Do not count every configuration as a separately verified complete sequence list. Closed wireframe/frame assemblies are not included.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-019-13507-5",
+    "design": "Rectangular metallization canvas",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "SI sequence tables, PDF pages 35\u201341; design maps in Supplementary Figs. 22\u201333",
+    "characterization": [
+      "AFM",
+      "TEM",
+      "SEM"
+    ],
+    "family": "Tall rectangle",
+    "notes": "Digit/letter, seven-dot and tetramer patterns are functionalization/assembly variants of the base canvas. Sequence supplement downloaded; exact variant composition remains group-level.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-019-13507-5",
+    "design": "Triangular metallization substrate",
+    "lattice": "square / planar domains",
+    "sequence_location": "SI sequence tables, PDF pages 35\u201341; Supplementary Fig. 28",
+    "characterization": [
+      "TEM",
+      "STEM",
+      "EDX",
+      "SEM"
+    ],
+    "family": "Planar triangle",
+    "notes": "Filled planar triangular origami, not a wireframe; metallized edge patterns are modifications. Verify core-plus-modification combination before synthesis.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-018-07805-7",
+    "design": "Square tiles for displacement and reconfiguration",
+    "lattice": "square / planar domains",
+    "sequence_location": "Supplementary Tables 1\u20134: interior, bridge, edge and label staples",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Hierarchical square tile",
+    "notes": "Invader/cover and X/O label variants share the four-triangle tile architecture; record variants without counting each label as a new geometry.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-019-12933-9",
+    "design": "Nanohole-forming rectangular tile family N/M/Nf/Mf/O/Of",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Tables 17\u201324; common rectangle staples in Table 24",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Rectangle with removable domains",
+    "notes": "Tables 17\u201323 contain variant/functional sequences and Table 24 the shared core. Completeness requires both, not a single short table.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-019-09064-6",
+    "design": "DNA-PAINT rectangle with 10/20-nm docking grids",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Tables 1\u20133, PDF pages 10\u201315",
+    "characterization": [
+      "DNA-PAINT super-resolution"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "Docking-site variants and imaging calibration substrates; not separate base geometries.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-018-04031-z",
+    "design": "Addressability rectangle and 18 docking-pattern variants",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary staple tables; PDF pages 19\u201323",
+    "characterization": [
+      "DNA-PAINT super-resolution"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "18 unique docking patterns probe 168 staples. Common core plus variant docking extensions must be combined. No raw localization deposit verified.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41598-017-12257-y",
+    "design": "48-docking-site Exchange-PAINT rectangle, five barcode variants",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplemental Table S1; scaffold in Table S2, PDF pages 10\u201314",
+    "characterization": [
+      "Exchange-PAINT super-resolution"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "Five docking sequences share the substrate geometry; imaging labels are variant metadata.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-017-00542-3",
+    "design": "Twist-corrected rectangular proximity-recording scaffold",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Table 1 (core); Table 2 (probe variants); Supplementary Fig. 5",
+    "characterization": [
+      "AFM",
+      "proximity sequencing"
+    ],
+    "family": "Twist-corrected rectangle",
+    "notes": "Probe arrangements are functionalization variants; sequencing proximity records are not raw microscopy.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s41467-017-02028-8",
+    "design": "Rectangle with 3\u00d74 grid / four-corner DNA-PAINT motifs",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Data spreadsheets MOESM7\u20138",
+    "characterization": [
+      "3D DNA-PAINT",
+      "spinning-disk confocal"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "Downloaded sequence spreadsheets. Rectangles used as calibration structures; cellular imaging data must not be assigned to the origami itself.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/nmeth.3804",
+    "design": "qPAINT rectangle: 12/48/150 docking sites and calibration grids",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Tables 1\u20136",
+    "characterization": [
+      "DNA-PAINT super-resolution"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "Primary methods enumerate separate staple tables for each docking variant. Whole-cell experiments are separate from the origami standards.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/srep21266",
+    "design": "Aptamer-bearing rectangular origami targeting PfLDH",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Table S1",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Rothemund-derived rectangle",
+    "notes": "226-staple rectangular substrate with site-specific aptamer modifications; distinguish modified and unmodified variants.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.7554/elife.05472",
+    "design": "Flat rectangular motor-bearing origami",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary file 1: computer-aided staple sequences",
+    "characterization": [
+      "fluorescence microscopy",
+      "motor trajectories"
+    ],
+    "family": "Rectangular myosin scaffold",
+    "notes": "Motor number and attachment-site variants share the scaffold. DirectionalAnalysis repository is analysis software, not native design files.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1016/j.jmau.2015.08.001",
+    "design": "Honeycomb DNA nanotube",
+    "lattice": "honeycomb",
+    "sequence_location": "Main-text Table 1",
+    "characterization": [
+      "TEM",
+      "AFM",
+      "STM"
+    ],
+    "family": "Honeycomb nanotube",
+    "notes": "Authors explicitly specify caDNAno honeycomb design. Table 1 is available in full-text XML; presence does not independently establish completeness of the physical design.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/ncomms14698",
+    "design": "BEARS twist-corrected 2D origami rectangle",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Supplementary Data 1 (non-extended and pre-extended oligos)",
+    "characterization": [
+      "AFM",
+      "barcode sequencing"
+    ],
+    "family": "Twist-corrected rectangle",
+    "notes": "Only scaffolded origami subset; excludes 2D/3D DNA-brick structures. Different scaffold sequence from original rectangle.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/ncomms14698",
+    "design": "BEARS scaffolded 3D origami cuboid",
+    "lattice": "square",
+    "sequence_location": "Supplementary Data 1; Fig. 5",
+    "characterization": [
+      "TEM",
+      "barcode sequencing"
+    ],
+    "family": "BEARS origami cuboid",
+    "notes": "Separate from scaffold-free brick cuboid. Square-lattice model is described in methods; sequence spreadsheet contains mixed-design data, so sheet-level matching is necessary.",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "doi": "10.1038/s42003-019-0683-0",
+    "design": "10HB thick filament with six 2HB linkers",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Data MOESM6, core staple spreadsheet",
+    "characterization": [
+      "high-speed AFM",
+      "darkfield microscopy"
+    ],
+    "family": "10HB thick filament with six 2HB linkers",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/s41467-019-13517-3",
+    "design": "DNA origami cryptography structure variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI DNA sequences, PDF pages 41\u201347",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "DNA origami cryptography structure variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/s41467-019-09002-6",
+    "design": "Frustration-study origami variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Data MOESM4",
+    "characterization": [
+      "AFM",
+      "single-molecule fluorescence"
+    ],
+    "family": "Frustration-study origami variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1093/nar/gky1189",
+    "design": "Sequence-dependent nick / twisted 6HB variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Table S18",
+    "characterization": [
+      "TEM"
+    ],
+    "family": "Sequence-dependent nick / twisted 6HB variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1093/nar/gkx1262",
+    "design": "Square-lattice single-layer model test structure",
+    "lattice": "square",
+    "sequence_location": "Supplementary Table S3",
+    "characterization": [
+      "AFM",
+      "FRET"
+    ],
+    "family": "Square-lattice single-layer model test structure",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/ncomms1452",
+    "design": "DNA origami pliers and forceps",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Tables S1\u2013S3; Figs. S5\u2013S10",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "DNA origami pliers and forceps",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/s41467-018-03198-9",
+    "design": "Curved 20HB membrane-sculpting H/Q designs",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Tables 3 onward",
+    "characterization": [
+      "TEM",
+      "fluorescence microscopy"
+    ],
+    "family": "Curved 20HB membrane-sculpting H/Q designs",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1021/acsnano.6b03759",
+    "design": "19-cholesterol funnel-shaped porin",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supporting Tables S1\u2013S6",
+    "characterization": [
+      "TEM",
+      "confocal fluorescence"
+    ],
+    "family": "19-cholesterol funnel-shaped porin",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1126/sciadv.1602803",
+    "design": "Reconfigurable chiral plasmonic origami",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Table S1",
+    "characterization": [
+      "TEM",
+      "CD spectroscopy"
+    ],
+    "family": "Reconfigurable chiral plasmonic origami",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1126/sciadv.1602128",
+    "design": "Metafluorophore origami variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Table S1",
+    "characterization": [
+      "fluorescence microscopy"
+    ],
+    "family": "Metafluorophore origami variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1002/anie.201302727",
+    "design": "Rigid multihelix DNA beam variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supporting Table S1",
+    "characterization": [
+      "TEM",
+      "single-molecule mechanics"
+    ],
+    "family": "Rigid multihelix DNA beam variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1021/nn5011914",
+    "design": "Membrane-encapsulated DNA nano-octahedron",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supporting Information sequence list",
+    "characterization": [
+      "TEM",
+      "fluorescence"
+    ],
+    "family": "Membrane-encapsulated DNA nano-octahedron",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1021/ja906381y",
+    "design": "2\u00d721, 3\u00d714, 6\u00d712 and 8\u00d78 square-lattice blocks",
+    "lattice": "square",
+    "sequence_location": "Supporting Information; sequence list retrieval unresolved",
+    "characterization": [
+      "negative-stain TEM",
+      "cryo-EM"
+    ],
+    "family": "2\u00d721, 3\u00d714, 6\u00d712 and 8\u00d78 square-lattice blocks",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1073/pnas.1215713109",
+    "design": "Square-lattice cryo-EM pointer object",
+    "lattice": "square",
+    "sequence_location": "Supporting sequence information; PDB 4V5X polymer sequences",
+    "characterization": [
+      "cryo-EM"
+    ],
+    "family": "Square-lattice cryo-EM pointer object",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/nature07971",
+    "design": "DNA box with a controllable lid",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary Data sequence list",
+    "characterization": [
+      "cryo-EM",
+      "SAXS",
+      "AFM",
+      "FRET"
+    ],
+    "family": "DNA box with a controllable lid",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1038/nature14860",
+    "design": "Small origami folding-pathway variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Supplementary nucleotide sequences",
+    "characterization": [
+      "AFM"
+    ],
+    "family": "Small origami folding-pathway variants",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  },
+  {
+    "doi": "10.1039/b907800b",
+    "design": "Box-shaped 3D origami with joint strands",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "Publisher-listed supplement: staple and joint sequences",
+    "characterization": [
+      "AFM",
+      "DLS"
+    ],
+    "family": "Box-shaped 3D origami with joint strands",
+    "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
+    "review_status": "candidate_scope_or_list_verification_needed"
+  }
+]
