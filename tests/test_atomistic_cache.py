@@ -161,3 +161,35 @@ def test_reclaim_cache_if_low_no_ram_reading_is_noop(monkeypatch):
     assert atomistic_cache.reclaim_cache_if_low(4096) == 0  # don't reclaim on a guess
     assert cache_size() >= 1
     clear_atomistic_cache()
+
+
+def test_byte_limit_bypasses_oversized_model(monkeypatch):
+    counter = _install_stub(monkeypatch)
+    monkeypatch.setattr(atomistic_cache, '_CACHE_MAX_BYTES', 1)
+    d = make_minimal_design()
+    build_atomistic_model_cached(d)
+    build_atomistic_model_cached(d)
+    assert counter.calls == 2
+    assert atomistic_cache.cache_bytes() == 0
+
+
+def test_different_design_builds_are_serialized(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    _install_stub(monkeypatch)
+    active = peak = 0
+    lock = threading.Lock()
+    def build(*a, **kw):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(.04)
+        with lock:
+            active -= 1
+        return object()
+    monkeypatch.setattr(atomistic_mod, 'build_atomistic_model', build)
+    with ThreadPoolExecutor(3) as pool:
+        list(pool.map(build_atomistic_model_cached,
+                      [make_minimal_design(helix_length_bp=n) for n in (42,52,62)]))
+    assert peak == 1
+    clear_atomistic_cache()

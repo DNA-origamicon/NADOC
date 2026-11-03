@@ -50,6 +50,7 @@ export function mdVizApiAdapter(api) {
     // tells the controller it may batch its prebuild; oxDNA leaves it unset and keeps
     // fetching one frame at a time, which is right for a per-frame reconstruction.
     heavyBatch: true,
+    cancelTrajectoryPrefetch: () => prefetch.cancel(),
     prefetchTrajectory: (jobId, stride) => prefetch.start(jobId, stride),
     progressiveTrajectory: typeof api.getMdTrajectoryMeta === 'function',
     getTrajectoryMeta: (id, stride) => api.getMdTrajectoryMeta(id, { stride }),

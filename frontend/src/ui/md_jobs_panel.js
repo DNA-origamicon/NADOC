@@ -1342,7 +1342,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
   const screeningCard = initNamdSurfaceCharge()
-  const boxSolvent = initBoxSolvent({api,store})
+  const boxSolvent = initBoxSolvent({api,store,saveDraftSettings: _saveDraftBoxSettings})
   const surfaceEnableChk   = document.getElementById('md-surface-enable')
   const surfaceAxisEl      = document.getElementById('md-surface-axis')
   const surfaceOffsetEl    = document.getElementById('md-surface-offset')
@@ -1443,6 +1443,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const trajFramesHint = document.getElementById('md-jobs-traj-frames-hint')
 
   // ── State ──────────────────────────────────────────────────────────────────
+  let _draftSettingsVersion = 0
   let _jobs         = []     // cached list from API
   let _selectedId   = null   // currently displayed job_id
   // The user clicked the selected row to DESELECT it. `_selectBestJob` runs on every poll
@@ -1619,8 +1620,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _selectedRunpodGpu = null
   const _runpodPicker = initRunpodGpuPicker({
     mount: runpodPickerEl,
+    fetchOptions: () => api.getRunpodGpuOptions(undefined, boxSolvent?.payload()),
     onSelect: (row) => { _selectedRunpodGpu = row },
   })
+
+  boxSolvent?.subscribe(() => _runpodPicker.refresh())
 
   // Alpine GPU availability: free GPUs, queue depth and estimated wait per partition.
   // Passes the selected job so the estimate is sized for the real run, not a generic one.
@@ -1884,10 +1888,29 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   const notifyBoxSizeFailures = createBoxSizeFailureNotifier(warnings => boxSolvent?.setJobWarnings(warnings))
 
+  async function _saveDraftBoxSettings(selected, changes) {
+    const job=_jobs.find(j=>j.job_id===selected.job_id) || selected
+    const patch=Object.fromEntries(Object.entries(changes).filter(([key,value])=>
+      JSON.stringify(value)!==JSON.stringify(job.prep_params?.[key])))
+    if(!Object.keys(patch).length)return job
+    _draftSettingsVersion++
+    try {
+      const saved=await api.updateMdDraftPreparation(job.job_id, patch)
+      if(!saved)throw Error(api.lastErrorMessage?.() || 'Could not save job settings')
+      _jobs=_jobs.map(j=>j.job_id===saved.job_id?{...j,...saved}:j)
+      return saved
+    } finally {
+      // A poll that started before this write must not resurrect the old prep_params.
+      _draftSettingsVersion++
+    }
+  }
+
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
+    const settingsVersion=_draftSettingsVersion
     try {
       const jobs = await api.listMdJobs()
+      if(settingsVersion!==_draftSettingsVersion)return
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
       _jobs = mergeCreatingJobs(jobs, 'namd')
       notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
@@ -3579,6 +3602,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   async function deleteSelected() {
     if (!_selectedId) return false
     const job = _jobs.find(j => j.job_id === _selectedId)
+    if (job?.execution_target === 'alpine' && job.status === 'queued') {
+      const status = await api.getClusterStatus().catch(() => null)
+      if (status?.state !== 'connected') {
+        window.alert('Connect to Alpine before deleting this queued job so it can be cancelled. Then try Delete again.')
+        return false
+      }
+    }
     const label = job ? `${job.design_name} (${job.job_id})` : _selectedId
     if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return false
     try {
@@ -4170,6 +4200,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // card, what it writes, and whether it fits the network volume.  One round trip carries
       // the cards, storage, balance, live pods AND the pre-flight.
       getRunpodJobPreview: body => api.getRunpodJobPreview(body),
+      getRuntimePreview: body => api.getMdRuntimePreview(body),
       getRunpodVolumes: () => api.getRunpodVolumes(),
       setRunpodVolume: id => api.setRunpodVolume(id),
       // The folder picker browses the server's filesystem through the same client.
@@ -4288,15 +4319,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
 
-    // Only warn about a busy GPU when this run actually targets the GPU.
-    // Wizard requests name the preset and deliberately omit its derived protocol.
-    // Treat GBIS as CPU-only at this boundary too; otherwise the visible implicit plan
-    // still enters the explicit-water VRAM gate before the backend can resolve the preset.
-    const implicitRun = isImplicitSolventProtocol(proto.protocol)
-      || proto.relax_preset === 'implicit_gbis'
-    const runsOnGpu = !implicitRun
-      && deviceStr.toLowerCase() !== 'cpu'
-      && deviceStr.toLowerCase() !== 'none'
     _launching = true
     _paintRunControl()
 
@@ -4332,15 +4354,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     // Gate A — verify that the fully solvated system fits before starting the build.
     // Seeded drafts are sized later because their atomistic model is not available yet.
-    if (isLocalRun && draftId && runsOnGpu) {
+    if (isLocalRun && draftId) {
       try {
         const adv = await preflightMdVram(payload)
+        if (!adv) throw new Error('Memory estimate unavailable')
         const gate = gateAMessage(adv)
         if (gate) {
           const proceed = await openGateAModal(adv)
           if (!proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
         }
-      } catch { /* preflight is best-effort — never block a launch */ }
+      } catch {
+        await openGateAModal({tier:'unknown',reason:'The memory check could not complete. Retry before launching.'})
+        hideOpProgress(); _launching = false; runBtn.disabled = false; return
+      }
     }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its

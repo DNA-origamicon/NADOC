@@ -52,12 +52,24 @@ class ChargeAudit:
         return data
 
 
-def parse_psf_atoms(psf_text: str) -> list[PsfAtom]:
+def _text_lines(text):
+    """Iterate LF/CRLF text without materializing every line or a StringIO copy."""
+    start = 0
+    while start < len(text):
+        end = text.find('\n', start)
+        if end < 0:
+            yield text[start:].rstrip('\r')
+            break
+        yield text[start:end].rstrip('\r')
+        start = end + 1
+
+
+def _iter_psf_atoms(psf_text):
     """Parse the NATOM section of an extended or standard CHARMM PSF."""
-    atoms: list[PsfAtom] = []
+    count = 0
     in_natom = False
     expected: int | None = None
-    for line in psf_text.splitlines():
+    for line in _text_lines(psf_text) if isinstance(psf_text, str) else psf_text:
         if "!NATOM" in line:
             in_natom = True
             try:
@@ -69,7 +81,7 @@ def parse_psf_atoms(psf_text: str) -> list[PsfAtom]:
             continue
         stripped = line.strip()
         if not stripped:
-            if expected is None or len(atoms) >= expected:
+            if expected is None or count >= expected:
                 break
             continue
         if stripped.startswith("!") or "!N" in line:
@@ -78,23 +90,27 @@ def parse_psf_atoms(psf_text: str) -> list[PsfAtom]:
         if len(parts) < 8:
             continue
         try:
-            atoms.append(
-                PsfAtom(
-                    serial=int(parts[0]),
-                    segid=parts[1],
-                    resid=parts[2],
-                    resname=parts[3],
-                    atomname=parts[4],
-                    atomtype=parts[5],
-                    charge=float(parts[6]),
-                    mass=float(parts[7]),
-                )
+            atom = PsfAtom(
+                serial=int(parts[0]),
+                segid=parts[1],
+                resid=parts[2],
+                resname=parts[3],
+                atomname=parts[4],
+                atomtype=parts[5],
+                charge=float(parts[6]),
+                mass=float(parts[7]),
             )
+            count += 1
+            yield atom
         except ValueError:
             continue
-        if expected is not None and len(atoms) >= expected:
+        if expected is not None and count >= expected:
             break
-    return atoms
+
+
+def parse_psf_atoms(psf_text: str) -> list[PsfAtom]:
+    """Parse the NATOM section of an extended or standard CHARMM PSF."""
+    return list(_iter_psf_atoms(psf_text))
 
 
 def audit_psf(
@@ -107,11 +123,11 @@ def audit_psf(
     dna_residue_charge_bounds: tuple[float, float] = (-1.25, -0.25),
 ) -> ChargeAudit:
     """Return production-readiness diagnostics for a PSF topology."""
-    atoms = parse_psf_atoms(psf_text)
-    audit = ChargeAudit(n_atoms=len(atoms))
+    audit = ChargeAudit()
     residue_charge: dict[tuple[str, str, str], float] = {}
 
-    for atom in atoms:
+    for atom in _iter_psf_atoms(psf_text):
+        audit.n_atoms += 1
         resname = atom.resname.upper()
         audit.total_charge += atom.charge
         audit.residue_counts[resname] = audit.residue_counts.get(resname, 0) + 1
@@ -138,7 +154,7 @@ def audit_psf(
         audit.dna_residue_charge_min = min(charges)
         audit.dna_residue_charge_max = max(charges)
 
-    if not atoms:
+    if not audit.n_atoms:
         audit.errors.append("PSF has no parseable NATOM records.")
     if abs(audit.integer_charge_error) > integer_tolerance:
         audit.errors.append(
@@ -176,4 +192,5 @@ def audit_psf(
 
 
 def audit_psf_file(path: str | Path, **kwargs) -> ChargeAudit:
-    return audit_psf(Path(path).read_text(errors="replace"), **kwargs)
+    with Path(path).open(errors="replace") as source:
+        return audit_psf(source, **kwargs)

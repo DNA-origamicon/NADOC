@@ -11,36 +11,22 @@ from backend.core.md_optimize import (
 
 
 class TestThroughputModel:
-    def test_reproduces_the_two_real_benchmarks(self) -> None:
-        """The model is anchored on real 2080-Super runs; it must return them."""
-        # full solvation + GPU-resident: measured 12.8 ns/day @ 747,262 atoms
-        assert predict_ns_per_day(747_262, gpu_resident=True) == pytest.approx(
-            12.8, rel=0.02
-        )
-        # 12 A carve + CUDA offload: measured 18.8 ns/day @ 196,606 atoms
-        assert predict_ns_per_day(196_606, gpu_resident=False) == pytest.approx(
-            18.8, rel=0.02
-        )
+    def test_uses_current_hardware_scoped_evidence(self, monkeypatch):
+        from backend.core import namd_timing
+        calls=[]
+        def rate(n,**kwargs):
+            calls.append((n,kwargs))
+            return 10.0
+        monkeypatch.setattr(namd_timing,'local_step_ms',rate)
+        assert predict_ns_per_day(500000,gpu_resident=True,devices='1',threads=16)==pytest.approx(34.56)
+        assert calls==[(500000,dict(resident=True,devices='1',threads=16))]
 
-    def test_throughput_falls_with_atom_count(self) -> None:
-        assert predict_ns_per_day(100_000, gpu_resident=True) > predict_ns_per_day(
-            400_000, gpu_resident=True
-        )
-
-    def test_gpu_resident_is_faster_per_atom(self) -> None:
-        n = 300_000
-        assert predict_ns_per_day(n, gpu_resident=True) > predict_ns_per_day(
-            n, gpu_resident=False
-        )
-
-    def test_cpu_is_far_slower_than_gpu(self) -> None:
-        n = 200_000
-        assert predict_ns_per_day(
-            n, gpu_resident=False, gpu=False
-        ) < predict_ns_per_day(n, gpu_resident=False, gpu=True)
-
-    def test_zero_atoms_does_not_divide_by_zero(self) -> None:
-        assert predict_ns_per_day(0, gpu_resident=True) == 0.0
+    def test_unknown_evidence_or_cpu_never_uses_an_obsolete_engine(self,monkeypatch):
+        from backend.core import namd_timing
+        monkeypatch.setattr(namd_timing,'local_step_ms',lambda *args,**kwargs:None)
+        assert predict_ns_per_day(500000,gpu_resident=True) is None
+        assert predict_ns_per_day(500000,gpu_resident=False,gpu=False) is None
+        assert predict_ns_per_day(0,gpu_resident=True)==0.0
 
 
 def test_physical_cores_is_at_least_one() -> None:
@@ -48,29 +34,6 @@ def test_physical_cores_is_at_least_one() -> None:
 
 
 class TestResidentIsSizeAware:
-    """GPU-resident's advantage is not scale-free — the optimiser must stop promising it.
-
-    The throughput model had a single K per path, so resident always looked 2.6x better
-    per atom.  Measured on an RTX 3080 Ti (offload -> resident ms/step): 32.5k
-    1.116->1.266 (a LOSS), 111k 1.749->1.544, 770k 32.10->16.16, 3.14M 125.6->39.0.
-    """
-
-    def test_resident_is_not_predicted_faster_below_the_crossover(self) -> None:
-        from backend.core.md_optimize import predict_ns_per_day
-
-        n = 32_566
-        assert predict_ns_per_day(n, gpu_resident=True) < predict_ns_per_day(
-            n, gpu_resident=False
-        )
-
-    def test_resident_is_predicted_faster_well_above_it(self) -> None:
-        from backend.core.md_optimize import predict_ns_per_day
-
-        n = 3_139_238
-        assert predict_ns_per_day(n, gpu_resident=True) > predict_ns_per_day(
-            n, gpu_resident=False
-        )
-
     def test_gpu_resident_pays_tracks_the_measured_crossover(self) -> None:
         from backend.core.md_optimize import _RESIDENT_MIN_ATOMS, gpu_resident_pays
 

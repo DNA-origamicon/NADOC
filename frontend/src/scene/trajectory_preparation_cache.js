@@ -1,10 +1,18 @@
 /** Prepare heavy trajectory frames off-screen using the existing display pipeline.
  * The session has no scene/renderers; only completed caches are adopted by playback.
  */
-export function initTrajectoryPreparationCache({ context, download, createSession }) {
+export function initTrajectoryPreparationCache({ context, download, createSession, maxReady = 2 }) {
   const entries = new Map()
   let tail = Promise.resolve()
   const key = (jobId, spec) => JSON.stringify([jobId, spec.scope, spec.stride ?? null, spec.frameStart ?? null, spec.frameEnd ?? null, context()])
+
+  function dispose(entry) {
+    entry.session?.cancelPendingLoad?.()
+    entry.session?.discardForDocumentReset?.()
+    entry.session?.setPlaying?.(false)
+    entry.session = null
+    entry.snapshot = null
+  }
 
   function prepare(jobId, spec, { onProgress, planPrebuild, schedule } = {}) {
     const id = key(jobId, spec)
@@ -22,12 +30,20 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
       const cancelled = new Promise((_, reject) => { entry.rejectCancel = reject })
       const run = async () => {
         if (entry.cancelled) throw new DOMException('cancelled', 'AbortError')
+        // Ready clips also retain topology/session state. Bound their count even
+        // when their coordinate frames have already been evicted by the byte pool.
+        const ready = [...entries].filter(([, e]) => e.state === 'ready')
+        while (ready.length >= maxReady) {
+          const [oldId, old] = ready.shift()
+          entries.delete(oldId); dispose(old)
+        }
         report({ phase: 'load', done: 0, total: 0 })
         const data = await download(jobId, spec, { onProgress: report })
         if (entry.cancelled) throw new DOMException('cancelled', 'AbortError')
         report({ phase: 'load', done: data?.n_frames || 0, total: data?.n_frames || 0 })
         entry.session = createSession(data, settings)
         const loaded = await entry.session.loadTrajectory(jobId, true, spec.scope, spec.stride, null, spec)
+        if (entry.cancelled) throw new DOMException('cancelled', 'AbortError')
         if (!loaded?.ok) throw new Error(loaded?.reason || 'Trajectory unavailable')
         report({ phase: 'frames', done: 0, total: 0, trajectoryFrames: data.total_n_frames ?? data.n_frames })
         const plan = await planPrebuild?.(entry.session)
@@ -45,14 +61,17 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
           trajectoryFrames: data.total_n_frames ?? data.n_frames })
         return { n_frames: data.n_frames, total_n_frames: data.total_n_frames ?? data.n_frames, ...result }
       }
-      const work = (schedule ? schedule(run) : tail.catch(() => {}).then(run)).catch(error => {
+      // External schedulers may run different jobs concurrently. Keep session
+      // construction serial here as well, so ready-session pruning cannot race.
+      const work = tail.catch(() => {}).then(() => schedule ? schedule(run) : run()).catch(error => {
+        dispose(entry)
         entry.state = 'error'
         report({ phase: error?.name === 'AbortError' ? 'cancelled' : 'error', done: 0, total: 0 })
         if (entries.get(id) === entry) entries.delete(id)
         throw error
       })
       entry.promise = Promise.race([work, cancelled])
-      if (!schedule) tail = work
+      tail = work
       work.catch(() => {})
     } else if (onProgress) {
       entry.listeners.add(onProgress)
@@ -69,8 +88,7 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
       entry.progress = { phase: 'cancelled', done: 0, total: 0 }
       for (const listener of entry.listeners) listener(entry.progress)
       entry.rejectCancel?.(new DOMException('cancelled', 'AbortError'))
-      entry.session?.cancelPendingLoad?.()
-      entry.session?.setPlaying?.(false)
+      dispose(entry)
       entries.delete(id)
     }
   }
@@ -81,10 +99,17 @@ export function initTrajectoryPreparationCache({ context, download, createSessio
       entry.progress = { phase: 'cancelled', done: 0, total: 0 }
       for (const listener of entry.listeners) listener(entry.progress)
       entry.rejectCancel?.(new DOMException('cancelled', 'AbortError'))
-      entry.session?.cancelPendingLoad?.()
-      entry.session?.setPlaying?.(false)
+      dispose(entry)
       entries.delete(id)
     }
   }
-  return { prepare, retain, cancel, snapshot: (jobId, spec) => entries.get(key(jobId, spec))?.snapshot }
+  function takeSnapshot(jobId, spec) {
+    const id = key(jobId, spec), entry = entries.get(id)
+    if (entry?.state !== 'ready') return null
+    const snapshot = entry.session?.takeTrajectoryPreparationState?.() ?? entry.snapshot
+    entries.delete(id)
+    dispose(entry)
+    return snapshot
+  }
+  return { prepare, retain, cancel, takeSnapshot, snapshot: (jobId, spec) => entries.get(key(jobId, spec))?.snapshot }
 }

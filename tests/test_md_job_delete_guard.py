@@ -92,3 +92,74 @@ def test_delete_refuses_stopped_job_with_preparation_worker(monkeypatch, tmp_pat
         assert job.job_dir(tmp_path).exists()
     finally:
         unregister_active_preparation(job.job_id)
+
+
+def test_queued_alpine_delete_requires_connection(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from backend.core import cluster_ssh
+    monkeypatch.setattr(routes_md, '_WORKSPACE_DIR', tmp_path)
+    monkeypatch.setattr(cluster_ssh, 'get_manager', lambda: SimpleNamespace(is_connected=lambda: False))
+    job = _make_job(tmp_path, MdStatus.queued)
+    job.execution_target = 'alpine'
+    job.slurm_job_id = '123'
+    job.save(tmp_path)
+    resp = TestClient(app).delete(f'/api/md/jobs/{job.job_id}')
+    assert resp.status_code == 409
+    assert 'Connect to Alpine' in resp.json()['detail']
+    assert job.job_dir(tmp_path).exists()
+
+
+def test_offline_stopped_delete_preserves_cancellation(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from backend.core import cluster_ssh
+    monkeypatch.setattr(routes_md, '_WORKSPACE_DIR', tmp_path)
+    monkeypatch.setattr(cluster_ssh, 'get_manager', lambda: SimpleNamespace(is_connected=lambda: False))
+    job = _make_job(tmp_path, MdStatus.stopped)
+    job.execution_target = 'alpine'
+    job.slurm_job_id = '123'
+    job.pending_scancel = True
+    job.save(tmp_path)
+    resp = TestClient(app).delete(f'/api/md/jobs/{job.job_id}')
+    assert resp.status_code == 200
+    assert not job.job_dir(tmp_path).exists()
+    assert (tmp_path / 'alpine_deletions' / f'{job.job_id}.json').exists()
+
+
+def test_online_delete_cancels_before_local_deletion(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from backend.core import cluster_ssh
+    monkeypatch.setattr(routes_md, '_WORKSPACE_DIR', tmp_path)
+    job = _make_job(tmp_path, MdStatus.queued)
+    job.execution_target = 'alpine'
+    job.slurm_job_id = '123'
+    job.save(tmp_path)
+
+    async def run(*args, **kwargs):
+        assert job.job_dir(tmp_path).exists()
+        assert 'scancel' in args[0]
+        return SimpleNamespace(rc=0)
+
+    conn = SimpleNamespace(is_connected=lambda: True, run=AsyncMock(side_effect=run))
+    monkeypatch.setattr(cluster_ssh, 'get_manager', lambda: conn)
+    resp = TestClient(app).delete(f'/api/md/jobs/{job.job_id}')
+    assert resp.status_code == 200
+    conn.run.assert_awaited_once()
+    assert not job.job_dir(tmp_path).exists()
+
+
+def test_failed_online_cancel_retains_job_and_receipt(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from backend.core import cluster_ssh
+    monkeypatch.setattr(routes_md, '_WORKSPACE_DIR', tmp_path)
+    job = _make_job(tmp_path, MdStatus.queued)
+    job.execution_target = 'alpine'
+    job.slurm_job_id = '123'
+    job.save(tmp_path)
+    conn = SimpleNamespace(is_connected=lambda: True, run=AsyncMock(side_effect=RuntimeError('network lost')))
+    monkeypatch.setattr(cluster_ssh, 'get_manager', lambda: conn)
+    resp = TestClient(app).delete(f'/api/md/jobs/{job.job_id}')
+    assert resp.status_code == 502
+    assert job.job_dir(tmp_path).exists()
+    assert (tmp_path / 'alpine_deletions' / f'{job.job_id}.json').exists()

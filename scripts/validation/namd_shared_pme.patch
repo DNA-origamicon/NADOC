@@ -1,0 +1,262 @@
+--- a/src/CudaPmeSolverUtil.C
++++ b/src/CudaPmeSolverUtil.C
+@@ -1,6 +1,7 @@
+ #include <stdio.h>
+ #include <algorithm>
+ #include <cstdlib>
++#include <mutex>
+ #ifdef NAMD_CUDA
+ #include <cuda_runtime.h>
+ #endif
+@@ -26,6 +27,118 @@
+ extern __declspec(thread) DeviceCUDA *deviceCUDA;
+ #endif
+ extern "C" void CcdCallBacksReset(void *ignored, double curWallTime);  // fix Charm++
++
++
++// Experimental, opt-in reuse for the two mutually exclusive PME execution paths.
++// ScriptTcl switches CUDASOAintegrate between minimization and dynamics. Only
++// one process, replica, device and grid are allowed here; other modes retain
++// their original ownership. Neither grid contains persistent physical state.
++namespace {
++bool sharedPmeEnabled() {
++#if defined(NAMD_CUDA) && defined(NODEGROUP_FORCE_REGISTER)
++  const char *enabled = std::getenv("NADOC_SHARED_PME");
++  const SimParameters *sp = Node::Object()->simParameters;
++  return enabled && !strcmp(enabled, "1") && sp->CUDASOAintegrateMode &&
++    sp->usePMECUDA && !sp->alchOn && CkNumNodes() == 1 &&
++    CmiNumPartitions() == 1 && deviceCUDA->getNumDevice() == 1 &&
++    !deviceCUDA->isGpuReservedPme() && sp->PMEPencilsX <= 1 &&
++    sp->PMEPencilsY <= 1 && sp->PMEPencilsZ <= 1;
++#else
++  return false;
++#endif
++}
++
++struct SharedPmeStorage {
++  std::mutex mutex;
++  void *buffers[2] = {NULL, NULL};  // real grid, complex grid
++  size_t bytes[2] = {0, 0};
++  int owners[2] = {0, 0};
++  cufftHandle plans[2] = {0, 0};  // forward and reverse retain separate workspaces
++  int planOwners[2] = {0, 0};
++  int dimensions[2][3] = {{0, 0, 0}, {0, 0, 0}};
++};
++SharedPmeStorage sharedPme;
++
++template <typename T>
++void acquirePmeGrid(T **ptr, size_t count, int slot) {
++  if (!sharedPmeEnabled()) {
++    allocate_device<T>(ptr, count);
++    return;
++  }
++  size_t bytes = sizeof(T) * count;
++  if (slot == 0) {
++    // Resident PME pads float ELEMENT counts to textureAlignment.
++    int device;
++    cudaDeviceProp prop;
++    cudaCheck(cudaGetDevice(&device));
++    cudaCheck(cudaGetDeviceProperties(&prop, device));
++    const size_t alignment = sizeof(float) * prop.textureAlignment;
++    bytes = ((bytes + alignment - 1) / alignment) * alignment;
++  }
++  std::lock_guard<std::mutex> guard(sharedPme.mutex);
++  if (sharedPme.owners[slot] == 0) {
++    cudaCheck(cudaMalloc(&sharedPme.buffers[slot], bytes));
++    sharedPme.bytes[slot] = bytes;
++  } else if (sharedPme.bytes[slot] != bytes || sharedPme.owners[slot] >= 2) {
++    NAMD_bug("Shared PME grid dimensions or ownership changed");
++  }
++  ++sharedPme.owners[slot];
++  *ptr = static_cast<T *>(sharedPme.buffers[slot]);
++}
++
++template <typename T>
++void releasePmeGrid(T **ptr) {
++  std::lock_guard<std::mutex> guard(sharedPme.mutex);
++  for (int slot = 0; slot < 2; ++slot) {
++    if (*ptr != NULL && *ptr == sharedPme.buffers[slot]) {
++      if (--sharedPme.owners[slot] == 0) {
++        cudaCheck(cudaFree(sharedPme.buffers[slot]));
++        sharedPme.buffers[slot] = NULL;
++        sharedPme.bytes[slot] = 0;
++      }
++      *ptr = NULL;
++      return;
++    }
++  }
++  deallocate_device<T>(ptr);
++}
++
++void acquirePmePlan(cufftHandle *plan, int z, int y, int x, cufftType type) {
++  if (!sharedPmeEnabled()) {
++    cufftCheck(cufftPlan3d(plan, z, y, x, type));
++    return;
++  }
++  const int slot = type == CUFFT_R2C ? 0 : 1;
++  std::lock_guard<std::mutex> guard(sharedPme.mutex);
++  if (sharedPme.planOwners[slot] == 0) {
++    cufftCheck(cufftPlan3d(&sharedPme.plans[slot], z, y, x, type));
++    sharedPme.dimensions[slot][0] = x;
++    sharedPme.dimensions[slot][1] = y;
++    sharedPme.dimensions[slot][2] = z;
++  } else if (sharedPme.dimensions[slot][0] != x ||
++             sharedPme.dimensions[slot][1] != y ||
++             sharedPme.dimensions[slot][2] != z ||
++             sharedPme.planOwners[slot] >= 2) {
++    NAMD_bug("Shared PME plan dimensions or ownership changed");
++  }
++  ++sharedPme.planOwners[slot];
++  *plan = sharedPme.plans[slot];
++}
++
++void releasePmePlan(cufftHandle plan) {
++  std::lock_guard<std::mutex> guard(sharedPme.mutex);
++  for (int slot = 0; slot < 2; ++slot) {
++    if (sharedPme.planOwners[slot] && sharedPme.plans[slot] == plan) {
++      if (--sharedPme.planOwners[slot] == 0) {
++        cufftCheck(cufftDestroy(plan));
++        sharedPme.plans[slot] = 0;
++      }
++      return;
++    }
++  }
++  cufftCheck(cufftDestroy(plan));
++}
++} // namespace
+ 
+ void writeComplexToDisk(const float2 *d_data, const int size, const char* filename, cudaStream_t stream) {
+   fprintf(stderr, "writeComplexToDisk %d %s\n", size, filename);
+@@ -66,8 +179,8 @@
+   cudaCheck(cudaSetDevice(deviceID));
+   forwardType = CUFFT_R2C;
+   backwardType = CUFFT_C2R;
+-  cufftCheck(cufftPlan3d(&forwardPlan, n[2], n[1], n[0], CUFFT_R2C));
+-  cufftCheck(cufftPlan3d(&backwardPlan, n[2], n[1], n[0], CUFFT_C2R));
++  acquirePmePlan(&forwardPlan, n[2], n[1], n[0], CUFFT_R2C);
++  acquirePmePlan(&backwardPlan, n[2], n[1], n[0], CUFFT_C2R);
+   setStream();
+   // plantype = 3;
+ }
+@@ -115,16 +228,16 @@
+ 
+ CudaFFTCompute::~CudaFFTCompute() {
+   cudaCheck(cudaSetDevice(deviceID));
+-	cufftCheck(cufftDestroy(forwardPlan));
+-	cufftCheck(cufftDestroy(backwardPlan));
+-  if (dataSrcAllocated) deallocate_device<float>(&dataSrc);
+-  if (dataDstAllocated) deallocate_device<float>(&dataDst);
++	releasePmePlan(forwardPlan);
++	releasePmePlan(backwardPlan);
++  if (dataSrcAllocated) releasePmeGrid<float>(&dataSrc);
++  if (dataDstAllocated) releasePmeGrid<float>(&dataDst);
+ }
+ 
+ float* CudaFFTCompute::allocateData(const int dataSizeRequired) {
+   cudaCheck(cudaSetDevice(deviceID));
+   float* tmp = NULL;
+-  allocate_device<float>(&tmp, dataSizeRequired);
++  acquirePmeGrid<float>(&tmp, dataSizeRequired, 1);
+   return tmp;
+ }
+ 
+@@ -132,6 +245,8 @@
+ 
+ void CudaFFTCompute::forward() {
+   cudaCheck(cudaSetDevice(deviceID));
++  // Restore the offload stream after a resident dynamics segment.
++  if (sharedPmeEnabled()) setStream();
+   // ncall++;
+   if (forwardType == CUFFT_R2C) {
+     cufftCheck(cufftExecR2C(forwardPlan, (cufftReal *)dataSrc, (cufftComplex *)dataDst));
+@@ -181,6 +296,8 @@
+ 
+ void CudaFFTCompute::backward() {
+   cudaCheck(cudaSetDevice(deviceID));
++  // Restore the offload stream after a resident dynamics segment.
++  if (sharedPmeEnabled()) setStream();
+   if (backwardType == CUFFT_C2R) {
+     // if (ncall == 1) {
+     //   if (plantype == 1)
+@@ -559,7 +676,7 @@
+   grid_data = NULL;
+   grid_data_len = 0;
+   #endif
+-  allocate_device<float>(&data, dataSize);
++  acquirePmeGrid<float>(&data, dataSize, 0);
+   setupGridData(data, xsize*ysize*zsize);
+   cudaCheck(cudaEventCreate(&gatherForceEvent));
+ }
+@@ -573,7 +690,7 @@
+   if (d_force != NULL) deallocate_device<CudaForce>(&d_force);
+   // if (d_patches != NULL) deallocate_device<PatchInfo>(&d_patches);
+   // deallocate_device<double>(&d_selfEnergy);
+-  deallocate_device<float>(&data);
++  releasePmeGrid<float>(&data);
+   cudaCheck(cudaEventDestroy(gatherForceEvent));
+ }
+ 
+@@ -1388,12 +1505,15 @@
+ 
+ #if defined(NAMD_CUDA) || defined(NAMD_HIP)
+ 
++  // A script-task boundary makes the two PME execution paths exclusive.
++  // Complete any prior offload work before retargeting shared FFT plans.
++  if (sharedPmeEnabled()) cudaCheck(cudaDeviceSynchronize());
+   // set up cufft
+   forwardPlans = new cufftHandle[num_used_grids];
+   backwardPlans = new cufftHandle[num_used_grids];
+   for (size_t iGrid = 0; iGrid < num_used_grids; ++iGrid) {
+-    cufftCheck(cufftPlan3d(&(forwardPlans[iGrid]), k3, k2, k1, CUFFT_R2C));
+-    cufftCheck(cufftPlan3d(&(backwardPlans[iGrid]), k3, k2, k1, CUFFT_C2R));
++    acquirePmePlan(&(forwardPlans[iGrid]), k3, k2, k1, CUFFT_R2C);
++    acquirePmePlan(&(backwardPlans[iGrid]), k3, k2, k1, CUFFT_C2R);
+     cufftCheck(cufftSetStream(forwardPlans[iGrid], stream));
+     cufftCheck(cufftSetStream(backwardPlans[iGrid], stream));
+   }
+@@ -1416,8 +1536,8 @@
+ //     // if it is not aligned, padding is required
+ //     transize = (int(transize / texture_alignment) + 1) * texture_alignment;
+ //   }
+-  allocate_device<float>(&d_grids, num_used_grids * gridsize);
+-  allocate_device<float2>(&d_trans, num_used_grids * transize);
++  acquirePmeGrid<float>(&d_grids, num_used_grids * gridsize, 0);
++  acquirePmeGrid<float2>(&d_trans, num_used_grids * transize, 1);
+   gridTexObjArrays = new cudaTextureObject_t[num_used_grids];
+   for (size_t iGrid = 0; iGrid < num_used_grids; ++iGrid) {
+     // set up texture object
+@@ -1434,8 +1554,8 @@
+     cudaCheck(cudaCreateTextureObject(&(gridTexObjArrays[iGrid]), &resDesc, &texDesc, NULL));
+   }
+ #else
+-  allocate_device<float>(&d_grids, num_used_grids * gridsize);
+-  allocate_device<float2>(&d_trans, num_used_grids * transize);
++  acquirePmeGrid<float>(&d_grids, num_used_grids * gridsize, 0);
++  acquirePmeGrid<float2>(&d_trans, num_used_grids * transize, 1);
+ #endif
+   // calculate prefactors
+   double *bm1 = new double[k1];
+@@ -1473,17 +1593,19 @@
+ }
+ 
+ CudaPmeOneDevice::~CudaPmeOneDevice() {
++  cudaCheck(cudaSetDevice(deviceID));
++  if (sharedPmeEnabled()) cudaCheck(cudaStreamSynchronize(stream));
+   deallocate_device<float4>(&d_atoms);
+   deallocate_device<float3>(&d_forces);
+-  deallocate_device<float2>(&d_trans);
+-  deallocate_device<float>(&d_grids);
++  releasePmeGrid<float2>(&d_trans);
++  releasePmeGrid<float>(&d_grids);
+   deallocate_host<EnergyVirial>(&h_energyVirials);
+   deallocate_device<EnergyVirial>(&d_energyVirials);
+   deallocate_device<float>(&d_scaling_factors);
+ #if defined(NAMD_CUDA) || defined(NAMD_HIP)
+   for (size_t iGrid = 0; iGrid < num_used_grids; ++iGrid) {
+-    cufftCheck(cufftDestroy(forwardPlans[iGrid]));
+-    cufftCheck(cufftDestroy(backwardPlans[iGrid]));
++    releasePmePlan(forwardPlans[iGrid]);
++    releasePmePlan(backwardPlans[iGrid]);
+ #if defined(NAMD_CUDA) // only CUDA uses texture objects
+     cudaCheck(cudaDestroyTextureObject(gridTexObjArrays[iGrid]));
+ #endif

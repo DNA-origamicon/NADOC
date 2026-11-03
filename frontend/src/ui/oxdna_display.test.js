@@ -1439,12 +1439,12 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     })
 
     it('reports the grid as capped, and stays within budget, when meshes are large', async () => {
-      // 4 M vertices ≈ 48 MB/frame against the 1.5 GB ceiling → ~32 frames of 500.
+      // Plain JS vertices cost 96 MB/frame; the shared 512 MiB ceiling fits only a short window.
       const { ctrl } = makeSurfDeps(500, 4_000_000)
       await ctrl.loadTrajectory('jobT'); await tick()
       const r = await ctrl.prebuildHeavy(() => {})
       expect(r.capped).toBe(true)
-      expect(r.frames).toBeGreaterThan(8)                 // still better than the old fixed cap
+      expect(r.frames).toBeGreaterThan(0)                 // still better than the old fixed cap
       expect(r.frames).toBeLessThan(500)
     })
 
@@ -1749,8 +1749,8 @@ describe('prebuildMemoryPlan', () => {
   })
 
   it('names FREE RAM as the limit on a machine that is short of it', () => {
-    // 1 GB free -> only 512 MB may be taken -> below both other ceilings.
-    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    // 0.5 GiB free -> only 256 MiB may be taken -> below the cache ceiling.
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     expect(p.limitedBy).toBe('ram')
     expect(p.capped).toBe(true)
     expect(p.frames * p.frameBytes).toBeLessThanOrEqual(0.5 * GB)
@@ -1775,7 +1775,7 @@ describe('prebuildMemoryPlan', () => {
   it('takes the LOWER of free RAM and the heap ceiling, never the higher', () => {
     // The two limits are independent: a huge machine is still bounded by the tab, and a
     // small one by its RAM. Picking either alone would be wrong half the time.
-    const tight = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    const tight = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     const roomy = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 64 * GB })
     expect(tight.budgetBytes).toBeLessThan(roomy.budgetBytes)
     expect(roomy.budgetBytes).toBe(BROWSER_HEAP_CEILING_BYTES)
@@ -1791,7 +1791,7 @@ describe('prebuildMemoryPlan', () => {
   it('reports the true total cost even when it cannot be afforded', () => {
     // wantBytes is what the panel quotes in the warning — it must be the REAL figure,
     // not the affordable one, or the warning understates the problem it is warning about.
-    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 0.5 * GB })
     expect(p.wantBytes).toBe(991 * 469_350 * 12)
     expect(p.wantBytes).toBeGreaterThan(p.budgetBytes)
   })

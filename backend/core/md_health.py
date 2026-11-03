@@ -16,6 +16,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+from contextvars import ContextVar
+from functools import wraps
+import gc
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +28,122 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 logger = logging.getLogger(__name__)
+
+# One immutable topology per health evaluation, private coordinate readers.
+# Context-local ownership also isolates simultaneous requests and releases the
+# topology when the evaluation exits (including its error/early-return paths).
+_HEALTH_TOPOLOGIES = ContextVar('health_topologies', default=None)
+_HEALTH_READERS = ContextVar('health_readers', default=None)
+_HEALTH_REFERENCES = ContextVar('health_references', default=None)
+
+
+def _shared_health_topology(function):
+    @wraps(function)
+    def evaluate(*args, **kwargs):
+        token = _HEALTH_TOPOLOGIES.set({})
+        readers = []
+        reader_token = _HEALTH_READERS.set(readers)
+        reference_token = _HEALTH_REFERENCES.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            for reference in readers:
+                reader = reference()
+                if reader is not None:
+                    try:
+                        reader.trajectory.close()
+                    except Exception:
+                        pass  # closing a failed reader must not mask health results
+            reader = None
+            _HEALTH_TOPOLOGIES.get().clear()
+            _HEALTH_TOPOLOGIES.reset(token)
+            _HEALTH_READERS.reset(reader_token)
+            _HEALTH_REFERENCES.get().clear()
+            _HEALTH_REFERENCES.reset(reference_token)
+            if readers:
+                # MDAnalysis groups form cycles. Don't retain an old million-atom
+                # topology until a later interpreter-wide generation-2 collection.
+                gc.collect()
+    return evaluate
+
+
+def _read_reference_pdb(path, n_atoms):
+    """Read the first reference model into float32 coordinates in PSF order.
+
+    Health uses positions and the cell, not PDB occupancy/temperature columns.
+    Avoid PDBReader's full text, split-line list and per-coordinate strings.
+    Keep this helper standalone: remote health workers stage this module alone.
+    """
+    positions = np.empty((n_atoms, 3), dtype=np.float32)
+    dimensions = None
+    count = 0
+    with Path(path).open() as source:
+        for line in source:
+            record = line[:6]
+            if record == 'ENDMDL':
+                break
+            if record in ('ATOM  ', 'HETATM'):
+                if count >= n_atoms:
+                    raise ValueError('Reference PDB has more atoms than the PSF')
+                positions[count] = (line[30:38], line[38:46], line[46:54])
+                count += 1
+            elif record == 'CRYST1':
+                try:
+                    cell = np.array([line[6:15], line[15:24], line[24:33],
+                                     line[33:40], line[40:47], line[47:54]], dtype=np.float32)
+                    dimensions = None if np.allclose(cell, [1, 1, 1, 90, 90, 90]) else cell
+                except ValueError:
+                    dimensions = None  # match PDBReader's missing/invalid cell behavior
+    if count != n_atoms:
+        raise ValueError(f'Reference PDB has {count} atoms; PSF has {n_atoms}')
+    return positions, dimensions
+
+
+def _health_universe(psf, *coordinates, **kwargs):
+    import MDAnalysis as mda
+
+    cache = _HEALTH_TOPOLOGIES.get()
+    key = str(Path(psf).resolve())
+    topology = cache.get(key) if cache is not None else None
+    if topology is None:
+        from MDAnalysis.topology.PSFParser import PSFParser
+
+        class HealthPSFParser(PSFParser):
+            # Health uses identities, residue membership and charges; all pair
+            # definitions come from atom names/sidecars/geometry, never PSF bonds.
+            # This topology stays private to health, including on remote workers.
+            format = 'NADOC_HEALTH_PSF'
+
+            def _parse_sec(self, psffile, section_info):
+                if section_info[0] != 'NATOM':
+                    # The parent parser's EOF path installs empty bonded attrs.
+                    raise StopIteration
+                return super()._parse_sec(psffile, section_info)
+
+        with HealthPSFParser(psf) as parser:
+            topology = parser.parse()
+        if cache is not None:
+            cache[key] = topology
+    if len(coordinates) == 1 and isinstance(coordinates[0], (str, Path)) and Path(coordinates[0]).suffix.lower() == '.pdb' and not kwargs:
+        path = Path(coordinates[0])
+        stat = path.stat()
+        reference_key = (key, str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+        references = _HEALTH_REFERENCES.get()
+        reference = references.get(reference_key) if references is not None else None
+        if reference is None:
+            reference = _read_reference_pdb(path, topology.n_atoms)
+            if references is not None:
+                references[reference_key] = reference
+        positions, dimensions = reference
+        # Each reader owns its coordinates; transformations or caller writes must
+        # never corrupt the reference used by another metric in this evaluation.
+        universe = mda.Universe(topology, positions.copy()[None, ...], format='MEMORY', dimensions=dimensions)
+    else:
+        universe = mda.Universe(topology, *coordinates, **kwargs)
+    readers = _HEALTH_READERS.get()
+    if readers is not None:
+        readers.append(weakref.ref(universe))
+    return universe
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -413,9 +533,8 @@ def build_c1_pairs(
     touch one are skipped so these bases never contribute a (weak, floppy) pair
     that then "fails" during dynamics and depresses the health fraction.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
 
-    u = mda.Universe(str(psf), str(pdb))
+    u = _health_universe(str(psf), str(pdb))
     c1 = _select_c1(u)
     pos = c1.positions
     c1_index = {atom.residue.ix: i for i, atom in enumerate(c1)}
@@ -496,12 +615,11 @@ def c1_metrics_from_dcd(
     Returns None if the DCD does not yet have enough frames.
     Returns {"error": ...} on read failure.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
 
     if not dcd.exists() or dcd.stat().st_size == 0:
         return None
     try:
-        u = mda.Universe(str(psf), str(dcd))
+        u = _health_universe(str(psf), str(dcd))
         n = len(u.trajectory)
         if n <= safe_back:
             return None
@@ -543,9 +661,8 @@ def build_wc_pairs(
     spurious WC pair; excluding them keeps the WC fraction measuring the intended
     duplex.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
 
-    u = mda.Universe(str(psf), str(pdb))
+    u = _health_universe(str(psf), str(pdb))
     residue_pairs = _reference_residue_pairs(
         u, psf, exclude_residues=exclude_residues, wc_only=True
     )
@@ -663,9 +780,8 @@ def wc_metrics_from_dcd(
     ref_delta_ang: float = 0.75,
 ) -> dict:
     """Return WC metrics for a specific frame in a DCD."""
-    import MDAnalysis as mda  # noqa: PLC0415
 
-    u = mda.Universe(str(psf), str(pdb), str(dcd))
+    u = _health_universe(str(psf), str(pdb), str(dcd))
     u.trajectory[frame]
     box = u.trajectory.ts.dimensions
     L = box[:3] if box is not None and len(box) >= 3 else None
@@ -694,9 +810,8 @@ def wc_window_metrics_from_dcd(
     bounded window is only the advisory scalar shown to a person, where one stretched
     thermal contact in one snapshot should not masquerade as global duplex damage.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
 
-    u = mda.Universe(str(psf), str(dcd))
+    u = _health_universe(str(psf), str(dcd))
     stop = len(u.trajectory) - max(0, int(safe_back))
     if stop <= 0:
         raise ValueError("DCD has no complete frames for WC window")
@@ -750,6 +865,7 @@ def _latest_segment_dcd(output_dir: Path, segment_name: str) -> Path:
     return conts[-1] if conts else base
 
 
+@_shared_health_topology
 def run_health_check(
     package_dir: Path,
     segment_name: str,
@@ -841,14 +957,13 @@ def run_health_check(
     per_frame_ran = False
     diagnostics_error: Optional[str] = None
     try:
-        import MDAnalysis as mda  # noqa: PLC0415
 
         # NOTE the topology-only Universe for the DCD.  Passing the PDB as a second
         # coordinate file (as this used to) builds a ChainReader whose frame 0 is the
         # reference structure, not a trajectory frame — which silently shifted
         # wc_per_frame (read by the early-stop accelerator) by one and made the [-1]
         # scalars below describe a different instant than c1_paired_fraction.
-        u_all = mda.Universe(str(psf), str(dcd))
+        u_all = _health_universe(str(psf), str(dcd))
         try:
             dna_idx, ion_idx = _shell_selections(u_all)
             charges = u_all.atoms.charges
@@ -859,8 +974,10 @@ def run_health_check(
         # The tutorial's broken-bp count is (idealised intact) − (this frame's intact),
         # so the reference frame sets the baseline.
         don_idx, acc_idx = wc_hbond_atoms(u_all)
-        u_ref = mda.Universe(str(psf), str(pdb))
+        u_ref = _health_universe(str(psf), str(pdb))
         n_expected = count_intact_base_pairs(u_ref.atoms.positions, don_idx, acc_idx)
+        u_ref.trajectory.close()
+        del u_ref
 
         n_frames = len(u_all.trajectory)
         # Honour safe_back here too: NAMD may be mid-write at the DCD tail while a live

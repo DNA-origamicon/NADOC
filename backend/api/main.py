@@ -97,6 +97,7 @@ from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
 from backend.api.routes_md_thinning import router as md_thinning_router
 from backend.api.routes_md_plan import router as md_plan_router
+from backend.api.routes_md_runtime import router as md_runtime_router
 from backend.api.routes_md_queue import router as md_queue_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_lammps import router as lammps_router
@@ -384,6 +385,14 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+from backend.core.memory_budget import MemoryBudgetExceeded
+
+
+@app.exception_handler(MemoryBudgetExceeded)
+async def _memory_budget_error_handler(request, exc):
+    return ORJSONResponse(status_code=409,
+                         content={'detail': str(exc), 'code': 'memory_budget_exceeded'})
+
 
 @app.exception_handler(CpdCapabilityError)
 async def _cpd_capability_error_handler(request, exc):
@@ -497,6 +506,7 @@ app.include_router(md_router, prefix="/api")
 app.include_router(md_metrics_router, prefix="/api")
 app.include_router(md_thinning_router, prefix="/api")
 app.include_router(md_plan_router, prefix="/api")
+app.include_router(md_runtime_router, prefix="/api")
 app.include_router(md_queue_router, prefix="/api")
 app.include_router(oxdna_router, prefix="/api")
 app.include_router(peg_setup_router, prefix="/api")

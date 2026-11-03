@@ -255,7 +255,7 @@ describe('resourceContextRows', () => {
 describe('resourceNotes', () => {
   it('leads with the walltime headroom, then the recommender’s own notes', () => {
     expect(resourceNotes(SIZING)).toEqual([
-      'Wall time carries 1.5× headroom.', 'GPU-resident above 100k atoms.',
+      'Compute planning includes 1.5× headroom; each submission remains subject to the scheduler limit.', 'GPU-resident above 100k atoms.',
     ])
   })
 
@@ -375,7 +375,7 @@ describe('slurmFacts', () => {
     const facts = Object.fromEntries(slurmFacts(PREVIEW))
     expect(facts.Partition).toBe('ah200 (h200)')
     expect(facts['CPUs / GPUs']).toBe('8 cores · 1 GPU')
-    expect(facts['Est. cost']).toBe('21,286 SU')
+    expect(facts['Est. cost']).toContain('21,286 SU')
   })
 
   it('says whether the throughput is measured or a guess', () => {

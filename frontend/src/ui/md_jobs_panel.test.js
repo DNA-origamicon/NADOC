@@ -1535,6 +1535,29 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
+  it('persists draft box edits and reselects the saved values without a list refresh', async () => {
+    const {readFileSync}=await import('node:fs')
+    const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
+    for(const id of ['md-box-solvent-toggle','md-box-solvent-body'])document.body.append(source.getElementById(id))
+    const job={job_id:'draft-box',design_name:'Gerling',status:'draft',created_at:1,
+      prep_params:{padding_nm:6,box_mode:'bbox',threads:7}}
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    mdApi.updateMdDraftPreparation.mockImplementation(async(id,changes)=>({...job,prep_params:{...job.prep_params,...changes}}))
+    const panel=initMdJobsPanel()
+    await panel.selectJob(job.job_id)
+    const input=$('md-box-padding');input.value='3.5'
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))
+    await flushMicro()
+    expect(mdApi.updateMdDraftPreparation).toHaveBeenCalledWith(job.job_id,expect.objectContaining({padding_nm:3.5}))
+    expect(mdApi.updateMdDraftPreparation.mock.calls[0][1]).not.toHaveProperty('threads')
+    expect(mdApi.updateMetadata).not.toHaveBeenCalled()
+    panel.deselectJob()
+    await panel.selectJob(job.job_id)
+    expect(input.value).toBe('3.5')
+    expect($('md-box-view-details').checked).toBe(false)
+  })
+
   it('starts OPEN regardless of markup/persisted collapse; the heading click is a no-op', async () => {
     // Seed a stale "collapsed" preference + collapsed markup — a non-collapsible
     // section must ignore both and force itself open.
@@ -1559,6 +1582,23 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect($('md-jobs-adv-toggle')).toBeNull()
     expect($('md-jobs-adv-body')).toBeNull()
     expect($('md-jobs-new-btn')).not.toBeNull()
+  })
+
+  it('blocks queued Alpine deletion with a popup when disconnected', async () => {
+    clearDom()
+    mountIds({ 'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-jobs-list': 'div', 'md-jobs-detail': 'div' })
+    const job = { job_id: 'A', execution_target: 'alpine', status: 'queued', created_at: 1 }
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    mdApi.getClusterStatus.mockResolvedValue({ state: 'disconnected' })
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const panel = initMdJobsPanel()
+    await flushMicro()
+    await panel.selectJob('A')
+    expect(await panel.deleteSelected()).toBe(false)
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining('Connect to Alpine'))
+    alert.mockRestore()
   })
 
   it('keeps the real Alpine button gray and disabled across preparation/upload polling', async () => {

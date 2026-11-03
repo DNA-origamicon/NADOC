@@ -27,3 +27,17 @@ it('sends sparse preview intervals to the compact trajectory endpoint', async ()
   expect(url).toContain('frame_start=10&frame_end=100&frame_step=30')
   expect(url).toContain('stride=5')
 })
+
+it('bounds MD atoms, solvent and trajectory transfers before allocation', async () => {
+  const { getMdTrajectoryBin, getMdFramesAtomistic, getMdFramesSolventBin } = await import('./client.js')
+  const cancel = vi.fn(), getReader = vi.fn()
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200,
+    headers: { get: () => String(129 * 1024 * 1024) }, body: { cancel, getReader } })))
+  for (const run of [() => getMdTrajectoryBin('huge'),
+    () => getMdFramesAtomistic('huge', [0], { positionsOnly: true }),
+    () => getMdFramesSolventBin('huge', [0])]) {
+    await expect(run()).rejects.toThrow('memory limit')
+  }
+  expect(cancel).toHaveBeenCalledTimes(3)
+  expect(getReader).not.toHaveBeenCalled()
+})

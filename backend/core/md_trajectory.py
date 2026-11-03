@@ -19,6 +19,9 @@ they do not rebuild atoms from the design's idealized atomistic model.
 
 from __future__ import annotations
 
+from backend.core.md_topology import open_universe
+from backend.core.memory_budget import reserve_trajectory_response, check_array_budget
+
 from backend.core.trajectory_cache import persistent_analysis
 
 import json
@@ -271,7 +274,6 @@ def _build_md_nadoc_ctx(
     atom dictionaries and unused PSF bonded interactions. ``alignment_only=True``
     additionally omits heavy-atom and base-ring tables for primary-cell ions/box,
     whose coordinates require only the phosphate-derived display affine."""
-    import MDAnalysis as mda  # type: ignore
 
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES,
@@ -357,14 +359,14 @@ def _build_md_nadoc_ctx(
             with _universe_build_lock(universe_key):
                 cached_universe = _cache_get_universe(universe_key)
                 if cached_universe is None:
-                    u = mda.Universe(str(topology_path), trajectory_arg)
+                    u = open_universe(str(topology_path), trajectory_arg)
                     _cache_put_universe(universe_key, u)
                 else:
-                    u = mda.Universe(cached_universe._topology, trajectory_arg)
+                    u = open_universe(cached_universe._topology, trajectory_arg)
         else:
-            u = mda.Universe(cached_universe._topology, trajectory_arg)
+            u = open_universe(cached_universe._topology, trajectory_arg)
     except ImportError:
-        u = mda.Universe(str(topology_path), trajectory_arg)
+        u = open_universe(str(topology_path), trajectory_arg)
     # NOTE: no whole-system ``mda_unwrap`` transformation.  It make-wholes ALL ~1 M
     # atoms (incl. solvent) on EVERY frame seek — ~180 s/frame for a solvated origami,
     # the dominant cost of the flex map / trajectory.  It is redundant here: both
@@ -1346,6 +1348,7 @@ def md_frames_atomistic_bin(*args):
     return pack(*args)
 
 
+@reserve_trajectory_response
 def md_frames_atomistic(
     topology_path,
     segments,
@@ -1384,6 +1387,10 @@ def md_frames_atomistic(
     if positions_only:
         serials = np.asarray([int(m["serial"]) for m in (ctx.get("atom_meta") or [])], dtype=np.int64)
         n_serials = int(serials.max()) + 1 if len(serials) else 0
+    requested = {int(i) for i in frame_indices if 0 <= int(i) < len(raw_of)}
+    # Python floats/list slots plus JSON output, or full per-atom dictionaries.
+    per_frame = n_serials * 3 * 64 if positions_only else len(ctx.get("atom_meta") or []) * 2048
+    check_array_budget(len(requested) * per_frame)
     out: dict[str, object] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(raw_of):
@@ -1402,6 +1409,19 @@ def md_frames_atomistic(
     return out
 
 
+def _check_solvent_response_budget(sctx, opts, frame_count, n_serials=0):
+    waters = sctx.get("n_waters_total", 0) if opts.get("water", True) else 0
+    # The selector treats non-positive caps as unlimited.
+    if opts.get("max_waters") is not None and int(opts["max_waters"]) > 0:
+        waters = min(waters, int(opts["max_waters"]))
+    ions = sctx.get("n_ions", 0) if opts.get("ions", True) else 0
+    graphene = len(sctx.get("graphene_rows", ()))
+    per_frame = 1024 + waters * (36 if opts.get("atomistic") else 12) + ions * 16 + graphene * 12 + n_serials * 12
+    # Retained arrays, per-block bytes, joined result, packing/header overhead.
+    check_array_budget(4 * frame_count * per_frame)
+
+
+@reserve_trajectory_response
 def md_frames_solvent(
     topology_path,
     segments,
@@ -1452,14 +1472,14 @@ def md_frames_solvent(
     )
     graphene_only = design_strands is not None and not any(design_strands)
     if graphene_only:
-        import MDAnalysis as mda  # type: ignore
 
         paths = [str(p) for p in seg_paths]
         trajectory_arg = paths if len(paths) > 1 else paths[0]
-        u = mda.Universe(str(topology_path), trajectory_arg)
+        u = open_universe(str(topology_path), trajectory_arg)
         sctx = build_solvent_ctx(u, water=bool(o.get("water", True)))
         n = len(u.trajectory)
         raw_of = composite_raw_frame_map(segments, max_frames, stride)
+        _check_solvent_response_budget(sctx, o, len({int(i) for i in frame_indices if 0 <= int(i) < len(raw_of)}))
         frames: dict[int, dict] = {}
         for idx in sorted(set(int(i) for i in frame_indices)):
             if idx < 0 or idx >= len(raw_of):
@@ -1512,6 +1532,7 @@ def md_frames_solvent(
         )
 
     try:
+        _check_solvent_response_budget(sctx, o, len({int(i) for i in frame_indices if 0 <= int(i) < len(raw_of)}))
         frames: dict[int, dict] = {}
         for idx in sorted(set(int(i) for i in frame_indices)):
             if idx < 0 or idx >= len(raw_of):
@@ -1579,6 +1600,7 @@ def extract_solvent_frame_for(u, sctx, frame_out: dict, xf, **kw) -> dict:
     )
 
 
+@reserve_trajectory_response
 def md_frames_surface(
     topology_path,
     segments,
@@ -1605,6 +1627,9 @@ def md_frames_surface(
     )
     n = ctx["n_frames"]
     raw_of = composite_raw_frame_map(segments, max_frames, stride)
+    from backend.core.memory_sizes import retained_bytes
+
+    retained = 0
     out: dict[str, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(raw_of):
@@ -1636,6 +1661,9 @@ def md_frames_surface(
                 radius_scale=1.2 * radius_inflate,
             )
             mesh = smooth_mesh(mesh, iterations=smooth)
+        # Mesh size is geometry-dependent; reject before expanding NumPy data
+        # into Python numbers and JSON. Include accumulated prior frames.
+        check_array_budget(retained + (mesh.vertices.size + mesh.faces.size) * 96)
         entry = {
             "vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
             "faces": [int(f) for f in mesh.faces.ravel()],
@@ -1643,6 +1671,8 @@ def md_frames_surface(
         # Per-vertex identity, so the NAMD surface honours per-cluster colour + opacity
         # like every other surface. Without it the client has nothing to resolve against.
         entry.update(vertex_index_tables(mesh))
+        retained += 2 * retained_bytes(entry)
+        check_array_budget(retained)
         out[str(idx)] = entry
     return out
 
@@ -2486,6 +2516,7 @@ def _composite_indices(
     return out
 
 
+@reserve_trajectory_response
 def md_composite_trajectory(
     topology_path,
     segments,
@@ -2511,6 +2542,7 @@ def md_composite_trajectory(
     )
 
 
+@reserve_trajectory_response
 def md_composite_trajectory_bin(
     topology_path,
     segments,
@@ -2678,6 +2710,10 @@ def _md_composite_trajectory_data(
 
     report(0)
     n_keys = len(key_list)
+    from backend.core.memory_budget import check_array_budget
+    # Binary packing can temporarily own three float32 payloads. JSON additionally
+    # owns Python float/list objects. Require explicit smaller frame windows.
+    check_array_budget(picked_total * n_keys * 12 * (12 if binary else 48))
     out_frames = np.empty((picked_total, n_keys * 12), dtype="<f4") if binary else []
     out_stages: list[dict] = []
     markers: list[dict] = []
@@ -2932,7 +2968,6 @@ def md_occupancy(
     Runs inside ``md_analysis_runner``'s killable subprocess, so it must stay picklable in
     and out and must not rely on any module-level cache surviving the call.
     """
-    import MDAnalysis as mda  # type: ignore  # noqa: PLC0415  (heavy; lazy like its siblings)
 
     from backend.core.occupancy_core import (
         apply_fit_plan,
@@ -2953,8 +2988,7 @@ def md_occupancy(
 
     seg_counts: list[int] = []
     for _, _, dcd in segments:
-        su = mda.Universe(str(topology_path), str(dcd))
-        seg_counts.append(len(su.trajectory))
+        seg_counts.append(_dcd_complete_frame_count(dcd))
     if sum(seg_counts) == 0:
         return {"ready": False, "reason": "no trajectory frames yet"}
 

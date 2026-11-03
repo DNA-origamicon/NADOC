@@ -863,7 +863,7 @@ def library_file_jobs(path: str) -> dict:
 
 
 @router.delete("/library/file", status_code=200)
-def library_delete(path: str, delete_jobs: bool = False) -> dict:
+async def library_delete(path: str, delete_jobs: bool = False) -> dict:
     """Delete a workspace file or folder (folders are deleted recursively).
 
     With ``delete_jobs=true`` the MD / oxDNA job folders generated from this
@@ -885,6 +885,17 @@ def library_delete(path: str, delete_jobs: bool = False) -> dict:
                 + ", ".join(running),
             )
         from backend.core.job_archive import purge_index_entry
+
+        from backend.core import alpine_deletion, cluster_ssh
+        mgr = cluster_ssh.get_manager()
+        for _kind, j in jobs:
+            if j.execution_target == "alpine" and j.status == "queued" and not mgr.is_connected():
+                raise HTTPException(409, "Connect to Alpine before deleting queued jobs so they can be cancelled.")
+        for _kind, j in jobs:
+            try:
+                await alpine_deletion.prepare(_asm._WORKSPACE_DIR, j, mgr)
+            except Exception as exc:
+                raise HTTPException(502, f"Alpine deletion has not finished; cleanup will retry on reconnect: {exc}") from exc
 
         for _kind, j in jobs:
             job_dir = j.job_dir(_asm._WORKSPACE_DIR)

@@ -2885,11 +2885,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   async function deleteSelected() {
     if (!_selectedId) return false
     const job = _selectedJob()
+    const subtree = new Set([_selectedId, ...descendantIds(_jobs, _selectedId)])
+    if (_jobs.some(j => subtree.has(j.job_id) && j.execution_target === 'alpine' && j.status === 'queued')) {
+      const status = await api.getClusterStatus().catch(() => null)
+      if (status?.state !== 'connected') {
+        window.alert('Connect to Alpine before deleting a queued job or its parent so it can be cancelled. Then try Delete again.')
+        return false
+      }
+    }
     const nChildren = job ? descendantIds(_jobs, _selectedId).size : 0
     const { title, message, confirmLabel } = deleteConfirmMessage(job, nChildren)
     const ok = await showConfirm({ title, message, danger: true, confirmLabel })
     if (!ok) return false
     const r = await api.deleteOxdnaJob(_selectedId)
+    if (!r) {
+      window.alert(api.lastErrorMessage() || 'Job deletion failed. The job has been kept.')
+      return false
+    }
     const deletedIds = Array.isArray(r?.deleted) ? r.deleted : [_selectedId]
     const active = oxdnaDisplay?.activeJobId()
     if (active && deletedIds.includes(active)) _allDisplaysOff()

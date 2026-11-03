@@ -1646,11 +1646,11 @@ async def _finish_local_processing(job: MdJob, workspace_dir: Path) -> None:
     # for minutes exactly when a remote download reached 100%. Keep SSH on the main
     # loop, but move this purely local CPU/disk phase to a worker thread.
     await asyncio.to_thread(_finalize_local_bookkeeping, job, workspace_dir)
-    _record_learned_throughput(job, workspace_dir)
     if job.download_status and job.download_status.get("state") == "processing":
         job.download_status["state"] = "verified"
         job.download_status["processing_finished_at"] = time.time()
     job.status = MdStatus.completed
+    _record_learned_throughput(job, workspace_dir)
     job.error = None
     job.resumable = False
     job.fetch_attempts = 0
@@ -1729,6 +1729,8 @@ async def poll_remote_jobs(
     conn = conn or _default_conn()
     if not getattr(conn, "is_connected", lambda: False)():
         return []
+    from backend.core import alpine_deletion
+    await alpine_deletion.drain(workspace_dir, conn)
     from backend.core.alpine_download_queue import pending, recovery_order
     from backend.core.alpine_transfer_state import recover_downloads
     touched: list[str] = []
@@ -1837,15 +1839,18 @@ def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
     """Fold this completed remote run's measured Alpine throughput into the learned
     ns/day store, keyed by (cluster, partition, GRES, size-bucket), so a MIG run
     cannot distort whole-GPU estimates.  Best-effort; never raises."""
-    from backend.core import cluster_resources, cluster_throughput
+    from backend.core import cluster_throughput
 
     try:
         pkg = job.package_dir(workspace_dir)
-        nsday = cluster_resources.latest_ns_per_day(pkg / "output" / "metrics.jsonl")
-        if not nsday:
-            return
         manifest = _read_manifest(pkg) if (pkg / "manifest.json").exists() else {}
-        n_atoms = cluster_resources.n_atoms_from_manifest(manifest)
+        from backend.core.namd_planning import qualified_job_timing
+        if str(getattr(job.status,'value',job.status))!='completed':return
+        timing=qualified_job_timing(pkg,manifest)
+        # The cluster prior is resident. Offload needs its own calibration.
+        if not timing or not timing['gpu_resident']:return
+        nsday=timing['ns_per_day']
+        n_atoms = timing['n_atoms']
         partition = (job.resources or {}).get("partition", "")
         gres_type = (job.resources or {}).get("gres_type")
         cluster_throughput.record_throughput(
@@ -1855,6 +1860,7 @@ def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
             n_atoms=n_atoms,
             ns_per_day=nsday,
             gres_type=gres_type,
+            provenance=timing['provenance'],timestep_fs=timing['timestep_fs'],
         )
     except Exception:  # noqa: BLE001 — learning must not break job completion
         logger.warning(

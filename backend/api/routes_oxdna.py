@@ -2671,6 +2671,17 @@ async def delete_oxdna_job(job_id: str) -> dict:
         if j.archived and not (j.job_dir(ws) / "job.json").is_file():
             raise HTTPException(409, f"Storage is unavailable at {j.archive_path}; connect the drive before deleting this job.")
 
+    from backend.core import alpine_deletion, cluster_ssh
+    mgr = cluster_ssh.get_manager()
+    for j in (*descendants, job):
+        if j.execution_target == "alpine" and j.status == OxdnaStatus.queued and not mgr.is_connected():
+            raise HTTPException(409, "Connect to Alpine before deleting a queued job or its parent so it can be cancelled.")
+    for j in (*descendants, job):
+        try:
+            await alpine_deletion.prepare(ws, j, mgr)
+        except Exception as exc:
+            raise HTTPException(502, f"Alpine deletion has not finished; cleanup will retry on reconnect: {exc}") from exc
+
     deleted: list[str] = []
     for j in (*descendants, job):
         jd = j.job_dir(ws)

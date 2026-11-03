@@ -244,6 +244,15 @@ def _measure(psf, segments, ref, design, n_slices=0, max_frames=0,
 
 
 def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
+    from backend.core.memory_budget import exclusive_analysis
+    try:
+        with exclusive_analysis(on_wait=lambda reason:_set(run_id,phase=reason,eta_s=None)):
+            _compute_ready(run_id,job_id,req,ws)
+    except Exception as exc:
+        _set(run_id,state='error',error=str(exc))
+
+
+def _compute_ready(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
     from backend.core.md_trajectory import count_md_frames
 
     try:
@@ -608,6 +617,17 @@ class MdCpdTraceRequest(BaseModel):
 def _compute_cpd_trace(
     run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path
 ) -> None:
+    from backend.core.memory_budget import exclusive_analysis
+    try:
+        with exclusive_analysis(on_wait=lambda reason:_set(run_id,phase=reason,eta_s=None)):
+            _compute_cpd_trace_ready(run_id,job_id,req,ws)
+    except Exception as exc:
+        _set(run_id,state='error',error=str(exc))
+
+
+def _compute_cpd_trace_ready(
+    run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path
+) -> None:
     """Background pass: read the trajectory once and measure the weld coordinates."""
     from backend.core.cpd_metrics import weld_trace
 
@@ -618,7 +638,7 @@ def _compute_cpd_trace(
             _set(run_id, state="error", error=inputs)
             return
         psf, _ref, segments, design = inputs
-        _set(run_id, frames_total=None)
+        _set(run_id, frames_total=None, phase='Measuring trajectory')
 
         def _progress(done: int, total: int) -> None:
             _set(

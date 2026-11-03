@@ -47,15 +47,8 @@ from backend.core.slurm_script import (
     LIVE_METRICS_NAME,
 )
 
-# ── VRAM model ───────────────────────────────────────────────────────────────
-# Linear fits to the three measured points above. Both are ~0.4 GB fixed overhead
-# plus a per-atom slope; the offload fit reproduces all three within ~3%.
-VRAM_MB_PER_MATOM_OFFLOAD = 2100.0
-VRAM_MB_PER_MATOM_RESIDENT = 3212.0
-VRAM_MB_FIXED = 400.0
-
-# Leave headroom: the CUDA context, the display (if any), and NAMD's transient
-# peaks during patch-grid setup all sit on top of the steady-state figure.
+# Capacity headroom above the shared stage-memory admission allowance.
+# Exact package geometry and the target engine still require preflight.
 VRAM_SAFETY_FRACTION = 0.85
 
 
@@ -157,10 +150,13 @@ GPU_TYPES: tuple[GpuType, ...] = (
 
 
 def required_vram_mb(n_atoms: int, *, gpu_resident: bool) -> float:
-    """Steady-state VRAM for an ``n_atoms`` system, from the measured fits."""
-    matoms = n_atoms / 1_000_000.0
-    slope = VRAM_MB_PER_MATOM_RESIDENT if gpu_resident else VRAM_MB_PER_MATOM_OFFLOAD
-    return VRAM_MB_FIXED + slope * matoms
+    """Current admission allowance with unknown restraints conservatively included.
+
+    Exact stage geometry/PME is added by the planner and prepared launch check.
+    This is not a steady-state prediction or cross-engine qualification.
+    """
+    from backend.core.namd_planning import memory_plan
+    return memory_plan(n_atoms,resident=gpu_resident)['gpu_mib']
 
 
 def fits_on(gpu: GpuType, n_atoms: int, *, gpu_resident: bool) -> bool:

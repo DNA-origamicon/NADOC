@@ -1,13 +1,15 @@
+import { TrajectoryMemoryMap } from './trajectory_memory.js'
+
 /** Exact simulation coordinates only. One in-flight batch; byte-bounded retention.
  * Copies compact views so evicting a frame also releases its response buffer.
  * Context includes the display epoch: a cancelled load cannot warm the next one.
  */
 export function createVRExactAtomCache({ context, fetchFrames, budgetBytes = 32 * 1024 * 1024 }) {
-  let key = '', frames = new Map(), bytes = 0, tail = Promise.resolve(), revision = 0, prepared = new WeakMap()
+  let key = '', frames = new TrajectoryMemoryMap({ maxBytes: budgetBytes }), tail = Promise.resolve(), revision = 0, prepared = new WeakMap()
   const size = data => (data?.byteLength ?? (data?.length ?? 0) * 8) + (data?.serialMap?.byteLength ?? 0)
   const copy = data => data?.dense ? { ...data, dense: data.dense.slice(), serialMap: data.serialMap.slice() }
     : data.slice()
-  function clear() { key = ''; frames.clear(); bytes = 0; prepared = new WeakMap() }
+  function clear() { key = ''; frames.clear(); prepared = new WeakMap() }
   function reset() { revision++; clear() }
   async function get(indices) {
     const expected = context(), started = revision
@@ -24,12 +26,8 @@ export function createVRExactAtomCache({ context, fetchFrames, budgetBytes = 32 
         if (!data) throw new Error(`Missing exact atomic trajectory frame ${i + 1}`)
         out[i] = data
         if (!frames.has(i) && size(data) <= budgetBytes) {
-          const retained = copy(data), cost = size(retained)
-          while (bytes + cost > budgetBytes && frames.size) {
-            const oldest = frames.keys().next().value
-            bytes -= size(frames.get(oldest)); frames.delete(oldest)
-          }
-          frames.set(i, retained); bytes += cost; out[i] = retained
+          const retained = copy(data)
+          frames.set(i, retained); out[i] = retained
         }
       }
       return out

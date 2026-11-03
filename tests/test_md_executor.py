@@ -1008,7 +1008,7 @@ def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
     assert not any(k.endswith(".resume.conf") for k in conn.put_contents)
 
 
-def test_reconcile_completed_records_learned_throughput(tmp_path, monkeypatch):
+def test_reconcile_completed_does_not_learn_unprovenanced_metrics(tmp_path, monkeypatch):
     from backend.core import cluster_throughput
 
     job = _make_prepared_job(tmp_path)
@@ -1040,7 +1040,7 @@ def test_reconcile_completed_records_learned_throughput(tmp_path, monkeypatch):
     learned = cluster_throughput.lookup_throughput(
         tmp_path, cluster="alpine", partition="acpu", n_atoms=100_000
     )
-    assert learned == 12.5
+    assert learned is None
 
 
 # ── cancel_job + poll_remote_jobs ─────────────────────────────────────────────

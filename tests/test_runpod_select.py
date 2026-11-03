@@ -4,6 +4,9 @@ Pure-function tests (no network) — these encode the RUNBOOK §7 lessons this s
 the git build has no sm_120, small boxes want a cheap-but-not-glacial card, out-of-stock cards
 must drop, and live prices override the pinned table.
 """
+from backend.core.namd_allocation_model import QUALIFIED_ENGINE
+PROOF = dict(engine_sha256=QUALIFIED_ENGINE, configuration_sha256='a'*64, gpu='test GPU', driver='test driver', completed=True, outputs_verified=True)
+
 
 from backend.core.runpod_select import (
     estimate_rate,
@@ -149,21 +152,21 @@ def test_estimate_rate_scales_with_atoms():
 # ── learned per-arch rate registry ───────────────────────────────────────────────
 def test_record_rate_running_mean(tmp_path):
     p = tmp_path / "rates.json"
-    record_rate("sm_89", SMALL, 14.3, path=p)  # per-Matom 10.9
-    record_rate("sm_89", SMALL, 21.5, path=p)  # per-Matom 16.4
+    record_rate("sm_89", SMALL, 14.3, path=p, provenance=PROOF)  # per-Matom 10.9
+    record_rate("sm_89", SMALL, 21.5, path=p, provenance=PROOF)  # per-Matom 16.4
     reg = load_rate_registry(p)
-    assert reg["sm_89"]["n"] == 2
-    assert abs(reg["sm_89"]["ms_per_matom"] - (14.3 + 21.5) / 2 / (SMALL / 1e6)) < 0.05
+    assert reg[f"sm_89|{PROOF['gpu']}"]["n"] == 2
+    assert abs(reg[f"sm_89|{PROOF['gpu']}"]["ms_per_matom"] - (14.3 + 21.5) / 2 / (SMALL / 1e6)) < 0.05
 
 
 def test_ms_per_matom_prefers_learned_above_threshold():
     assert (
-        ms_per_matom("sm_89", registry={"sm_89": {"ms_per_matom": 11.0, "n": 3}})
+        ms_per_matom("sm_89", gpu_key=PROOF["gpu"], registry={f"sm_89|{PROOF['gpu']}": {"ms_per_matom": 11.0, "n": 3, "provenance": PROOF}})
         == 11.0
     )
     # below the sample floor -> conservative static prior (15.0), not the thin learned value
     assert (
-        ms_per_matom("sm_89", registry={"sm_89": {"ms_per_matom": 11.0, "n": 1}})
+        ms_per_matom("sm_89", gpu_key=PROOF["gpu"], registry={f"sm_89|{PROOF['gpu']}": {"ms_per_matom": 11.0, "n": 1, "provenance": PROOF}})
         == 15.0
     )
     assert ms_per_matom("sm_89") == 15.0  # no registry -> static
@@ -172,7 +175,7 @@ def test_ms_per_matom_prefers_learned_above_threshold():
 def test_estimate_rate_uses_learned_registry():
     static = estimate_rate("sm_89", SMALL, 0.69)
     learned = estimate_rate(
-        "sm_89", SMALL, 0.69, registry={"sm_89": {"ms_per_matom": 10.9, "n": 5}}
+        "sm_89", SMALL, 0.69, gpu_key=PROOF["gpu"], registry={f"sm_89|{PROOF['gpu']}": {"ms_per_matom": 10.9, "n": 5, "provenance": PROOF}}
     )
     assert learned["ns_day"] > static["ns_day"]  # learned 10.9 < static 15 -> faster
 

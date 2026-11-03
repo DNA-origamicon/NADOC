@@ -75,8 +75,9 @@ def _drain():
         memory_limited = False
         try:
             from backend.core.trajectory_priority import PREEMPTED, foreground_active
+            from backend.core.memory_budget import simulation_active
 
-            while foreground_active():
+            while foreground_active() or simulation_active():
                 time.sleep(0.1)
             env = dict(os.environ, NADOC_PRECOMPUTE_WORKER="1", OMP_NUM_THREADS="1",
                        OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
@@ -206,7 +207,12 @@ def main():
         # Only computations inside the atomic artifact cache may be interrupted;
         # reference/snapshot preparation outside it must finish its file writes.
         priority.BACKFILL_PROCESS = True
-        prepare(*sys.argv[1:])
+        from backend.core.memory_budget import reserve, simulation_active, exclusive_analysis
+        if simulation_active():
+            sys.exit(priority.PREEMPTED)
+        with exclusive_analysis():
+            with reserve(2 * 1024**3, kind='background', label='Background trajectory analysis'):
+                prepare(*sys.argv[1:])
 
 
 if __name__ == "__main__":

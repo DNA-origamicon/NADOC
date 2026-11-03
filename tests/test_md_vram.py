@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from backend.core import md_vram as V
+
+
+@pytest.fixture(autouse=True)
+def isolated_memory_registry(tmp_path, monkeypatch):
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR',str(tmp_path/'memory'))
 
 
 # ── Failure detection ─────────────────────────────────────────────────────────
@@ -185,25 +191,25 @@ def test_classify_vram_fit_tiers():
     )
 
 
-def test_classify_vram_fit_missing_data_never_gates():
-    assert V.classify_vram_fit(None) == "ok"
-    assert V.classify_vram_fit({}) == "ok"
+def test_classify_vram_fit_missing_data_blocks_and_zero_capacity_is_real():
+    assert V.classify_vram_fit(None) == "unknown"
+    assert V.classify_vram_fit({}) == "unknown"
     assert (
-        V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "ok"
-    )  # unknown cap
+        V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "a3"
+    )
 
 
 
 def test_preflight_vram_advice_skips_when_gpu_unreadable(monkeypatch):
     monkeypatch.setattr(V, "detect_vram_mb", lambda *a, **k: None)
     out = V.preflight_vram_advice(object(), devices="0")
-    assert out == {"skipped": True, "tier": "ok"}
+    assert out["skipped"] is False and out["tier"] == "unknown"
 
 
 def test_preflight_vram_advice_skips_cpu_without_host(monkeypatch):
     monkeypatch.setattr(V, "detect_host_ram_mb", lambda *a, **k: None)
     out = V.preflight_vram_advice(object(), devices="cpu")
-    assert out["skipped"] is True and out["tier"] == "ok"
+    assert out["skipped"] is False and out["tier"] == "unknown"
 
 
 # ── Error-line extraction (frontend cause surfacing) ──────────────────────────
@@ -427,3 +433,41 @@ def test_gpu_contention_ignores_small_and_own_processes():
 def test_gpu_contention_no_nvidia_smi():
     out = V.gpu_contention_summary(None)
     assert out["available"] is False and out["busy"] is False
+
+
+def test_preflight_reduced_gerling_box_includes_simultaneous_health_ram(monkeypatch):
+    monkeypatch.setattr(V, "detect_vram_mb", lambda *_: 12288)
+    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 12473)
+    monkeypatch.setattr(V, "estimate_profile_from_design", lambda *_args, **_kwargs: {
+        "dna_atoms": 3156200, "full_water": 0, "ion_atoms": 0,
+    })
+    out = V.preflight_vram_advice(object(), padding_nm=2)
+    assert out["tier"] == "a3"
+    assert out["bound"] == "host RAM"
+    assert out["current_vram_mb"] == 11797  # includes the pre-preparation restraint allowance
+    assert out["current_host_mb"] > out["host_mb"]
+    assert out["execution_modes"]["offload"]["ram_mib"] < out["execution_modes"]["resident"]["ram_mib"]
+
+
+def test_preflight_capacity_and_reserve_are_separate(monkeypatch):
+    monkeypatch.setattr(V, "detect_vram_mb", lambda *_: 12288)
+    cases = [
+        (1000000, 13000, "0", "ok", "host RAM"),
+        (3500000, 30000, "0", "a3", "GPU"),
+        (4000000, 13000, "0", "a3", "host RAM"),
+        (3156200, 7000, "0", "a3", "host RAM"),
+        (3156200, 12473, "cpu", "a3", "host RAM"),
+    ]
+    for atoms, host, devices, tier, bound in cases:
+        monkeypatch.setattr(V, "detect_host_ram_mb", lambda: host)
+        monkeypatch.setattr(V, "estimate_profile_from_design", lambda *_args, **_kwargs: {
+            "dna_atoms": atoms, "full_water": 0, "ion_atoms": 0, "box_nm": [40,40,40],
+        })
+        out = V.preflight_vram_advice(object(), devices=devices)
+        assert (out["tier"], out["bound"]) == (tier, bound)
+
+
+def test_capacity_boundary_is_inclusive_but_overflow_still_blocks():
+    assert V.classify_vram_fit({"current_atoms": 200, "max_atoms": 150, "capacity_atoms": 200}) == "headroom"
+    assert V.classify_vram_fit({"current_atoms": 201, "max_atoms": 150, "capacity_atoms": 200}) == "a3"
+    assert V.classify_vram_fit({"current_atoms": 201, "max_atoms": 0, "capacity_atoms": 200}) == "a3"

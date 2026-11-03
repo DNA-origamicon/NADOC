@@ -130,6 +130,13 @@ class TestTrajectoryBytesTrackDcdFreq:
         assert 60 * gib < predicted < 120 * gib
 
 
+@pytest.fixture
+def current_probe_rate(monkeypatch):
+    from backend.core import namd_timing
+    monkeypatch.setattr(namd_timing, 'local_step_ms', lambda *args, **kwargs: 6.0)
+
+
+@pytest.mark.usefixtures("current_probe_rate")
 class TestThroughputEstimate:
     def test_a_microsecond_run_is_predicted_in_days_not_hours(self) -> None:
         est = _throughput_estimate(62_677, 1000.0, 4.0)
@@ -162,6 +169,7 @@ class TestThroughputEstimate:
         assert est["throughput_source"] is None
 
 
+@pytest.mark.usefixtures("current_probe_rate")
 class TestMeasuredThroughputBeatsTheModel:
     """A run that has actually happened must outrank the atom-count guess.
 
@@ -176,7 +184,7 @@ class TestMeasuredThroughputBeatsTheModel:
         measured = _throughput_estimate(
             62_677, 1000.0, 4.0, measured=(220.0, 2.0, "d_01_production")
         )
-        assert modelled["throughput_source"] == "model"
+        assert modelled["throughput_source"] == "current-engine-probes"
         assert measured["throughput_source"] == "measured:d_01_production"
         # 220 ns/day at 2 fs is 440 at 4 fs; the model said ~59.
         assert measured["est_ns_per_day"] == pytest.approx(440.0, rel=0.01)
@@ -192,7 +200,7 @@ class TestMeasuredThroughputBeatsTheModel:
 
     def test_the_model_still_covers_a_package_that_never_ran(self) -> None:
         est = _throughput_estimate(62_677, 100.0, 4.0, measured=None)
-        assert est["throughput_source"] == "model"
+        assert est["throughput_source"] == "current-engine-probes"
         assert est["est_ns_per_day"] > 0
 
     @pytest.mark.parametrize(
@@ -200,7 +208,7 @@ class TestMeasuredThroughputBeatsTheModel:
     )
     def test_a_nonsense_measurement_falls_back_to_the_model(self, bad) -> None:
         est = _throughput_estimate(62_677, 100.0, 4.0, measured=bad)
-        assert est["throughput_source"] == "model"
+        assert est["throughput_source"] == "current-engine-probes"
 
     def test_nothing_measurable_and_no_atoms_estimates_nothing(self) -> None:
         est = _throughput_estimate(0, 100.0, 4.0, measured=None)

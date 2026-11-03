@@ -1,0 +1,264 @@
+{
+  "schema": "namd-timing-v2",
+  "provenance": {
+    "engine_sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf",
+    "gpu": "NVIDIA GeForce RTX 3080 Ti",
+    "driver": "580.178.04",
+    "threads": 16,
+    "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor"
+  },
+  "source": ".development-artifacts/namd-script-scheduling-20261102/engine",
+  "basis": "Standard local resident probes plus stage-specific geometry fits and one narrowly scoped long offload case. Hardware identity required; planning spreads are not statistical confidence intervals.",
+  "timing_qualified": false,
+  "excludes": [
+    "startup (separate lifecycle component)",
+    "health and trajectory processing (separate lifecycle components)",
+    "transfers",
+    "queueing",
+    "retries"
+  ],
+  "points": [
+    {
+      "atoms": 313861,
+      "ms_per_step": 5.295725,
+      "cases": [
+        {
+          "case": "6hb_fast",
+          "configuration_sha256": "23aacf14d3b15b14c9e0c5f216b9d93951a06b386d2ae58d0c4b6fa63d35dabf",
+          "ms_per_step": 5.38351
+        },
+        {
+          "case": "6hb_aksimentiev",
+          "configuration_sha256": "3c9ba8b0310f2ac6e47db5d048d059e9c40065f9e06ee6927a6530c6100bb468",
+          "ms_per_step": 5.20794
+        }
+      ]
+    },
+    {
+      "atoms": 472630,
+      "ms_per_step": 7.981545,
+      "cases": [
+        {
+          "case": "2hb_fast",
+          "configuration_sha256": "b4b0fb905981c0847df4b40179a11efa68b613d5d32a07970630dfd93f236158",
+          "ms_per_step": 8.28543
+        },
+        {
+          "case": "2hb_aksimentiev",
+          "configuration_sha256": "905c57feefed67f78966d70bae8feca931bd009545b2105dfe3d16055d55f547",
+          "ms_per_step": 7.6776599999999995
+        }
+      ]
+    },
+    {
+      "atoms": 1936696,
+      "ms_per_step": 40.139525,
+      "cases": [
+        {
+          "case": "3x6hb_fast",
+          "configuration_sha256": "275ff60b1704c5ad2df47a2944db0b22269f031a6db47934eb42ba79cd40d614",
+          "ms_per_step": 41.849
+        },
+        {
+          "case": "3x6hb_aksimentiev",
+          "configuration_sha256": "9e95cc09309af88787320abaace7b265972c3e6c23f8daf63ce9162700c86ed8",
+          "ms_per_step": 38.43005
+        }
+      ]
+    },
+    {
+      "atoms": 2979096,
+      "ms_per_step": 63.4523,
+      "cases": [
+        {
+          "case": "18hb_fast",
+          "configuration_sha256": "a436991a3a6cac63cd63240e975f3a6c0140416871b809fd8a925f61c62ee6e1",
+          "ms_per_step": 69.315
+        },
+        {
+          "case": "18hb_aksimentiev",
+          "configuration_sha256": "92346bbe47cf1bd9e5f967420580eeed80263033a2147a21a70a803926d62878",
+          "ms_per_step": 57.589600000000004
+        }
+      ]
+    }
+  ],
+  "stage_models": [
+    {
+      "mode": "minimization",
+      "threads": 16,
+      "coefficients": [
+        0.0,
+        40.92313417402529,
+        0.0,
+        0.0
+      ],
+      "count": 14,
+      "groups": 7,
+      "atoms": [
+        183146,
+        2174291
+      ],
+      "ratio_range": [
+        0.10328246408780717,
+        1.2667066011460324
+      ],
+      "startup_s": 2.048276286970605,
+      "max_pme_points_per_atom": 25.725112781954888,
+      "max_grid_aspect": 5.7272727272727275
+    },
+    {
+      "mode": "resident",
+      "threads": 16,
+      "coefficients": [
+        0.0,
+        19.1446413693772,
+        0.30075867201739703,
+        0.0
+      ],
+      "count": 322,
+      "groups": 7,
+      "atoms": [
+        183146,
+        2174291
+      ],
+      "ratio_range": [
+        0.8221049554737677,
+        1.2942854930365921
+      ],
+      "startup_s": 2.574093532630913,
+      "max_pme_points_per_atom": 25.725112781954888,
+      "max_grid_aspect": 5.7272727272727275
+    }
+  ],
+  "stage_evidence": {
+    "source": ".development-artifacts/namd-script-scheduling-20261102/features.json",
+    "rows": 336,
+    "validation": "Leave one geometry group out; ratios are observed spreads, not confidence bounds",
+    "models": [
+      {
+        "mode": "minimization",
+        "threads": 16,
+        "coefficients": [
+          0.0,
+          40.92313417402529,
+          0.0,
+          0.0
+        ],
+        "count": 14,
+        "groups": 7,
+        "atoms": [
+          183146,
+          2174291
+        ],
+        "ratio_range": [
+          0.10328246408780717,
+          1.2667066011460324
+        ],
+        "startup_s": 2.048276286970605
+      },
+      {
+        "mode": "minimization",
+        "threads": 32,
+        "coefficients": [
+          31.60377653848041,
+          0.0,
+          0.0,
+          0.050256585443482577
+        ],
+        "count": 3,
+        "groups": 2,
+        "atoms": [
+          758204,
+          786194
+        ],
+        "ratio_range": null,
+        "startup_s": 32.3200308979612
+      },
+      {
+        "mode": "resident",
+        "threads": 16,
+        "coefficients": [
+          0.0,
+          19.1446413693772,
+          0.30075867201739703,
+          0.0
+        ],
+        "count": 322,
+        "groups": 7,
+        "atoms": [
+          183146,
+          2174291
+        ],
+        "ratio_range": [
+          0.8221049554737677,
+          1.2942854930365921
+        ],
+        "startup_s": 2.574093532630913
+      },
+      {
+        "mode": "resident",
+        "threads": 32,
+        "coefficients": [
+          13.979817962089067,
+          0.0,
+          1.5270646494934665,
+          0.0
+        ],
+        "count": 69,
+        "groups": 2,
+        "atoms": [
+          758204,
+          786194
+        ],
+        "ratio_range": [
+          0.4052390112094627,
+          2.7965987895058197
+        ],
+        "startup_s": 4.004778729905635
+      }
+    ],
+    "exclusions": "Only eligible current-engine completed cases with at least three TIMING intervals; exclude 32-thread models from local 16-thread calibration."
+  },
+  "offload_long_case": {
+    "atoms": 786194,
+    "grid": [
+      280,
+      280,
+      280
+    ],
+    "pairlistdist": 24,
+    "margin": 30,
+    "threads": 32,
+    "ms_per_step": 52.418955217931945,
+    "low_ms": 31.31455557228066,
+    "high_ms": 105.86579820980114,
+    "sources": [
+      {
+        "id": "cube20_offload_fast/sustain",
+        "steps": 60000,
+        "elapsed_s": 2348.5916679210495,
+        "configuration_sha256": "bb9464494cba5f7f500e99f41017714d6727b49f6e9f8fa7c98ff7f7b6add876"
+      },
+      {
+        "id": "cube20_offload_fast/restart",
+        "steps": 60000,
+        "elapsed_s": 3325.9381317200605,
+        "configuration_sha256": "ba8ac55ed61756c8eefe6c7f0d6e00144a3e937dee91d06e1f0acc1b9ac37ea3"
+      },
+      {
+        "id": "cube20_offload_aksimentiev/sustain",
+        "steps": 32000,
+        "elapsed_s": 2605.927340548951,
+        "configuration_sha256": "af8828a878b8f902dafab6667f2e3e3817b334f3316fb7aa3f1db6eb1069dd21"
+      },
+      {
+        "id": "cube20_offload_aksimentiev/restart",
+        "steps": 32000,
+        "elapsed_s": 1580.9794636969455,
+        "configuration_sha256": "a8ee51bdd2ce616ac7da26c31769a39fd6b1c3bdb47fd9ab55c9e6d3c362eadc"
+      }
+    ],
+    "basis": "Four completed sustained/restart phases of one geometry; includes startup and concurrent health/playback; empirical range, not independent coverage."
+  }
+}

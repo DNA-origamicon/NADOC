@@ -98,3 +98,29 @@ def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path, st
     frames = np.frombuffer(payload, dtype='<f4', offset=(20 + header_len + 3) & ~3).reshape(count, 12)
     assert np.allclose(frames[:,0], expected)
     assert np.allclose(frames[:,9], np.array(expected) + .4)
+
+
+def test_large_trajectory_requires_pages_before_extracting_frames(monkeypatch, tmp_path):
+    from backend.core import md_trajectory as mt, memory_budget as budget
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR', str(tmp_path / 'memory'))
+    monkeypatch.setattr(budget.psutil, 'virtual_memory', lambda: SimpleNamespace(available=8*1024**3))
+    n_keys = 20000
+    monkeypatch.setattr(mt, '_build_playback_ctx', lambda *a, **kw: {
+        'p_order': [('h', i, 'F') for i in range(n_keys)], 'term_specs': []})
+    monkeypatch.setattr(mt, '_dcd_complete_frame_count', lambda _: 200)
+    seen = []
+    def extract(ctx, frame):
+        seen.append(frame)
+        return np.full((n_keys, 12), frame, dtype=np.float32)
+    monkeypatch.setattr(mt, '_extract_md_full_frame', extract)
+    args = ('x.psf', [('a', 'md', tmp_path / 'a.dcd')], 'x.pdb', object())
+    with pytest.raises(budget.MemoryBudgetExceeded, match='buffer limit'):
+        mt.md_composite_trajectory_bin(*args)
+    assert seen == []
+    payload = mt.md_composite_trajectory_bin(*args, frame_start=8, frame_end=23)
+    assert seen == list(range(8, 24))
+    _, _, count, keys, header_len = struct.unpack_from('<5I', payload)
+    assert (count, keys) == (16, n_keys)
+    frames = np.frombuffer(payload, dtype='<f4', offset=(20 + header_len + 3) & ~3).reshape(16, -1)
+    assert np.all(frames[:, 0] == np.arange(8, 24))
+    assert budget.available_for_work() == 4*1024**3

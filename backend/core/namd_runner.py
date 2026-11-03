@@ -23,6 +23,7 @@ from backend.core import simulation_runtime as runtime
 
 import asyncio
 import functools
+from contextvars import ContextVar
 import json
 import logging
 import os
@@ -634,7 +635,7 @@ def _write_resume_conf(
     kept = [
         line
         for line in text.splitlines()
-        if (line.split()[0] if line.split() else "") not in _RESUME_DROP
+        if (line.split()[0].lower() if line.split() else "") not in {k.lower() for k in _RESUME_DROP}
     ]
     kept += [
         f"binCoordinates     output/{resume_base}.coor",
@@ -656,13 +657,8 @@ def _write_resume_conf(
 
 
 def _log_completed(log_path: Path) -> bool:
-    if not log_path.exists():
-        return False
-    try:
-        tail = log_path.read_text(errors="replace")[-8192:]
-    except OSError:
-        return False
-    return "End of program" in tail or "WRITING VELOCITIES TO OUTPUT FILE" in tail
+    from backend.core.namd_script import log_completed
+    return log_completed(log_path)
 
 
 #: Keys that make a metrics/health JSONL record worth keeping.  If every one of them is
@@ -1677,6 +1673,33 @@ def _note_health_probe(job, workspace_dir: Path, **fields) -> None:
         logger.debug("[%s] health_probe bookkeeping failed", job.job_id, exc_info=True)
 
 
+async def _health_evaluation(*args, **kwargs):
+    """Keep the reservation until an uncancellable native health call finishes."""
+    from backend.core.md_playback_workers import close
+    close()  # Only idle workers; the trajectory slot excludes active playback.
+    task=asyncio.create_task(asyncio.to_thread(run_health_check,*args,**kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # to_thread cancellation does not stop native allocations. Do not release
+        # the workflow/trajectory lease while that worker is still running.
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if task.done() and not task.cancelled():task.exception()
+        raise
+
+
+async def _scheduled_health(*args, **kwargs):
+    from backend.core.memory_budget import trajectory_activity
+    async with trajectory_activity('health'):
+        return await _health_evaluation(*args,**kwargs)
+
+
 def _make_inflight_health_tick(
     job, spec, package_dir: Path, output_dir: Path, workspace_dir: Path
 ):
@@ -1743,10 +1766,22 @@ def _make_inflight_health_tick(
                 reason="waiting for the first trajectory frames",
             )
             return
+        from backend.core.memory_budget import TrajectoryActivity
+        activity=TrajectoryActivity('health')
+        try:
+            acquired=activity.try_acquire()
+        except BaseException:
+            activity.close()
+            raise
+        if not acquired:
+            activity.close()
+            state['next_at']=now+5
+            _note_health_probe(job,workspace_dir,last_tick_at=now,last_error=None,
+                reason='waiting for active trajectory processing; retrying health in 5 seconds')
+            return  # Keep the engine/disk monitor polling while playback finishes.
         state["busy"] = True
         try:
-            hresult = await asyncio.to_thread(
-                run_health_check,
+            hresult = await _health_evaluation(
                 package_dir,
                 spec.name,
                 job.name_stem,
@@ -1800,6 +1835,7 @@ def _make_inflight_health_tick(
                 hresult.wc_ref_relative_fraction or 0.0,
             )
         finally:
+            activity.close()
             state["busy"] = False
             state["next_at"] = time.time() + _INFLIGHT_HEALTH_INTERVAL_S
 
@@ -1899,6 +1935,9 @@ def _core_binding_prefix(threads: int) -> list[str]:
     return [taskset, "-c", core_spec]
 
 
+_WORKFLOW_MEMORY = ContextVar('namd_workflow_memory', default=None)
+
+
 async def _run_namd_async(
     namd_bin: str,
     conf_name: str,
@@ -1925,37 +1964,76 @@ async def _run_namd_async(
         cmd += ["+devices", devices]
     cmd += [f"{conf_name}.conf"]
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("w") as log_fh:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=str(package_dir),
-            stdout=log_fh,
-            stderr=asyncio.subprocess.STDOUT,
-            start_new_session=True,  # own process group for clean kill
-        )
-        pid = proc.pid
-        if job_id:
-            _ACTIVE_PIDS[job_id] = pid
-        if on_spawn:
-            try:
-                on_spawn(pid)
-            except Exception:
-                pass  # noqa: E722,S110 — persistence must never break the run
-        try:
-            rc = await wait_proc_with_disk_guard(
-                proc, package_dir, kill=_kill_process_group, on_tick=on_tick
+    from backend.core.namd_resources import configuration_memory, health_memory_mib
+    from backend.core.memory_budget import reserve, reclaim_discretionary_memory, MemoryBudgetExceeded
+
+    # Reclaim before reserving the full stage, not at a fixed free-RAM threshold.
+    reclaim_discretionary_memory()
+    try:
+        memory_lease = _WORKFLOW_MEMORY.get()
+        from backend.core.namd_patch_grid import device_shared_bytes
+        shared_bytes=device_shared_bytes(devices) if devices and devices not in ('cpu','none') else 49152
+        memory = configuration_memory(package_dir / f"{conf_name}.conf", threads=threads,
+                                      fallback_box=getattr(memory_lease, 'fallback_box', None),shared_bytes=shared_bytes,
+                                      cuda_patch=bool(devices and devices not in ('cpu','none')),engine_binary=namd_bin,device=devices)
+        if not memory.supported:
+            raise MemoryBudgetExceeded("; ".join(memory.limitations))
+        own_lease = memory_lease is None
+        if own_lease:
+            memory_lease = reserve(memory.ram_mib * 1024**2, kind='simulation', label='NAMD stage',
+                                   gpu_mib=memory.gpu_mib if devices and devices not in ('cpu','none') else 0, devices=devices)
+            memory_lease.__enter__()
+        elif (memory.ram_mib > memory_lease.engine_ram_mib
+              or health_memory_mib(memory.atoms) > memory_lease.health_ram_mib
+              or (devices and devices not in ('cpu', 'none') and memory.gpu_mib > memory_lease.gpu_mib)):
+            raise MemoryBudgetExceeded('Stage exceeds the reserved workflow memory budget')
+    except (MemoryError, ValueError, OSError) as exc:
+        log_path.write_text(f"FATAL ERROR: Memory admission refused: {exc}\n")
+        return 75, None
+    try:
+        from backend.core.namd_provenance import resource_receipt
+        receipt = resource_receipt(namd_bin, package_dir / f"{conf_name}.conf", memory,
+                                   threads=threads, devices=devices)
+        log_path.with_suffix('.resources.json').write_text(json.dumps(receipt, indent=2)+'\n')
+        with log_path.open("w") as log_fh:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=str(package_dir),
+                stdout=log_fh,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,  # own process group for clean kill
             )
-        except asyncio.CancelledError:
-            _kill_process_group(pid)
-            raise
-        finally:
+            pid = proc.pid
+            try:
+                memory_lease.bind_child(pid)
+            except BaseException:
+                _kill_process_group(pid)
+                raise
             if job_id:
-                _ACTIVE_PIDS.pop(job_id, None)
+                _ACTIVE_PIDS[job_id] = pid
             if on_spawn:
                 try:
-                    on_spawn(None)
+                    on_spawn(pid)
                 except Exception:
-                    pass  # noqa: E722,S110
+                    pass  # noqa: E722,S110 — persistence must never break the run
+            try:
+                rc = await wait_proc_with_disk_guard(
+                    proc, package_dir, kill=_kill_process_group, on_tick=on_tick
+                )
+            except asyncio.CancelledError:
+                _kill_process_group(pid)
+                raise
+            finally:
+                if job_id:
+                    _ACTIVE_PIDS.pop(job_id, None)
+                if on_spawn:
+                    try:
+                        on_spawn(None)
+                    except Exception:
+                        pass  # noqa: E722,S110
+    finally:
+        if own_lease:
+            memory_lease.__exit__(None, None, None)
     return rc, pid
 
 
@@ -2066,6 +2144,57 @@ def _alias_skipped_stage_outputs(
 
 
 async def run_job(job: MdJob, workspace_dir: Path) -> None:
+    """Reserve the worst planned stage plus health analysis for the entire workflow."""
+    if job.protocol == "gold_qualification_v1":
+        return await _run_job_reserved(job, workspace_dir)
+    from backend.core.namd_resources import configuration_memory, health_memory_mib
+    from backend.core.memory_budget import reserve, reclaim_discretionary_memory, MemoryBudgetExceeded
+    try:
+        package = job.package_dir(workspace_dir)
+        manifest = json.loads((package / 'manifest.json').read_text())
+        _, segments = segments_from_manifest(package / 'manifest.json')
+        names = [manifest['minimization']['name']] + [s.name for s in segments]
+        from backend.core.namd_patch_grid import device_shared_bytes
+        shared_bytes=device_shared_bytes(job.devices) if not job_wants_cpu(job.protocol,job.devices) else 49152
+        estimates = [configuration_memory(package / (name + '.conf'), threads=job.threads,
+                                          fallback_box=manifest.get('box_ang'),shared_bytes=shared_bytes,
+                                          cuda_patch=not job_wants_cpu(job.protocol,job.devices)) for name in names]
+        unsupported = [reason for e in estimates for reason in e.limitations]
+        if unsupported:
+            raise MemoryBudgetExceeded('; '.join(sorted(set(unsupported))))
+        health = max(health_memory_mib(e.atoms) for e in estimates)
+        required = max(e.ram_mib for e in estimates) + health
+        if not job_wants_cpu(job.protocol, job.devices):
+            from backend.core.md_vram import detect_gpu_activity
+            gpu = detect_gpu_activity(devices=job.devices)
+            if not gpu or gpu.get('total_mb') is None or gpu.get('used_mb') is None:
+                raise MemoryBudgetExceeded('GPU availability could not be measured')
+            available_gpu = gpu['total_mb'] - gpu['used_mb']
+            if max(e.gpu_mib for e in estimates) > available_gpu:
+                raise MemoryBudgetExceeded('Planned stages exceed available GPU memory. Select CUDA offload or a larger GPU.')
+        reclaim_discretionary_memory()
+        lease = reserve(required * 1024**2, kind='simulation', label='NAMD workflow including health analysis',
+                        gpu_mib=max(e.gpu_mib for e in estimates) if not job_wants_cpu(job.protocol, job.devices) else 0,
+                        devices=job.devices)
+        lease.engine_ram_mib = max(e.ram_mib for e in estimates)
+        lease.health_ram_mib = health
+        lease.fallback_box = manifest.get('box_ang')
+        lease.__enter__()
+    except (MemoryError, ValueError, OSError, KeyError) as exc:
+        job.status = MdStatus.failed
+        job.error = f'Memory admission refused before launch: {exc}'
+        job.save(workspace_dir)
+        return
+    token = _WORKFLOW_MEMORY.set(lease)
+    try:
+        return await _run_job_reserved(job, workspace_dir)
+    finally:
+        _WORKFLOW_MEMORY.reset(token)
+        lease.__exit__(None, None, None)
+
+
+
+async def _run_job_reserved(job: MdJob, workspace_dir: Path) -> None:
     """Async coroutine — runs until completion, failure, or cancellation."""
     if job.protocol == "gold_qualification_v1":
         from backend.core.namd_gold_job import run_job as run_gold_job
@@ -2774,7 +2903,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     reason="DNA structural metrics are not applicable to a graphene-only control.",
                 )
                 if graphene_only
-                else run_health_check(
+                else await _scheduled_health(
                     package_dir,
                     spec.name,
                     job.name_stem,

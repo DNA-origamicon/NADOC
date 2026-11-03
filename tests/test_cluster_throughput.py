@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from backend.core import cluster_throughput as ct
+from backend.core.namd_allocation_model import QUALIFIED_ENGINE
+
+PROOF = dict(engine_sha256=QUALIFIED_ENGINE, configuration_sha256='a'*64, gpu='test GPU', driver='test driver', completed=True, outputs_verified=True)
+
 
 
 def test_size_bucket_edges():
@@ -35,10 +39,10 @@ def test_record_and_lookup_roundtrip(tmp_path):
         is None
     )
     ct.record_throughput(
-        tmp_path, cluster="alpine", partition="aa100", n_atoms=150_000, ns_per_day=16.0
+        tmp_path, cluster="alpine", partition="aa100", n_atoms=150_000, ns_per_day=16.0, provenance=PROOF, timestep_fs=4.0
     )
     ct.record_throughput(
-        tmp_path, cluster="alpine", partition="aa100", n_atoms=190_000, ns_per_day=20.0
+        tmp_path, cluster="alpine", partition="aa100", n_atoms=190_000, ns_per_day=20.0, provenance=PROOF, timestep_fs=4.0
     )
     # Same size bucket (100k-200k) → averaged.
     assert (
@@ -96,7 +100,7 @@ def test_mig_and_whole_gpu_throughput_are_isolated(tmp_path):
         tmp_path,
         **common,
         gres_type="rtx_pro_6000_2g.48gb",
-        ns_per_day=300.0,
+        ns_per_day=300.0, provenance=PROOF, timestep_fs=4.0,
     )
     assert ct.lookup_throughput(
         tmp_path, **common, gres_type="rtx_pro_6000_2g.48gb"

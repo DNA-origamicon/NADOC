@@ -1,23 +1,11 @@
-"""Value-ranked, availability-aware, build-aware GPU selection for RunPod NAMD jobs.
+"""Availability-aware GPU selection with shared NAMD timing and billing forecasts.
 
-This is the bridge the ad-hoc launchers kept missing (see REFERENCE_RUNPOD_RUNBOOK §7-8). It
-fuses the three things that must ALL be right before renting, and that this session got wrong:
-
-  1. **The NAMD BUILD's arch set.** A card outside it rents fine and dies at step 0 with
-     "no kernel image is available". The Dec-2025 GIT build is sm_50..sm_90 (NO sm_120, so the
-     RTX 5090 cannot run it); the multi-arch 3.0.2 tar is sm_80/89/90/120.
-  2. **LIVE availability + price** — `runpod_preflight.fetch_gpu_stock` (GraphQL), not a pinned
-     table. `recommend_gpus` uses pinned prices and no stock filter; this consumes the live data.
-  3. **$/ns VALUE.** A small box on an H100 is ~5x worse $/ns than on a 4090 — its horsepower is
-     wasted below a few M atoms. Ranking by a per-arch rate estimate is what keeps a small job on
-     a cheap card and reserves H100/H200 for the huge boxes where they win.
-
-The rate estimate is deliberately CONSERVATIVE (slower end of measured) so a pre-rent $/ns figure
-never over-promises; the on-pod preflight bench refines it to the real pod (per-pod rate varies
-~1.5x even on the same card model — RUNBOOK §7).
-
-Pure functions (`select_cards`, `estimate_rate`) are unit-tested; `pick_cards` is the thin async
-wrapper that fetches live stock and calls them.
+CUDA build compatibility and VRAM allowance gate selection. Live stock/prices
+supersede indicative card prices. Architecture rates are throughput priors, not
+upper bounds: CPU allocation, geometry and individual card models affect speed.
+Qualified learned observations are keyed by GPU model within an architecture;
+legacy mixed-model averages cannot seed a new quote. Full stage work and the
+separate time-to-results/billing breakdown are computed by namd_runtime.
 """
 
 from __future__ import annotations
@@ -34,7 +22,6 @@ from backend.core.runpod_script import (
     VRAM_SAFETY_FRACTION,
     GpuType,
     fits_on,
-    required_vram_mb,
 )
 
 # NAMD build -> the CUDA compute-caps its binary actually carries. A card whose sm is not in the
@@ -102,21 +89,25 @@ def load_rate_registry(path: Path = DEFAULT_RATES_PATH) -> dict:
 
 
 def record_rate(
-    sm: str, n_atoms: int, ms_step: float, *, path: Path = DEFAULT_RATES_PATH
+    sm: str, n_atoms: int, ms_step: float, *, path: Path = DEFAULT_RATES_PATH, provenance: dict | None = None
 ) -> None:
     """Fold one accepted resident run's ms/step into the running mean for its arch. Resilient —
     never raises (a stats write must not crash a paid run)."""
     try:
-        if not sm or n_atoms <= 0 or ms_step <= 0:
+        from backend.core.namd_planning import timing_provenance_valid
+        if not sm or n_atoms <= 0 or ms_step <= 0 or not timing_provenance_valid(provenance):
             return
         per = ms_step / (n_atoms / 1e6)
         reg = load_rate_registry(path)
-        row = reg.get(sm) or {"ms_per_matom": 0.0, "n": 0}
+        key = f"{sm}|{provenance['gpu']}"
+        row = reg.get(key) or {}
+        if not timing_provenance_valid(row.get('provenance')):row={"ms_per_matom":0.,"n":0}
         n, mean = int(row.get("n", 0)), float(row.get("ms_per_matom", 0.0))
         row["ms_per_matom"] = (mean * n + per) / (n + 1)
         row["n"] = n + 1
         row["updated"] = int(time.time())
-        reg[sm] = row
+        row['provenance']=provenance
+        reg[key] = row
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
@@ -127,12 +118,13 @@ def record_rate(
 
 
 def ms_per_matom(
-    sm: str, *, registry: Optional[dict] = None, min_samples: int = _MIN_LEARN_SAMPLES
+    sm: str, *, registry: Optional[dict] = None, min_samples: int = _MIN_LEARN_SAMPLES, gpu_key: str | None = None
 ) -> Optional[float]:
-    """Learned ms/step-per-Matom for an arch (enough samples) else the static prior."""
-    if registry:
-        row = registry.get(sm)
-        if row and int(row.get("n", 0)) >= min_samples and row.get("ms_per_matom"):
+    """Model-specific learned rate (enough samples), else an architecture prior."""
+    if registry and gpu_key:
+        from backend.core.namd_planning import timing_provenance_valid
+        row = registry.get(f"{sm}|{gpu_key}")
+        if row and timing_provenance_valid(row.get('provenance')) and int(row.get("n", 0)) >= min_samples and row.get("ms_per_matom"):
             return float(row["ms_per_matom"])
     return _MS_PER_STEP_PER_MATOM.get(sm)
 
@@ -162,13 +154,14 @@ def estimate_rate(
     timestep_fs: float = 4.0,
     resident: bool = True,
     registry: Optional[dict] = None,
+    gpu_key: str | None = None,
 ) -> Optional[dict]:
     """Pre-rent ms/step, ns/day and $/ns for a card+system. None if the arch is unknown.
 
     Uses the LEARNED per-arch rate if ``registry`` supplies enough samples, else the conservative
     static prior. The on-pod bench is still the ground truth (and feeds ``record_rate``). Offload
     multiplies ms/step by ~2.6x (a different, slower code path)."""
-    base = ms_per_matom(sm, registry=registry)
+    base = ms_per_matom(sm, registry=registry, gpu_key=gpu_key)
     if base is None or not usd_per_hour or usd_per_hour <= 0 or n_atoms <= 0:
         return None
     ms_step = base * (n_atoms / 1e6) * (1.0 if resident else _OFFLOAD_PENALTY)
@@ -210,6 +203,7 @@ def select_cards(
     archs = BUILD_ARCHS.get(build)
     if archs is None:
         raise ValueError(f"unknown build {build!r}; known: {sorted(BUILD_ARCHS)}")
+    if build!='git':registry=None
     out: list[Candidate] = []
     for g in cards:
         if g.sm not in archs:
@@ -234,7 +228,7 @@ def select_cards(
             price,
             timestep_fs=timestep_fs,
             resident=resident,
-            registry=registry,
+            registry=registry, gpu_key=g.key,
         )
         out.append(
             Candidate(
@@ -367,6 +361,8 @@ def plan_options(
     prefer: str = "balanced",
     cards: tuple[GpuType, ...] = CARDS,
     show_ineligible: bool = False,
+    stages: Optional[list] = None,
+    box_nm: Optional[list] = None,
 ) -> list[dict]:
     """Ranked, JSON-ready GPU rows for a WHOLE plan — relaxation and production costed
     separately, at their own timesteps, plus a total.
@@ -383,6 +379,13 @@ def plan_options(
 
     Pure given ``stock`` + ``registry``. Best-value in-stock card first.
     """
+    from backend.core.namd_planning import memory_plan,phase_work
+    from backend.core.namd_runtime import compute_estimate,stage_rate,completion_quote
+    from backend.core.disk_guard import namd_run_output_bytes
+    if build!='git':registry=None
+    work=phase_work(stages,relax_ns=relax_ns,production_ns=production_ns,
+        relax_timestep_fs=relax_timestep_fs,production_timestep_fs=production_timestep_fs,resident=resident)
+    memory=memory_plan(n_atoms,stages=work,box_nm=box_nm,resident=resident)
     ranked = select_cards(
         n_atoms,
         build=build,
@@ -428,7 +431,7 @@ def plan_options(
         reasons: list[str] = []
         if c.sm not in BUILD_ARCHS[build]:
             reasons.append(f"the {build} NAMD build does not include CUDA {c.sm}")
-        needed = required_vram_mb(n_atoms, gpu_resident=resident)
+        needed = memory['gpu_mib']
         usable = c.vram_mb * VRAM_SAFETY_FRACTION
         if needed > usable:
             reasons.append(
@@ -455,6 +458,19 @@ def plan_options(
             resident=resident,
             registry=registry,
         )
+        compute = compute_estimate(work, lambda stage: stage_rate(
+            n_atoms,stage,resident_ms=(estimate_rate(c.sm,n_atoms,c.usd_per_hour,
+            resident=True,registry=registry,gpu_key=c.key) or {}).get('ms_step'),resident=resident,box_nm=box_nm))
+        if compute:
+            relax_h=sum(s['hours'] for s in compute['stages'] if s['role']!='production') or None
+            prod_h=sum(s['hours'] for s in compute['stages'] if s['role']=='production') or None
+            relax_cost=relax_h*c.usd_per_hour if relax_h is not None else None
+            prod_cost=prod_h*c.usd_per_hour if prod_h is not None else None
+            if relax_h and relax_ns>0:relax_nsday=relax_ns*24/relax_h
+            if prod_h and production_ns>0:prod_nsday=production_ns*24/prod_h
+        quote=completion_quote(compute,target='runpod',n_atoms=n_atoms,stages=work,
+            output_bytes=namd_run_output_bytes([(s.get('steps',0),s.get('dcd_freq',0)) for s in work],n_atoms),
+            hourly_rate=c.usd_per_hour)
         hours = [h for h in (relax_h, prod_h) if h is not None]
         costs = [x for x in (relax_cost, prod_cost) if x is not None]
         rows.append(
@@ -463,7 +479,7 @@ def plan_options(
                 "label": c.label,
                 "sm": c.sm,
                 "vram_gb": round(c.vram_mb / 1024),
-                "usd_per_hour": round(c.usd_per_hour, 2),
+                "usd_per_hour": c.usd_per_hour,
                 "live_price": c.live_price,
                 "available": c.available,  # True / False / None (stock unknown)
                 "eligible": not reasons,
@@ -478,9 +494,21 @@ def plan_options(
                 "production_cost": round(prod_cost, 2) if prod_cost else None,
                 "total_hours": round(sum(hours), 1) if hours else None,
                 "total_cost": round(sum(costs), 2) if costs else None,
+                "memory": memory,
+                "compute": compute,
+                "completion": quote,
+                "timing_basis": "per-stage steps and execution mode; hardware throughput prior",
+                "timing_qualified": False,
+                "timing_excludes": ["startup", "health/analysis", "transfer", "queueing", "retries"],
+                "planning_hours": round(compute['high_hours'],2) if compute else None,
+                "planning_cost": round(compute['high_hours']*c.usd_per_hour,2) if compute else None,
+                "planning_factor": (compute["high_hours"]/compute["hours"]) if compute and compute["hours"] else None,
             }
         )
-    return rows
+    # Stage-specific PME/neighbor allowances can disqualify a card that passed
+    # the coarse atom-only selector. Never leave that card recommended first.
+    rows.sort(key=lambda r:not r['eligible'])
+    return rows if show_ineligible else [r for r in rows if r['eligible']]
 
 
 def gpu_options(

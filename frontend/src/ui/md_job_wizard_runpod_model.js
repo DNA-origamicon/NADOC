@@ -51,10 +51,15 @@ export function runpodPlanShape(plan, { productionNsIntent = null } = {}) {
     bucket.ns += ns
     bucket.steps += steps
     segments.push({
-      steps,
-      // A stage with no dcdfreq writes no trajectory; 0 would divide by zero downstream, and
-      // the backend clamps to >= 1 anyway.
-      dcd_freq: Math.max(1, Number(s?.params?.dcdfreq) || 1),
+      role: s?.role || 'relaxation', steps, ns,
+      timestep_fs: Number(s?.params?.timestep) || (steps > 0 && ns > 0 ? ns * 1e6 / steps : 4),
+      dcd_freq: Math.max(0, Number(s?.params?.dcdfreq) || 0),
+      gpu_resident: s?.role === 'minimization' ? false : s?.conditional_params?.gpuresident || s?.params?.gpuresident == null
+        ? null : ['on', 'yes', 'true', '1'].includes(String(s.params.gpuresident).toLowerCase()),
+      pairlistdist: Number(s?.params?.pairlistdist) || 13.5,
+      pmegridspacing: Number(s?.params?.pmegridspacing) || 1.5,
+      margin: s?.params?.margin == null ? 3 : Number(s.params.margin),
+      extra_bonds: ['off', 'no', 'false', '0'].includes(String(s?.params?.extrabonds).toLowerCase()) ? 0 : 2600000,
     })
   }
 
@@ -105,12 +110,21 @@ function _meanTimestep({ ns, steps }, fallback) {
 export function runpodEstimateKey(shape, { connected = false } = {}) {
   if (!shape) return ''
   return [
+    shape.parent_job_id, shape.n_atoms, shape.prepared, shape.upload_mbps, shape.download_mbps,
+    shape.padding_nm,
+    shape.box_mode,
+    JSON.stringify(shape.box_size_nm),
+    shape.ion_conc_mM,
+    shape.mg_conc_mM,
     shape.relax_steps,
     shape.relax_timestep_fs,
     shape.production_steps,
     shape.production_ns,
     shape.production_timestep_fs,
-    (shape.stages || []).map(s => `${s.steps}x${s.dcd_freq}`).join(','),
+    JSON.stringify(shape.stages || []),
+    shape.salt_mode,
+    shape.gpu_resident_mode,
+    shape.build,
     connected ? 1 : 0,                 // live prices vs indicative ones are different answers
   ].join('|')
 }
@@ -179,8 +193,25 @@ export function estimateRows(row, shape) {
     rows.push(['Production', 'not set',
       'Set an intended production length to see what the whole run costs.'])
   }
-  rows.push(['Total', `${formatHours(row.total_hours)} · ${formatUsd(row.total_cost)}`,
-    `${row.ns_day ?? '?'} ns/day on this card`])
+  rows.push(['Estimated compute', `${formatHours(row.total_hours)} · ${formatUsd(row.total_cost)}`,
+    `${row.ns_day ?? '?'} ns/day; overheads included in the total below when available`])
+  if (row.planning_cost != null) rows.push(['Compute with headroom',
+    `${formatHours(row.planning_hours)} · ${formatUsd(row.planning_cost)}`,
+    `${row.planning_factor}× planning allowance; not a cost guarantee`])
+  const q = row.completion
+  if (q?.available) {
+    rows.push(['Time until results', `${formatHours(q.known_hours)} (${formatHours(q.low_hours)}–${formatHours(q.high_hours)})`,
+      'Includes preparation, setup, health checks and transfers; capacity wait and retries additional'])
+    rows.push(['Pod bill', `${formatUsd(q.cost)} (${formatUsd(q.low_cost)}–${formatUsd(q.high_cost)})`,
+      `${formatHours(q.billed_hours)} billed; ${q.transfer_mode === 's3' ? 'S3 transfers outside GPU rental' : 'SSH transfers billed'}`])
+    if (q.storage_monthly_cost != null) rows.push(['Network-volume rent', `${formatUsd(q.storage_window_cost)} during this window`,
+      `${formatUsd(q.storage_monthly_cost)}/month while retained; separate from pod cap`])
+  }
+  if (row.memory) {
+    rows.push(['RAM allowance', `${(row.memory.workflow_ram_mib / 1024).toFixed(1)} GiB`, 'Engine plus one health check; verify the chosen pod’s host RAM'])
+    rows.push(['VRAM allowance', `${(row.memory.gpu_mib / 1024).toFixed(1)} GiB`,
+      row.memory.in_measured_domain ? 'Exact package and target-device preflight required' : 'Outside the measured domain; target validation required'])
+  }
   return rows
 }
 
@@ -192,7 +223,7 @@ export function storageRows(storage) {
     const st = storage.staging || {}
     rows.push(['Upload before it starts', formatBytes(storage.package_bytes),
       st.minutes != null
-        ? `${st.minutes} min of pod time${st.usd != null ? ` (${formatUsd(st.usd)})` : ''}`
+        ? `${st.minutes} min${st.billable === false ? ' outside pod rental' : ' of pod time'}${st.usd != null ? ` (${formatUsd(st.usd)})` : ''}`
         : ''])
   }
   if (storage.volume_size_gb != null) {
@@ -237,6 +268,18 @@ export function budgetState({ budget, balance, livePods = [] } = {}) {
         + `${billing ? ` at ${formatUsd(billing)}/hr` : ''}.`
       : '',
   }
+}
+
+/** Recompute against the selected card, including its own staging rate. */
+export function selectedBudget(preview, gpuKey, cap) {
+  const row=selectedRow(preview,gpuKey)
+  const cost=row?.completion?.high_cost ?? row?.planning_cost ?? row?.total_cost
+  const minutes=preview?.storage?.staging?.minutes
+  const staging=row?.completion?.available || preview?.storage?.staging?.billable === false ? 0 : minutes != null && row?.usd_per_hour != null ? minutes / 60 * row.usd_per_hour
+    : preview?.storage?.staging?.usd || 0
+  const estimate=cost == null ? preview?.budget?.estimated_usd ?? null : cost + staging
+  return { budget_usd: Number(cap), estimated_usd: estimate,
+    over_budget: estimate != null && estimate > Number(cap) }
 }
 
 /**

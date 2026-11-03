@@ -16,9 +16,9 @@ This wraps the build with two guards:
   design collapse to ONE build; the other N-1 wait on the lock and receive the
   cached result instead of each materialising their own copy.
 
-Net effect: memory for the atomistic model is bounded to ``_CACHE_MAX`` models
-regardless of how many WebSocket loads are in flight, and the expensive
-minimisation runs once per distinct design rather than once per load.
+Completed cache entries have both count and conservative byte-charge limits.
+Distinct builds serialize and reserve their expected temporary allocations.
+Active callers own their models independently of cache retention.
 
 The fingerprint hashes the whole design (a superset of what
 ``build_atomistic_model`` actually reads): over-invalidation only costs a rebuild,
@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import weakref
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
@@ -43,9 +44,13 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # toggle back-and-forth (nadoc ↔ ballstick share one model per design) stays warm
 # without letting several million-atom models accumulate.
 _CACHE_MAX = 2
+_CACHE_MAX_BYTES = 512 * 1024**2
+_cache_charges: dict[str, int] = {}
+# Also serialize different designs: an LRU bounds completed entries, not builds.
+_build_lock = threading.Lock()
 
 _cache: "OrderedDict[str, object]" = OrderedDict()
-_key_locks: "dict[str, threading.Lock]" = {}
+_key_locks = weakref.WeakValueDictionary()
 _registry_lock = (
     threading.Lock()
 )  # guards _cache + _key_locks (never held during a build)
@@ -97,27 +102,37 @@ def build_atomistic_model_cached(
 
     # Single-flight: exactly one thread builds a given key.  The others block here
     # (cheap — waiting, not building) and pick up the cached result below.  The
-    # build itself runs OUTSIDE _registry_lock so unrelated designs don't serialise.
-    with key_lock:
+    # Build work runs outside the registry lock, but has its own allocation lock.
+    with key_lock, _build_lock:
         with _registry_lock:
             if key in _cache:  # built by the thread that held the lock before us
                 _cache.move_to_end(key)
                 return _cache[key]
 
-        model = build_atomistic_model(
-            design,
-            fast_bridges=fast_bridges,
-            measured_positioning=measured_positioning,
-        )
+        from backend.core.memory_budget import reserve
+        from backend.core.memory_sizes import retained_bytes
+        from backend.core.sequences import strand_nucleotide_count
+
+        nucleotides = sum(strand_nucleotide_count(s, design) for s in design.strands)
+        # Heavy-atom Python models plus placement temporaries; no solvent atoms.
+        allowance = 128 * 1024**2 + nucleotides * 32 * 4096
+        with reserve(allowance, label='Atomistic model construction'):
+            model = build_atomistic_model(
+                design,
+                fast_bridges=fast_bridges,
+                measured_positioning=measured_positioning,
+            )
+            charge = int(retained_bytes(model) * 1.25)
 
         with _registry_lock:
+            if charge > _CACHE_MAX_BYTES:
+                return model  # caller owns it; don't retain an oversized cache entry
             _cache[key] = model
+            _cache_charges[key] = charge
             _cache.move_to_end(key)
-            while len(_cache) > _CACHE_MAX:
+            while len(_cache) > _CACHE_MAX or sum(_cache_charges.values()) > _CACHE_MAX_BYTES:
                 old_key, _ = _cache.popitem(last=False)
-                # Drop the evicted key's lock only if no one is mid-build on it;
-                # holders keep their own reference either way, so this is safe.
-                _key_locks.pop(old_key, None)
+                _cache_charges.pop(old_key, None)
         return model
 
 
@@ -125,13 +140,20 @@ def clear_atomistic_cache() -> None:
     """Drop all cached models (test hook / manual reclaim)."""
     with _registry_lock:
         _cache.clear()
-        _key_locks.clear()
+        _cache_charges.clear()
+        # In-flight/waiting requests still own their key locks. Removing those
+        # locks here would let a new request duplicate an in-flight build.
 
 
 def cache_size() -> int:
     """Number of models currently held (for tests / diagnostics)."""
     with _registry_lock:
         return len(_cache)
+
+
+def cache_bytes() -> int:
+    with _registry_lock:
+        return sum(_cache_charges.values())
 
 
 def reclaim_cache_if_low(min_free_mb: int) -> int:
@@ -154,3 +176,7 @@ def reclaim_cache_if_low(min_free_mb: int) -> int:
     if n:
         clear_atomistic_cache()
     return n
+
+
+from backend.core.memory_budget import register_reclaimer
+register_reclaimer('atomistic_models', clear_atomistic_cache)

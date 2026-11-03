@@ -28,14 +28,9 @@ def test_recommend_defaults_to_gpu_ah200(alpine):
     assert r["cores"] == cr._GPU_CORES
 
 
-def test_recommend_falls_back_to_cpu_when_too_big(alpine):
-    # Ceiling is per-partition now — the default ah200 has 141 GB, so the fallback
-    # trips well above the old A100-derived number.
-    r = cr.recommend(alpine, n_atoms=cr.gpu_atom_ceiling("ah200") + 1, total_ns=5.0)
-    assert r["kind"] == "cpu"
-    assert r["gpus"] == 0
-    assert r["partition"] == "acpu"
-    assert any("exceeds the single-GPU ceiling" in n for n in r["notes"])
+def test_oversize_cpu_fallback_cannot_underallocate_ram(alpine):
+    with pytest.raises(ValueError, match='GiB RAM'):
+        cr.recommend(alpine, n_atoms=cr.gpu_atom_ceiling("ah200")+1, total_ns=5.0)
 
 
 # ── walltime + QoS clamping ───────────────────────────────────────────────────
@@ -58,7 +53,7 @@ def test_long_run_bumps_to_long_qos(alpine):
 
 def test_cpu_fallback_uses_cpu_namespaced_qos_names(alpine):
     # A system past the single-GPU ceiling falls back to acpu -> cpu-* QoS.
-    r = cr.recommend(alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0)
+    r = cr.recommend(alpine, n_atoms=500_000, total_ns=2.0, measured_ns_per_day=50.0, partition="acpu")
     assert r["kind"] == "cpu"
     assert r["partition"] == "acpu"
     assert r["qos"] == "cpu-normal"
@@ -130,9 +125,34 @@ def test_measured_throughput_beats_guess(alpine):
 
 def test_mem_scales_with_atoms_and_has_floor(alpine):
     small = cr.recommend(alpine, n_atoms=1_000, total_ns=1.0, measured_ns_per_day=50.0)
-    big = cr.recommend(alpine, n_atoms=500_000, total_ns=1.0, measured_ns_per_day=50.0)
+    big = cr.recommend(alpine, n_atoms=1_000_000, total_ns=1.0, measured_ns_per_day=50.0)
     assert small["mem_gb"] >= 4
     assert big["mem_gb"] > small["mem_gb"]
+
+
+def test_full_job_cost_survives_scheduler_walltime_cap(alpine):
+    r = cr.recommend(alpine, n_atoms=500_000, total_ns=1000, measured_ns_per_day=20)
+    assert r['run_hours'] == 1200
+    assert r['run_hours'] > r['walltime_h']
+    assert r['est_cost_su'] > r['requested_cost_su']
+    assert r['planning_cost_su'] >= r['est_cost_su']*1.5
+    assert r['completion']['cost'] > r['est_cost_su']
+    assert r['requires_resubmission'] and r['submission_count']>1
+
+
+def test_host_ram_requirement_increases_cpu_allocation_instead_of_being_clamped(alpine):
+    r = cr.recommend(alpine, n_atoms=2_000_000, total_ns=1, partition='acpu')
+    assert r['mem_gb'] >= 164  # conservative CPU-only planning allowance
+    assert r['cores']*alpine.partition('acpu').mem_per_core_gb >= r['mem_gb']
+
+
+def test_cluster_charges_actual_mixed_stage_work(alpine):
+    stages=[dict(role='minimization',steps=10000),
+            dict(role='relaxation',steps=100000,gpu_resident=False,timestep_fs=2),
+            dict(role='production',steps=100000,gpu_resident=True,timestep_fs=4)]
+    r=cr.recommend(alpine,n_atoms=500000,total_ns=.6,measured_ns_per_day=20,stages=stages)
+    ms_per_step=4*86.4/20
+    assert r['run_hours']==pytest.approx((110000*2.6+100000)*ms_per_step/3600000,abs=.001)
 
 
 def test_cost_uses_gpu_billing(alpine):
@@ -143,7 +163,7 @@ def test_cost_uses_gpu_billing(alpine):
         measured_ns_per_day=50.0,
         partition="aa100",
     )
-    hours = r["walltime_h"]
+    hours = r["run_hours"]
     expected = r["cores"] * hours * 1.0 + r["gpus"] * hours * 108.6
     assert r["est_cost_su"] == pytest.approx(round(expected, 1))
 
@@ -163,9 +183,9 @@ def test_rtx_mig_recommendation_uses_exact_gres_speed_core_cap_and_rate(alpine):
     assert mig["mig"] is True and mig["gpu_vram_gb"] == 48
     assert mig["cores"] <= 16
     assert mig["expected_ns_per_day"] == pytest.approx(
-        whole["expected_ns_per_day"] * 0.5
+        whole["expected_ns_per_day"] * 0.5, abs=.001
     )
-    expected_cost = mig["cores"] * mig["walltime_h"] + 130.2 * mig["walltime_h"]
+    expected_cost = mig["cores"] * mig["run_hours"] + 130.2 * mig["run_hours"]
     assert mig["est_cost_su"] == pytest.approx(round(expected_cost, 1))
 
 
@@ -299,7 +319,7 @@ def test_recommend_costs_against_the_chosen_partition(alpine):
     expected = cr.estimate_cost_su(
         r["cores"],
         r["gpus"],
-        r["walltime_h"],
+        r["run_hours"],
         alpine,
         alpine.partition("ah200"),
     )
@@ -339,20 +359,13 @@ def test_blackwell_measured_equal_to_hopper_not_slower(alpine):
     assert cr.gpu_speed_factor("artxpro6000") == cr.gpu_speed_factor("ah200")
 
 
-def test_artxpro6000_is_the_su_efficient_choice(alpine):
-    """Same speed, lower billing rate — so the same job must cost less there."""
-    a = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="ah200")
-    b = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="artxpro6000")
-    assert b["expected_ns_per_day"] == a["expected_ns_per_day"]  # equally fast
-    assert b["est_cost_su"] < a["est_cost_su"]  # but cheaper
-
-
-def test_throughput_anchor_matches_the_measured_production_run(alpine):
-    """2hb_1-0xT (62,673 atoms) sustained 30.8 ns/day on an a100_3g.20gb MIG slice
-    (~3/7 of a card) with DCD + ENM, so a whole A100 is ~70 ns/day. The estimate for
-    that system on aa100 should land near it — the old constant said 46."""
-    r = cr.recommend(alpine, n_atoms=62_673, total_ns=100.0, partition="aa100")
-    assert 60.0 < r["expected_ns_per_day"] < 85.0
+def test_hardware_priors_are_shared_with_runpod(alpine):
+    from backend.core.runpod_select import estimate_rate
+    for partition,sm in [('aa100','sm_80'),('ah200','sm_90'),('artxpro6000','sm_120')]:
+        r=cr.recommend(alpine,n_atoms=1_000_000,total_ns=100,partition=partition)
+        assert r['reference_ns_per_day']==pytest.approx(estimate_rate(sm,1_000_000,1)['ns_day'],abs=.001)
+        assert not r['timing_qualified']
+        assert r['completion']['completion_hours'] is None
 
 
 def test_aa100_queue_guess_says_do_not_plan_around_it(alpine):

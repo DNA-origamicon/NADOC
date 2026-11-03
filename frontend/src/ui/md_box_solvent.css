@@ -13,3 +13,5 @@
 #md-box-sizing-help { line-height:1.4; }
 
 #md-box-solvent-body .box-solvent-toggle { display:block; margin:5px 0; }
+
+#md-box-source { overflow-wrap:anywhere; }

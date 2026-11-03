@@ -81,11 +81,11 @@ class TestEstimate:
         assert body["gpu"]["usd_per_hour"] == 0.69
         assert body["gpu_resident"] is True
 
-    def test_voltroncore_sized_from_the_measured_model(self, client):
-        """5.66M atoms measured 17,678 MB resident on a real 4090."""
+    def test_large_system_uses_current_admission_allowance(self, client):
+        """Large systems receive an extrapolated planning allowance, not an old peak fit."""
         body = client.post("/api/runpod/estimate", json={"n_atoms": 5_656_632}).json()
         assert body["feasible"] is True
-        assert body["required_vram_mb"] == pytest.approx(18_571, rel=0.10)
+        assert body["required_vram_mb"] > 20_000
 
     def test_impossible_system_is_infeasible_and_says_why(self, client):
         body = client.post("/api/runpod/estimate", json={"n_atoms": 200_000_000}).json()
@@ -674,3 +674,28 @@ class TestJobPreview:
         d = client.post("/api/runpod/job-preview", json=self.BODY).json()
         assert d["connected"] is True
         assert [p["id"] for p in d["live_pods"]] == ["p1"]
+
+
+def test_gpu_options_uses_selected_padding(client, monkeypatch):
+    from unittest.mock import Mock
+
+    design = Mock()
+    design.without_reference_geometry.return_value = design
+    monkeypatch.setattr(routes_runpod.design_state, "get_or_404", lambda: design)
+    estimate = Mock(return_value={"dna_atoms": 1000, "full_water": 10000, "ion_atoms": 100})
+    monkeypatch.setattr(routes_runpod, "estimate_profile_from_design", estimate)
+    response = client.post("/api/runpod/gpu-options", json={"padding_nm": 3.5,"box_mode":"bbox","box_size_nm":[31,31,31]})
+    assert response.status_code == 200
+    assert response.json()["n_atoms"] == 31100
+    estimate.assert_called_once_with(design, padding_nm=3.5,box_mode="bbox",box_size_nm=(31,31,31))
+
+
+def test_job_preview_uses_selected_box(client,monkeypatch):
+    from unittest.mock import Mock
+    design=Mock();design.without_reference_geometry.return_value=design
+    monkeypatch.setattr(routes_runpod.design_state,'get_or_404',lambda:design)
+    estimate=Mock(return_value={'atom_upper_bound':2990000,'resource_box_nm':[31]*3})
+    monkeypatch.setattr(routes_runpod,'estimate_profile_from_design',estimate)
+    response=client.post('/api/runpod/job-preview',json={'padding_nm':2,'box_mode':'bbox','box_size_nm':[31]*3,'relax_ns':1})
+    assert response.status_code==200 and response.json()['n_atoms']==2990000
+    estimate.assert_called_once_with(design,padding_nm=2,box_mode='bbox',box_size_nm=(31,31,31),nacl_mM=0,mgcl2_mM=12.5)

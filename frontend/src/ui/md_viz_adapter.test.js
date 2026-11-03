@@ -343,12 +343,13 @@ describe('mdVizApiAdapter', () => {
 
     it('the signal the controller hands over actually aborts the in-flight MD load', async () => {
       let captured
-      const api = { getMdTrajectory: vi.fn((id, signal) => { captured = signal; return new Promise(() => {}) }) }
+      const api = { getMdTrajectory: vi.fn((id, signal) => { captured = signal; return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true })) }) }
       const ctrl = initOxdnaDisplay({ designRenderer: renderer(), api: mdVizApiAdapter(api) })
-      ctrl.loadTrajectory('J3')
+      const pending = ctrl.loadTrajectory('J3')
       expect(captured?.aborted).toBe(false)
       ctrl.cancelPendingLoad()
       expect(captured?.aborted, 'cancelling must reach the MD request').toBe(true)
+      await expect(pending).resolves.toMatchObject({ ok: false, reason: 'superseded' })
     })
   })
 })

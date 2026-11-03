@@ -51,3 +51,34 @@ describe('background trajectory preparation cache', () => {
     expect(f.cache.snapshot('a', spec)).toBeUndefined()
   })
 })
+
+it('disposes the oldest ready session and transfers adopted state exactly once', async () => {
+  const dispose = vi.fn(), take = vi.fn(() => ({ transferred: true }))
+  const cache = initTrajectoryPreparationCache({ maxReady: 1, context: () => 'vdw',
+    download: async () => ({ n_frames: 1 }),
+    createSession: () => ({ loadTrajectory: async () => ({ ok: true }),
+      prebuildHeavy: async () => ({ ok: true, frames: 1 }),
+      trajectoryPreparationState: () => ({ ready: true }),
+      takeTrajectoryPreparationState: take, discardForDocumentReset: dispose }),
+  })
+  await cache.prepare('a', spec)
+  await cache.prepare('b', spec)
+  expect(dispose).toHaveBeenCalledTimes(1)
+  expect(cache.snapshot('a', spec)).toBeUndefined()
+  expect(cache.takeSnapshot('b', spec)).toEqual({ transferred: true })
+  expect(cache.takeSnapshot('b', spec)).toBeNull()
+  expect(take).toHaveBeenCalledOnce()
+  expect(dispose).toHaveBeenCalledTimes(2)
+})
+
+it('serializes session creation even when an external scheduler permits parallel jobs', async () => {
+  const f = fixture(), schedule = work => work()
+  const a = f.cache.prepare('a', spec, { schedule })
+  const b = f.cache.prepare('b', spec, { schedule })
+  await vi.waitFor(() => expect(f.gates).toHaveLength(1))
+  expect(f.sessions).toHaveLength(1)
+  f.gates[0].resolve(); await a
+  await vi.waitFor(() => expect(f.gates).toHaveLength(2))
+  f.gates[1].resolve(); await b
+  f.cache.retain([])
+})

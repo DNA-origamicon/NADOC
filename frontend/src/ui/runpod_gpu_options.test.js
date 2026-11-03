@@ -143,7 +143,7 @@ describe('renderJobOptionRows', () => {
   it('leaves an over-budget row selectable — raising the cap is a valid answer', () => {
     const html = renderJobOptionRows([JOB_ROW], null, { budgetUsd: 1 })
     expect(html).toContain('runpod-gpu-row')
-    expect(html).toMatch(/over your cap/)
+    expect(html).toMatch(/exceeds your cap/)
   })
 
   it('renders nothing for an empty list', () => {

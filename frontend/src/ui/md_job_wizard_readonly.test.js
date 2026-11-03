@@ -803,3 +803,20 @@ it('does not fabricate a current-design box for an unavailable historical packag
  expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
  wiz.close()
 })
+
+it('replans an open wizard after committed sidebar preparation changes',async()=>{
+ let notify
+ const values={padding_nm:6,box_mode:'bbox',box_size_nm:null}
+ const unsubscribe=vi.fn()
+ const preparation={keys:new Set(Object.keys(values)),payload:()=>({...values}),summary:()=> 'Box setup',acceptPreview:vi.fn(),subscribe:fn=>{notify=fn;return unsubscribe}}
+ const {wiz,api}=setup({preparation})
+ api.fetchProtocolPlan.mockImplementation(async payload=>({...PLAN,box_preview_request:{...payload}}))
+ api.fetchProtocolBoxPreview=vi.fn(async payload=>({box_preview:{selected_nm:[10,12,14].map(n=>n+2*payload.padding_nm)}}))
+ await wiz.open('relaxation')
+ await vi.waitFor(()=>expect(preparation.acceptPreview).toHaveBeenCalled())
+ values.padding_nm=3.5;notify()
+ await vi.waitFor(()=>expect(preparation.acceptPreview).toHaveBeenLastCalledWith({selected_nm:[17,19,21]}))
+ expect(api.fetchProtocolPlan.mock.calls.at(-1)[0].padding_nm).toBe(3.5)
+ wiz.close()
+ expect(unsubscribe).toHaveBeenCalled()
+})

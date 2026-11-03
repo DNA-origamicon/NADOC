@@ -1,3 +1,4 @@
+import { TRAJECTORY_RESPONSE_BYTES } from '../scene/trajectory_memory.js'
 import { getRunDir } from '../ui/run_location_preferences.js'
 import { withCreatingJob } from './sim_job_creation.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
@@ -2866,7 +2867,10 @@ async function _oxdnaJSONTransport(method, path, body = undefined, { signal, hea
     })
     return null
   }
-  const json = await r.json().catch(() => null)
+  const trajectoryResponse = /^\/md\/jobs\/[^/]+\/(?:trajectory|frames-atomistic|frames-surface)(?:\?|$)/.test(path)
+  const json = trajectoryResponse && typeof r.arrayBuffer === 'function'
+    ? JSON.parse(new TextDecoder().decode(await _boundedResponseBuffer(r, { maxBytes: TRAJECTORY_RESPONSE_BYTES })))
+    : await r.json().catch(() => null)
   _emitRequestDiagnostic({
     phase: 'complete', id: diagnosticId, method, path,
     durationMs: performance.now() - diagnosticStarted,
@@ -2906,6 +2910,10 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
     throw new Error(error.detail || 'Trajectory request exceeds the safe memory limit. Load fewer frames.')
   }
   if (!r || !r.ok) return null
+  return _boundedResponseBuffer(r, { onProgress, maxBytes })
+}
+
+async function _boundedResponseBuffer(r, { onProgress, maxBytes = Infinity } = {}) {
   if (!r.body?.getReader || (typeof onProgress !== 'function' && maxBytes === Infinity)) {
     const buffer = await r.arrayBuffer().catch(() => null)
     if (buffer?.byteLength > maxBytes) throw new Error('Visualization exceeds the browser memory limit')
@@ -2961,8 +2969,8 @@ export const prepareExpPrediction = () => _ensureAssemblySimulation('/exp/jobs',
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
 /** Ranked available RunPod GPUs for the active design's relaxation — each with live price,
  *  estimated relax wall-clock, and estimated cost. nAtoms omitted → backend sizes the design. */
-export const getRunpodGpuOptions = (nAtoms)      =>
-  _oxdnaJSON('POST', '/runpod/gpu-options', nAtoms ? { n_atoms: nAtoms } : {})
+export const getRunpodGpuOptions = (nAtoms, preparation = {}) =>
+  _oxdnaJSON('POST', '/runpod/gpu-options', { ...preparation, ...(nAtoms ? { n_atoms: nAtoms } : {}) })
 /** The Job Wizard's RunPod feed: the WHOLE plan costed (relaxation + production, at their own
  *  timesteps) plus storage, balance, live pods and the pre-flight — in ONE round trip, so the
  *  card does not fetch the same live stock four times. Body is `runpodPlanShape(plan)`. */
@@ -3042,7 +3050,7 @@ export const getLammpsTrajectoryBin = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getLammpsTrajectoryBin')
   return _oxdnaBin(
     'GET', `/lammps/jobs/${id}/trajectory-bin?align=${align}`,
-    undefined, { signal, onProgress: opts?.onProgress },
+    undefined, { signal, onProgress: opts?.onProgress, maxBytes: TRAJECTORY_RESPONSE_BYTES },
   )
 }
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
@@ -3520,7 +3528,7 @@ export const getMdTrajectory     = (id, signal, opts = {}) =>
 export const getMdTrajectoryBin = (id, signal, opts = {}) =>
   _oxdnaBin(
     'GET', `/md/jobs/${id}/trajectory-bin${_trajectoryQuery(opts)}`, undefined,
-    { signal, onProgress: opts?.onProgress },
+    { signal, onProgress: opts?.onProgress, maxBytes: TRAJECTORY_RESPONSE_BYTES },
   )
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast.
  *  Also returns `total_raw` + per-stage `n_raw` (undownsampled DCD counts). */
@@ -3574,7 +3582,7 @@ export const cancelMdAnalysis = (id, kind) =>
 export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
   opts.positionsOnly
     ? _oxdnaBin('POST', `/md/jobs/${id}/frames-atomistic-bin`,
-        { frame_indices: frameIndices, ..._strideBody(opts) }).then(buffer => parseMdAtomFrames(buffer, { compact: opts.compact }))
+        { frame_indices: frameIndices, ..._strideBody(opts) }, { signal: opts.signal, maxBytes: TRAJECTORY_RESPONSE_BYTES }).then(buffer => parseMdAtomFrames(buffer, { compact: opts.compact }))
     : _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`,
     { frame_indices: frameIndices, ..._strideBody(opts),
       ...(opts.positionsOnly ? { positions_only: true } : {}) })
@@ -3582,7 +3590,7 @@ export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
  *  stream coordinates with getMdFramesAtomistic(..., {positionsOnly:true}). Same
  *  contract as getOxdnaAtomisticModel. */
 export const getMdAtomisticModel = (id) =>
-  _oxdnaBin('GET', `/md/jobs/${id}/atomistic-model-bin`).then(parseMdAtomModel)
+  _oxdnaBin('GET', `/md/jobs/${id}/atomistic-model-bin`, undefined, { maxBytes: TRAJECTORY_RESPONSE_BYTES }).then(parseMdAtomModel)
 /** The design's intended extra-base UV weld pairs + their C5/C6 atom serials
  *  ({ready, pairs, constants}). Identity only — the viewer computes d_mid/eta from the
  *  frame it is already rendering, so the markers can't drift off the atoms. `pairs` is
@@ -3644,7 +3652,7 @@ export const getMdFramesSolventBin = (id, frameIndices, opts = {}) =>
     atomistic: !!opts.atomistic,
     max_waters: opts.maxWaters ?? null,
     include_dna: !!opts.includeDna,
-  })
+  }, { signal: opts.signal, maxBytes: TRAJECTORY_RESPONSE_BYTES })
 /** How much solvent a NAMD job HAS ({ready, n_waters, n_ions, species, box_nm}) —
  *  read from the package's charge audit, so it answers in milliseconds and can price
  *  a fetch before one is made. */
@@ -3748,6 +3756,7 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Replace settings and rebuild an unstarted draft/prepared job in place. */
 export const updateMdJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/md/jobs/${id}/settings`, body)
+export const updateMdDraftPreparation = (id, body = {}) => _oxdnaJSON('PATCH', `/md/jobs/${id}/preparation`, body)
 export const copyMdJob           = (id)          => withCreatingJob('namd', { copy_source_id: id }, () => _oxdnaJSON('POST', `/md/jobs/${id}/copy`))
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
@@ -5655,3 +5664,5 @@ export async function pasteVRClipboard(body, { onCommitted } = {}) {
   await _syncFromDesignResponse(response)
   return response
 }
+
+export const getMdRuntimePreview = (body) => _oxdnaJSON('POST', '/md/runtime-preview', body)

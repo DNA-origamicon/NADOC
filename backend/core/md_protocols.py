@@ -197,16 +197,17 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
     ``None`` DELETES the directive, which is how a user turns something off that the
     protocol turned on.
 
-    Returns ``conf_text`` unchanged when there is nothing to apply — the conf writers
-    carry byte-identical guarantees that the ensemble path depends on, and this must not
-    disturb them for a job that overrides nothing.
+    Safe patch layouts remain unchanged when there are no overrides. Periodic
+    layouts exceeding the occupancy allowance receive decomposition settings;
+    physical settings and explicitly selected decomposition controls are preserved.
 
     Raises ``ValueError`` for a protected directive: see :data:`PROTECTED_DIRECTIVES`.
     A repeated directive (``extraBondsFile``) is replaced at its FIRST occurrence and the
     rest dropped, so an override of it means "these files, instead of those".
     """
+    from backend.core.namd_patch_grid import ensure_safe_patch_layout
     if not overrides:
-        return conf_text
+        return ensure_safe_patch_layout(conf_text)
 
     clean: dict[str, "str | None"] = {}
     spelling: dict[str, str] = {}  # lowercase key -> the caller's own casing
@@ -223,7 +224,7 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
             )
         clean[low] = None if value is None else str(value).strip()
     if not clean:
-        return conf_text
+        return ensure_safe_patch_layout(conf_text)
 
     seen: set[str] = set()
     out: list[str] = []
@@ -243,11 +244,12 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
             out.append(f"{body.split(None, 1)[0]:<18} {value}\n")
     missing = [(k, v) for k, v in clean.items() if k not in seen and v is not None]
     if missing:
-        out.append(
-            "\n# ── Per-stage overrides (set by hand; not from the protocol) ──\n"
-        )
-        out.extend(f"{spelling[k]:<18} {v}\n" for k, v in missing)
-    return "".join(out)
+        block="\n# Per-stage overrides\n"+''.join(f"{spelling[k]:<18} {v}\n" for k,v in missing)
+        text=''.join(out)
+        match=re.search(r'^(?:# NADOC_ADAPTIVE_MIN_BEGIN|run\b|minimize\b|while\b|for\b|if\b)',text,re.M)
+        pos=match.start() if match else len(text)
+        out=[text[:pos]+block+text[pos:]]
+    return ensure_safe_patch_layout("".join(out))
 
 
 def overrides_for_stage(stage_overrides: "dict | None", index: int) -> dict:
@@ -2852,7 +2854,7 @@ def _base_name_stem(package_dir: Path) -> str:
     return base[0].stem
 
 
-def _iter_packed_psf_pairs(lines: list[str], start_i: int, n_pairs: int, width: int):
+def _iter_packed_psf_pairs(lines, start_i: int, n_pairs: int, width: int):
     """Yield ``n_pairs`` ``(a, b)`` index pairs from a PACKED fixed-width PSF section
     (``!NBOND`` = (8I8) standard / (8I10) EXT, no separators).
 
@@ -2861,18 +2863,39 @@ def _iter_packed_psf_pairs(lines: list[str], start_i: int, n_pairs: int, width: 
     index fills an I8 column and two adjacent numbers merge into one token, so ``split()``
     drops half of them and IndexErrors (the 2.85M shell never hit this; the ~11.8M full box
     does).  Fixed-width slicing parses both small and large systems identically."""
-    read, li = 0, start_i
-    while read < n_pairs:
-        row = lines[li].rstrip()
-        nums = [
-            int(row[c : c + width])
-            for c in range(0, len(row), width)
-            if row[c : c + width].strip()
-        ]
+    from itertools import islice
+
+    read = 0
+    for row in islice(lines, start_i, None):
+        if read >= n_pairs:
+            return
+        row = row.rstrip()
+        nums = [int(row[c:c + width]) for c in range(0, len(row), width)
+                if row[c:c + width].strip()]
         for j in range(0, len(nums) - 1, 2):
             yield nums[j], nums[j + 1]
             read += 1
-        li += 1
+            if read >= n_pairs:
+                return
+    if read != n_pairs:
+        raise ValueError(f'Truncated PSF bond section: {read} of {n_pairs} pairs')
+
+
+def _prepared_hmr_count(src_psf: Path, hmr_psf: Path) -> int | None:
+    """Reuse this builder's default HMR only when both file identities match."""
+    import hashlib
+    try:
+        receipt = json.loads(src_psf.with_suffix('.hmr.json').read_text())
+        count = receipt['hydrogens_repartitioned']
+        if receipt['schema'] != 1 or receipt['factor'] != 3.0 or type(count) is not int or count < 0:
+            return None
+        for path, key in ((src_psf, 'source_sha256'), (hmr_psf, 'hmr_sha256')):
+            with path.open('rb') as source:
+                if hashlib.file_digest(source, 'sha256').hexdigest() != receipt[key]:
+                    return None
+        return count
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def write_hmr_psf(
@@ -2913,90 +2936,102 @@ def write_hmr_psf(
     width, so atom ordering and every other field stay byte-for-byte intact.
     Returns the number of hydrogens repartitioned.
     """
+    from itertools import chain
+    import os
+    import tempfile
+    import numpy as np
+
     heavy_residues = heavy_residues or set()
-    lines = src_psf.read_text().splitlines()
+    heavy = set()
+    # Only eligible solute hydrogens need adjacency. Keep masses compact even
+    # for water; sequential mass updates intentionally preserve legacy H-H cases.
+    neighbors = {}
+    with src_psf.open() as source:
+        header = next(source)
+        for line in source:
+            if '!NATOM' in line:
+                n_atoms = int(line.split()[0])
+                break
+        else:
+            raise RuntimeError(f'!NATOM not found in {src_psf}')
+        mass = np.zeros(n_atoms + 1, dtype=np.float64)
+        seen = bytearray(n_atoms + 1)
+        for _ in range(n_atoms):
+            parts = next(source).split()
+            aid = int(parts[0])
+            if not 1 <= aid <= n_atoms or seen[aid]:
+                raise ValueError(f'Invalid PSF atom index {aid}')
+            seen[aid] = 1
+            mass[aid] = value = float(parts[7])
+            if parts[3] in _HMR_WATER_RESNAMES:
+                continue
+            if (parts[1], parts[2]) in heavy_residues:
+                heavy.add(aid)
+            elif 0.9 <= value <= 1.5:
+                neighbors[aid] = []
+        for line in source:
+            if '!NBOND' in line:
+                n_bonds = int(line.split()[0])
+                break
+        else:
+            raise RuntimeError(f'!NBOND not found in {src_psf}')
+        first = next(source, '').rstrip()
+        ends = [m.end() for m in re.finditer(r'\d+', first)]
+        bond_w = ends[1] - ends[0] if len(ends) >= 2 else (10 if 'EXT' in header.upper() else 8)
+        for a, b in _iter_packed_psf_pairs(chain([first], source), 0, n_bonds, bond_w):
+            if not (1 <= a <= n_atoms and 1 <= b <= n_atoms):
+                raise ValueError('PSF bond index outside NATOM')
+            if a in neighbors:
+                neighbors[a].append(b)
+            if b in neighbors:
+                neighbors[b].append(a)
 
-    def _find(tag: str) -> int:
-        for i, l in enumerate(lines):
-            if tag in l:
-                return i
-        raise RuntimeError(f"{tag} not found in {src_psf}")
-
-    natom_i = _find("!NATOM")
-    n_atoms = int(lines[natom_i].split()[0])
-    nbond_i = _find("!NBOND")
-    n_bonds = int(lines[nbond_i].split()[0])
-
-    mass = [0.0] * (n_atoms + 1)  # 1-based
-    resname = [""] * (n_atoms + 1)
-    heavy = [False] * (n_atoms + 1)  # dangling extra bases: mass scaled UP, no HMR
-    span: list[Optional[tuple[int, int, int, int]]] = [None] * (n_atoms + 1)
-    for k in range(n_atoms):
-        li = natom_i + 1 + k
-        toks = list(re.finditer(r"\S+", lines[li]))
-        aid = int(toks[0].group())
-        resname[aid] = toks[3].group()  # atomid seg resid resname name type charge MASS
-        if heavy_residues and (toks[1].group(), toks[2].group()) in heavy_residues:
-            heavy[aid] = True
-        m = toks[7]
-        mass[aid] = float(m.group())
-        span[aid] = (li, m.start(), m.end(), m.end() - m.start())
-
-    # Detect the packed bond-column width from the DATA rather than the "EXT" flag: NADOC
-    # emits BOTH widths — psfgen-built PSFs use CHARMM-standard I10 under EXT, but the
-    # tool-free `namd_helpers._complete_psf_from_stub` packs bonds at I8 even under an EXT
-    # header (and with a variable count per line).  Assuming I10 from the flag mis-slices
-    # the I8 form (two adjacent indices land in one 10-char slice → int() ValueError).
-    # Right-justified fixed-width fields put consecutive integers exactly `width` apart, so
-    # the gap between the first two integer ends IS the column width.  Falls back to the EXT
-    # heuristic only when the row has <2 separable integers — the >=10M-atom I8 case where
-    # digits merge with no separator, which fixed-width slicing at the flagged width handles.
-    _first = lines[nbond_i + 1].rstrip() if nbond_i + 1 < len(lines) else ""
-    _ends = [m.end() for m in re.finditer(r"\d+", _first)]
-    bond_w = (
-        (_ends[1] - _ends[0])
-        if len(_ends) >= 2
-        else (10 if "EXT" in lines[0].upper() else 8)
-    )
-    neigh: list[list[int]] = [[] for _ in range(n_atoms + 1)]
-    for a, b in _iter_packed_psf_pairs(lines, nbond_i + 1, n_bonds, bond_w):
-        neigh[a].append(b)
-        neigh[b].append(a)
-
-    def _is_h(aid: int) -> bool:
-        return 0.9 <= mass[aid] <= 1.5
-
-    heavy_delta: dict[int, float] = {}
+    heavy_delta = {}
     n_hmr = 0
-    for aid in range(1, n_atoms + 1):
-        if not _is_h(aid) or resname[aid] in _HMR_WATER_RESNAMES or heavy[aid]:
+    for aid in sorted(neighbors):
+        parents = [p for p in neighbors[aid] if not 0.9 <= float(mass[p]) <= 1.5]
+        if len(parents) != 1:
             continue
-        parents = [p for p in neigh[aid] if not _is_h(p)]
-        if len(parents) != 1:  # ion-model H bonded to >1 heavy: skip
-            continue
-        new_h = mass[aid] * factor
-        heavy_delta[parents[0]] = heavy_delta.get(parents[0], 0.0) + (new_h - mass[aid])
+        old_h = float(mass[aid])
+        new_h = old_h * factor
+        heavy_delta[parents[0]] = heavy_delta.get(parents[0], 0.0) + (new_h - old_h)
         mass[aid] = new_h
         n_hmr += 1
-    for aid, d in heavy_delta.items():
-        mass[aid] -= d
-    # Dangling extra bases: uniform mass scale-UP on their (physical) atoms — slows their
-    # fast heavy-atom modes below the 4 fs limit.  Applied AFTER HMR; a heavy residue's
-    # atoms were skipped by the HMR loop (its H never donated, its heavy atoms received no
-    # delta — DNA H are intra-residue), so they are still at physical mass here.
-    if heavy_residues and heavy_factor != 1.0:
-        for aid in range(1, n_atoms + 1):
-            if heavy[aid] and resname[aid] not in _HMR_WATER_RESNAMES:
-                mass[aid] *= heavy_factor
+    for aid, delta in heavy_delta.items():
+        mass[aid] = float(mass[aid]) - delta
+    if heavy_factor != 1.0:
+        for aid in heavy:
+            mass[aid] = float(mass[aid]) * heavy_factor
+    del neighbors, heavy_delta, heavy
+    del seen
 
-    out = list(lines)
-    for aid in range(1, n_atoms + 1):
-        sp = span[aid]
-        if sp is None:
-            continue
-        li, s, e, w = sp
-        out[li] = out[li][:s] + f"{mass[aid]:.4f}".rjust(w) + out[li][e:]
-    dst_psf.write_text("\n".join(out) + "\n")
+    # A second streaming pass preserves every non-mass field. Publish only a
+    # complete file, including when callers deliberately use the same input/output.
+    temporary = None
+    try:
+        with src_psf.open() as source, tempfile.NamedTemporaryFile(
+            mode='w', dir=dst_psf.parent, delete=False
+        ) as out:
+            temporary = Path(out.name)
+            for line in source:
+                out.write(line.rstrip('\r\n') + '\n')
+                if '!NATOM' in line:
+                    break
+            for _ in range(n_atoms):
+                line = next(source).rstrip('\r\n')
+                tokens = list(re.finditer(r'\S+', line))
+                aid = int(tokens[0].group())
+                token = tokens[7]
+                value = f'{float(mass[aid]):.4f}'.rjust(token.end() - token.start())
+                out.write(line[:token.start()] + value + line[token.end():] + '\n')
+            for line in source:
+                out.write(line.rstrip('\r\n') + '\n')
+        mode_source = dst_psf if dst_psf.exists() else src_psf
+        os.chmod(temporary, mode_source.stat().st_mode & 0o777)
+        os.replace(temporary, dst_psf)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return n_hmr
 
 
@@ -3798,6 +3833,7 @@ def prepare_mgh_slow_release(
     pkg_root.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         zf.extractall(pkg_root)
+    del zip_bytes
 
     # Discover the extracted subfolder
     inner_dirs = [p for p in pkg_root.iterdir() if p.is_dir()]
@@ -4086,7 +4122,10 @@ def prepare_mgh_slow_release(
     )
     if ladder_choice.hmr:
         hmr_psf = package_dir / f"{name_stem}_hmr.psf"
-        n_hmr = write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
+        base_psf = package_dir / f"{name_stem}.psf"
+        n_hmr = _prepared_hmr_count(base_psf, hmr_psf)
+        if n_hmr is None:
+            n_hmr = write_hmr_psf(base_psf, hmr_psf)
         structure_psf = hmr_psf.name
 
     # Mirrors _segment_conf's gate so the manifest reports what the confs ACTUALLY carry.
