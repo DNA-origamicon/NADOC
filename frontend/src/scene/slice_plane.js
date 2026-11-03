@@ -1514,7 +1514,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // ── Raycasting helpers ──────────────────────────────────────────────────────
 
   function _rayHandle() {
-    return _raycaster.intersectObjects([_sphere, _coneFwd, _coneBack]).length > 0
+    return _handleGroup.visible && _raycaster.intersectObjects([_sphere, _coneFwd, _coneBack]).length > 0
   }
 
   function _rayPlane() {
@@ -1822,7 +1822,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   if (_ctxEl) {
     async function _doExtrude() {
-      if (privateContext || _commitInFlight) return
+      if ((privateContext && !privateContext.onExtrude) || _commitInFlight) return
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
       const absVal  = Math.abs(rawVal)
@@ -1853,7 +1853,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _hidePreview()
       let succeeded = false
       try {
-        await onExtrude?.({
+        await (privateContext?.onExtrude ?? onExtrude)?.({
           cells, lengthBp, plane: _plane, offsetNm: _offset,
           continuationMode: _continuationMode,
           newBundle: _newBundle,
@@ -1910,10 +1910,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   return {
     /** Temporarily bind this existing picker to an owned feature prefix. */
-    usePrivateContext({ design, helixAxes, displayLayer: layer }) {
+    usePrivateContext({ design, helixAxes, displayLayer: layer, onExtrude: editExtrude }) {
       if (!design || !helixAxes || !Number.isInteger(layer) || layer < 0 || layer > 31) throw new Error('Invalid private lattice context')
       this.hide()
-      const token = { design, helixAxes, displayLayer: layer }
+      const token = { design, helixAxes, displayLayer: layer, onExtrude: editExtrude }
       privateContext = token
       _root.traverse(node => node.layers.set(layer)); _raycaster.layers.set(layer)
       const release = () => {
@@ -2047,6 +2047,32 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     getSelectedCells() { return _selectionOrder.map(k => k.split(',').map(Number)) },
+    getExtrudeInputs() {
+      const raw = Math.abs(Number(_sliceLengthInput?.value))
+      return { cells: this.getSelectedCells(), length_bp: _sliceDirSign *
+        (_sliceUnitSelect?.value === 'nm' ? Math.round(raw / RISE) : Math.trunc(raw)),
+        strand_filter: _ctxEl?.querySelector('input[name="slice-strand-filter"]:checked')?.value ?? 'both',
+        ligate_adjacent: _ctxEl?.querySelector('#slice-ligate-adjacent')?.checked ?? true }
+    },
+    /** Restore native extrusion controls without changing the authored design. */
+    setExtrudeInputs(params) {
+      if (_sliceUnitSelect) _sliceUnitSelect.value = 'bp'
+      if (_sliceLengthInput) _sliceLengthInput.value = String(Math.abs(params.length_bp))
+      for (const input of _ctxEl?.querySelectorAll('input[name="slice-strand-filter"]') ?? [])
+        input.checked = input.value === (params.strand_filter ?? 'both')
+      const ligate = _ctxEl?.querySelector('#slice-ligate-adjacent')
+      if (ligate) ligate.checked = params.ligate_adjacent ?? true
+      _setDirSign(params.length_bp < 0 ? -1 : 1)
+      _applyLengthStep()
+      this.setSelectedCells(params.cells)
+    },
+    getPlaneCenterWorld() {
+      const selected = _circleMeshes.filter(cell => _selected.has(`${cell.row},${cell.col}`))
+      if (!selected.length) return _planeMesh.getWorldPosition(new THREE.Vector3())
+      const center = new THREE.Vector3()
+      for (const cell of selected) center.add(cell.fill.getWorldPosition(new THREE.Vector3()))
+      return center.multiplyScalar(1 / selected.length)
+    },
     setSelectedCells(cells) {
       _selected.clear(); _selectionOrder = []
       for (const [row, col] of cells) _selectCell(`${row},${col}`)

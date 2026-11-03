@@ -145,7 +145,7 @@ test('Sweep lists upstream dependents and refuses history edits at rollback', as
       if (!await (await import('/src/api/client.js')).seekFeatures(1)) throw new Error('Seek failed')
     })
     const rolledBack = await f.checkpoint(), writes = f.writes.length
-    await expect(page.locator('[title="Return to the latest history position before editing feature inputs."]').first()).toBeDisabled()
+    await expect(page.locator('[title="Move the history cursor to this feature or later to edit it."]').first()).toBeDisabled()
     expect(await f.checkpoint()).toEqual(rolledBack)
     expect(f.writes).toHaveLength(writes)
     await page.locator('.menu-item').filter({ hasText: 'Tools' }).first().hover()

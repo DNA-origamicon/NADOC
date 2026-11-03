@@ -1,3 +1,4 @@
+import { canEditAtCursor, isLatestHistory, restoreHistoryForEdit } from './feature_edit_cursor.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
@@ -293,13 +294,17 @@ export async function openRoutingFeatureEditor({ api, store, index, subIndex, pa
 /** Thin Feature Log entry; snapshot/diff eviction is not input eligibility. */
 export function createRoutingEditAction({ api, store, design, parent, child, index, subIndex, enabled, assemblyActive }) {
   if (!enabled || assemblyActive || !isNativeRoutingChild(parent, child)) return null
-  const latest = (design.feature_log_cursor ?? -1) === -1 && design.feature_log_sub_cursor == null
+  const allowed = canEditAtCursor(design, index, subIndex)
   const edit = createButton({ label: '✎', size: 'sm', onClick: async event => {
     event.stopPropagation(); edit.disabled = true
-    try { await openRoutingFeatureEditor({ api, store, index, subIndex, parent, child }) }
-    finally { if (edit.isConnected) edit.disabled = !latest }
+    try {
+      if (!isLatestHistory(store.getState().currentDesign)
+          && !await restoreHistoryForEdit(api, store, index, parent.id, subIndex)) return
+      await openRoutingFeatureEditor({ api, store, index, subIndex, parent, child })
+    }
+    finally { if (edit.isConnected) edit.disabled = !allowed }
   } })
-  edit.disabled = !latest
-  edit.title = latest ? `Edit ${child.label} inputs` : 'Return to the latest history position before editing routing inputs.'
+  edit.disabled = !allowed
+  edit.title = allowed ? `Edit ${child.label} inputs` : 'Move the history cursor to this routing step or later to edit it.'
   return edit
 }

@@ -31,6 +31,25 @@ beforeEach(() => {
   }
 })
 
+it('shares the Extrude popup for history Apply and delegates Cancel until restoration finishes', () => {
+  const apply = document.createElement('button'); apply.id = 'slice-extrude-btn'; apply.textContent = 'Extrude'
+  document.getElementById('extrude-panel').append(apply)
+  const deps = makeDeps(), panel = initExtrudePanel(deps)
+  const onCancel = vi.fn(), onPlaneChange = vi.fn()
+  panel.activateEdit({ plane: 'XZ', onCancel, onPlaneChange })
+  expect(document.getElementById('extrude-from').value).toBe('XZ')
+  expect(apply.textContent).toBe('Apply')
+  document.getElementById('extrude-from').value = 'YZ'
+  document.getElementById('extrude-from').dispatchEvent(new Event('change'))
+  expect(onPlaneChange).toHaveBeenCalledWith('YZ')
+  panel.hide()
+  expect(onCancel).toHaveBeenCalledTimes(1)
+  expect(panel.isActive()).toBe(true)
+  panel.finishEdit()
+  expect(panel.isActive()).toBe(false)
+  expect(apply.textContent).toBe('Extrude')
+})
+
 describe('initExtrudePanel — new-bundle', () => {
   it('activate("newBundle") shows the panel on the default plane and opens the slice UI', () => {
     const deps = makeDeps()

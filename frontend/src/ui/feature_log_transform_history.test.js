@@ -37,8 +37,8 @@ it.each(['cluster_op', 'nucleotide-transform', 'nucleotide-transform-batch', 'nu
     expect(f.row.textContent).not.toContain('⚠')
   })
 
-it('requires the latest history cursor for the owned editor', () => {
-  expect(render(entryFor('placement-poses'), { cursor: 0 }).edit.disabled).toBe(true)
+it('allows the owned editor at its feature step', () => {
+  expect(render(entryFor('placement-poses'), { cursor: 0 }).edit.disabled).toBe(false)
 })
 
 it('keeps new role entry points gated with the corresponding editor', () => {

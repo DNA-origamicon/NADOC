@@ -36,6 +36,8 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
   const _select = document.getElementById('extrude-from')
   let _active = false
   let _mode   = null
+  let _editCancel = null
+  let _editPlane = null
   const popup = createToolPopup({ panel: _panel, title: 'Extrude', onClose: hide })
 
   function _modeIndicator() { return document.getElementById('mode-indicator') }
@@ -78,6 +80,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
 
   /** Tear down the tool: hide the panel + slice widget, reset the dropdown + indicator. */
   function hide() {
+    if (_editCancel) return _editCancel()
     const wasActive = _active
     _active = false
     _mode   = null
@@ -94,11 +97,30 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
   // Dropdown is the sole plane selector in new-bundle mode: re-position the widget
   // onto the chosen origin plane (slice_plane.show clears the in-progress selection).
   _select?.addEventListener('change', () => {
+    if (_active && _mode === 'edit') { _editPlane?.(_select.value); return }
     if (!_active || _mode !== 'newBundle') return
     const plane = _select.value
     store.setState({ currentPlane: plane })
     _showNewBundleOnPlane(plane)
   })
 
-  return { activate, hide, isActive: () => _active }
+  function finishEdit() {
+    _editCancel = _editPlane = null
+    popup?.setAvoidCanvas(false)
+    const apply = document.getElementById('slice-extrude-btn')
+    if (apply) apply.textContent = 'Extrude'
+    hide()
+  }
+  function activateEdit({ plane, onCancel, onPlaneChange }) {
+    activate('edit', { plane })
+    popup?.setAvoidCanvas(true)
+    _editCancel = onCancel
+    _editPlane = onPlaneChange
+    if (_select) _select.disabled = !onPlaneChange
+    const apply = document.getElementById('slice-extrude-btn')
+    if (apply) apply.textContent = 'Apply'
+    const mi = _modeIndicator()
+    if (mi) mi.textContent = 'EDIT EXTRUDE — change cells and parameters · Apply to rebuild · Esc to cancel'
+  }
+  return { activate, activateEdit, finishEdit, hide, isActive: () => _active }
 }

@@ -329,7 +329,7 @@ test('Fine Routing lists upstream dependents and refuses mid-log edits', async (
     })
     const rolledBack = await f.checkpoint()
     await page.getByTitle('Expand Fine Routing', { exact: true }).click()
-    const edit = page.getByTitle('Return to the latest history position before editing routing inputs.', { exact: true })
+    const edit = page.getByTitle('Move the history cursor to this routing step or later to edit it.', { exact: true })
     await expect(edit).toHaveCount(parent.children.length)
     await expect(edit.first()).toBeDisabled()
     const denied = await request.post(`http://127.0.0.1:8004/api/design/features/${index}/edit?sub_index=${subIndex}`, {

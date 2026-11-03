@@ -35,7 +35,7 @@ it('opens the exact native Sweep row despite evicted bodies and a later snapshot
   expect(api.editFeature).not.toHaveBeenCalled()
 })
 
-it.each([{ cursor: -2 }, { cursor: 0 }, { subCursor: 0 }])('requires the current complete history position (%j)', options => {
+it.each([{ cursor: -2 }, { subCursor: 0 }])('refuses future or invalid history positions (%j)', options => {
   const { edit, onEditSweep } = fixture(options)
   expect(edit).toBeDefined(); expect(edit.disabled).toBe(true)
   edit.click(); expect(onEditSweep).not.toHaveBeenCalled()
@@ -48,3 +48,5 @@ it.each([true, false])('does not offer obsolete editing while rollout is disable
 it('does not promote an unknown Sweep proof contract to recovery-independent editing', () => {
   expect(fixture({ version: 2 }).edit).toBeUndefined()
 })
+
+it('allows Sweep at its own step', () => { expect(fixture({ cursor: 0 }).edit.disabled).toBe(false) })

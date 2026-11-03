@@ -14,12 +14,19 @@ export function createToolPopup({ panel, title, onClose, panelDisplay = 'block' 
   root.dataset.toolPanel = panel.id
   root.style.display = 'none'
   document.body.append(root)
-  let position = null, drag = null
+  let position = null, drag = null, avoidCanvas = false, canvasPosition = null
   const canvas = document.getElementById('canvas')
   function layout() {
     const bounds = canvas?.getBoundingClientRect()
-    const left = Math.max(8, bounds?.left ?? 8), top = Math.max(8, bounds?.top ?? 8)
-    const right = Math.min(window.innerWidth - 8, bounds?.right || window.innerWidth - 8)
+    let left = Math.max(8, bounds?.left ?? 8)
+    let right = Math.min(window.innerWidth - 8, bounds?.right || window.innerWidth - 8)
+    const top = Math.max(8, bounds?.top ?? 8)
+    // Historical lattice editing must leave a usable picking area. On a narrow
+    // canvas, temporarily use an adjacent sidebar instead of covering the grid.
+    if (avoidCanvas && right - left < 720) {
+      if (left >= 288) { right = left - 8; left = Math.max(8, right - 360) }
+      else if (window.innerWidth - right >= 288) { left = right + 8; right = window.innerWidth - 8 }
+    }
     const bottom = Math.min(window.innerHeight - 8, bounds?.bottom || window.innerHeight - 8)
     const width = Math.max(1, right - left), height = Math.max(1, bottom - top)
     root.style.width = `${Math.min(360, width)}px`
@@ -65,6 +72,13 @@ export function createToolPopup({ panel, title, onClose, panelDisplay = 'block' 
     root,
     show() { panel.style.display = panelDisplay; sync() },
     hide() { panel.style.display = 'none'; sync() },
+    setAvoidCanvas(value) {
+      if (avoidCanvas === value) return
+      if (value) { canvasPosition = position; position = null }
+      else { position = canvasPosition; canvasPosition = null }
+      avoidCanvas = value
+      if (root.style.display !== 'none') layout()
+    },
     setTitle(value) { heading.textContent = value; close.setAttribute('aria-label', `Close ${value}`) },
     dispose() { observer.disconnect(); resize?.disconnect(); window.removeEventListener('resize', layout); root.remove() },
   }

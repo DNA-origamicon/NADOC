@@ -30,8 +30,8 @@ it('edits an evicted native child before a later feature through the actual pane
 it.each([{ enabled: false }, { native: false }, { kind: 'strand-delete' }])('does not manufacture native eligibility (%j)', options => {
   const f = fixture(options); expect(f.edit()).toBeUndefined(); expect(f.api.getRoutingFeatureInputs).not.toHaveBeenCalled()
 })
-it('requires latest history before loading a native child prefix', () => {
-  const f = fixture({ cursor: 0 }); expect(f.edit().disabled).toBe(true); expect(f.api.getRoutingFeatureInputs).not.toHaveBeenCalled()
+it('allows a child when its parent has executed', () => {
+  const f = fixture({ cursor: 0 }); expect(f.edit().disabled).toBe(false); expect(f.api.getRoutingFeatureInputs).not.toHaveBeenCalled()
 })
 it('marks the refused child and blocked suffix, retaining the draft until Cancel', async () => {
   const f = fixture()

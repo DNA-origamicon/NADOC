@@ -1,3 +1,4 @@
+import { createAssetSaveCoordination } from './asset_save_coordination.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
@@ -81,6 +82,7 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 import { createDesignRevisionTracker } from './design_revisions.js'
 
 const _designRevisions = createDesignRevisionTracker()
+const _assetSaves = createAssetSaveCoordination()
 const _partRepairResponse = createPartRepairResponse({ store, revisions: _designRevisions, getDocId, syncDesign: _syncFromDesignResponse })
 export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
   acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
@@ -3735,6 +3737,8 @@ export const editPatternFeatureInputs = (index, params, context, featureId) => _
 const _featureInputs = createSourceBoundRequests({ store, request: _request, syncDesign: _syncFromDesignResponse,
   getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests, label: 'feature' })
 export const captureFeatureEditContext = state => _featureInputs.capture(state)
+/** Keep autosave acknowledgements outside temporary history-edit navigation. */
+export const holdFeatureEditSaves = () => _assetSaves.hold()
 export const isFeatureEditContextCurrent = (context, state) => _featureInputs.isCurrent(context, state)
 export const editNativeExtrusionFeature = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
 export const editFeatureInputs = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
@@ -4909,7 +4913,17 @@ export async function saveAssemblyToWorkspace(filename) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function saveDesignToWorkspace(path) {
+export function saveDesignToWorkspace(path) {
+  return _coordinateAssetSave(() => _saveDesignToWorkspace(path))
+}
+
+function _coordinateAssetSave(action) {
+  const generation = _documentRequests.capture(), doc = getDocId(), id = store.getState().currentDesign?.id
+  return _assetSaves.save(action, () => _documentRequests.isCurrent(generation)
+    && getDocId() === doc && store.getState().currentDesign?.id === id)
+}
+
+async function _saveDesignToWorkspace(path) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
   if (!json) return null
   // A same-path save refreshes only the backend's identity_confirmed_at stamp.
@@ -4937,7 +4951,11 @@ export async function convertHistory({ apply = false, expectedRevision = null } 
 
 /** Save current in-memory design to an explicit workspace path.
  *  Pass overwrite:false to get a 409 if the file already exists (for Save As confirm flow). */
-export async function saveDesignAs(path, overwrite = true) {
+export function saveDesignAs(path, overwrite = true) {
+  return _coordinateAssetSave(() => _saveDesignAs(path, overwrite))
+}
+
+async function _saveDesignAs(path, overwrite) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite })
   if (!json) return null
   if (json.identity_disposition === 'confirmed') {

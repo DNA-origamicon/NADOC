@@ -74,6 +74,7 @@ import { initClusterClipboard }      from './scene/cluster_clipboard.js'
 import { initSavedSweepWarnings } from './scene/sweep_warning_markers.js'
 import { initSweepPanel } from './ui/sweep_panel.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
+import { createExtrudeHistoryEditor } from './app/extrude_history_editor.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
@@ -2485,6 +2486,7 @@ async function main() {
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  const extrudeHistoryEditor = createExtrudeHistoryEditor({ store, api, slicePlane, panel: _extrudePanel, getCamera: getRenderCamera, getControls: getActiveControls, setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, showToast })
   initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
   const sweepPanel = initSweepPanel({ setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
   initLinearPatternPanel({ store, showToast, selectionManager, scene })
@@ -5809,6 +5811,7 @@ async function main() {
   _partFeatureLogPanel = initFeatureLogPanel(store, {
     showSeekPreview: createFeatureSeekPreview(scene),
     onEditSweep: (entry, index) => sweepPanel.edit(entry, index),
+    onEditExtrude: (entry, index) => extrudeHistoryEditor.open(entry, index),
     api: {
       ...api,
       seekFeatures:         _seekFeaturesWithDelta,

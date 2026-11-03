@@ -6,6 +6,126 @@ The user requested the next three independent milestones after the original 14:0
 **Tools done: 4/4. CAD: 30/34 complete; FH-27/31/32/36 remain open.**
 FH-30/34/35 closed in the preceding campaign; FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
 
+Evidence root **C**: `.development-artifacts/feature-history-focus/`.
+
+## November 3 — actual workspace autosave interruption
+
+User verification superseded the prior refresh-only diagnosis: the earlier app
+fixtures did not activate ordinary workspace autosave. Opening an isolated copy of
+`workspace/test.nadoc` through the normal workspace route reproduced the popup
+closing after a successful autosave advanced revision10→11 with no changed inputs.
+The source guard correctly rejected that revision; tolerating equivalent GET data
+alone did not solve the user's failure.
+
+Extrude now uses the existing workspace-save coordination lease. It drains saves
+already in flight before taking its edit source, holds later workspace writes
+through temporary scrubs/draft editing, and releases them after Apply/Cancel
+restores the opening cursor. Document reset/failure also releases the lease.
+The real unmodified workspace flow now survives a12-second dwell. The durable
+regression covers both Cancel and Apply, retained lattice selection/parameters,
+resumed autosave, reopen and recipe proof. Both real-file cases pass (34.9 s and
+35.9 s);21 controller tests plus2 save-coordination tests pass. Original file SHA256
+`232f14b590dc0ccc7181afa4388eaddf44af1bbd9e918c707f045e2dcc047bb1`
+is unchanged. Full frontend: **805 files /9,599 passed /1 skipped**,379.10 s.
+Lint and whitespace checks pass; isolated `just smoke`: **23 passed**. All7 owned
+browser roots are verified absent; original source checksum remains unchanged.
+Evidence: `C/extrude-autosave-20261103/`. The user's file is read only; diagnostic
+copies use ordinary import/Save As in isolated launcher storage. Copies preserve
+the original open-name: otherwise the workspace loader stamps the temporary
+filename into authoring metadata and correctly fails recipe comparison. The first
+copy also had an incompatible existing revision-store head; legitimate Save As
+provides its own project identity. Neither diagnostic artifact problem is evidence
+of a native-edit defect in the user's source. The separate full agent audit reports
+physical loadout state outside native authoring replay; native recipe proof after
+the corrected workspace flow passes. No main.js change.
+
+## November 3 — Extrude session stability and return position
+
+Follow-up: equivalent passive design refreshes (including recovery-body hydration)
+no longer retire the Extrude picker or discard its draft. The editor rebinds only
+within the same document generation and authoritative revision, with unchanged
+cursor and authored data. Actual input/revision/document changes still invalidate
+it. Apply now restores the opening feature and child cursor after rebuilding the
+full suffix; Cancel continues to restore that cursor and camera. A failed return
+seek after successful publication reports that navigation failure without offering
+the already-committed draft as a retry.
+
+Regression coverage delays a real GET design response while changing the length
+in the ordinary popup, then checks Apply from end, Extrude, and downstream positions,
+save/reopen cursor persistence and full-recipe proof. Unit coverage includes late
+recovery bodies, equivalent full refresh, actual input/revision changes, child
+cursors and failed post-publication navigation. Evidence:
+`C/extrude-edit-stability-20261103/`. Delayed-refresh app matrix: **3 passed**,
+including saved/reopened cursor and complete-recipe proof. Both automatic-routing
+orders also passed. The three owned history roots are absent; the interrupted
+frontend command had not started its suite and was restarted. Full frontend:
+**805 files /9,596 passed /1 skipped**,395.87 s. Lint and whitespace checks pass;
+isolated `just smoke`: **23 passed**. All four owned browser roots are absent.
+`main.js` delta for this follow-up:0. No backend or assembly behavior change.
+
+## November 3 — Extrude edits in the ordinary lattice tool
+
+For bundle-create, extrude-segment, canonical extrude-continuation and
+extrude-deformed-continuation, Edit now seeks to the feature, binds occupancy to
+its recorded prefix, restores the selected cells and signed parameters in the
+ordinary Extrude popup, and aligns the camera face-on to the selection. Apply
+edits the original feature through the existing native editor and rebuilds the
+retained suffix. Cancel restores the opening cursor and camera without editing
+feature inputs. Navigation uses ordinary seeks (and therefore ordinary navigation
+undo entries); the final native edit remains one undoable operation.
+The popup moves over an adjacent sidebar when the canvas is too narrow to select
+cells beside it. Hidden plane handles no longer intercept lattice clicks.
+
+Specialized circle, overhang, frame and source-frame continuation features retain
+their dedicated parameter editor; the ordinary lattice tool cannot represent all
+of their inputs. Other feature editors retain the restore-end behavior below.
+Assembly work remains deferred. User workspace files are untouched.
+
+App workflows: **6 passed** — two real six-helix selection/Cancel/Apply flows with
+both automatic-routing orders, bundle→Bend→Sweep, and the three lattice extrusion
+variants. Feature IDs, suffix inputs, undo/redo, saved/reopened geometry and
+independent recipe replay pass. Evidence: `C/extrude-tool-edit-20261103/`.
+The successful browser root `/tmp/__e2e__history-4astvl7f` is removed.
+Full frontend: **805 files /9,587 passed /1 skipped**,391.83 s. Lint and diff
+whitespace checks pass; isolated `just smoke`: **23 passed**. All seven owned browser
+roots are verified absent, including smoke. No deployment or backend behavior change. `main.js` delta: **+3 lines**,
+solely import, factory initialization and callback wiring; behavior lives in
+`frontend/src/app/extrude_history_editor.js`.
+
+## November 3 — editing from a scrubbed feature
+
+User correction: a supported feature is editable when the cursor is at it or later,
+including Fine Routing child positions. F0 and future steps remain unavailable.
+The part rail now uses that rule. Except for the ordinary Extrude flow above, clicking Edit restores the complete retained history
+through ordinary seek before opening the existing guarded editor; this moves the cursor
+to the end without deleting a suffix or authoring an operation. Failed restoration or a
+document switch prevents opening. Assembly behavior is unchanged.
+Frontend suite: **803 files /9,562 passed /1 skipped**; final focused cursor/editor checks:
+**46 passed**. Evidence: `C/edit-at-cursor-20261103/`. `main.js` LOC delta:0.
+Browser: **2 passes** (34.6 s and 28.2 s), scrub to Extrude then Edit, both
+Extrude→Autoscaffold→Autostaple and the saved `test.nadoc` operation order
+Extrude→Autostaple→Autoscaffold. Downstream inputs/IDs, regenerated geometry,
+one Save undo step, redo and saved/reopened independent recipe proof pass.
+The initial browser assertion counted navigation undo steps as edit steps; it now
+measures Save against the restored editor source. Both disposable roots are absent.
+Isolated app smoke: **23 passed**; `just lint` and diff whitespace checks pass.
+Smoke workspace cleanup verified absent as well. User `workspace/test.nadoc` was read
+for diagnosis and never modified. No backend behavior change or new broad backend run.
+
+## November 2 — upstream Extrude through automatic routing
+
+The existing native extrusion editor rebuilds both downstream automatic routing commands;
+no new replay implementation is needed for the tested six-helix length-edit case.
+`tests/test_extrusion_auto_routing_history.py`: **2 passes**, real spawned evaluator,
+seamless and seamed scaffold routing followed by full Autostaple, 84→126→63 bp.
+Results equal fresh native construction at each length; downstream feature identities and
+inputs persist. Cold proof after JSON reopen, undo/redo, and atomic invalid-length refusal pass.
+Browser: `Early Extrude edit reapplies Autoscaffold and Autostaple` **1 pass /41.0 s**:
+actual feature-log Edit/Save, changed geometry, one undo, redo, saved/reopened native proof.
+Launcher cleanup verified `/tmp/__e2e__history-xq5zb3l_` absent. Test-only additions;
+no fresh broad suite needed. Ruff and diff whitespace checks pass.
+No molecular algorithm change; `main.js` LOC delta:0.
+
 ## November 2 — piercing visualizer and performance
 
 **Piercing performance follow-up (ISSUE-166):** precomputed ring triangles and

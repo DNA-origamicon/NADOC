@@ -2,6 +2,88 @@ import { test, expect } from '@playwright/test'
 import { withHistoryFixture, withHeldResponse } from './helpers/deformation_history.js'
 
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
+
+for (const routing of ['seamless', 'test.nadoc order']) test(`Early Extrude edit reapplies Autoscaffold and Autostaple (${routing})`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    await page.evaluate(async routing => {
+      const api = await import('/src/api/client.js')
+      if (!await api.createDesign('__e2e__routing-resize', 'HONEYCOMB')) throw new Error('New part failed')
+      if (!await api.createBundle({ cells: [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]],
+        lengthBp: 84, name: '__e2e__routing-resize' })) throw new Error('Extrude failed')
+      if (routing === 'seamless') {
+        if (!await api.autoScaffoldSeamless()) throw new Error('Autoscaffold failed')
+        if (!await api.addFullAutostaple()) throw new Error('Autostaple failed')
+      } else {
+        if (!await api.addFullAutostaple()) throw new Error('Autostaple failed')
+        if (!await api.autoScaffoldSeamed()) throw new Error('Autoscaffold failed')
+      }
+    }, routing)
+    const before = await f.checkpoint(), stored = await f.browser()
+    await page.evaluate(async () => {
+      if (!await (await import('/src/api/client.js')).seekFeatures(0)) throw new Error('Seek failed')
+    })
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(0)
+    expect(before.design.feature_log.map(row => row.op_kind)).toEqual(routing === 'seamless'
+      ? ['bundle-create', 'auto-scaffold-seamless', 'full-autostaple']
+      : ['bundle-create', 'full-autostaple', 'auto-scaffold-seamed'])
+    const previousCamera = await page.evaluate(() => window.__nadocTest.viewerDiagnostic().camera)
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const openEdit = () => page.getByTitle(`Edit ${before.design.feature_log[0].label} parameters`, { exact: true }).click()
+    await openEdit()
+    const modal = page.locator('#extrude-panel')
+    await expect(modal).toBeVisible()
+    await expect(modal.getByLabel('Extrusion length', { exact: true })).toHaveValue('84')
+    const clickTarget = () => page.evaluate(() => {
+      const selected = new Set(window.SLICE.getSelectedCells().map(cell => cell.join(',')))
+      return window.__nadocTest.getSliceCellScreenPositions().find(cell => selected.has(`${cell.row},${cell.col}`)
+        && document.elementFromPoint(cell.x, cell.y)?.id === 'canvas')
+    })
+    await expect.poll(clickTarget).toBeTruthy()
+    const clicked = await clickTarget()
+    await page.mouse.click(clicked.x, clicked.y)
+    await expect.poll(() => page.evaluate(() => window.SLICE.getSelectedCells().length)).toBe(5)
+    await modal.getByLabel('Extrusion length', { exact: true }).fill('70')
+    await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(modal).not.toBeVisible()
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(0)
+    expect((await f.checkpoint()).design.feature_log).toEqual(before.design.feature_log)
+    expect(await page.evaluate(() => window.__nadocTest.viewerDiagnostic().camera)).toEqual(previousCamera)
+    await page.evaluate(async () => { await (await import('/src/api/client.js')).seekFeatures(-1) })
+    await openEdit()
+    await expect(modal).toBeVisible()
+    const editSource = await f.checkpoint()
+    expect(editSource.design.feature_log_cursor).toBe(0)
+    expect(await page.evaluate(() => window.SLICE.getSelectedCells())).toEqual(before.design.feature_log[0].params.cells)
+    await modal.getByLabel('Extrusion length', { exact: true }).fill('126')
+    const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit')
+    await modal.getByRole('button', { name: 'Apply', exact: true }).click()
+    const response = await pending
+    expect(response.ok(), await response.text()).toBe(true)
+    await expect(modal).not.toBeVisible()
+    const after = await f.checkpoint(), adopted = await f.browser()
+    expect(after.history).toHaveLength(editSource.history.length + 2)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    expect(after.design.feature_log.slice(1).map(row => row.params)).toEqual(before.design.feature_log.slice(1).map(row => row.params))
+    expect(after.design.strands).not.toEqual(before.design.strands)
+    expect(placements(adopted.geometry)).not.toEqual(placements(stored.geometry))
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file)) throw new Error('Save failed')
+      await api.undo()
+    }, f.file)
+    expect(placements((await f.browser()).geometry)).toEqual(placements(stored.geometry))
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      await api.redo()
+      if (!await api.loadDesign(file)) throw new Error('Reopen failed')
+    }, f.file)
+    expect(placements((await f.browser()).geometry)).toEqual(placements(adopted.geometry))
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'extrude-blocked')
+})
+
 const fields = ['helix_id', 'direction', 'bp_index', 'copy_k', 'strand_id', 'strand_type',
   'domain_index', 'is_five_prime', 'is_three_prime', 'overhang_id', 'placement_source',
   'backbone_position', 'base_position', 'base_normal', 'axis_tangent', 'slab_position', 'slab_quaternion']
@@ -112,7 +194,7 @@ for (const mode of ['Tools', 'fresh-Tools', 'empty-context', 'end-context', 'end
     }, fresh ? -2 : 0)
     const rolledBack = await f.checkpoint(), rollbackDisplay = await f.browser()
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
-    await expect(page.getByTitle('Return to the latest history position before editing feature inputs.', { exact: true })).toHaveCount(fresh ? 1 : 2)
+    await expect(page.getByTitle('Move the history cursor to this feature or later to edit it.', { exact: true })).toHaveCount(1)
     const refused = await request.post('http://127.0.0.1:8004' + path, {
       headers: f.headers, data: response.request().postDataJSON(),
     })
@@ -123,69 +205,41 @@ for (const mode of ['Tools', 'fresh-Tools', 'empty-context', 'end-context', 'end
   }, 'extrude-blocked')
 })
 
-test('Bundle Extrude history Cancel Save and Bend Sweep replay persistence', async ({ page, request }) => {
+test('Bundle Extrude history Cancel Apply and Bend Sweep replay persistence', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const before = await f.checkpoint(), stored = await f.browser()
-    const modal = page.getByRole('dialog', { name: 'Edit Extrude', exact: true })
+    const panel = page.locator('#extrude-panel')
     const open = async () => {
       await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
       await page.getByTitle('Edit Native bounded bundle parameters', { exact: true }).click()
-      await expect(modal).toBeVisible()
+      await expect(panel).toBeVisible()
     }
-    const proof = async () => {
-      const response = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
-      expect(response.ok()).toBe(true)
-      expect((await response.json()).status).toBe('verified')
-    }
-    expect(before.redo).toHaveLength(1)
-    expect(before.design.feature_log[0].evicted).toBe(true)
-    await proof()
     await open()
-    await modal.getByLabel('Length (bp)', { exact: true }).fill('48')
-    await modal.getByLabel('Name', { exact: true }).fill('Cancelled Bundle')
-    await modal.getByRole('button', { name: 'Add cell', exact: true }).click()
-    await modal.getByLabel('Cell 2 column', { exact: true }).fill('1')
-    await modal.getByLabel('Remove cell 2', { exact: true }).click()
-    await modal.getByLabel('Plane', { exact: true }).selectOption('XZ')
-    await modal.getByLabel('Lattice', { exact: true }).selectOption('SQUARE')
-    await modal.getByLabel('Strands', { exact: true }).selectOption('scaffold')
-    await modal.getByLabel('Ligate adjacent ends', { exact: true }).uncheck()
-    await modal.getByLabel('Separate fresh extrusions', { exact: true }).uncheck()
-    expect(await f.checkpoint()).toEqual(before)
-    expect(await f.browser()).toEqual(stored)
-    await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await expect(modal).not.toBeVisible()
-    expect(await f.checkpoint()).toEqual(before)
-    expect(await f.browser()).toEqual(stored)
+    await expect(panel.getByLabel('Extrusion length')).toHaveValue('42')
+    await expect(page.locator('#extrude-from')).toHaveValue('XY')
+    expect(await page.evaluate(() => window.SLICE.getSelectedCells())).toEqual(before.design.feature_log[0].params.cells)
+    await panel.getByLabel('Extrusion length').fill('48')
+    await page.locator('#extrude-from').selectOption('XZ')
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(panel).not.toBeVisible()
+    expect((await f.checkpoint()).design.feature_log).toEqual(before.design.feature_log)
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(-1)
+    expect(placements((await f.browser()).geometry)).toEqual(placements(stored.geometry))
     await open()
-    await expect(modal.getByLabel('Length (bp)', { exact: true })).toHaveValue('42')
-    await expect(modal.getByLabel('Plane', { exact: true })).toHaveValue('XY')
-    await expect(modal.getByLabel('Lattice', { exact: true })).toHaveValue('HONEYCOMB')
-    await expect(modal.getByLabel('Strands', { exact: true })).toHaveValue('both')
-    await modal.getByLabel('Length (bp)', { exact: true }).fill('48')
-    await modal.getByLabel('Name', { exact: true }).fill('Edited native Bundle')
-    const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit')
-    await modal.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(panel.getByLabel('Extrusion length')).toHaveValue('42')
+    await expect(page.locator('#extrude-from')).toHaveValue('XY')
+    await panel.getByLabel('Extrusion length').fill('48')
+    const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit', { timeout: 15000 })
+    await panel.getByRole('button', { name: 'Apply', exact: true }).click()
     const response = await pending
     expect(response.ok(), await response.text()).toBe(true)
-    await expect(modal).not.toBeVisible()
+    await expect(panel).not.toBeVisible()
     const after = await f.checkpoint(), adopted = await f.browser()
-    expect(after.revision).toBe(before.revision + 1)
-    expect(after.history).toHaveLength(before.history.length + 1)
-    expect(after.redo).toHaveLength(0)
-    expect(after.design.feature_log[0].params).toMatchObject({ length_bp: 48, name: 'Edited native Bundle' })
+    expect(after.design.feature_log[0].params).toEqual({ ...before.design.feature_log[0].params, length_bp: 48 })
     expect(after.design.feature_log[1].op_snapshot).toEqual(before.design.feature_log[1].op_snapshot)
     expect(after.design.feature_log[2].params).toEqual(before.design.feature_log[2].params)
-    expect(after.design.feature_log.map(r => r.id)).toEqual(before.design.feature_log.map(r => r.id))
-    expect(after.design.helices.map(h => h.id)).toEqual(before.design.helices.map(h => h.id))
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
     expect(placements(adopted.geometry)).not.toEqual(placements(stored.geometry))
-    const geometry = await page.evaluate(async () => {
-      const { _request } = await import('/src/api/client.js')
-      return _request('GET', '/design/geometry')
-    })
-    expect(geometry?.nucleotides).toBeTruthy()
-    expect(placements(adopted.geometry)).toEqual(placements(geometry.nucleotides))
-    await proof()
     await page.evaluate(async file => {
       const api = await import('/src/api/client.js')
       if (!await api.saveDesign(file)) throw new Error('Save failed')
@@ -197,19 +251,52 @@ test('Bundle Extrude history Cancel Save and Bend Sweep replay persistence', asy
       await api.redo(); await api.loadDesign(file)
     }, f.file)
     expect(placements((await f.browser()).geometry)).toEqual(placements(adopted.geometry))
-    await proof()
-    await open()
-    await expect(modal.getByLabel('Length (bp)', { exact: true })).toHaveValue('48')
-    await expect(modal.getByLabel('Name', { exact: true })).toHaveValue('Edited native Bundle')
-    await modal.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await expect(modal).not.toBeVisible()
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
   }, 'extrude-chain')
 })
 
+for (const kind of ['extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation']) test(`Extrude lattice ${kind} controls Cancel Apply persistence`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint()
+    const panel = page.locator('#extrude-panel')
+    const open = async () => {
+      await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+      await page.getByTitle(`Edit ${kind} parameters`, { exact: true }).first().click()
+      await expect(panel).toBeVisible()
+    }
+    await open()
+    await expect(panel.getByLabel('Extrusion length')).toHaveValue('7')
+    expect(await page.evaluate(() => window.SLICE.getSelectedCells())).toEqual(before.design.feature_log[1].params.cells)
+    await panel.getByLabel('Extrusion length').fill('14')
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(panel).not.toBeVisible()
+    expect((await f.checkpoint()).design.feature_log).toEqual(before.design.feature_log)
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(-1)
+    await open()
+    await panel.getByLabel('Extrusion length').fill('14')
+    const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/1/edit')
+    await panel.getByRole('button', { name: 'Apply', exact: true }).click()
+    const response = await pending
+    expect(response.ok(), await response.text()).toBe(true)
+    await expect(panel).not.toBeVisible()
+    const after = await f.checkpoint()
+    expect(after.design.feature_log[1].params.length_bp).toBe(14)
+    expect(after.design.feature_log.at(-1).params).toEqual(before.design.feature_log.at(-1).params)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file)) throw new Error('Save failed')
+      await api.loadDesign(file)
+    }, f.file)
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, kind)
+})
+
 const families = [
-  ['extrude-segment', 'Extrude'],
-  ['extrude-continuation', 'Extrude'],
-  ['extrude-deformed-continuation', 'Extrude'],
   ['extrude-frame', 'Extrude'],
   ['circle-segment', 'Circle'],
   ['overhang-extrude', 'Extrude'],
@@ -510,4 +597,100 @@ for (const finish of ['Cancel', 'Save retry']) test(`Extrude refuses partial rou
     expect(elapsedMs).toBeLessThanOrEqual(finish === 'Cancel' ? 400 : 6000)
     return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }
   }, 'extrude-blocked')
+})
+
+for (const cursor of [-1, 0, 1]) test(`Extrude delayed refresh keeps draft open and Apply restores cursor ${cursor}`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    await page.evaluate(async cursor => {
+      if (!await (await import('/src/api/client.js')).seekFeatures(cursor)) throw new Error('Seek failed')
+    }, cursor)
+    const before = await f.checkpoint()
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await page.getByTitle('Edit Native bounded bundle parameters', { exact: true }).click()
+    const panel = page.locator('#extrude-panel')
+    await expect(panel).toBeVisible()
+    await withHeldResponse(page, '/api/design', async held => {
+      const refresh = page.evaluate(async () => (await import('/src/api/client.js')).getDesign())
+      await held.ready
+      await panel.getByLabel('Extrusion length').fill('48')
+      await held.release()
+      await refresh
+      await expect(panel).toBeVisible()
+      await expect(panel.getByLabel('Extrusion length')).toHaveValue('48')
+    })
+    const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit')
+    await panel.getByRole('button', { name: 'Apply', exact: true }).click()
+    expect((await pending).ok()).toBe(true)
+    await expect(panel).not.toBeVisible()
+    const after = await f.checkpoint()
+    expect(after.design.feature_log_cursor).toBe(cursor)
+    expect(after.design.feature_log[0].params.length_bp).toBe(48)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file) || !await api.loadDesign(file)) throw new Error('Save/reopen failed')
+    }, f.file)
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(cursor)
+    // The proof endpoint compares the complete recipe against the displayed state.
+    await page.evaluate(async () => { await (await import('/src/api/client.js')).seekFeatures(-1) })
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'extrude-chain')
+})
+
+for (const finish of ['Cancel', 'Apply']) test(`Extrude workspace edit remains open across normal autosave (${finish})`, async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    if (process.env.NADOC_EXTRUDE_REPRO_FILE) {
+      const { readFile } = await import('node:fs/promises')
+      const raw = await readFile(process.env.NADOC_EXTRUDE_REPRO_FILE, 'utf8')
+      await page.evaluate(async raw => {
+        if (!await (await import('/src/api/client.js')).importDesign(raw)) throw new Error('Diagnostic copy load failed')
+      }, raw)
+    }
+    const workspaceName = '__e2e__extrude-autosave.nadoc'
+    const sourceName = (await f.checkpoint()).design.metadata.name
+    await page.evaluate(async path => {
+      if (!await (await import('/src/api/client.js')).saveDesignAs(path)) throw new Error('Workspace Save As failed')
+    }, workspaceName)
+    await page.goto(`/?doc=${f.doc}&open=${encodeURIComponent(workspaceName)}&open-name=${encodeURIComponent(sourceName)}`)
+    await page.waitForFunction(() => window.__nadocTest?.store.getState().currentGeometry?.length > 0)
+    const saves = []
+    const isSave = response => new URL(response.url()).pathname.endsWith('/design/save-workspace')
+    page.on('response', response => { if (isSave(response)) saves.push(response.status()) })
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const before = await f.checkpoint()
+    await page.getByTitle(`Edit ${before.design.feature_log[0].label} parameters`, { exact: true }).click()
+    const panel = page.locator('#extrude-panel')
+    await expect(panel).toBeVisible()
+    const length = panel.getByLabel('Extrusion length', { exact: true })
+    await length.fill('49')
+    const savedBeforeDwell = saves.length
+    const cells = await page.evaluate(() => window.SLICE.getSelectedCells())
+    // Deliberate dwell across several autosave delays. Use the ordinary workspace
+    // lifecycle, without intercepting requests or fabricating responses.
+    await page.waitForTimeout(12000)
+    await expect(panel).toBeVisible()
+    await expect(length).toHaveValue('49')
+    expect(await page.evaluate(() => window.SLICE.getSelectedCells())).toEqual(cells)
+    expect(saves).toHaveLength(savedBeforeDwell)
+    const saved = page.waitForResponse(isSave).catch(() => null)
+    const edited = finish === 'Apply' ? page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/0/edit') : null
+    await panel.getByRole('button', { name: finish, exact: true }).click()
+    if (edited) { const response = await edited; expect(response.ok(), await response.text()).toBe(true) }
+    await expect(panel).not.toBeVisible()
+    expect((await saved).ok()).toBe(true)
+    const after = await f.checkpoint()
+    expect(after.design.feature_log_cursor).toBe(before.design.feature_log_cursor)
+    expect(after.design.feature_log[0].params.length_bp).toBe(finish === 'Apply' ? 49 : before.design.feature_log[0].params.length_bp)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    await page.goto(`/?doc=${f.doc}&open=${encodeURIComponent(workspaceName)}&open-name=${encodeURIComponent(sourceName)}`)
+    await page.waitForFunction(() => window.__nadocTest?.store.getState().currentGeometry?.length > 0)
+    expect((await f.checkpoint()).design.feature_log_cursor).toBe(before.design.feature_log_cursor)
+    expect((await f.checkpoint()).design.feature_log[0].params.length_bp).toBe(after.design.feature_log[0].params.length_bp)
+    await page.evaluate(async () => { await (await import('/src/api/client.js')).seekFeatures(-1) })
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'extrude-chain')
 })

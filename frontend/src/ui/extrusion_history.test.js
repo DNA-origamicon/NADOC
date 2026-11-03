@@ -17,7 +17,8 @@ function fixture({ kind = 'extrude-segment', native = true, evicted = true, curs
   currentAssembly: null, assemblyActive: false }
   const context = { designId: 'part', revision: 10 }
   const api = { captureFeatureEditContext: vi.fn(() => context), isFeatureEditContextCurrent: vi.fn(() => true),
-    editNativeExtrusionFeature: vi.fn(async () => null), editFeature: vi.fn() }
+    editNativeExtrusionFeature: vi.fn(async () => null), editFeature: vi.fn(),
+    seekFeatures: vi.fn(async () => { state.currentDesign.feature_log_cursor = -1; return true }) }
   initFeatureLogPanel({ getState: () => state, subscribe: () => () => {}, subscribeSlice: () => () => {} }, { api })
   const edit = () => [...document.querySelectorAll('#fl-list [data-fl-row="1"] button')].find(node => node.textContent === '✎')
   return { api, context, edit }
@@ -32,10 +33,20 @@ it.each(['extrude-segment', 'circle-segment', 'extrude-frame'])('opens native %s
   expect(f.api.editNativeExtrusionFeature).toHaveBeenCalledWith(0, expect.objectContaining({ history_seed: 'saved', _proof_version: 1 }), f.context, 'stable-feature')
   expect(f.api.editFeature).not.toHaveBeenCalled(); expect(document.querySelector('[role="dialog"]')).not.toBeNull()
 })
-it.each([{ cursor: -2 }, { cursor: 0 }, { cursor: -1, subCursor: 0 }])('requires latest cursor before opening native history input editor (%j)', options => {
+it.each([{ cursor: -2 }, { cursor: -1, subCursor: 0 }])('refuses features ahead of the cursor or invalid child cursors (%j)', options => {
   const f = fixture(options); expect(f.edit()).toBeDefined(); expect(f.edit().disabled).toBe(true)
   expect(f.api.captureFeatureEditContext).not.toHaveBeenCalled()
 })
 it.each([false, true])('does not offer a legacy extrusion editor (evicted=%s)', evicted => {
   expect(fixture({ native: false, evicted }).edit()).toBeUndefined()
+})
+
+it('restores full history and opens Extrude at its own step', async () => {
+  const f = fixture({ cursor: 0 })
+  expect(f.edit().disabled).toBe(false)
+  f.edit().click()
+  await Promise.resolve(); await Promise.resolve()
+  expect(f.api.seekFeatures).toHaveBeenCalledWith(-1)
+  expect(f.api.captureFeatureEditContext).toHaveBeenCalledTimes(1)
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
 })
