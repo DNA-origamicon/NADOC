@@ -3,7 +3,7 @@
 Pointer-only. Open a topic file when it matches the task. Hard rules + commands live in `CLAUDE.md`.
 
 **Context economy.** Big topic files split into a lean *head* (current state, invariants, open items,
-handoff) plus `*_archive.md` (history). **Never read an archive in a routine loop** — mine it only for
+handoff) plus `details/<topic>/` (supporting contracts/evidence) and `*_archive.md` (history). **Never read an archive in a routine loop** — mine it only for
 a specific past decision. Keep this index lean and edit it rarely — it's always-loaded, so any change
 invalidates the prompt cache for all sessions.
 
@@ -11,6 +11,9 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 `blocked`, `shipped`, `retired`, `historical`; authority: `canonical`/`supporting`).
 
 ## Read first when relevant
+
+- **[Structure requires process](feedback_structure_requires_process.md)** — mandatory for every agent-created structure: full truthful feature log and independent replay; no history-free review/candidate/captured-root exception.
+- [Polymerization and extension scope](feedback_polymerization_extension_scope.md) — no implicit strand-to-extension conversion; correct Full attachment at ›1; defer long-tail molecular geometry beyond the feature-log/dependency overhaul.
 
 - [Debug visibility](feedback_debug_visibility.md) — autonomously improve viewing conditions, preserve the behavior under test, verify user-visible output; reusable Codex skill.
 
@@ -125,6 +128,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **[strand_extensions_sim](project_strand_extensions_sim.md)** (5′/3′ tails in oxDNA+NAMD — read before touching nucleotide walk/native seed) ·
 [skip_twist_selfconsistency](project_skip_twist_selfconsistency.md)·**[regional_autorefine](project_regional_autorefine.md)** (LIVE REF — always-on 1–5-edit skip fine-tuner; wholesale placement shelved)·[skip_twist_curvature_sweep](project_skip_twist_curvature_sweep.md)·[md_twist_validation](project_md_twist_validation.md)
 
+**Local shape screening:** [exp_predictor](project_exp_predictor.md) — installed baseline, isolated candidates, data and geometry qualification limits.
+
 **Native FEM shape predictor:** [cando_fem](project_cando_fem.md)·**[snupi_mimic](project_snupi_mimic.md)** (`material="snupi"`)·[snupi_frontend_tab](project_snupi_frontend_tab.md)·**[snupi_gaps](project_snupi_gaps.md)** (A–D DONE)·**[snupi_reference_compare](project_snupi_reference_compare.md)** (real SNUPI at `~/SNUPI`)·**[snupi_dynamics](project_snupi_dynamics.md)** (Langevin)·
 **[snupi_ssdna](project_snupi_ssdna.md)** (PLAN SS-0…SS-5)
 
@@ -165,6 +170,9 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **Unclassified:** [autostaple bugs](project_autostaple_bugs.md)·[create seam](project_create_seam.md)·[forced ligation](project_forced_ligation.md)·[near/far ends](project_near_far_ends.md) — assign to a category or mark historical.
 
 ## Maintenance
+
+Supporting pages are reached through their existing topic head; read only the matching section.
+The same 200-line target applies recursively to active detail pages. Archives retain dated history.
 
 Finishing a feature → update its topic file *head*, not this index. Repeated mistakes → add one symptom hook to **LESSONS.md** + detail to `LESSONS_archive.md`.
 Head past ~200 lines → move history to matching `*_archive.md`. Run `just lint-memory` after structure changes; see [hygiene rubric](../docs/agent_memory_hygiene.md) for periodic audits.

@@ -1,0 +1,79 @@
+{
+  "task": "S02",
+  "date": "2026-10-17",
+  "baseline": "96ab701e",
+  "status": "Registration and focused acceptance delivered; required broad validation incomplete/blocked.",
+  "focused": [
+    {
+      "command": "just test-focused tests/test_part_deformation_preview_registration.py",
+      "passed": 24,
+      "seconds": 3.35
+    },
+    {
+      "command": "just test-focused tests/test_part_deformation_preview_routes.py",
+      "passed": 13,
+      "warnings": 6,
+      "seconds": 3.53
+    }
+  ],
+  "smart": {
+    "command": "just test-smart",
+    "decision": "FAST",
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "exit_code": 2,
+    "interrupted": true,
+    "reason": "Observed 320 MiB temporary output on system filesystem with Archive absent; sent SIGINT to owned pytest to prevent further storage-policy violation. Output grew to 355 MiB during shutdown. No retry or guard bypass.",
+    "passed": 16170,
+    "failed": 16,
+    "skipped": 15,
+    "errors": 4,
+    "warnings": 2477,
+    "seconds": 272,
+    "guard_seconds": 277,
+    "summary": "=========================== short test summary info ============================\nFAILED tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[off-inspect]\nFAILED tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[transactions-transactions]\nFAILED tests/test_group_creation_v2.py::test_capabilities_advertise_local_group_versions_without_global_upgrade\nFAILED tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]\nFAILED tests/test_vr_join.py::test_join_feedback_publication_is_private_atomic_ordered_and_document_bound\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]\nFAILED tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally\nFAILED tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]\nFAILED tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]\nERROR tests/test_cpd_gpu_npt_context_v4.py - FileNotFoundError: [Errno 2] No ...\nERROR tests/test_cpd_gpu_npt_context_v4.py - FileNotFoundError: [Errno 2] No ...\nERROR tests/test_cpd_gpu_npt_context_v4.py - FileNotFoundError: [Errno 2] No ...\nERROR tests/test_cpd_gpu_npt_context_v4.py - FileNotFoundError: [Errno 2] No ...",
+    "scope": "No full run and no baseline rerun; these partial passes do not qualify regression. Four collection errors are the same missing CPD artifact on four workers.",
+    "observed_failure_causes": [
+      "Missing .development-artifacts/cpd-anti-gpu-longbox-v3/assembly.json",
+      "WSL native VR platform refusal",
+      "Missing native/vr_viewer/build/nadoc-vr-viewer",
+      "Capability expectation omits current extension-upsert v2 override",
+      "VR Join and junction-balance assertions remain untriaged; no scientific correction authorized."
+    ]
+  },
+  "slow_triage": {
+    "skill": ".claude/skills/triage-slow-tests/SKILL.md",
+    "violators": [
+      {
+        "nodeid": "tests/test_part_immutable_deformation.py::test_real_worker_bend_and_upstream_edit",
+        "seconds": 5.57,
+        "cause": "Real spawned geometry worker for append/upstream edit plus independent native proof."
+      },
+      {
+        "nodeid": "tests/test_part_immutable_geometry_recovery.py::test_real_recover_edit_persist_close_recover_cycle",
+        "seconds": 5.11,
+        "cause": "Real recovery/edit workers, durable typed-file write/read, undo/redo, second recovery and native verification."
+      },
+      {
+        "nodeid": "tests/test_part_immutable_transform.py::test_real_worker_placement_and_upstream_edit",
+        "seconds": 5.06,
+        "cause": "Real spawned placement worker and upstream edit with independent native proof."
+      }
+    ],
+    "disposition": "Read report and inspected all three bodies. Native subprocess integration costs; no marker/budget changes. Isolated timing confirmation and placement correction are deferred outside this one router task; broad verification blocked by missing Archive. Do not call budget restored."
+  },
+  "cleanup": {
+    "regular_files_removed": 8609,
+    "logical_bytes_removed": 2392169781,
+    "allocated_bytes_removed": 270286848,
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-0",
+      "/tmp/pytest-of-joshua/pytest-1",
+      "/tmp/pytest-of-joshua/pytest-2",
+      "workspace/autorefine/e56e7c69d24a.json",
+      "workspace/autorefine/c0ebe5f6a630.json"
+    ],
+    "active_cwd_fd_and_mapping_references": 0,
+    "provenance": "pytest-0=24 registration cases; pytest-1=13 existing lifecycle cases; pytest-2=interrupted fast run. Exact 282-byte workspace/autorefine outputs match test_skip_twist_tuning stub results and birth times during that run.",
+    "verified_absent": true
+  }
+}

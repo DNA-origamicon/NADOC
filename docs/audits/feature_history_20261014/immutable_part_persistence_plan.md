@@ -185,3 +185,13 @@ publication and concurrent lightweight HTTP requests separately. Removing model
 copies from the shared lock does not remove Python/GIL or garbage-collection
 latency, disk latency, or transient retained bytes. The public batch and immutable
 storage gates remain false until their complete lifecycle evidence is reviewed.
+
+## S32/U60 geometry-only view-volume preservation
+
+Bounded exact view-volume records now survive sealed geometry publication,
+Apply, undo/redo and file recovery; populated annotation HTTP parity completes
+S31 acceptance. Batch and other preserved-field admission remain unchanged.
+[Evidence and limits](immutable_view_volume_preservation_20261017.md).
+21/38 complete, delta0; U60 is FH-28 checkpoint11, growth flagged. Full
+immutable/resource and desktop release exits remain open. S33 session-status
+read pair is the sole unstarted successor in the current handoff.

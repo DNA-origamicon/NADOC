@@ -99,7 +99,42 @@ def test_oracle_catches_invalid_build():
 def test_coverage_report_shape_and_known_wrappers():
     report = headless_coverage_report()
     assert report["total"] == report["covered"] + report["uncovered"]
-    assert report["covered"] >= 11  # the wrappers headless_build ships today
+    assert report["covered"] == 63
+    covered = {row["endpoint"] for row in report["covered_routes"]}
+    expected = {
+        "add_bundle_deformed_continuation",
+        "add_circle_segment",
+        "add_cluster",
+        "add_connector",
+        "add_deformation",
+        "add_instance",
+        "add_joint",
+        "add_nick",
+        "apply_loop_skips_from_deformations",
+        "assign_staple_sequences_endpoint",
+        "create_assembly",
+        "create_assembly_overhang_binding",
+        "create_belt_path",
+        "create_gear_relation",
+        "create_mate",
+        "delete_assembly_overhang_binding",
+        "delete_crossover",
+        "delete_forced_ligation",
+        "delete_strand",
+        "forced_ligation",
+        "import_assembly",
+        "insert_loop_skip",
+        "ligate_strand",
+        "patch_assembly_overhang_binding",
+        "patch_joint",
+        "place_crossover",
+        "polymerize_assembly",
+        "polymerize_periodic_assembly",
+        "resolve_assembly",
+        "strand_end_resize",
+        "update_cluster",
+    }
+    assert expected <= covered, f"Missing headless routes: {sorted(expected - covered)}"
     assert report["uncovered"] > 0  # the AF backlog is non-empty
 
     covered_paths = {r["path"] for r in report["covered_routes"]}
@@ -123,62 +158,6 @@ def test_coverage_report_lists_real_backlog_routes():
     uncovered_paths = {r["path"] for r in report["uncovered_routes"]}
     assert any(p.endswith(_route) for p in uncovered_paths)
     assert not any(p.endswith(_route) for p in covered_paths)
-
-
-def test_coverage_report_marks_af2_routes_covered():
-    """AF-2 flipped nick/ligate/delete-strand from uncovered → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"add_nick", "ligate_strand", "delete_strand"} <= covered
-
-
-def test_coverage_report_marks_af6_route_covered():
-    """AF-6 flipped POST /design/deformation (add_deformation) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "add_deformation" in covered
-
-
-def test_coverage_report_marks_af7_assembly_routes_covered():
-    """AF-7's new headless_assembly_build module flips the core /assembly routes."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"create_assembly", "add_instance", "resolve_assembly"} <= covered
-
-
-def test_coverage_report_marks_af8_mate_routes_covered():
-    """AF-8 flipped add_connector + create_mate → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"add_connector", "create_mate"} <= covered
-
-
-def test_coverage_report_marks_af9_gear_routes_covered():
-    """AF-9 flipped create_gear_relation + patch_joint (drive) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"create_gear_relation", "patch_joint"} <= covered
-
-
-def test_coverage_report_marks_af31_crossover_routes_covered():
-    """AF-31 flipped place_crossover + delete_crossover (manual crossover) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"place_crossover", "delete_crossover"} <= covered
-
-
-def test_coverage_report_marks_af30_strand_end_resize_covered():
-    """AF-30 flipped strand_end_resize (the cadnano drag-arrow resize) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "strand_end_resize" in covered
-
-
-def test_coverage_report_marks_af32_forced_ligation_routes_covered():
-    """AF-32 flipped forced_ligation + delete_forced_ligation (manual force-ligate) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {"forced_ligation", "delete_forced_ligation"} <= covered
 
 
 # ── The forced-ligation oracle PASSES on a real ligation and FIRES otherwise (AF-32) ──
@@ -637,13 +616,6 @@ def test_gear_ratio_oracle_fires_on_undriven():
 # ── The gear-ratio oracle GENERALISES to belt-derived relations (AF-9 belts) ────
 
 
-def test_coverage_report_marks_af9_belt_route_covered():
-    """AF-9 belts flipped create_belt_path → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "create_belt_path" in covered
-
-
 def _belted_build(*, radius_a: float = 2.0, radius_b: float = 1.0):
     """Active scratch assembly: two pulleys revolute-mated to a base about +Z and
     belt-coupled with the given rim radii.  Returns ``(before_snapshot, belt_rel_id,
@@ -733,13 +705,6 @@ def test_belt_ratio_oracle_fires_when_uncoupled():
 # ── The polymer-chain oracle PASSES on a real chain and FIRES otherwise ────────
 
 
-def test_coverage_report_marks_af9_polymerize_route_covered():
-    """AF-9 polymerize flipped polymerize_assembly → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "polymerize_assembly" in covered
-
-
 def _polymer_build():
     """Active scratch assembly: two identical inline parts mated rigidly (B snapped to
     +10 nm X), then polymerized forward to length 4.  Returns ``(before_snapshot,
@@ -825,13 +790,6 @@ def test_polymer_chain_oracle_fires_vacuously_on_stacked_seed():
 # ── The periodic-chain oracle PASSES on a real chain and FIRES otherwise ───────
 
 
-def test_coverage_report_marks_periodic_polymerize_route_covered():
-    """The periodic straggler flipped polymerize_periodic_assembly → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "polymerize_periodic_assembly" in covered
-
-
 def _periodic_chain_after():
     """Active scratch assembly: one periodic 2-helix seed part, polymerized forward to
     4 copies.  Returns the after-assembly snapshot."""
@@ -895,17 +853,6 @@ def test_periodic_chain_oracle_fires_on_no_chain():
 
 
 # ── The binding-resolves oracle PASSES on a real binding and FIRES otherwise ───
-
-
-def test_coverage_report_marks_af9_overhang_binding_routes_covered():
-    """AF-9 overhang-bindings flipped create/patch/delete → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {
-        "create_assembly_overhang_binding",
-        "patch_assembly_overhang_binding",
-        "delete_assembly_overhang_binding",
-    } <= covered
 
 
 def _binding_design(oh_id: str, sequence: str):
@@ -2324,13 +2271,6 @@ def test_range_of_motion_obstacle_reduces_swing():
         assert_range_of_motion(d, a, axis, rom)  # the true reduced value passes
         with pytest.raises(AssertionError, match="expected"):
             assert_range_of_motion(d, a, axis, 360.0)  # claiming a free swing fails
-
-
-def test_coverage_report_marks_af14_route_covered():
-    """AF-14 Phase 1 flipped POST /design/cluster/{id}/joint (add_joint) → covered."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert "add_joint" in covered
 
 
 # ── assert_parallelogram_linkage (the 4-bar capstone oracle) ──────────────────

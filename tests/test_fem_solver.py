@@ -185,8 +185,11 @@ def test_singular_system_raises_clear_valueerror():
     K = csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]]))  # rank-deficient → singular
     f = np.array([1.0, 2.0])
     free = np.arange(2)
-    with pytest.raises(ValueError, match="singular"):
-        solve_equilibrium(K, f, 2, free)
+    from scipy.sparse.linalg import MatrixRankWarning
+
+    with pytest.warns(MatrixRankWarning, match="exactly singular"):
+        with pytest.raises(ValueError, match="singular"):
+            solve_equilibrium(K, f, 2, free)
 
 
 def test_rmsf_is_finite_nonnegative_and_per_node(routed_6hb):

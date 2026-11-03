@@ -140,6 +140,11 @@ class CandoJob:
 
         path = resolve_job_json(workspace_dir, "cando_jobs", job_id)
         data = json.loads(path.read_text())
+        return cls.from_metadata(data)
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "CandoJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = CandoStatus(data["status"])
         data["stages"] = [CandoStageStatus(**s) for s in data.get("stages", [])]
         data.setdefault("kind", "predict")

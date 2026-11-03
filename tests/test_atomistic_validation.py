@@ -140,7 +140,8 @@ def test_non_finite_atom_flagged(design, tmp_path):
     frame = _ideal_frame(design, tmp_path)
     victim = next(iter(frame))
     frame[victim]["backbone_position"] = np.array([np.inf, 0.0, 0.0])
-    r = audit_bonds(design, frame)
+    with pytest.warns(RuntimeWarning, match="invalid value encountered"):
+        r = audit_bonds(design, frame)
     assert any(a["reason"] == "non-finite position" for a in r["bad_atoms"])
     assert any(b["reason"] == "non-finite position" for b in r["invalid_bonds"])
     assert not r["ok"]

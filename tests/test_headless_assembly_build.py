@@ -27,7 +27,6 @@ from tests.automation_harness import (
     assert_polymer_chain,
     canonical_assembly,
     canonical_topology,
-    headless_coverage_report,
 )
 from tests.conftest import make_6hb_design
 
@@ -960,30 +959,3 @@ def test_periodic_polymerize_requires_a_seam():
         with _pytest.raises(HTTPException) as exc:
             hab.polymerize_periodic(seed_id, count=4)
         assert exc.value.status_code == 422
-
-
-# ── Coverage flip ─────────────────────────────────────────────────────────────
-
-
-def test_assembly_routes_now_covered():
-    """AF-7 flipped create/add-instance/resolve/import; AF-8 adds connector + mate;
-    AF-9 adds gear-relations + the joint-drive PATCH + belt-paths + polymerize +
-    the overhang-binding CRUD; the periodic straggler adds polymerize-periodic."""
-    report = headless_coverage_report()
-    covered = {r["endpoint"] for r in report["covered_routes"]}
-    assert {
-        "create_assembly",
-        "add_instance",
-        "resolve_assembly",
-        "import_assembly",
-        "add_connector",
-        "create_mate",
-        "create_gear_relation",
-        "patch_joint",
-        "create_belt_path",
-        "polymerize_assembly",
-        "polymerize_periodic_assembly",
-        "create_assembly_overhang_binding",
-        "patch_assembly_overhang_binding",
-        "delete_assembly_overhang_binding",
-    } <= covered

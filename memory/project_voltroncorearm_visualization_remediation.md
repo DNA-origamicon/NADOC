@@ -10,181 +10,41 @@ metadata:
 
 # VoltronCoreArm visualization remediation
 
-## Objective
+## Topic navigation and current boundaries
 
-Fix every finding from the 2026-08-15 VoltronCoreArm visualization audit. A finding is
-closed only after its unit coverage passes and the relevant initial, intermediate, and
-final state is observed through Playwright. Keep this document current as work lands.
+Reorganized October 17, 2026. Read the retained contracts here, then only the
+matching detail below. Dated results and old handoffs are not new verification
+or authorization; current user instructions and `CLAUDE.md` take precedence.
 
-## Reproduction fixture
+<a id="objective"></a>
+- [Objective](details/project_voltroncorearm_visualization_remediation/01-objective.md#objective)
 
-- Design: `workspace/VoltronCoreArm.nadoc`
-- NAMD job: `82a3cd08ed4f` (Alpine)
-- State diagnostic: `frontend/e2e/md_alpine_display_diagnostic.spec.js`
-- Geometry diagnostic: `frontend/e2e/md_overhang_alignment_diagnostic.spec.js`
-- Timeline: `frontend/e2e/logs/md_alpine_display_diagnostic.{txt,jsonl}`
-- Measurements: `frontend/e2e/logs/md_overhang_alignment_measurements.json`
+<a id="reproduction-fixture"></a>
+- [Reproduction fixture](details/project_voltroncorearm_visualization_remediation/01-objective.md#reproduction-fixture)
 
-Do not start, stop, or mutate the simulation job during visualization verification.
-Alpine refresh verification requires a live Duo-authenticated session. Local retained-frame
-verification must continue to work without that session.
+<a id="baseline"></a>
+- [Baseline](details/project_voltroncorearm_visualization_remediation/01-objective.md#baseline)
 
-## Baseline
+<a id="work-ledger"></a>
+- [Work ledger](details/project_voltroncorearm_visualization_remediation/01-objective.md#work-ledger)
 
-Timing-only Playwright pass on 2026-08-15:
+<a id="v1--authoritative-alpine-connection-state"></a>
+- [V1 — Authoritative Alpine connection state](details/project_voltroncorearm_visualization_remediation/01-objective.md#v1--authoritative-alpine-connection-state)
 
-| State transition | Baseline | Result |
-|---|---:|---|
-| navigation -> welcome | 4.31 s | pass |
-| welcome -> design loaded | 38.35 s | pass, slow |
-| design loaded -> Dynamics open | 3.25 s | pass |
-| Dynamics -> job selected | 0.34 s | pass |
-| selection -> warming | 0.30 s | pass |
-| warming -> frame cached | 12.45 s | pass, slow |
-| cached -> Display request | 0.39 s | pass |
-| request -> cached frame applied | 0.15 s | pass |
-| Display on -> Refresh enabled | n/a | **fail** |
-| Refresh -> refreshed frame applied | n/a | blocked by expired Alpine session |
+<a id="v2--explicit-refresh-gate-diagnostics"></a>
+- [V2 — Explicit refresh-gate diagnostics](details/project_voltroncorearm_visualization_remediation/01-objective.md#v2--explicit-refresh-gate-diagnostics)
 
-Backend sub-timings from the same warm-topology run were 0.09 s for the lightweight
-design map, 0.65 s to attach the cached topology/trajectory, 2.66 s for DNA topology
-mapping, 0.62 s for PBC/centroid work, and 4.38 s total load. Applying 14,179 positions
-took 145 ms. The remaining wall time is scheduling, transfer/JSON decoding, and frontend
-contention, not final scene mutation.
+<a id="v3--honest-readiness-semantics"></a>
+- [V3 — Honest readiness semantics](details/project_voltroncorearm_visualization_remediation/01-objective.md#v3--honest-readiness-semantics)
 
-## Work ledger
+<a id="v4--request-coalescing-and-polling-contention"></a>
+- [V4 — Request coalescing and polling contention](details/project_voltroncorearm_visualization_remediation/01-objective.md#v4--request-coalescing-and-polling-contention)
 
-### V1 — Authoritative Alpine connection state
+<a id="v5--initial-design-loadrender-contention"></a>
+- [V5 — Initial design-load/render contention](details/project_voltroncorearm_visualization_remediation/01-objective.md#v5--initial-design-loadrender-contention)
 
-Status: **implemented and Playwright-verified**
-
-Problem: the diagnostic observed `/api/cluster/status == connected` while the Refresh
-button remained disabled; the next run observed the session disconnected. The button is
-painted from a cached `getClusterState()` value and can disagree with the backend.
-
-Implementation:
-
-- Repaint remote controls on every `nadoc:cluster-state-change` event.
-- Pass the event state into the refresh-control calculation instead of rereading a
-  potentially lagging closure during the same event.
-- Before a user-triggered Alpine refresh, reconcile with the authoritative status API.
-- If the session expires, leave the retained local frame visible and surface the reason.
-
-Acceptance:
-
-- Unit test covers connected -> disconnected -> reconnected while Display MD is on.
-- Refresh is green/enabled only when connected, not warming/fetching, and the remote job
-  is actually running.
-- A 409/session expiry becomes a visible actionable state, never a silent disabled button.
-- Playwright records the connection transition and the correct Refresh state.
-
-### V2 — Explicit refresh-gate diagnostics
-
-Status: **implemented and Playwright-verified**
-
-Problem: red/yellow/green collapses connection, warm-up, fetch, and job readiness into a
-color and tooltip. Users cannot tell why Display MD did not advance.
-
-Implementation:
-
-- Replace the color-only decision with a pure structured gate: state, reason code, label,
-  title, enabled.
-- Show concise persistent text while disabled: reconnect, preparing cached frame, waiting
-  for the job to run, or fetching.
-- Add the reason code to the diagnostic DOM log.
-
-Acceptance:
-
-- Every disabled branch has unit coverage and user-visible text.
-- Playwright verifies each reachable red/yellow/green state by reason, not color alone.
-
-### V3 — Honest readiness semantics
-
-Status: **implemented and locally verified**
-
-Problem: socket `ready` means topology/model preparation completed; only `frame-cached`
-or `frame-applied` proves usable or visible coordinates. Consumers must not conflate them.
-
-Implementation:
-
-- Keep `ready` as an intermediate parser state and label it accordingly.
-- Enable instant Display only after `frame-cached` for the selected job/config/mode.
-- Treat `frame-applied` as the only visible-frame completion signal.
-- Ensure stale events from a prior job/config/mode cannot unlock the current control.
-
-Acceptance:
-
-- State-machine tests cover load-ready without frame, cached frame, applied frame, errors,
-  job switch, representation switch, and reconnect.
-- Playwright assertions use process events for cached/applied states and never status prose.
-
-### V4 — Request coalescing and polling contention
-
-Status: **implemented and Playwright-verified**
-
-Problem: design loading overlapped repeated job-list, active-job, system-resource, and MD
-metadata requests. Some appeared to take 2–15 seconds while the renderer was saturated.
-
-Implementation:
-
-- Inventory request owners and cadence before changing behavior.
-- Coalesce identical safe GETs while an identical request is in flight.
-- Deduplicate panel refresh triggers and avoid duplicate resource-monitor requests.
-- Suspend only nonessential polling during an explicitly measured major scene rebuild;
-  never suppress job-state or connection transitions.
-
-Acceptance:
-
-- No duplicate identical in-flight GETs in the diagnostic timeline.
-- Job/connection state still updates within its existing service-level interval.
-- The design-load timing improves or the remaining cost is attributed by instrumentation.
-
-### V5 — Initial design-load/render contention
-
-Status: **implemented, attributed, and Playwright-verified**
-
-Problem: welcome -> loaded took 38–40 seconds under SwiftShader and monopolized the
-renderer. The current checkpoint hides whether parsing, scene construction, GPU upload,
-first render, or ancillary panels dominate.
-
-Implementation:
-
-- Add performance marks for document fetch/parse, store install, geometry fetch, scene
-  build, GPU upload/compile, first render, and panel hydration.
-- Yield between independently renderable construction batches where it improves input and
-  network responsiveness without exposing partial corrupt state.
-- Defer off-screen/nonessential visualization work when safe.
-- Preserve a single deterministic `scene-ready` completion event for tests and UI.
-
-Acceptance:
-
-- Every >1 s phase is named in the diagnostic output.
-- UI progress remains responsive during load.
-- Timing improves over the 38.35 s baseline, or a documented irreducible phase accounts
-  for the remaining time with CPU/GPU evidence.
-
-### V6 — Bounded Playwright visual verification
-
-Status: **implemented and Playwright-verified**
-
-Problem: a SwiftShader screenshot of the live WebGL canvas can take over five minutes and
-may ignore the useful test timeout while Chromium is blocked in readback.
-
-Implementation:
-
-- Keep state/timing tests screenshot-free and event-driven.
-- Capture lightweight cloned-DOM screenshots for transient UI states.
-- Run sparse scene pixel checks in a separate GPU-backed project when available.
-- Put each scene capture behind an external watchdog so a wedged compositor cannot hold
-  the suite indefinitely; retain trace/state evidence on timeout.
-- Geometry invariants remain the headless correctness oracle for the large scene.
-
-Acceptance:
-
-- The timing diagnostic finishes within 90 seconds when using a retained local frame.
-- A headless visual job exits predictably on readback failure.
-- Equilibrium and MD-applied geometry are both verified without requiring continuous
-  SwiftShader rendering.
+<a id="v6--bounded-playwright-visual-verification"></a>
+- [V6 — Bounded Playwright visual verification](details/project_voltroncorearm_visualization_remediation/02-v6--bounded-playwright-visual-verification.md#v6--bounded-playwright-visual-verification)
 
 ## Geometry invariants
 
@@ -197,108 +57,23 @@ Do not trade correctness for speed. Every final retained/refreshed-frame run mus
 - Reference overhangs and reference crossover arcs hidden.
 - No browser console or page errors.
 
-## Execution order
+<a id="execution-order"></a>
+- [Execution order](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#execution-order)
 
-1. V1 and V2: make remote state truthful and actionable.
-2. V3: make cached/visible readiness impossible to misreport.
-3. V4: remove avoidable request contention.
-4. V5: instrument, then optimize the measured dominant load phases.
-5. V6: make the full verification loop bounded and repeatable.
-6. Reconnect Alpine and run the complete welcome -> refreshed-frame matrix.
+<a id="completion-record"></a>
+- [Completion record](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#completion-record)
 
-## Completion record
+<a id="2026-08-15--loop-1-remote-refresh-truthfulness"></a>
+- [2026-08-15 — Loop 1: remote refresh truthfulness](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#2026-08-15--loop-1-remote-refresh-truthfulness)
 
-Append dated entries here after each implementation/test loop. Include commands, measured
-timings, failures, and the next action. Do not mark this project complete while any V-item
-is pending or while the final remote refresh remains unverified without a documented
-external blocker.
+<a id="2026-08-15--loop-2-honest-readiness-contention-and-bounded-verification"></a>
+- [2026-08-15 — Loop 2: honest readiness, contention, and bounded verification](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#2026-08-15--loop-2-honest-readiness-contention-and-bounded-verification)
 
-### 2026-08-15 — Loop 1: remote refresh truthfulness
+<a id="2026-08-15--loop-3-eliminate-rebuild-fan-out-and-broad-regression"></a>
+- [2026-08-15 — Loop 3: eliminate rebuild fan-out and broad regression](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#2026-08-15--loop-3-eliminate-rebuild-fan-out-and-broad-regression)
 
-- Added `mdRemoteRefreshGate`, a structured state/reason/label/title/enabled decision for
-  disconnected, fetching, warming, job-not-running, and ready states.
-- Refresh now exposes `data-gate-reason` and `aria-disabled`, and paints a persistent
-  actionable status instead of relying on color and tooltip alone.
-- Cluster-state broadcasts repaint Refresh using the event's state directly, avoiding a
-  one-event lag in the connection-state getter.
-- Alpine Refresh reconciles `/api/cluster/status` immediately before starting remote work;
-  an expired session retains the local frame and asks the user to reconnect.
-- Verification: `cd frontend && npx vitest run src/ui/md_jobs_panel.test.js` — **236 passed**.
-- Remaining for V1/V2: reconnect Alpine and capture disconnected -> connected -> warming ->
-  ready -> fetching -> applied through Playwright.
-
-### 2026-08-15 — Loop 2: honest readiness, contention, and bounded verification
-
-- Renamed the parser-only display event to `topology-ready`. The readiness dot remains
-  warming until `prewarmed`/`frame-cached`; only `frame`/`frame-applied` represents visible
-  coordinates. Focused display tests cover topology-ready before cached-frame readiness.
-- Coalesced identical in-flight job JSON GETs, active-job probes, same-device resource
-  probes, library lists, and unified simulation lists. AbortSignal-bearing requests remain
-  independent. The Playwright timeline records coalesced followers.
-- Fixed the operation-idle boundary: importing populated topology with no geometry no
-  longer completes at the empty intermediate rebuild. Background polls now remain deferred
-  until separately fetched geometry has built and presented its final frame.
-- Added `nadoc:operation-timing` and captured phase deltas in the Playwright timeline,
-  including response, parse, geometry fetch, mesh construction, crossovers, post-build,
-  and final render.
-- Made scene screenshots explicit (`NADOC_AUDIT_SCENE_SCREENSHOTS=1`). Default headless
-  runs retain UI screenshots and geometry assertions without entering an unbounded
-  SwiftShader readback.
-- Verification: six focused Vitest files — **330 passed**.
-- Bounded geometry Playwright: **passed in 1.1 minutes**, preserving all 14,179-position,
-  overhang, rod, and hidden-reference invariants.
-- Bounded Display-MD Playwright: **passed in 40.7 seconds**. Welcome -> design loaded fell
-  from 38.35 s to **19.82 s**; warm-up -> cached frame fell from 12.45 s to **8.60 s**;
-  cached-frame apply remained **111 ms**.
-- The operation trace now attributes the import's 16.44 s: ~1.13 s response+parse, ~8.03 s
-  geometry fetch, repeated scene builds, and final presentation. Follow-up: explain/remove
-  the post-geometry rebuild fan-out rather than merely accepting it.
-- Job `82a3cd08ed4f` is now `completed`, so Refresh correctly gates as `job-not-running`.
-  Playwright verified the retained final frame stays visible and the reason is explicit.
-  A true remote fetching -> applied check requires a running Alpine job; do not mutate this
-  completed fixture merely to satisfy the test.
-
-### 2026-08-15 — Loop 3: eliminate rebuild fan-out and broad regression
-
-- Operation marks identified two post-geometry full rebuilds as empty surface-capture
-  overlay highlight transitions (`count=0`, highlight true then false).
-- `setExtraNucleotides` now updates empty-overlay metadata/glow state without rebuilding
-  the 14,179-position scene. The final trace contains one real geometry build and no
-  extra-nucleotide rebuild.
-- Welcome -> design loaded improved again to **17.02 s**, a **55.6% reduction** from the
-  38.35 s audit baseline. The complete retained-frame diagnostic passed in **31.6 s**.
-- The remaining geometry request is intentionally expensive and fully attributed by
-  `Server-Timing`: measured/deformed placement of 29,418 active+reference positions took
-  3.87 s and the required straight reference placement took 4.28 s; axes, overhang
-  rotations, and JSON parse together took ~0.20 s. Both coordinate sets are consumed by
-  deformation/unfold visualization, so removing either would trade away correctness.
-- Post-fix request audit found **zero overlapping identical GETs**. Coalesced followers
-  remained visible in the diagnostic log.
-- Broad verification: `npm test -- --reporter=dot` — **322 files, 5,609 tests passed**.
-- Production verification: `npm run build` — **passed**.
-- Real Playwright verification: Display-MD retained-frame workflow **passed**; geometry
-  invariants **passed**. Current external limit remains a live remote-refresh transition:
-  the VoltronCoreArm fixture is completed and therefore has no running Alpine restart
-  frame to fetch.
-
-### 2026-08-15 — Loop 4: complete remote state matrix without mutating the run
-
-- Added `NADOC_AUDIT_MOCK_REMOTE_TRANSFER=1` to the Voltron diagnostic. It changes only
-  the browser-visible lifecycle flag and intercepts the Alpine start/progress control
-  endpoints. It does **not** change the completed job, its files, or backend state.
-- The data path remains real: VoltronCoreArm design import, 413 MB topology attach,
-  WebSocket topology/model preparation, 14,179-position cached frame, forced refresh
-  reload, scene application, and final geometry are all exercised normally.
-- With UI screenshots enabled and scene readback safely disabled, all **17/17** predicted
-  initial/intermediate/final states passed in **41.8 s**: welcome, design load, Dynamics,
-  selection, warming, frame cached, instant display, remote refresh request, transfer
-  completion, refreshed socket frame applied, final 100% UI, plus both forbidden-work
-  assertions.
-- Refreshed-frame reconstruction took 6.25 s and final scene application completed before
-  the 100% UI state by 206 ms. No generic Working popup or unintended Alpine poll occurred.
-- This closes V1/V2's running-job frontend verification while preserving the completed
-  simulation fixture. Real SSH/SFTP transport remains covered by its backend tests and is
-  intentionally not fabricated or restarted for a visualization regression.
+<a id="2026-08-15--loop-4-complete-remote-state-matrix-without-mutating-the-run"></a>
+- [2026-08-15 — Loop 4: complete remote state matrix without mutating the run](details/project_voltroncorearm_visualization_remediation/03-execution-order.md#2026-08-15--loop-4-complete-remote-state-matrix-without-mutating-the-run)
 
 ## Final completion audit
 
@@ -320,186 +95,22 @@ Project completed 2026-08-15. Future GPU-backed pixel baselines and a naturally 
 Alpine job may add evidence, but they are not required to reproduce or validate the fixed
 visualization state machine and must not mutate this completed simulation fixture.
 
-### 2026-08-15 — Loop 5: service-availability incident
+<a id="2026-08-15--loop-5-service-availability-incident"></a>
+- [2026-08-15 — Loop 5: service-availability incident](details/project_voltroncorearm_visualization_remediation/04-2026-08-15--loop-5-service-availability-incident.md#2026-08-15--loop-5-service-availability-incident)
 
-- User report: the frontend shell remained available, but files would not load.
-- Reproduction: Vite answered on `127.0.0.1:5173`; nothing listened on backend port
-  `127.0.0.1:8000`. This was an unavailable process, not a visualization or file-parser
-  failure. No evidence identified the event that stopped the earlier backend process.
-- Recovery: started FastAPI independently without disturbing the existing Vite process.
-- Browser-facing verification through Vite's `/api` proxy: `/library/files` returned 269
-  entries; `/library/content?path=VoltronCoreArm.nadoc` returned 10,509,420 characters;
-  `/design/import` returned HTTP 200 with the named VoltronCoreArm design, 71 helices,
-  436 strands, and zero validation errors.
-- Current state: backend and frontend are both listening, and the exact frontend file-open
-  data path is operational. Use `./start.sh` for future launches so both processes share
-  one supervised lifetime.
+<a id="2026-08-15--loop-6-cached-completed-frame-must-not-look-failed"></a>
+- [2026-08-15 — Loop 6: cached completed frame must not look failed](details/project_voltroncorearm_visualization_remediation/04-2026-08-15--loop-5-service-availability-incident.md#2026-08-15--loop-6-cached-completed-frame-must-not-look-failed)
 
-### 2026-08-15 — Loop 6: cached completed frame must not look failed
+<a id="2026-08-15--loop-7-selected-job-ownership-of-the-alpine-submit-control"></a>
+- [2026-08-15 — Loop 7: selected-job ownership of the Alpine submit control](details/project_voltroncorearm_visualization_remediation/04-2026-08-15--loop-5-service-availability-incident.md#2026-08-15--loop-7-selected-job-ownership-of-the-alpine-submit-control)
 
-- User report: selecting the completed Alpine job and enabling Display MD briefly painted
-  the red “Reconnect to Alpine to refresh the frame” warning even though its retained
-  frame was current and subsequently displayed correctly.
-- Root cause: passive Refresh-control repaints wrote every disabled gate reason into the
-  shared display-status line. Connection/refresh policy therefore overwrote legitimate
-  cached-frame preparation and application progress.
-- Fix: passive repaints keep `disconnected` and `job-not-running` information on the
-  Refresh control (`data-gate-reason`, disabled state, dot, and tooltip) without announcing
-  it as a display failure. Only cached-frame warming may passively occupy the status line;
-  the explicit refresh path retains its reconnect warning.
-- Verification: `md_jobs_panel.test.js` — **237 passed**. Real Playwright completed-job
-  path loaded VoltronCoreArm, cached its frame, applied it in 106 ms, made no Alpine poll,
-  and asserted that neither reconnect nor job-running refresh policy appeared in the
-  shared display status.
+<a id="2026-08-15--loop-8-selected-job-synchronizes-the-clusters-card"></a>
+- [2026-08-15 — Loop 8: selected job synchronizes the Clusters card](details/project_voltroncorearm_visualization_remediation/04-2026-08-15--loop-5-service-availability-incident.md#2026-08-15--loop-8-selected-job-synchronizes-the-clusters-card)
 
-### 2026-08-15 — Loop 7: selected-job ownership of the Alpine submit control
+<a id="2026-09-1617--loop-9-event-loop-threading-codex--client-side-connection-pool-contention"></a>
+- [2026-09-16/17 — Loop 9: event-loop threading (Codex) + client-side connection-pool contention](details/project_voltroncorearm_visualization_remediation/04-2026-08-15--loop-5-service-availability-incident.md#2026-09-1617--loop-9-event-loop-threading-codex--client-side-connection-pool-contention)
 
-- Required invariant: a prepared (`queued`, not yet handed to SLURM) Alpine job may label
-  the primary control “Submit to Alpine” only while that exact job is selected.
-- Added `mdRunControlForSelection`, an explicit pure selection boundary. The primary
-  control now resolves the selected id against the current job cache and never falls back
-  to another queued job. A completed selection, no selection, or a missing/stale selected
-  id produces the appropriate disabled control even when an awaiting-submit Alpine job
-  exists elsewhere in the list.
-- Hardened the Job Wizard creation callback: if the new job has not reached the panel's
-  cache yet, it refetches first and then selects/reselects that new id. Existing relaxation
-  and production creation paths also refetch and select their returned job ids.
-- Verification: `md_jobs_panel.test.js` — **238 passed**, including queued-selected,
-  queued-unselected/completed-selected, empty-selection, and stale-id cases;
-  `md_job_wizard_readonly.test.js` — **28 passed**, including the new-job callback after
-  successful creation. The live job inventory was inspected read-only; no running or
-  queued simulation was changed.
+<a id="2026-09-17--loop-10-user-authorized-live-server-testing-found-and-fixed-the-real-bottleneck"></a>
+- [2026-09-17 — Loop 10: user authorized live-server testing; found and fixed the real bottleneck](details/project_voltroncorearm_visualization_remediation/05-2026-09-17--loop-10-user-authorized-live-server-testing-found-and.md#2026-09-17--loop-10-user-authorized-live-server-testing-found-and-fixed-the-real-bottleneck)
 
-### 2026-08-15 — Loop 8: selected job synchronizes the Clusters card
-
-- Selecting an NAMD job now makes its persisted execution target authoritative for the
-  Clusters card: legacy/explicit local selects Local, Alpine selects Alpine, and RunPod
-  selects RunPod.
-- The corresponding radio and detail pane switch together. Selecting RunPod also refreshes
-  its pre-flight once (without the former duplicate probe); leaving RunPod clears its
-  transient picker state through the existing pane-transition path.
-- Verification: `md_jobs_panel.test.js` — **241 passed**, including a real panel DOM test
-  that selects local, Alpine, and RunPod records in sequence and checks both the radio and
-  mutually-exclusive visible pane for every transition.
-
-### 2026-09-16/17 — Loop 9: event-loop threading (Codex) + client-side connection-pool contention
-
-- A separate agent (Codex) diagnosed a fresh incident: VoltronCoreArm/V2 (~80 MB, mostly
-  loadout snapshots + feature-log history) took up to 184 s to open. Root cause: several
-  job-list routes (`blade`/`cando`/`lammps`/`mrdna`/`oxdna`/`snupi`/`md`/`md/queue`/
-  `simulate/jobs`) did synchronous disk scans inside `async def` handlers, blocking the
-  FastAPI event loop for every concurrent request including the design/geometry fetch.
-  Codex wrapped all of them in `run_in_threadpool`, added `backend/core/collaboration_status.py`
-  (single-flight + 10 s TTL peer-reachability cache shared across tabs), skipped mrDNA's
-  per-process cwd resolution unless the cmdline mentions `arbd`, and set `suppressBusy` on
-  peer-status polling so an unreachable peer can't paint the blocking modal. That work ran
-  out of usage credits mid-verification; resumed and verified here (96 focused tests, full
-  frontend suite, `just test-smart` baseline unchanged from before the fix).
-- Follow-up (this loop): the threading fix alone left the **client-side** bottleneck
-  unaddressed. Vite's dev server is plain HTTP/1.1, capping Chromium at 6 concurrent
-  connections per origin; ~20 GETs (job lists, `jobs/active`, `md/queue`, peer status,
-  health, engines/status, primitives, library/files) fire within the first 3 s of boot,
-  unconditionally and on a 4-5 s repeat cadence, competing with `/design` +
-  `/design/geometry` for that budget. In Codex's own post-fix reproduction
-  (`/tmp/nadoc-blocking-fix/browser-final.log`), `/design/geometry` alone spanned
-  8.4 s→41.7 s (33.3 s) despite the same computation profiling at ~5 s in isolation — pure
-  queueing. The codebase already had a polling-deferral mechanism
-  (`frontend/src/perf/operation_timing.js`'s `whenOperationIdle()`, consumed by
-  `listActiveJobs`/`listSimJobs`/every `_backgroundJobList`-wrapped engine job list) but it
-  never engaged during initial load because `GET /design` and `GET /design/geometry` were
-  excluded from `client.js`'s `isTimedOperation` allowlist (GET requests were categorically
-  excluded). Fix: added those two GET paths to the allowlist (a metadata-only `getDesign()`
-  call is explicitly excluded — it never triggers `design_renderer`'s
-  `finishOperationAfterRender()`, so tracing it would leave the trace dangling); added the
-  two remaining pollers that bypassed `whenOperationIdle()` entirely
-  (`getCollaborationPeerStatuses`, `getMdQueue`). No new mechanism — this only closes the gap
-  in the existing one, so `jobs/active` and all six engine job lists now correctly defer
-  during a load for free.
-- Parity fix: `list_md_jobs` already used the non-blocking `dir_size_bytes_cached_only` +
-  background `warm_dir_sizes` pattern (the exact pattern the 18hb-archive incident this
-  module documents was built to prevent) but the other five engines still called the
-  blocking `dir_size_bytes_cached`. Extended the pattern to `mrdna`/`cando`/`oxdna`/`snupi`/
-  `blade` via a new shared `schedule_dir_size_warm()` in `design_disk_usage.py` (also used to
-  de-duplicate `routes_md.py`'s own inline task-ref bookkeeping).
-- Verification: 198 focused backend tests (all six engines + collaboration/status/queue
-  suites) pass; full frontend suite — **446 files / 6506 tests** pass; `just test-smart` —
-  **8632 passed, 30 failed→29 failed after fixing a test that assumed the old blocking
-  disk-size read (`test_job_archive.py::test_oxdna_archive_unarchive_via_api`, now polls like
-  its `md` sibling)**; failure set otherwise byte-identical to the pre-change baseline (all
-  pre-existing local-environment gaps: stale oxDNA build, missing `tclsh` — unrelated).
-  Not independently re-verified end-to-end in a live browser: doing so would require driving
-  the shared dev server's `POST /design/import` (or a fresh tab against the same live `doc`),
-  which risks clobbering a concurrent session's in-flight work; ask before retrying that.
-
-### 2026-09-17 — Loop 10: user authorized live-server testing; found and fixed the real bottleneck
-
-- User authorized driving the live server directly ("taking over the concurrent sessions
-  work") after manual testing still showed >30 s. Ran real end-to-end reproductions
-  (Playwright via Windows Chrome, `?doc=b3c48e612869489dbc6f06f1cfa374d7` — VoltronCoreArmV2's
-  live doc — using only GET/blocked-mutation scripts, and separately a fresh isolated
-  per-tab doc for the actual `openPartFromServer` click-through flow) — confirmed the report:
-  ~36.7 s for the realistic open. Cleaned up the disposable per-tab doc's session +
-  `.nadoc-projects` snapshot data (864 MB) afterward.
-- Root cause A: `apply_measured_positioning` (`backend/core/measured_positioning.py`) placed
-  every backbone/base bead in a Python loop calling `np.cross`/`np.dot`/`np.linalg.norm` on
-  individual 3-vectors (38,408 calls on VoltronCoreArmV2). Vectorized into batched array ops.
-  Verified **bit-identical** (max diff 0.0) against the original across all 15,214 real base
-  pairs in both VoltronCoreArm and V2, plus the unused `groove_rad` branch (never called in
-  production, but its own real-molecular-geometry-formula must still hold — checked
-  separately). `measured_positioning.py` is not in `molecular-geometry-authorization.md`'s
-  gated path list. 7.5 s → 1.9 s.
-- Root cause B (deeper): `backend/core/geometry.py` IS in that gated list (hard stop —
-  isolated candidate + A/B artifact before any production placement change). User explicitly
-  authorized proceeding with the same bit-identical-proof rigor instead of the full Molecular
-  Placement Audit workflow (that tooling is built for crossover-insert candidates, not a
-  whole-helix vectorization). Found: `nucleotide_positions_arrays()` already had a fast
-  vectorized path, but it fell back entirely to the scalar `nucleotide_positions()` loop for
-  ANY helix with `loop_skips` — and 52/71 of VoltronCoreArmV2's helices have loop_skips (only
-  ~3 entries each, but on 155-179 bp helices), so the "rare" fallback was actually the
-  dominant path. Wrote `_nuc_arrays_loop_skip_fast()`: vectorizes the skip/loop index-and-
-  offset bookkeeping but deliberately keeps `math.cos`/`math.sin` (not `np.cos`/`np.sin`) for
-  every trig evaluation — `_strand_beads`' own docstring and LESSONS H15/H19 record that the
-  two trig implementations can differ at the last ULP and the backbone-bridge solve can
-  amplify that into 0.1-1.3 Å at a junction, and `test_the_scalar_and_array_bead_paths_agree`
-  already documents this as an accepted, deliberate separation. Verified bit-identical (exact
-  `np.array_equal`, not `allclose`) against 62 synthetic edge cases (skip/loop at start/
-  middle/end, cancelling skip+loop, adjacent skips, out-of-range entries, all-but-one-skipped,
-  both directions, both `compact_skips` settings, offset `bp_start` + tilted axis) and all 208
-  real (helix × compact_skips) combinations across both production designs. New pinned test:
-  `test_the_scalar_and_loop_skip_fast_paths_agree` in `test_geometry.py`. 1.9 s → 1.15 s
-  (remaining cost is now dominated by deformation/cluster-transform resolution, not placement).
-- Root cause C (payload size): `_design_response(..., full_feature_log=True)` — used
-  unconditionally on every cold load (`GET /design`, `POST /design/load`, `POST
-  /design/import`) — shipped every feature-log snapshot/diff body up front. Measured on
-  VoltronCoreArmV2 (109-entry log): **42 MB vs 2.4 MB slim**. Per the user's direction ("make
-  loadout snapshot load in background after geometry... speed up time to first usable
-  assets"): those three routes now ship the slim response; a new read-only
-  `GET /design/feature-log/full` backfills the real bodies. `client.js` triggers the backfill
-  from both `_syncFromDesignResponse` (after its `getGeometry()` call) and `getDesign()`
-  (restart recovery, cross-tab open — which had no merge/backfill path at all before this),
-  gated on "no previous design in this tab" and delayed by the existing `whenOperationIdle()`
-  (best-effort — its 2 s cap means a very slow geometry build can still see the tail of the
-  backfill overlap it). Seek/undo/history replay were already confirmed server-authoritative
-  (`routes_feature_log.py`'s `_seek_feature_log` never reads client-sent bodies), so the gap
-  before backfill completes is never a correctness issue, only a slower first history-panel
-  interaction. Updated two pinned `full_feature_log=True` cold-load tests in
-  `test_feature_log_snapshot.py` to the new contract + added full-backfill assertions; fixed
-  a third test (`test_bundle_continuation_validate.py`, 3 cases) whose before/after `GET
-  /design` comparison broke on the now-stripped bodies (topology was never affected).
-- Combined live-reproduction result (same Playwright harness, doc `b3c48e...`): **43 s → ~12
-  s** (`/api/design` 2-4s→~170ms from the payload cut; geometry request itself down from 33s
-  of mostly-queueing to ~5-6s of mostly-real-work). Run-to-run variance is real (~10-16s
-  observed) — remaining cost is GIL contention between the geometry threadpool task and
-  concurrent job-list polls (a fundamental CPython limitation: threadpooling doesn't
-  parallelize CPU-bound work), plus `_emit_arrs`/`_segments_for_helix` (deformation/cluster-
-  transform resolution) now being the largest remaining single costs. Both are outside this
-  loop's scope — `_emit_arrs` is in `design_geometry.py`, also gated by
-  `molecular-geometry-authorization.md`, and deformation.py is a separate subsystem.
-- Verification: 62 synthetic + 208 real bit-identical loop-skip comparisons (see above); full
-  `test_geometry.py`, `test_loop_skip.py`, `test_helical_site.py`, `test_measured_positioning.py`,
-  `test_junction_balance.py`, `test_oxdna_relaxation.py`, `test_oxdna_live_session.py` (400
-  tests) pass; `test_feature_log_snapshot.py`/`test_feature_log_clusters.py`/
-  `test_feature_log_edit_core.py`/`test_assembly_feature_log_actions.py` (104 tests) pass;
-  full frontend suite 446 files/6506 tests pass; `just test-smart` failure set byte-identical
-  to the pre-loop baseline (all pre-existing local toolchain gaps, unrelated). Cleaned up all
-  test-created session/project artifacts.
+- [2026-09-17 — Loop 10: user authorized live-server testing; found and fixed the real bottleneck — continued detail](details/project_voltroncorearm_visualization_remediation/05-2026-09-17--loop-10-user-authorized-live-server-testing-found-and.md)

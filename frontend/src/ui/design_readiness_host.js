@@ -1,3 +1,4 @@
+import { passiveReadScheduler } from '../api/passive_read_scheduler.js'
 import { initDesignReadiness } from './design_readiness.js'
 import { initDesignReadinessVisibility } from './design_readiness_visibility.js'
 import { initDesignReadinessController } from './design_readiness_controller.js'
@@ -65,11 +66,13 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
     async fetchReport(target, { signal }) {
       if (target.assembly) await waitForAssemblyReady?.(target.document, { signal })
       if (signal.aborted) throw signal.reason ?? new DOMException('Readiness check superseded.', 'AbortError')
-      const response = await fetch(`/api/design/readiness${target.assembly ? '?assembly=true' : ''}`, {
-        headers: docHeaders(), signal,
-      })
-      if (!response.ok) throw new Error(`Readiness check unavailable (${response.status}).`)
-      return response.json()
+      return passiveReadScheduler.run(JSON.stringify([getDocId(), 'readiness', target.assembly]), async () => {
+        const response = await fetch(`/api/design/readiness${target.assembly ? '?assembly=true' : ''}`, {
+          headers: docHeaders(), signal: AbortSignal.timeout(15000),
+        })
+        if (!response.ok) throw new Error(`Readiness check unavailable (${response.status}).`)
+        return response.json()
+      }, { passive: true, signal, current: () => !disposed && !signal.aborted })
     },
     onReport: report => { void applyPendingAction(report) },
   })

@@ -29,7 +29,7 @@ _Id = Annotated[str, Field(strict=True, min_length=1, max_length=256)]
 class _Input(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     proof_version: Annotated[StrictInt, Field(ge=1, le=1)] = Field(alias="_proof_version")
-    thiol_version: StrictInt = Field(ge=1, le=1)
+    thiol_version: StrictInt = Field(ge=1, le=2)
     history_seed: _Id
     nanoparticle_id: _Id
     replace_conjugation_ids: list[_Id] = Field(max_length=MAX_HANDLES)
@@ -50,6 +50,7 @@ class _Input(BaseModel):
 
 
 class CreateRequest(_Input):
+    retained_conjugation_ids: list[_Id] | None = Field(default=None, max_length=MAX_HANDLES)
     conjugation_id: _Id
     scheme: Literal["direct_thiol", "alkyl_thiol", "peg_thiol", "peg_backfill"]
     sequence: Annotated[str, Field(strict=True, min_length=1, max_length=500)]
@@ -68,13 +69,22 @@ class CreateRequest(_Input):
 
     @model_validator(mode="after")
     def bounded_work(self):
+        if self.thiol_version == 1 and self.retained_conjugation_ids is not None:
+            raise ValueError("Thiol v1 cannot append to retained graft layers")
+        if self.thiol_version == 2 and (self.replace_conjugation_ids or self.retained_conjugation_ids is None
+                or len(set(self.retained_conjugation_ids)) != len(self.retained_conjugation_ids)):
+            raise ValueError("Thiol v2 requires exact retained grafts and no replacements")
         if self.count * len(self.sequence) > MAX_BASES:
             raise ValueError("Native thiol grafts admit at most 50,000 generated nucleotides")
         return self
 
 
 class DeleteRequest(_Input):
-    pass
+    @model_validator(mode="after")
+    def original_contract(self):
+        if self.thiol_version != 1:
+            raise ValueError("Thiol deletion requires version 1")
+        return self
 
 
 def parse_command(kind, params):
@@ -240,7 +250,16 @@ def build(kind, design, params):
         _fail("Remove nanoparticle connection ownership before replacing or deleting conjugation",
               "nanoparticle", particle.id, ["nanoparticle_id"])
     index, _ = identity_index(design)
-    removed = resolve_owned_handles(design, command.nanoparticle_id, command.replace_conjugation_ids, index)
+    if isinstance(command, CreateRequest) and command.thiol_version == 2:
+        resolve_owned_handles(design, command.nanoparticle_id, command.retained_conjugation_ids, index,
+                              parameter="retained_conjugation_ids")
+        existing = sum(len(c.surface_strands) for c in design.nanoparticle_conjugations
+                       if c.nanoparticle_id == particle.id)
+        if existing + command.count > MAX_HANDLES:
+            raise ValueError("Additive thiol graft exceeds the existing handle allowance")
+        removed = set()
+    else:
+        removed = resolve_owned_handles(design, command.nanoparticle_id, command.replace_conjugation_ids, index)
     strand_ids = {identity for resource, identity in removed if resource == "strand"}
     helix_ids = {identity for resource, identity in removed if resource == "helix"}
     overhang_ids = {identity for resource, identity in removed if resource == "overhang"}
@@ -283,7 +302,8 @@ def build(kind, design, params):
         candidate = candidate.copy_with(helices=[*candidate.helices, *helices], strands=[*candidate.strands, *strands],
             overhangs=[*candidate.overhangs, *overhangs], nanoparticle_conjugations=[*candidate.nanoparticle_conjugations, conjugation],
             staple_groups=[*retained_groups, group])
-        candidate = with_default_cluster(candidate, identity_factory=lambda *_: factory("thiol-default-cluster", []))
+        if command.thiol_version == 1:
+            candidate = with_default_cluster(candidate, identity_factory=lambda *_: factory("thiol-default-cluster", []))
         outputs.update(("cluster", item.id) for item in candidate.cluster_transforms
                        if ("cluster", item.id) not in index)
     check_incoming(design, removed, outputs)

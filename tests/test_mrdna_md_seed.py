@@ -444,7 +444,7 @@ def test_ssdna_seed_restores_junction_and_does_no_harm():
 
 
 @pytest.mark.slow
-def test_build_namd_seed_from_mrdna_on_real_job():
+def test_build_namd_seed_from_mrdna_on_real_job(tmp_path):
     """The NAMD-seed builder reconstructs a recentered atomistic model from a real
     fine-stage mrDNA job (the sibling of oxDNA's build_namd_seed)."""
     pytest.importorskip("MDAnalysis")
@@ -468,7 +468,10 @@ def test_build_namd_seed_from_mrdna_on_real_job():
             continue
         if job.status != MrdnaStatus.completed or job.fine_steps <= 0:
             continue
-        seed = build_namd_seed_from_mrdna(job.job_id, _WS)
+        from tests.mrdna_seed_fixture import private_seed_job
+
+        with private_seed_job(job, _WS, tmp_path) as private_workspace:
+            seed = build_namd_seed_from_mrdna(job.job_id, private_workspace)
         assert seed.atomistic_model.atoms, "seed model must have atoms"
         assert seed.source_job_id == job.job_id
         # recentered on the origin (else the PDB's 8-char coord fields overflow)
@@ -476,3 +479,43 @@ def test_build_namd_seed_from_mrdna_on_real_job():
         assert np.linalg.norm(c) < 1e-3, f"seed model not recentered (centroid {c})"
         return
     pytest.skip("no completed fine-stage mrDNA job in workspace/mrdna_jobs")
+
+
+def test_private_seed_job_cleans_failure_without_mutating_source(tmp_path):
+    from tests.mrdna_seed_fixture import private_seed_job
+
+    source = tmp_path / "source"
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    job = _completed_fine_job(source)
+    _write_snapshot(job, source)
+    psf, dcd = _write_fine_stage(job, source)
+    psf.with_suffix(".pdb").write_text("synthetic copy-fixture bytes")
+    original = (job.job_dir(source) / "job.json").read_bytes()
+    with pytest.raises(RuntimeError, match="injected"):
+        with private_seed_job(job, source, scratch) as private:
+            directory = job.job_dir(private)
+            assert (directory / psf.name).read_bytes() == psf.read_bytes()
+            assert (directory / "output" / dcd.name).exists()
+            (directory / "job.json").write_text("private mutation")
+            (directory / ".runtime.lock").touch()
+            raise RuntimeError("injected")
+    assert not list(scratch.iterdir())
+    assert (job.job_dir(source) / "job.json").read_bytes() == original
+    assert not (job.job_dir(source) / ".runtime.lock").exists()
+
+
+def test_private_seed_job_detects_source_mutation_and_cleans_scratch(tmp_path):
+    from tests.mrdna_seed_fixture import private_seed_job
+
+    source, scratch = tmp_path / "source", tmp_path / "scratch"
+    scratch.mkdir()
+    job = _completed_fine_job(source)
+    _write_snapshot(job, source)
+    psf, _ = _write_fine_stage(job, source)
+    psf.with_suffix(".pdb").write_text("synthetic copy-fixture bytes")
+    with pytest.raises(AssertionError, match="Source job inputs or lock changed"):
+        with private_seed_job(job, source, scratch):
+            # Deliberately corrupt only this test's synthetic source.
+            (job.job_dir(source) / "job.json").write_text("injected source mutation")
+    assert not list(scratch.iterdir())

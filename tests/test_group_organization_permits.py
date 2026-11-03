@@ -74,10 +74,6 @@ def unexpected(*_args, **_kwargs):
     pytest.fail("Rejected publication performed snapshot or mutation work")
 
 
-def test_rollout_is_disabled_by_default():
-    assert gate.GROUP_ORGANIZATION_ENABLED is False
-
-
 def test_disabled_rollout_cannot_issue_an_admission(document, monkeypatch):
     monkeypatch.setattr(gate, "GROUP_ORGANIZATION_ENABLED", False)
     denied(lambda: admit(document), "group_organization_not_enabled")

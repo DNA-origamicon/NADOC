@@ -2992,9 +2992,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   })
 
   // ── Design changed (edit OR feature-log seek) → re-evaluate out-of-date ────
-  // The client emits this on every design sync; refetch so the ⚠ markers update
-  // even off the Dynamics tab (where the 1.5 s poll is paused) — e.g. when the user
-  // seeks the Feature Log back to a job's run position, clearing its stale flag.
+  // Only known jobs for this part can change freshness. Discovery belongs to
+  // panel opens, document switches and explicit job actions, never geometry edits.
   let _designChangeRefreshTimer = null
   window.addEventListener('nadoc:design-changed', () => {
     // A design edit makes a re-run no longer redundant; drop any live deviation/strain
@@ -3008,7 +3007,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Staleness is historical UI metadata, not part of applying the selected
     // Feature Log state. Coalesce rapid scrubs and let the scene paint first.
     clearTimeout(_designChangeRefreshTimer)
-    _designChangeRefreshTimer = setTimeout(() => { if (_base.isOpen()) void _fetchJobs() }, 150)
+    const path = _currentPartPath()
+    if (!_base.isOpen() || !filterJobsForPart(_jobs, path, false).length) return
+    _designChangeRefreshTimer = setTimeout(() => {
+      if (_base.isOpen() && path === _currentPartPath()) void _fetchJobs()
+    }, 150)
   })
 
   // ── Design switched/opened → re-filter the list to the new design ─────────

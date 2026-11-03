@@ -14,11 +14,32 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 _GUARD = Path(__file__).resolve().parent.parent / "scripts" / "test_guard.sh"
+
+
+@pytest.mark.parametrize("scope", ["0", "focused", "1"])
+def test_every_scope_pins_numerical_threads_and_preserves_exit_status(tmp_path, scope):
+    # Isolated guard fixture; never opens the checkout's real test session.
+    marker = tmp_path / "session"
+    marker.write_text(f"{int(time.time()) + 60}\n")
+    names = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+             "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+    proc = subprocess.run(
+        ["bash", str(_GUARD), "thread-check", "0", scope, "--", "bash", "-c",
+         "env; exit 7"],
+        cwd=tmp_path, capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin", "NADOC_TEST_SESSION_FILE": str(marker),
+             **dict.fromkeys(names, "32")},
+    )
+    assert proc.returncode == 7
+    environment = dict(line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line)
+    assert {name: environment[name] for name in names} == dict.fromkeys(names, "1")
+    assert not (tmp_path / ".nadoc-test.lock").exists()
 
 
 def _run_guard(tmp_path: Path, report: dict | None) -> str:

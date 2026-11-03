@@ -8,8 +8,7 @@ composition* through `apply_overhang_rotation_if_needed` /
 
 What is tested:
   • `OverhangSpec.parent_overhang_id` round-trip (model_dump / model_validate)
-  • `_overhang_chain_root` / `_overhang_chain_path` /
-    `_overhang_chain_descendants` / `_overhang_chain_links_root_first`
+  • `_overhang_chain_descendants`, used by cascade deletion
   • Validator rule: missing parent → fails; cycle → fails
   • Cascade-delete: removing the parent strand cascades to descendants
 
@@ -22,9 +21,6 @@ from __future__ import annotations
 
 from backend.core.lattice import (
     _overhang_chain_descendants,
-    _overhang_chain_links_root_first,
-    _overhang_chain_path,
-    _overhang_chain_root,
 )
 from backend.core.models import (
     Design,
@@ -155,32 +151,6 @@ def test_legacy_overhang_load_has_no_parent() -> None:
 # ── Chain-walk helpers ──────────────────────────────────────────────────────
 
 
-def test_chain_root_walks_to_bundle_anchored_root() -> None:
-    design = _design_with_chain(3)
-    assert _overhang_chain_root(design, "oh_2") == "oh_0"
-    assert _overhang_chain_root(design, "oh_1") == "oh_0"
-    assert _overhang_chain_root(design, "oh_0") == "oh_0"
-
-
-def test_chain_root_returns_none_for_unknown_id() -> None:
-    design = _design_with_chain(2)
-    assert _overhang_chain_root(design, "ghost") is None
-
-
-def test_chain_path_root_to_leaf() -> None:
-    design = _design_with_chain(3)
-    assert _overhang_chain_path(design, "oh_2") == ["oh_0", "oh_1", "oh_2"]
-    assert _overhang_chain_path(design, "oh_0") == ["oh_0"]
-
-
-def test_chain_path_returns_empty_on_broken_chain() -> None:
-    design = _design_with_chain(2)
-    # Introduce a missing-parent reference.
-    bad = design.overhangs[1].model_copy(update={"parent_overhang_id": "ghost"})
-    design = design.model_copy(update={"overhangs": [design.overhangs[0], bad]})
-    assert _overhang_chain_path(design, "oh_1") == []
-
-
 def test_chain_descendants_excludes_self() -> None:
     design = _design_with_chain(4)
     desc = _overhang_chain_descendants(design, "oh_1")
@@ -203,32 +173,6 @@ def test_chain_descendants_branched() -> None:
     strands.append(_strand_with_oh("stp_1", "oh_1"))
     design = base.model_copy(update={"strands": strands, "overhangs": overhangs})
     assert sorted(_overhang_chain_descendants(design, "oh_0")) == ["oh_1", "oh_b"]
-
-
-def test_chain_links_root_first_topological_order() -> None:
-    design = _design_with_chain(4)
-    # Reorder overhangs so children come before parents; helper must sort.
-    shuffled = list(reversed(design.overhangs))
-    design = design.model_copy(update={"overhangs": shuffled})
-    order = [o.id for o in _overhang_chain_links_root_first(design)]
-    # oh_0 must come before oh_1, etc. — exact order beyond that is irrelevant.
-    assert (
-        order.index("oh_0")
-        < order.index("oh_1")
-        < order.index("oh_2")
-        < order.index("oh_3")
-    )
-
-
-def test_chain_links_root_first_drops_cycles() -> None:
-    design = _design_with_chain(2)
-    cyclic = [
-        design.overhangs[0].model_copy(update={"parent_overhang_id": "oh_1"}),
-        design.overhangs[1],  # parent_overhang_id="oh_0"
-    ]
-    design = design.model_copy(update={"overhangs": cyclic})
-    order = _overhang_chain_links_root_first(design)
-    assert order == []  # entire cycle is unreachable from any zero-in-degree node
 
 
 # ── Validator rules ─────────────────────────────────────────────────────────

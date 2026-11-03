@@ -68,9 +68,9 @@ test-scientific TARGET *ARGS:
 test-scientific-list:
     uv run pytest tests/ --scientific --collect-only -q
 
-# The fast suite, nothing else (~20s): skips every `slow`-marked test. Always allowed.
-# If this ever creeps over the 60s budget the guard says so and the slowest unmarked
-# tests land in .nadoc-slow-candidates.json — triage them, don't raise the budget.
+# The fast software suite: excludes slow tests and scientific opt-ins. Always allowed.
+# The guard reports tests over 5s and aggregate runtime over its 90s backstop in
+# .nadoc-slow-candidates.json — triage the cause, don't raise the budgets.
 test-fast:
     scripts/test_guard.sh "test-fast" 0 0 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 

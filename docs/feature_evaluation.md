@@ -149,9 +149,16 @@ contract.
   outside this diff format. Existing snapshot substitution/reconstruction rules
   still apply. Expanding persistence coverage requires a separate versioned
   migration and correctness audit, not an optimizer assumption.
-- Missing/evicted snapshots and unsupported legacy commands retain existing
-  fallback behavior. Optimizations do not claim to repair an unreconstructable
-  historical state or validate corrupt intermediate patch payloads.
+- For parts with an explicit recipe root, missing/evicted recovery or corrupt
+  snapshot decoding falls back to native command replay of the requested prefix
+  (`part_history_navigation.py`). F0, Fine Routing child boundaries and return to
+  the end retain the complete saved definitions. Unsupported prefix commands
+  refuse explicitly; no later snapshot substitutes for a missing construction step.
+  Revert executes the retained recipe prefix and publishes once with a revision
+  guard, including regenerated recovery for retained children. The UI permits
+  recipe-backed Revert even after snapshot eviction. Rootless history and the
+  retired named-group organization model retain their existing recovery boundaries.
+  The frozen optimization oracle is unchanged; native fallback has separate tests.
 
 ## A/B checks and rollback
 

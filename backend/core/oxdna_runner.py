@@ -708,14 +708,14 @@ def prepare_oxdna_job(
     return info
 
 
-def load_stage_specs(job_dir: Path) -> list[OxdnaStageSpec]:
+def load_stage_specs(job_dir: Path, *, reader=None, exists=None) -> list[OxdnaStageSpec]:
     """Reload persisted stage specs, tolerating fields from older releases."""
     path = job_dir / "stages_spec.json"
-    if not path.exists():
+    if not (exists or Path.exists)(path):
         return []
     allowed = {field.name for field in fields(OxdnaStageSpec)}
     return [OxdnaStageSpec(**{key: value for key, value in record.items() if key in allowed})
-            for record in json.loads(path.read_text())]
+            for record in json.loads(path.read_text() if reader is None else reader(path))]
 
 
 def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
@@ -874,12 +874,13 @@ def assert_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
 # ── Progress ──────────────────────────────────────────────────────────────────
 
 
-def _stage_energy_lines(stage_dir: Path) -> int:
+def _stage_energy_lines(stage_dir: Path, *, reader=None, exists=None) -> int:
     p = stage_dir / "energy.dat"
-    if not p.exists():
+    if not (exists or Path.exists)(p):
         return 0
     try:
-        return sum(1 for ln in p.read_text(errors="replace").splitlines() if ln.strip())
+        text = p.read_text(errors="replace") if reader is None else reader(p)
+        return sum(1 for ln in text.splitlines() if ln.strip())
     except OSError:
         return 0
 
@@ -1348,15 +1349,14 @@ def _attempt_energy_files(stage_dir: Path) -> list[Path]:
     ]
 
 
-def _attempt_steps(path: Path, every: int) -> int:
+def _attempt_steps(path: Path, every: int, *, reader=None, exists=None) -> int:
     """Steps an attempt simulated, from its energy file. The first row is the starting
     state, not a simulated interval, so it is not counted."""
-    if not path.exists():
+    if not (exists or Path.exists)(path):
         return 0
     try:
-        lines = sum(
-            1 for ln in path.read_text(errors="replace").splitlines() if ln.strip()
-        )
+        text = path.read_text(errors="replace") if reader is None else reader(path)
+        lines = sum(1 for ln in text.splitlines() if ln.strip())
     except OSError:
         return 0
     return max(0, lines - 1) * every
@@ -1453,7 +1453,7 @@ def resume_point(
     return None, 0, f"{reason} and no complete trajectory frame to fall back on"
 
 
-def stage_completed_steps(stage_dir: Path, spec: OxdnaStageSpec) -> int:
+def stage_completed_steps(stage_dir: Path, spec: OxdnaStageSpec, *, evidence=None) -> int:
     """Steps of this stage's budget a resume would keep — CHEAP estimate for display.
 
     Energy-file arithmetic only: no trajectory scan and no writes, because this runs on
@@ -1463,10 +1463,10 @@ def stage_completed_steps(stage_dir: Path, spec: OxdnaStageSpec) -> int:
     ``print_conf_interval``.
     """
     every = spec.print_energy_every_override or max(1, spec.steps // 100)
-    files = _attempt_energy_files(stage_dir)
-    if _exploded(stage_dir) and files:
+    files = _attempt_energy_files(stage_dir) if evidence is None else evidence.attempt_files(stage_dir)
+    if (_exploded(stage_dir) if evidence is None else evidence.exploded(stage_dir)) and files:
         files = files[:-1]  # the current (diverged) attempt is thrown away
-    return sum(_attempt_steps(p, every) for p in files)
+    return sum(_attempt_steps(p, every) if evidence is None else evidence.attempt_steps(p, every) for p in files)
 
 
 def stage_fraction(stage_dir: Path, spec: OxdnaStageSpec) -> float:

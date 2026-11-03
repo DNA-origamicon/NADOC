@@ -1,14 +1,18 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { attachNanoparticleToOverhang } from './client.js'
+import { attachNanoparticleToOverhang, _syncFromDesignResponse, resetRevisionWatermark } from './client.js'
 import { store } from '../state/store.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  resetRevisionWatermark()
   store.setState({ currentDesign: null, lastError: null })
 })
 
 it('propagates an attachment rejection instead of reporting a successful selection', async () => {
-  store.setState({ currentDesign: { id: 'attachment-test' } })
+  store.setState({ assemblyActive: false, featureSeekPending: false })
+  await _syncFromDesignResponse({ revision: 7, design: {
+    id: 'attachment-test', helices: [], strands: [], feature_log: [],
+  } }, { skipGeometry: true })
   vi.stubGlobal('fetch', vi.fn(async () => ({
     ok: false, status: 422, headers: new Headers(),
     json: async () => ({ detail: 'This overhang is already occupied.' }),

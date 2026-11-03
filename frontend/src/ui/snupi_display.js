@@ -76,6 +76,7 @@ export function initSnupiDisplay({
   }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
+  let _ownsScene = false    // independent of the compact controller's ownership
   let _stats = null         // last flex/deviation/cando summary for the panel readout
   let _flexResp = null      // { disp, rmsf } for the flex map
   let _devResp = null       // deviation response
@@ -87,6 +88,7 @@ export function initSnupiDisplay({
   let _devBounds = null
 
   function _nativeVisible(v) {
+    _ownsScene = true
     if (setDesignVisible) setDesignVisible(v)
     else designRenderer?.setDesignVisible?.(v)
   }
@@ -96,6 +98,8 @@ export function initSnupiDisplay({
   }
 
   function _clearAll() {
+    // Idle panel cleanup must leave another representation's scene untouched.
+    if (!_ownsScene) return
     flexScale?.hide()
     largeView?.clear()
     _flexResp = null; _devResp = null; _candoResp = null
@@ -104,6 +108,7 @@ export function initSnupiDisplay({
     designRenderer.applyFemPositions?.(null)
     designRenderer.clearExternalGeometry?.()
     _restoreNative()
+    _ownsScene = false
   }
 
   function _prepareForExternal() {

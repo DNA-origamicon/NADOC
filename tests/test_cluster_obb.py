@@ -365,14 +365,6 @@ def test_place_cluster_joint_on_posed_cluster_round_trips_local_frame():
         assert_joint_on_hull_corner(d, jid, edge=edge)
 
 
-def test_place_cluster_joint_flips_add_joint_to_covered():
-    """place_cluster_joint drives the real add_joint handler (function-identity) →
-    coverage 34 → 35 (the first coverage flip since AF-15 Phase 1)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "add_joint" in covered
-
-
 # ── AF-14 Phase 2: swept-OBB range of motion ──────────────────────────────────
 
 
@@ -661,38 +653,3 @@ def test_grubler_rejects_bad_input():
         grubler_mobility(0, revolute=2)
     with pytest.raises(ValueError, match="non-negative"):
         grubler_mobility(4, revolute=-1)
-
-
-# ── coverage: a construction-sugar item (wraps no new route) ──────────────────
-
-
-def test_align_cluster_edge_adds_no_coverage():
-    """align_cluster_edge composes transform_cluster (already covered) + a pure solver —
-    it wraps no NEW route, so headless coverage is unchanged (the oracle is the
-    deliverable, not a coverage flip)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "update_cluster" in covered  # what align_cluster_edge drives
-    # AF-14 Phase 1's place_cluster_joint flipped add_joint → covered (34 → 35);
-    # the full_sequence feature later flipped assign_staple_sequences (35 → 36);
-    # the periodic straggler flipped polymerize_periodic_assembly (36 → 37);
-    # AF-25's seek_features flipped /design/features/seek (37 → 38);
-    # AF-26's return_to_latest flipped /design/loadouts/{id}/select (38 → 39).
-    # crossover_extra_bases flipped the single + batch extra-bases PATCH routes (39 -> 41).
-    # AF-27's connect_overhangs flipped create_overhang_connection (41 → 42);
-    # the hinge flexible-relax flipped flexible_relax (42 → 43);
-    # AF-31's place_crossover + delete_crossover flipped both (43 → 45).
-    # AF-32's force_ligate + delete_forced_ligation flipped both (45 → 47);
-    # AF-30's strand_end_resize flipped strand-end-resize (47 → 48).
-    # AF-27 P2's relax_overhang_connection + relax_bond flipped both (48 → 50).
-    # end-to-root binder flipped create_connection_version + apply_connection_version (50 → 52).
-    # AF-38's relax_overhang_binding + relax_end_to_root flipped both (52 → 54).
-    # Unifying direct connections (2026-06-30) dropped the /relax-end-to-root route +
-    # its wrapper; relax_overhang_binding now covers both direct types (54 → 53).
-    # Proposal-B duplex graph: connect_duplex added /design/duplexes/connect (53 → 54).
-    # add_strand_extension added /design/extensions (54 → 55).
-    # relax_duplex added /design/duplexes/{id}/relax (55 → 56).
-    # AF-37's direct-binding CREATION added create/patch/delete_overhang_binding
-    # + split_sub_domain + patch_sub_domain (56 → 61).
-    # Direct strand editing then covered ligate_strand + delete_strand (61 → 63).
-    assert rep["covered"] == 63

@@ -1,6 +1,9 @@
 """Server startup must never write audit/session files into the user's workspace."""
 
 import asyncio
+import os
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -35,3 +38,36 @@ def test_startup_writes_only_to_the_isolated_workspace(monkeypatch):
         alpine_operations.event("isolated_test_startup")
         assert '"event": "isolated_test_startup"' in audit.read_text()
         assert (assembly._WORKSPACE_DIR / "md_jobs").is_dir()
+
+
+@pytest.fixture(scope="module")
+def module_startup_paths(_isolate_module_workspace):
+    # Exercise the ordering that used to let a module TestClient use real storage.
+    assert main._WORKSPACE_DIR == _isolate_module_workspace
+    path = alpine_operations.configure(main._WORKSPACE_DIR)
+    alpine_operations.event("module_fixture_startup")
+    return path, os.environ["NADOC_WORKSPACE"]
+
+
+def test_module_startup_precedes_function_overrides_safely(module_startup_paths, _isolate_module_workspace):
+    path, workspace_env = module_startup_paths
+    assert path == _isolate_module_workspace / "logs" / "alpine_operations.jsonl"
+    assert workspace_env == str(_isolate_module_workspace)
+    assert '"event": "module_fixture_startup"' in path.read_text()
+
+
+def test_startup_isolation_closes_handlers_and_restores_globals_after_failure(tmp_path):
+    from tests.workspace_isolation import isolated_startup_workspace
+
+    original = (main._WORKSPACE_DIR, assembly._WORKSPACE_DIR, alpine_operations._LOGGER,
+                alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE"))
+    with pytest.raises(RuntimeError, match="injected"):
+        with isolated_startup_workspace(tmp_path):
+            path = alpine_operations.configure(tmp_path)
+            handler = alpine_operations._LOGGER.handlers[0]
+            alpine_operations.event("private_failure")
+            raise RuntimeError("injected")
+    assert handler.stream is None
+    assert '"event": "private_failure"' in path.read_text()
+    assert (main._WORKSPACE_DIR, assembly._WORKSPACE_DIR, alpine_operations._LOGGER,
+            alpine_operations._PATH, os.environ.get("NADOC_WORKSPACE")) == original

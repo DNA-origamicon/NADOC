@@ -63,6 +63,7 @@ def _diff_is_cluster_only(prev: "Design", new: "Design") -> bool:
     if prev.nucleotide_transforms or new.nucleotide_transforms:
         return False
     structural = [
+        "atomistic_reference",
         "helices",
         "strands",
         "crossovers",
@@ -216,6 +217,10 @@ def _topology_diff_field(prev: "Design", new: "Design") -> str | None:
     differs. ``None`` means topology IS unchanged. Used to attach a more
     informative ``path:full_geometry(<reason>)`` tag to the perf trace so
     you can see at a glance why positions_only didn't fire."""
+    # Atom-only history steps need a fresh molecular render even when the
+    # coarse topology and its nucleotide positions are identical.
+    if prev.atomistic_reference != new.atomistic_reference:
+        return "atomistic_reference"
     # Residue poses also carry site frames and inserted-base geometry. The
     # cluster delta and positions-only payloads cannot refresh that full state.
     if (prev.nucleotide_transforms != new.nucleotide_transforms

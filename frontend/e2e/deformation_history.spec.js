@@ -521,3 +521,51 @@ for (const [name, seed, field, collection] of [
     expect((await proof.json()).status).toBe('verified')
   }, seed)
 })
+
+test('Recipe-backed scrub and Revert survive unavailable recovery', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const original = (await f.browser()).design
+    expect(original.feature_log[0].evicted).toBe(true)
+    const last = original.feature_log.length - 1
+    const originalIds = original.feature_log.map(row => row.id)
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    // Drive the real feature rail, including the preview/commit path.
+    async function scrub(rowIndex) {
+      const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/seek')
+      await page.evaluate(index => {
+        const thumb = document.querySelector('#fl-rail .feature-seek-readiness').parentElement
+        const row = document.querySelector(`[data-fl-row="${index}"]`)
+        const box = row.getBoundingClientRect()
+        thumb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: box.top, pointerId: 1 }))
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: box.top + box.height / 2, pointerId: 1 }))
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }))
+      }, rowIndex)
+      expect((await response).ok()).toBe(true)
+      await expect(page.locator('#fl-rail [data-readiness="ready"]')).toBeAttached()
+    }
+    await scrub(0)
+    expect((await f.browser()).design.helices).toHaveLength(0)
+    expect((await f.browser()).geometry).toHaveLength(0)
+    await scrub(last + 1)
+    expect((await f.browser()).design.feature_log.map(row => row.id)).toEqual(originalIds)
+    expect((await f.browser()).design.helices).toEqual(original.helices)
+    await expect(page.locator('[title="Revert to before this Fine Routing cluster"]')).toBeEnabled()
+    await page.locator('[title="Revert to before this Fine Routing cluster"]').click()
+    const response = page.waitForResponse(r => new URL(r.url()).pathname === `/api/design/features/${last}/revert`)
+    await page.getByRole('button', { name: 'Revert', exact: true }).click()
+    expect((await response).ok()).toBe(true)
+    await expect.poll(async () => (await f.browser()).design.feature_log.length).toBe(last)
+    await page.evaluate(async () => (await import('/src/api/client.js')).undo())
+    await expect.poll(async () => (await f.browser()).design.feature_log.map(row => row.id)).toEqual(originalIds)
+    await page.evaluate(async () => (await import('/src/api/client.js')).redo())
+    await expect.poll(async () => (await f.browser()).design.feature_log.length).toBe(last)
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesign(file) || !await api.loadDesign(file)) throw new Error('Reopen failed')
+    }, f.file)
+    const proof = await request.get(`${endpoint}/__e2e__/history/proof`, { headers: f.headers })
+    expect(proof.ok()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+    expect((await page.evaluate(() => window.__nadocTest.renderedPixelCensus())).visible).toBeGreaterThan(0)
+  }, 'bend-nick', { pauseRendering: true })
+})

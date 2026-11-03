@@ -116,6 +116,7 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         id=source.id, feature_log=prefix.log,
     )
     compiled = None
+    fitted = None
     if request.kind == COATING_KIND:
         from backend.api.part_coating_append import compile_steps, prepare_sources
 
@@ -140,6 +141,25 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         definitions = [(header["identity"], request.kind, pattern_label(request.kind, params), params)]
     elif request.kind == "overhang-bulk":
         definitions = [(header["identity"], request.kind, "Connection version", request.params)]
+    elif request.kind == 'nanoparticle-attach-overhang' and request.params.get('strand_id') is None:
+        from backend.api.nanoparticle_attachment import attachment_candidates
+        from backend.api.part_np_fitting_commands import _source
+        _source(current, request.params['nanoparticle_id'])
+        failures = []
+        handles = dict.fromkeys(strand_id for strand_id, _variant in attachment_candidates(
+            current, request.params['nanoparticle_id'], request.params['overhang_id']))
+        for strand_id in handles:
+            selected = request.model_copy(update={'params': {**request.params, 'strand_id': strand_id}})
+            definition = _legacy_definition(current, selected, header)
+            try:
+                fitted = executor(definition[1], current, definition[3])
+            except ValueError as error:
+                failures.append(str(error))
+                continue
+            definitions = [definition]
+            break
+        else:
+            raise ValueError('; '.join(failures) or 'No compatible nanoparticle handle could be fitted.')
     else:
         definitions = [_legacy_definition(current, request, header)]
     if len(definitions) != needed:
@@ -147,7 +167,7 @@ def append_features(source, request, header, executor, dependencies, *, metadata
                                    code="invalid_append_plan")
     log = list(prefix.log)
     for identity, kind, label, params in definitions:
-        updated = executor(kind, current, params)
+        updated = fitted if fitted is not None else executor(kind, current, params)
         if request.kind in EXTRUSIONS:
             updated = updated.copy_with(id=source.id)
         if kind == "cluster_op":

@@ -44,8 +44,10 @@ class GeneratedHistory:
         entry_ids=None,
         stop_key=None,
         standard=True,
+        native_assets=False,
     ):
         self.standard = standard
+        self.native_assets = native_assets
         self.design = source.model_copy(deep=True)
         self.settings = settings.model_dump()
         self.group_id = group_id or str(uuid.uuid4())
@@ -192,7 +194,7 @@ class GeneratedHistory:
         native_params = None
         overlay_entry = None
         if self.standard and proof_version_supported(kind, params.get("_proof_version")):
-            from backend.api.part_proof_commands import execute
+            from backend.api.part_proof_commands import execute_long as execute
             from backend.core.part_history_proof import AUTHORING_FIELDS
             from backend.api.generated_overlay_entries import KINDS as OVERLAY_KINDS, entry_for
             if kind in OVERLAY_KINDS:
@@ -309,6 +311,7 @@ def build_recorded(
     entry_ids=None,
     stop_key=None,
     standard=True,
+    native_assets=False,
 ):
     from backend.api.two_np_build import materialize
     from backend.api.routes_nanoparticles import _set_np_version_applied
@@ -325,6 +328,7 @@ def build_recorded(
         entry_ids=entry_ids,
         stop_key=stop_key,
         standard=standard,
+        native_assets=native_assets,
     )
     prepared = source.model_copy(deep=True)
     particle_ids = {p.id for p in source.nanoparticles if p.kind == "gold_nanosphere"}
@@ -332,19 +336,33 @@ def build_recorded(
         for v in list(prepared.nanoparticle_connection_versions):
             if v.applied and v.nanoparticle_id in particle_ids and settings.connectivity_plan is None:
                 before = prepared
-                cluster = duplex_cluster_for(prepared, v.overhang_id)
-                if cluster:
-                    prepared = dematerialize_duplex_cluster(prepared, v.overhang_id)
-                prepared = _set_np_version_applied(prepared, v.id, False)
+                detach = {"version_id": v.id, "applied": False}
+                if native_assets:
+                    from backend.api.part_generated_np_fitting import teardown_inputs
+                    from backend.api.part_proof_commands import execute_long
+                    detach = teardown_inputs(prepared, v.id)
+                    prepared = execute_long('nanoparticle-connection-version-patch', prepared, detach)
+                else:
+                    cluster = duplex_cluster_for(prepared, v.overhang_id)
+                    if cluster:
+                        prepared = dematerialize_duplex_cluster(prepared, v.overhang_id)
+                    prepared = _set_np_version_applied(prepared, v.id, False)
                 history.record(
                     before,
                     prepared,
                     "nanoparticle-connection-version-patch",
                     "Detach previous nanoparticle connection",
-                    {"version_id": v.id, "applied": False},
+                    detach,
                     f"detach:{v.id}",
                     scoped=False,
                 )
+        if native_assets:
+            # Detachment restores radial carriers that were absent from the
+            # input's applied graph. They are retained inputs to the next
+            # generated scope, not new outputs in that scope's namespace.
+            for owner in prepared.nanoparticle_conjugations:
+                for record in owner.surface_strands:
+                    history.source_ids.update((record.strand_id, record.helix_id, record.overhang_id))
         _, report = materialize(prepared, candidate, settings, history=history)
     except _StopRecording:
         report = {}

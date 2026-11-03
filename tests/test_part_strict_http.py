@@ -87,11 +87,14 @@ async def forbidden_app(request, receive, send):
     ("/api/documents/another", "DELETE"), ("/openapi.json", "GET"),
     ("/docs", "GET"), (REVISION, "HEAD"), (EMPTY, "OPTIONS"), (JOBS + "/", "POST"),
 ])
-def test_unlisted_routes_never_read_body_or_fall_back(documents, path, method):
+def test_unlisted_or_invalid_media_never_read_body_or_fall_back(documents, path, method):
     doc, _other = documents
     sent, reads = invoke(strict.StrictPartDispatch(forbidden_app), scope(doc, path, method,
         headers=[(b"content-type", b"multipart/form-data; boundary=never-read")]))
-    assert response(sent)[0] == 403 and not reads
+    expected = 415 if method == "GET" and path in {"/api/design", "/api/design/geometry"} else 403
+    assert response(sent)[0] == expected and not reads
+    if expected == 415:
+        assert response(sent)[1]["detail"]["code"] == "unsupported_strict_media"
     assert doc not in state._sessions
 
 

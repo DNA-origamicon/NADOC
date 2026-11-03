@@ -61,6 +61,14 @@ family('Color', 'strands-color-bulk')
 family('Loop/Skip', 'loop-skip-insert loop-skip-clear loop-skip-clear-all loop-skip-twist loop-skip-bend')
 
 export function featureOperationName(entry) {
+  if (entry?.op_kind === 'diagnostic-process') {
+    const tools = { 'author-helix': 'Helix', 'author-strand': 'Strand', 'derive-connectivity': 'Crossover',
+      'assembly-add': 'Add Part', 'assembly-polymerize': 'Polymerize Origami',
+      'assembly-flatten': 'Prepare NAMD', 'phase-control': 'Molecular Placement Audit',
+      'native-atoms': 'Molecular Placement Audit', 'terminal-candidate': 'Molecular Placement Audit',
+      'mrdna-zero': 'Use as NAMD seed', 'document-name': 'Rename' }
+    return tools[entry.params?.action] ?? 'Diagnostic Process'
+  }
   if (entry?.feature_type === 'deformation') return names.get(entry.op_snapshot?.type) ?? 'Deform'
   return names.get(entry?.op_kind ?? entry?.op_subtype ?? entry?.feature_type) ?? 'Feature'
 }

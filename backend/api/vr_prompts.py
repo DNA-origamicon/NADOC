@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
-from backend.api.vr_routing import parse_event
+from backend.api.vr_routing import parse_event as parse_event
 
 router = APIRouter()
 

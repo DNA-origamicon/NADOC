@@ -32,7 +32,7 @@
 #   NADOC_TEST_CONFIRM=1     answer "yes" to the confirm gate up front (for agents)
 #   NADOC_TEST_BUDGET_SEC=N  raise/lower the total-time backstop
 #   NADOC_TEST_NICE=0        run pytest at normal CPU priority (default: nice -n 10)
-#   NADOC_TEST_BLAS_THREADS=N  BLAS/OpenMP threads per worker on fast-only recipes
+#   NADOC_TEST_BLAS_THREADS=N  BLAS/OpenMP threads per worker on all recipes
 #                            (default 1; 0 = don't touch the environment). See step 4.
 #   NADOC_TEST_FORCE=1       bypass EVERYTHING (last resort; you own the fallout).
 #                            Agents: this one is not yours to set — see CLAUDE.md.
@@ -153,7 +153,7 @@ NICE_LEVEL="${NADOC_TEST_NICE:-10}"
 # Keep automatic xdist from filling all 32 logical CPUs with independent heaps.
 export PYTEST_XDIST_AUTO_NUM_WORKERS="${PYTEST_XDIST_AUTO_NUM_WORKERS:-4}"
 
-# BLAS/OpenMP thread pinning (fast-only recipes).  numpy/scipy here are built against
+# BLAS/OpenMP thread pinning. numpy/scipy here are built against
 # scipy-openblas with MAX_THREADS=64, so every L-BFGS-B / lstsq / eigh call fans out
 # across the whole box by default.  The fast suite's numeric work is TINY (e.g. the
 # atomistic extra-base joint solve is 29 DOF), so the thread pool is pure overhead —
@@ -164,11 +164,12 @@ export PYTEST_XDIST_AUTO_NUM_WORKERS="${PYTEST_XDIST_AUTO_NUM_WORKERS:-4}"
 # i.e. the "heavy tests" flagged there were thrashing, not heavy.  Pinning to 1 is
 # faster in wall-clock even for a SERIAL run (25s -> 19s), because the matrices are
 # too small for threading to pay for itself.
-# Scoped to fast-only (slow=0) recipes: the heavy suite's FEM/SNUPI solves are large
-# enough that multithreaded BLAS may genuinely help, and that path is not measured here.
+# Full suites also exercise native recipe contracts requiring one numerical thread.
+# Use the same default in every scope; otherwise FULL both oversubscribes workers
+# and rejects numerical fingerprints that pass focused and fast validation.
 # Override with NADOC_TEST_BLAS_THREADS=N (0 = leave the environment untouched).
 BLAS_THREADS="${NADOC_TEST_BLAS_THREADS:-1}"
-if [[ "$SLOW" != "1" && "$BLAS_THREADS" != "0" ]]; then
+if [[ "$BLAS_THREADS" != "0" ]]; then
   export OMP_NUM_THREADS="$BLAS_THREADS"
   export OPENBLAS_NUM_THREADS="$BLAS_THREADS"
   export MKL_NUM_THREADS="$BLAS_THREADS"

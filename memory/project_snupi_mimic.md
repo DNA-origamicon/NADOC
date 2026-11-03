@@ -9,6 +9,12 @@ metadata:
 
 # SNUPI mimic — get base SNUPI for free
 
+## Topic navigation and current boundaries
+
+Reorganized October 17, 2026. Read the retained contracts here, then only the
+matching detail below. Dated results and old handoffs are not new verification
+or authorization; current user instructions and `CLAUDE.md` take precedence.
+
 **Goal:** Test whether *base* SNUPI can be recreated at ~$0 new MD by (1) transcribing SNUPI's
 published per-motif parameters (`Literature/SNUPI_SI.pdf`, Tables S1–S5) into a param DB and
 (2) wiring them into NADOC's existing corotational beam FEM (`backend/physics/fem_solver.py`),
@@ -36,217 +42,22 @@ classifier / CO-beam diversion. Replaces the old k_rot=0 WLC-spring placeholder.
   caveats — NOT a tight quantitative validation. Strengthening needs a longer 24hb reference (converge
   slow modes) or a cohesively-stable small extra-base design (bigger bundle, or +salt per exp29).
 
-## Why this is cheap (established 2026-07-11)
-- SNUPI (Lee/Kim, ACS Nano 2021) ran **almost no new MD**: regular+nicked BP steps = published
-  3DNA values (SI Tables S1–S2); CO motifs = **reused** Bathe-2012 trajectories (the 32-hb
-  honeycomb bundles, Fig S2) + a few additions (SI Note S14). All **74-motif** params are
-  printed in **SI Tables S1–S5**; Figure S1 plots them.
-- SNUPI's model = the **same corotational per-bp beam FE as CanDo**, plus three deltas. NADOC's
-  `fem_solver.py` is already a CanDo-replica **validated** vs CanDo (RMSF 0.8–0.97, twist
-  ~10–30%, bend ~0.9 — see [[project_cando_fem]]). So this is a small delta on validated code,
-  not a rebuild.
+<a id="why-this-is-cheap-established-2026-07-11"></a>
+- [Why this is cheap (established 2026-07-11)](details/project_snupi_mimic/01-why-this-is-cheap-established-2026-07-11.md#why-this-is-cheap-established-2026-07-11)
 
-## The three deltas (CanDo → SNUPI)
-1. **Anisotropic per-motif 6×6 stiffness**, sequence-dependent (6 rigidities EA/GAy/GAz/GJ/EIy/EIz),
-   74 motif types — vs the current isotropic scalar EA=1100 / EI=230 / GJ=460. Transcribe S1–S5.
-2. **15 coupling coefficients** per motif (trans–rot, incl. twist–stretch ≈ −277 pN·nm) — currently none.
-3. **Debye–Hückel inter-helix electrostatic elements** (SI Notes S6/S7) — the one genuinely new
-   solver piece; today inter-helix coupling is via crossover links only. **Deferrable to P3.**
+<a id="the-three-deltas-cando--snupi"></a>
+- [The three deltas (CanDo → SNUPI)](details/project_snupi_mimic/01-why-this-is-cheap-established-2026-07-11.md#the-three-deltas-cando--snupi)
 
-## Validation data — ON DISK, no new MD
-- **6hbx100_noT** — standard 6-helix honeycomb, no extra bases; complete set at
-  `/media/jojo/Archive/nadoc_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` → psf + pdb +
-  **20 ns k=0 production DCD (1.96 GB)**. **Primary base-SNUPI target.**
-- **3x4SQ** — square lattice, k=0 DCD (`/media/jojo/Archive/nadoc_jobs/93cdbbd3a3f1/...`) → validates SQ params.
-- 6hbx100_1xT / 2xT, 6hb_2xT — extra-base variants → the EXTENSION targets (base SNUPI can't
-  predict these; use after the Δbase extra-base motifs are added).
-- ⚠ **18hb trajectory is NOT on this machine** (job `e29d1e5d5ace` absent; only exp30 summary
-  docs in `experiments/exp30_18hb_production/`). The 39 GB DCD lives on the work computer —
-  sync it if you want 18hb as an extra target; **not needed to start**.
-- ⚠ **`Literature/SNUPI_SI.pdf` is gitignored (local only)** — run this plan ON THIS MACHINE,
-  or re-copy the SI + main paper on the other computer first.
+<a id="validation-data--on-disk-no-new-md"></a>
+- [Validation data — ON DISK, no new MD](details/project_snupi_mimic/01-why-this-is-cheap-established-2026-07-11.md#validation-data--on-disk-no-new-md)
 
-## Phases
-- **P1 — Transcribe params ($0, ½–1 session). ✅ DONE 2026-07-11.**
-  `backend/data/parameters/snupi_params.json` written (74 motifs: 10 regular_bp + 16 nicked_bp
-  + 16 co_nick + 16 double_co + 16 single_co). Each motif = **12 geometry** (dx/dy/dz + θx/θy/θz,
-  node1&node2; nm & deg), **6 rigidity** (EA,GAy,GAz [pN]; GJ,EIy,EIz [pN·nm²]), **15 coupling**
-  (g rot-rot [pN·nm²], trans-trans [pN], rot-trans [pN·nm]). Parsed programmatically from
-  `pdftotext -layout` of the SI (parser in scratchpad `parse_snupi.py`) with per-row unit +
-  motif-name + column-count validation — not hand-copied. **T = 300 K** (SNUPI), vs 310 K in our
-  bundle_stiffness. Convention = SNUPI's own co-rotational CR-triad beam frame (Notes S3/S4),
-  explicitly NOT Euler-ZYZ. Pin: `tests/test_snupi_params.py` (7 tests, green).
-  - **Deviation from plan — no separate SQ table.** The 74 motif intrinsic properties are
-    **lattice-independent** in SNUPI (CO motifs reuse Bathe-2012 honeycomb bundles). Honeycomb vs
-    square enters ONLY via the initial configuration (Note S8: ω=34.29° HC vs 33.75° SQ, CO dist
-    2.25 nm), stored under `lattice_dependence.initial_config_SI_Note_S8`. So one motif set, not HC+SQ.
-  - **Cross-check (physical sanity, since bundle_stiffness is a *different* observable —
-    inter-helix 6-DOF kJ/mol/Å², not per-bp beam rigidity → no direct value match expected):**
-    regular-BP means give bend L_p = EI/kT ≈ 48.8 nm (dsDNA lit ~50 ✓), twist L_p = GJ/kT ≈ 75.8 nm
-    (lit ~75–100 ✓), stretch modulus EA ≈ 1825 pN (lit ~1000–1500 ✓). Twist–stretch coupling
-    g(dx,θx) mean = **−277.4 pN·nm** — matches the plan's stated ≈−277, independent confirmation the
-    coupling rows are aligned. SNUPI/CanDo-isotropic ratios: EA 1.66×, EI 0.88×, GJ 0.68× (all same
-    order → units consistent).
-- **P2 — Wire the SNUPI material into fem_solver. IN PROGRESS (2026-07-11).**
-  Decision (with user): **build the full co-rotational/Timoshenko element, not the incremental
-  Euler-Bernoulli pass.** Reason (the "flip to Timoshenko" trigger): the *couplings*, not the
-  anisotropic bending, are SNUPI's load-bearing delta over isotropic CanDo, and a linear E-B 12×12
-  cannot host them:
-    - Anisotropic bending EIy≠EIz **self-cancels** — bp bending axes rotate 34.3°/bp, sweeping a full
-      turn every 10.5 bp, so over any bundle (≫1 turn) it averages back to isotropic. Low value.
-    - **Twist–stretch coupling g(Δx,Θx)=−277 pN·nm does NOT self-cancel** — it couples axial stretch
-      to axial twist, both in the fixed helix-axis DOFs (don't rotate with the bp frame), so it
-      accumulates coherently and drives global twist–bend (DNA overwind-under-tension). This is the
-      mechanism SNUPI adds; an E-B-only P4 would be a *misleading negative*.
-    - Also found: SNUPI/CanDo are **co-rotational** beams; NADOC's element is *linear* Euler-Bernoulli.
-      Match SNUPI's co-rotational linearization in the element; prove the convention by a mechanical
-      unit test (cantilever + twist–stretch response), not by reasoning (topology/convention rule).
-  **Step 1 DONE — `backend/physics/snupi_material.py` + `tests/test_snupi_material.py` (7 tests green).**
-  Loads the params → per-motif and per-family-MEAN **6×6 sectional constitutive matrix D** in SNUPI's
-  own DOF order q=[dx(axial),dy,dz,θx(torsion),θy,θz], diagonal rigidities + 15 couplings, mixed SI
-  units. Formulation-independent (no NADOC-frame remap yet — that's pinned by the element unit test).
-  **Finding — single-CO indefiniteness:** 7/16 per-motif `single_co` D are numerically NON-PD (real
-  SNUPI limitation of single-crossover fits — verified vs raw SI, e.g. AT|AT g(dx,dy)=636.5>√(EA·GAy);
-  NOT a transcription error). All 4 other families fully PD; **every family MEAN is PD** (single_co
-  mean min-eig +97) → the MEAN-first path is unaffected & validated. Sequence-specific single-CO will
-  need PD-projection later.
-  **Steps 2-3 DONE (2026-07-11).** `backend/physics/fem_solver.py` + `tests/test_snupi_element.py`
-  (10 tests) + all 15 existing `test_fem_solver` green.
-    - `_snupi_element_stiffness(L, D)` — anisotropic **Timoshenko** element, K=L·BᵀDB, constant-strain
-      (1-pt) integration = built-in shear-locking cure. Local z=axial (matches NADOC frame, reuses
-      `_transform_to_global`). Strains ordered by ROLE to match D's [dx,dy,dz,θx,θy,θz] → no D permutation.
-    - **Twist-stretch proven by unit test (not reasoning):** K[8,11]=D[0,3]/L exactly; a snupi element
-      induces twist under axial pull, a cando element induces exactly ZERO. This is the SNUPI delta, live.
-    - Wired behind `material="snupi"|"cando"` through `assemble_global_stiffness` → `solve_prestress_shape`
-      → `predict_shape`. **cando path byte-identical** (all existing tests green).
-    - **Scope (controlled first pass):** SNUPI material applied to INTRA-HELIX beam elements only
-      (regular_bp / nicked_bp family MEAN 6×6). Crossovers stay rigid links in BOTH paths → snupi-vs-cando
-      isolates the duplex material. Deferrals (documented): (a) crossovers as compliant double-CO/single-CO
-      beams = P2b (bigger hypothesis; SNUPI's CO-step Δx≈0.95nm shows they're bridging beams, but our rigid
-      links are the CanDo baseline); (b) bp-frame registration — anisotropic bending EIy≠EIz self-cancels
-      over a turn, and the important twist-stretch coupling is frame-independent, so the arbitrary element
-      perpendicular frame is fine for a first number; (c) prestress force still uses cando EA/GJ (RMSF, the
-      first P4 metric, doesn't use prestress).
-  Crossover representation confirmed on real `6hbx100_noT.nadoc`: each `Crossover`=ONE backbone crossing,
-  in adjacent pairs (bp 20&21, 41&42…) = reciprocal DX. 66 crossovers, no extra_bases.
-- **P3 — Electrostatics (SI S6/S7). ✅ DONE 2026-07-11.** `backend/physics/snupi_electrostatics.py`:
-  Debye–Hückel repulsive TRUSS spring between BP nodes of DIFFERENT helices within `r_cut = 2.5 nm`,
-  `Π = q²·l_B·kBT/r·exp(−r/λ_D)`, `q = 0.7 e` @ 20 mM MgCl₂, `λ_D = 1.24 nm`, l_B = 0.71 nm, T = 300 K —
-  values match SI S7. Pure module, finite-difference-verified (force = −∇Π, K = ∇²Π); pin
-  `tests/test_snupi_electrostatics.py` (6). Wired into BOTH the SNUPI shape solve AND the free-free NMA
-  (RMSF) K, evaluated at the deformed/equilibrated config. On real designs ~4300 inter-helix pairs engage
-  (node spacing 2.25–2.5 nm — the helices sit right in the cutoff, NOT the 2.6 nm I first worried about).
-  **⚠ tangent gotcha:** the perpendicular `Π'/r < 0` term is indefinite → blew up the shape solve; use the
-  **PD axial-only** tangent (`axial_only=True`) — the FORCE stays exact, only the stiffness is a PD approx →
-  stable + correct equilibrium. **Effect (exp42):** stiffens a spurious soft breathing mode → SQ RMSF max
-  3.07→1.30 nm; **flips the square lattice from a CanDo-tie to a SNUPI win** (SQ pearson 0.675→0.742 vs
-  cando 0.703; spearman 0.548→0.623). HC ≈unchanged (0.592→0.598, already good). **New verdict: SNUPI beats
-  CanDo on BOTH lattices, both metrics.**
-- **S9 nonlinear solution procedure — ✅ DONE 2026-07-11.** `fem_solver._solve_snupi_nonlinear` (material=
-  "snupi" nonlinear branch; cando keeps the old byte-identical loop): the proven corotational beam predictor
-  PLUS (a) an **electrostatic self-consistency iteration** each load level (re-evaluate f_es(x) at the moved
-  config, apply the residual until |Δx|<tol — the position-dependent nonlinearity that needs iterating), and
-  (b) **adaptive Δα subdivision** on divergence/non-finite (halve + retry from last good config; grow back on
-  success — SI S9's automatic Δt). Electrostatics ramps with α. Runs ~57 s on a 6HB/84 (Fine mode). Pins
-  `test_snupi_element.py::test_snupi_nonlinear_solve_runs_and_is_finite` + `::test_electrostatics_stiffens_rmsf_and_cando_unchanged`.
-  Remaining nuance vs a textbook S9: we keep the corotational predictor + fixed-point electrostatic
-  correction rather than a full 6-DOF Newton residual (our positions track translations; rotations via
-  reframing) — equivalent equilibrium, robust, and preserves the validated cando-style beam behavior.
-  - **Full-6DOF-Newton attempt (2026-07-11) — ABANDONED, kept the fixed-point. Key finding:** a Newton
-    over `R(u)=f_ext−K_beam(x)·u` DIVERGES (oscillates 2-cycle: ‖R‖ 4.7→50→8→40; even 42-node 2hb won't
-    converge, line-search + continuation can't rescue it). Root cause: `f_int = K_reframed(x)·(x−x₀)` is
-    NOT a consistent corotational internal force for finite u — u is measured from x₀ while the reframed
-    K assumes small strain from the CURRENT frame → the tangent has no descent direction. **Insight that
-    justifies the fixed-point:** freezing element frames per load level makes the beam EXACTLY linear, so
-    the single per-level solve already IS that level's exact equilibrium — the only within-level
-    nonlinearity to iterate is the electrostatics (which the fixed-point does). A genuine per-level Newton
-    with in-iteration reframing needs a PROPER corotational element (track nodal rotations/orientations,
-    extract per-element LOCAL deformational displacement, consistent material+geometric tangent —
-    Battini/Crisfield 3D corotational; ~300-500 LOC, high-risk in the validated solver). **It would only
-    improve the "Fine" SHAPE display; the validated RMSF-vs-MD metric is the separate NMA (unaffected).**
-    Deferred pending an explicit go — not worth the risk for a shape-only gain. Docstring of
-    `_solve_snupi_nonlinear` records the full reasoning.
-- **P4 — Validate vs MD. DONE (2026-07-11). Verdict: YES on the primary target.**
-  Method: MD bp-center RMSF (mean of both-strand C1' per bp, Kabsch-aligned to remove rigid body,
-  A→nm) vs FEM `compute_rmsf_nma` per-bp RMSF, matched by (helix,bp); Pearson/Spearman of the
-  RMSF pattern. Script: scratchpad `p4_validate.py` (args: nadoc psf dcd tag). Atom map = model C1'
-  order == DCD C1' order, verified by exact base-sequence match (0/1328 mismatch). **No CI pin**
-  (the DCDs are local-only, gitignored) — this is a documented analysis result.
-  - **Honeycomb `6hbx100_noT` (20 ns k0, 520 frames — well-sampled, PRIMARY target):**
-    **snupi robustly beats cando.** Pearson cando 0.504 → snupi 0.562; Spearman 0.262 → 0.337.
-    Paired bootstrap Δpearson = +0.058, 95% CI [+0.031,+0.084], **P(Δ>0)=1.000**. Interior-only
-    (trim 6 bp/end) the absolute r collapses (interior RMSF ~flat) but snupi still wins Δ+0.101 —
-    it captures interior RMSF variation isotropic cando misses. MD RMSF mean 0.32 nm; FEM ~0.40
-    (over-predicts mean ~25%, under-predicts floppy-end maxima: MD max 1.59 vs FEM 0.77).
-  - **Square `3x4SQ` (5 ns k0, 250 frames — 4× less sampled, SECONDARY):** cando slightly ahead
-    (Pearson 0.717 vs 0.675, Δ−0.040) BUT the gap shrinks to **non-significant in the interior**
-    (Δ−0.022, P=0.08). Confounded by short sampling + FEM end-node over-prediction (FEM max 2.4–2.9
-    nm vs MD 0.56). Inconclusive; not a counter-verdict. (0.5 ns DCD was useless — MD 5× under FEM.)
-  - **Bottom line (pre-P2b):** meets the plan's success bar on the well-sampled honeycomb primary;
-    square inconclusive.
+<a id="phases"></a>
+- [Phases](details/project_snupi_mimic/02-phases.md#phases)
 
-- **P2b — Compliant CO-step crossover beams. DONE (2026-07-11). Sharpens the verdict to snupi ≥ cando
-  on BOTH lattices.** Replaced the rigid crossover penalty links with finite-stiffness SNUPI
-  `double_co` mean 6×6 CO-step beams (element axial along the inter-helix offset), for `material="snupi"`
-  only — cando keeps rigid links (byte-identical). `assemble_global_stiffness` snupi branch + pin
-  `test_snupi_element.test_p2b_crossovers_are_compliant_not_rigid` (no K_PENALTY-scale entries under
-  snupi; bundle stays connected = 6 rigid modes). Simplification: all crossovers → double_co (the
-  all-PD, standard-reciprocal family); single-vs-double classification deferred.
-  - **HC 20ns (re-run w/ P2b):** snupi still robustly > cando. ALL Pearson Δ+0.051 (P=1.00), Spearman
-    Δ+0.090; INTERIOR Δ+0.127 both (cando ~0 in interior, snupi captures the variation). ≈neutral vs
-    P2a on pearson, better on rank.
-  - **SQ 5ns (re-run w/ P2b):** P2b HELPED the hard 90°-lattice case. Was cando-ahead (P2a Δpearson
-    −0.040); now ALL Pearson Δ−0.023 (P=0.01, small), Spearman Δ+0.016 (snupi>cando); INTERIOR Pearson
-    Δ−0.006 (**P=0.36 — not significant, a tie**), Spearman Δ+0.009 (snupi>cando). No longer a cando win.
-  - **FINAL VERDICT: "SNUPI for free" = YES.** With the full P2b model, snupi ≥ cando on both lattices —
-    clearly better on the well-sampled honeycomb (all cuts, robust bootstrap), statistical tie / slight
-    snupi rank-edge on the under-sampled square — at $0 new MD. Driver = twist-stretch coupling + motif
-    anisotropy + compliant crossovers. Remaining headroom (abs r ~0.55 HC): bp-frame registration,
-    single/double-CO classification, longer SQ MD, P3 electrostatics.
+- [Paper reproduction + cross-comparison (2026-07-11) — `experiments/exp42_snupi_cross_compare/` — continued detail](details/project_snupi_mimic/02-phases.md)
 
-## Paper reproduction + cross-comparison (2026-07-11) — `experiments/exp42_snupi_cross_compare/`
-Automation `scripts/snupi_cross_compare.py` (reuses the in-app compare framework: `build_cando_shape_source`
-→ `build_comparison_report`; `md_rmsf` → `build_namd_shape_source`) + UI button-press e2e
-`frontend/e2e/snupi_run.spec.js` (real Coarse+Fine clicks → jobs complete → deform overlay) &
-`snupi_tab.spec.js` (tab wiring). Findings:
-- **Params reproduce the SNUPI SI EXACTLY:** our `family_mean_D('regular_bp')` = GJ 313.83 / EIy 158.33 /
-  EIz 245.79 / g(Δx,Θx) −277.39, IDENTICAL to `Literature/SNUPI_SI.pdf` Note S4 mean column (torsional
-  L_p 75.8 nm = P_CH 75.8; bend ~48.8 ≈ P_BH 46.5). Transcription is faithful to 2 dp.
-- **Cross-comparison (per-bp NMA RMSF vs MD/CanDo):** HC `6hbx100_noT` (20ns MD) — **SNUPI beats CanDo on
-  BOTH** pearson 0.592 vs 0.549, spearman 0.424 vs 0.336 (reproduces P4, via the shared pipeline). SQ
-  `3x4SQ` (5ns MD) — tie (cando pearson 0.703 vs 0.675, snupi spearman 0.548 vs 0.533). Basic snupi-vs-cando
-  (no MD, 6 designs): RMSF PATTERN tracks CanDo tightly (pearson 0.97–1.0), MAGNITUDE shifts (higher on
-  small/stiff, lower on big/floppy — the anisotropy+coupling delta). ⚠ `6hb_validated` NMA RMSF ~8 nm
-  outlier (BOTH engines → soft/under-constrained mode, NOT SNUPI-specific; investigate separately).
-- **SNUPI's own validation battery** (SI figs S2–S25): 32HB/64HB bundles, gears + globally-bent by BP
-  ins/del (loop/skip), twisted monoliths, 6HB nick-twist, V-bricks/hierarchical assemblies vs cryo-EM/MD.
-  Metrics = per-BP NMA RMSF + BP-pair cross-correlation matrix + persistence-length scaling. **We match
-  params + method; NOT a 1:1 figure match** (their structures aren't in our workspace — rebuilding e.g. the
-  S13 gears / S16 6HB-nick-twist for a numeric match is the natural follow-up). Full writeup: exp42 README.
-
-**Verdict test:** "SNUPI for free" = YES if transcribed params + the existing FEM reproduce MD
-(and SNUPI's published) shape/RMSF within a stated tolerance. Then the extra-base extension is the
-only GPU spend (~$3–8k — [[project_bundle_stiffness_params]] / [[project_crossover_parameterization]]),
-plugging into the same param DB. ✅ Verdict reached (snupi ≥ cando both lattices, at $0).
-
-- **P5 — Frontend SNUPI engine tab. ✅ DONE 2026-07-11.** First-class SNUPI tab shipped (separate-tab
-  path, not the material-selector-on-CanDo fallback). Runner calls `predict_shape(material="snupi")`;
-  Advanced "Material" selector also offers the isotropic "cando" baseline for in-tab A/B. Anchors+E-fields
-  ON (reused shared cards → `predict_shape(anchors=, field=)`); surface OFF/greyed (no FEM wall BC — adding
-  one is a fem_solver change, scoped as follow-up). Backend `just test-smart` FULL 4718 pass; frontend 2683
-  pass; app-exercised (`e2e/snupi_tab.spec.js`, 0 console errors). Full detail + surface-BC writeup in
-  [[snupi-frontend-tab]]. Original brief below.
-- **P5 (original brief) — Frontend SNUPI engine tab (fresh session, 2026-07-11).** Surface the mimic in the app as
-  a first-class structure-prediction engine tab (sibling to CanDo FEM / mrDNA / oxDNA / NAMD). Backend
-  is READY: `predict_shape(design, material="snupi", anchors=, field=)` — no new solver work; this is a
-  UI/route wiring task. Scope: unified jobs card + live progress bar + advanced-params card + visualization
-  card with the standard rep toggles (RMSF coloring, axis/cylinder, backbone), and an INVESTIGATION into
-  wiring anchors + E-fields + surfaces (predict_shape already accepts `anchors=`/`field=`; how does CanDo
-  FEM surface them today, and can SNUPI reuse that path + a "surface" scope). Since SNUPI == a material flag
-  on the SAME FEM as CanDo, strongly prefer EXTENDING the existing CanDo-FEM job/route/panel with a
-  material selector over a parallel stack — decide in the fresh session after reading the panel architecture.
-  Module-first law applies (no main.js growth). Detailed build prompt handed to the fresh session (see
-  session handoff / the prompt generated 2026-07-11).
+<a id="paper-reproduction--cross-comparison-2026-07-11--experimentsexp42_snupi_cross_compare"></a>
+- [Paper reproduction + cross-comparison (2026-07-11) — `experiments/exp42_snupi_cross_compare/`](details/project_snupi_mimic/03-paper-reproduction--cross-comparison-2026-07-11--experimentsexp42.md#paper-reproduction--cross-comparison-2026-07-11--experimentsexp42_snupi_cross_compare)
 
 ## Risks / rules
 - **Convention conversions** (3DNA vs beam element; SNUPI's own co-rotated local triad). The
@@ -257,59 +68,8 @@ plugging into the same param DB. ✅ Verdict reached (snupi ≥ cando both latti
 - Don't touch `_PHASE_*`. Concurrent sessions share this tree — never git stash/reset/restore/checkout;
   forbid git in subagent prompts.
 
-## ⚠ Shape-solve fix (2026-07-12) — snupi Fine no longer stretches ~2×
-The default (fixed-point S9) snupi nonlinear SHAPE solve included the inter-helix electrostatics,
-which **ran away** (no consistent tangent → the lateral-soft repulsion mode blows up → every helix
-stretched ~2×: 6hbx100_noT 35→85 nm vs cando 42 nm). **Fix:** the default snupi shape solve now drops
-through the same corotational-PREDICTOR loop as cando with the SNUPI material, WITHOUT electrostatics
-(`solve_prestress_shape`). Electrostatics stays where it's (a) validated — the free-free NMA/RMSF (PD
-axial-only tangent, exp42 numbers unchanged) — and (b) stable — the opt-in corotational Newton
-(`corotational=True`, its consistent G11 tangent handles the repulsion; 6hbx100_noT span 40.9 nm).
-Verified end-to-end through the real job→display path: span 41.7 nm. Regression pin
-`test_snupi_nonlinear_shape_is_finite_and_not_stretched` (snupi span < 1.3× cando). `_solve_snupi_nonlinear`
-is now unused by the default path (kept for reference / the corotational path supersedes it).
-**Frontend note:** the deform-display toggle works for SAVED designs (design-scoped unified job list);
-a job run on a NEW *unsaved* design is filtered out of that list (path mismatch) — a known edge case,
-not a feature bug (the display itself works — user-confirmed + backend serves all payloads).
+<a id="-shape-solve-fix-2026-07-12--snupi-fine-no-longer-stretches-2"></a>
+- [⚠ Shape-solve fix (2026-07-12) — snupi Fine no longer stretches ~2×](details/project_snupi_mimic/04-shape-solve-fix-2026-07-12--snupi-fine-no-longer-stretches-2.md#-shape-solve-fix-2026-07-12--snupi-fine-no-longer-stretches-2)
 
-## Handoff
-**Gap-closure Phase A + B + C DONE (2026-07-11/12) — see [[project_snupi_gaps]] head for full detail.**
-Phase A: G1 (sequence-specific `motif_D`), G6 (SPD mass matrix + generalized eigsh), G12 (`mgcl2_M` salt).
-Phase B: G3 (single/double crossover classification; **biggest win**), G2 (bp-frame registration eq 3.18,
-kept ON). Phase C: G7 (`compute_correlation_matrix` BP–BP DCCM + `scripts/snupi_dccm_compare.py` MD comparator),
-G8 (`persistence_length_from_nma` bending L_p ≈ 2.6–4.5 µm). cando byte-identical throughout.
-**Verdict, now on TWO channels: SNUPI ≥ CanDo.** RMSF: HC pearson 0.598→0.623, SQ 0.742→0.763. DCCM motion
-topology (HC): snupi→MD 0.491 > cando 0.454. Pins `test_snupi_element.py::test_g{1,2,3,6,7,8,12}_*` (27 total).
-**Phase D DONE too (2026-07-12): G4/G5/G11 — the full corotational Newton shape solver** (opt-in
-`predict_shape(material="snupi", corotational=True)`; `backend/physics/snupi_corotational.py` EICR +
-consistent internal force fixed the old divergence; benchmark-validated rigid/linear-EB/large-defl; 6HB
-converges ~47 s; electrostatics with the FULL tangent in-Newton). Shape-only — verdict metrics unchanged.
-Pins `tests/test_snupi_corotational.py` (5). **ALL gap phases A–D now DONE.** Remaining refinements only:
-the 15 couplings inside the corotational local element, G9/G10 (situational), G7's MI-based correlation.
-Phase A+B committed as `7d3c216`; **Phase C (G7/G8) + Phase D (G4/G5/G11) uncommitted.**
-
-**P1 + P2 + P2b + P4 DONE (2026-07-11). FINAL VERDICT: "SNUPI for free" = YES** — snupi ≥ cando on
-both lattices at $0 (robustly better on the well-sampled 20ns honeycomb; a tie/slight snupi rank-edge
-on the under-sampled 5ns square). The mimic is built and validated. Next best (only if pursued):
-longer square-lattice MD to firm up SQ; single-vs-double-CO classification; bp-frame registration;
-then **P3** (Debye–Hückel electrostatics) — the extra-base extension is the only GPU spend.
-Everything to run the mimic exists:
-- Params: `backend/data/parameters/snupi_params.json` (74 motifs). Pin `tests/test_snupi_params.py`.
-- Material: `backend/physics/snupi_material.py` → `family_mean_D(fam)` 6×6. Pin `tests/test_snupi_material.py`.
-- FEM: `predict_shape(design, material="snupi")` / `assemble_global_stiffness(mesh, material="snupi")`
-  / `compute_rmsf_nma`. Pin `tests/test_snupi_element.py`. cando path unchanged.
-- Informal first data point: on `6hbx100_noT`, cando RMSF mean 0.411 nm vs snupi 0.398 nm (630 nodes,
-  624 beams, 66 crossover rigid links). Comparable magnitude (shared crossover model); P4 tests
-  RMSF-*pattern* correlation + shape vs the MD DCD, which is where couplings/anisotropy show.
-
-**P4 to-do:** from `/media/jojo/Archive/nadoc_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` (psf+pdb+20ns
-k=0 DCD), compute per-bp RMSF (bp-center = mean both-strand C1'; reuse `local_crossover_extract.py`
-/ `build_p_gro_order`) + equilibrium shape/twist/bend/L_p. Correlate snupi vs cando vs MD.
-Success = snupi ≥ cando at matching MD, at $0.
-
-**Open P2b/P3 (only if P4 says so):** (P2b) crossovers as compliant double-CO/single-CO beams
-(replace rigid links; single-CO needs PD-projection — 7/16 non-PD); bp-frame registration for EIy≠EIz;
-snupi prestress force. (P3) Debye–Hückel electrostatics.
-
-Key references: `backend/physics/fem_solver.py`, `Literature/SNUPI_SI.pdf` Tables S1–S5,
-[[project_cando_fem]] (FEM scorecard), [[feedback_bundle_param_extraction]] (why NOT Euler-ZYZ).
+<a id="handoff"></a>
+- [Handoff](details/project_snupi_mimic/04-shape-solve-fix-2026-07-12--snupi-fine-no-longer-stretches-2.md#handoff)

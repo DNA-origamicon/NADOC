@@ -123,7 +123,7 @@ def test_membership_edit_refuses_existing_deformation_arm_atomically(document):
 
 
 @pytest.mark.parametrize('missing', ['evicted', 'post', 'all'])
-def test_seek_without_creation_baseline_refuses_before_mutating_state(document, missing):
+def test_seek_rebuilds_creation_but_refuses_a_missing_producer(document, missing):
     from fastapi import HTTPException
     from backend.api import routes_feature_log
     routes.add_cluster(routes.AddClusterBody(name="Arm", helix_ids=[document.helices[0].id]))
@@ -135,9 +135,19 @@ def test_seek_without_creation_baseline_refuses_before_mutating_state(document, 
         rows[0] = rows[0].model_copy(update={'evicted': True} if missing == 'evicted' else {'post_state_gz_b64': ''})
     state.load_design(made.copy_with(feature_log=rows))
     before, revision, depth = state.get_or_404().model_dump_json(), state.revision(), state.undo_depth()
-    with pytest.raises(HTTPException) as caught:
+    if missing == 'all':
+        with pytest.raises(HTTPException) as caught:
+            routes_feature_log.seek_features(routes_feature_log.SeekFeaturesBody(position=-1))
+        assert caught.value.status_code == 409
+        assert state.get_or_404().model_dump_json() == before
+        assert state.revision() == revision and state.undo_depth() == depth
+    else:
         routes_feature_log.seek_features(routes_feature_log.SeekFeaturesBody(position=-1))
-    assert caught.value.status_code == 410
-    assert caught.value.detail['code'] == 'group_recovery_unavailable'
-    assert state.get_or_404().model_dump_json() == before
-    assert state.revision() == revision and state.undo_depth() == depth
+        restored = state.get_or_404()
+        assert restored.helices == made.helices
+        assert restored.cluster_transforms == made.cluster_transforms
+        assert crud._geometry_for_design(restored) == crud._geometry_for_design(made)
+        _verified(restored)
+        assert state.undo_depth() == depth + 1
+        state.undo()
+        assert state.get_or_404().model_dump_json() == before

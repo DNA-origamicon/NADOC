@@ -303,6 +303,7 @@ def test_normal_route_enables_coherent_final_recording(configuration, monkeypatc
     import tempfile
 
     monkeypatch.setenv("NADOC_PLACEMENT_REPORT_DIR", str(tmp_path/"placement-reports"))
+    monkeypatch.setattr(routes_vr, "_native_platform_reason", lambda: None)
     monkeypatch.setattr(routes_vr.design_state, "get_or_404", lambda: Design())
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     monkeypatch.setattr(routes_vr, "_LOG_PATH", tmp_path/"viewer.log")

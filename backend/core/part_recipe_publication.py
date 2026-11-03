@@ -2,6 +2,7 @@
 
 from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_repair_document import preserve_repair_draft
+from backend.core.part_history_proof import IDENTITY_METADATA_FIELDS
 
 
 def preserve_document_state(source, candidate):
@@ -15,6 +16,10 @@ def preserve_document_state(source, candidate):
         for name, role in FIELD_ROLES.items()
         if role in {"presentation", "physical", "document_identity"}
     }
+    # File location/signoff is excluded from recipe proof. Keep the live
+    # document's claim when a regenerated empty root supplies fresh metadata.
+    preserved['metadata'] = candidate.metadata.model_copy(update={
+        name: getattr(source.metadata, name) for name in IDENTITY_METADATA_FIELDS})
     removed = {item.id for item in source.protein_attachments} - {
         item.id for item in candidate.protein_attachments
     }

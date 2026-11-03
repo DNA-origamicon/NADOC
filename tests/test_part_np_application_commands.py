@@ -166,7 +166,7 @@ def test_registered_application_dependencies_expose_typed_selectors_and_outputs(
 
 
 @pytest.mark.parametrize("field,value", [
-    ("nanoparticle_application_version", True), ("nanoparticle_application_version", 2),
+    ("nanoparticle_application_version", True), ("nanoparticle_application_version", 4),
     ("nanoparticle_connection_version", True), ("history_seed", "not-a-UUID"),
     ("duplex_id", ""), ("duplex_created_at", float("inf")), ("applied", 1),
     ("conflict_version_ids", ["duplicate", "duplicate"]),

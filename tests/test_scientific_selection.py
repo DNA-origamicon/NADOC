@@ -55,3 +55,29 @@ def test_inventory_entries_exist():
 def test_parameter_ids_cannot_change_classification():
     assert campaign_reason("tests/test_chudoba_hmc.py::test_hmc_harmonic_bond_distribution[cpu]")
     assert not campaign_reason("tests/test_other.py::test_start[test_skip_twist_tuning_production]")
+
+
+@pytest.mark.parametrize("target", [
+    "tests/test_cpd_gpu_npt_context_v4.py",
+    "tests/test_photoproduct_review.py",
+    "tests/test_native_cpd_proof.py",
+    "tests/test_run_post_water_validation.py",
+    "tests/test_local_qm_continuation.py",
+    "tests/test_charmm_reference.py",
+    "tests/test_native_annotation_proof.py::test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
+])
+def test_experimental_opt_in_before_import(target):
+    from tests.conftest import _require_explicit_experimental_selection, pytest_ignore_collect
+    from tests.scientific_validation import cpd_experiment
+
+    assert cpd_experiment(target)
+    assert campaign_reason(target)
+    normal = SimpleNamespace(args=[target], getoption=lambda _: False)
+    explicit = SimpleNamespace(args=[target], getoption=lambda _: True)
+    assert pytest_ignore_collect(Path(target.split("::")[0]), normal) is (
+        True if cpd_experiment(target.split("::")[0]) else None
+    )
+    with pytest.raises(pytest.UsageError, match="explicitly requested"):
+        _require_explicit_experimental_selection(normal)
+    _require_explicit_experimental_selection(explicit)
+    assert pytest_ignore_collect(Path(target.split("::")[0]), explicit) is None

@@ -252,6 +252,7 @@ export function initCandoDisplay({
   }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
+  let _ownsScene = false    // includes a pending load that already hid/prepared the native scene
   let _stats = null         // last flex/deviation/cando summary for the panel readout
   // Cached responses so the workspace scale widget can recolour / rescale live
   // without a re-fetch, plus the active per-map colormap.
@@ -269,6 +270,7 @@ export function initCandoDisplay({
   // _setDesignGeometryVisible) also covers arcs / blunt-ends; fall back to the design
   // root alone if it wasn't provided.
   function _nativeVisible(v) {
+    _ownsScene = true
     if (setDesignVisible) setDesignVisible(v)
     else designRenderer?.setDesignVisible?.(v)
   }
@@ -277,6 +279,10 @@ export function initCandoDisplay({
   // drew (cylinder tubes, scalar recolour, AND the job-snapshot render).  Used when
   // turning a mode off, and before the cylinder mode (which hides the live model).
   function _clearAll() {
+    // Design changes (including history seeks) stop every simulation panel.
+    // An idle panel must not reset positions/colors or resurrect CG over the
+    // user's atomistic/surface representation. _mode alone misses pending loads.
+    if (!_ownsScene) return
     flexScale?.hide()
     largeView?.clear()
     _flexResp = null; _devResp = null; _candoResp = null
@@ -286,6 +292,7 @@ export function initCandoDisplay({
     designRenderer.clearExternalGeometry?.()   // rebuilds the live model (no-op if not external)
     if (restoreDesignVisible) restoreDesignVisible()
     else _nativeVisible(true)
+    _ownsScene = false
   }
 
   // Prepare the scene for an external (job-snapshot) render: clear the previous mode's

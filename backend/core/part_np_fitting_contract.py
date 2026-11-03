@@ -13,7 +13,7 @@ SOURCE_PATHS = tuple(sorted(set(DNA_PATHS + tuple('backend/core/' + name + '.py'
     'nanoparticle_attachment_obstacles', 'nanoparticle_kinematics', 'protein', 'conjugation',
     'part_saved_topology', 'part_scope_references')) + tuple('backend/api/' + name + '.py' for name in (
     'nanoparticle_attachment', 'part_np_fitting_commands', 'part_np_application_commands',
-    'part_thiol_commands', 'part_nanoparticle_connection_commands')))))
+    'part_thiol_commands', 'part_nanoparticle_connection_commands', 'part_generated_np_fitting')))))
 Hash = Annotated[str, StringConstraints(pattern=r'^[0-9a-f]{64}$')]
 
 

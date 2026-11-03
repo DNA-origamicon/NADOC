@@ -19,6 +19,11 @@ class AttachRequest(BaseModel):
 
 @router.post("/design/nanoparticles/{nanoparticle_id}/attach-overhang")
 def attach_overhang(nanoparticle_id: str, body: AttachRequest):
+    from backend.api.part_asset_routes import enabled, start
+    if enabled('nanoparticle-attach-overhang'):
+        return start('nanoparticle-attach-overhang', {'nanoparticle_id': nanoparticle_id,
+            **body.model_dump(exclude={'expected_revision', 'expected_design_id'})},
+            expected_revision=body.expected_revision, expected_design_id=body.expected_design_id)
     design, revision = state.copy_for_persist()
     if design is None:
         raise HTTPException(404, "Open a design before attaching a nanoparticle.")

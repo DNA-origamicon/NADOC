@@ -43,6 +43,15 @@ os.environ.setdefault("NADOC_RUNPOD_AUTOCONNECT", "0")
 # Tests that need their own workspace
 # (or the real one) just ``monkeypatch.setattr(assembly, "_WORKSPACE_DIR", ...)``
 # again; a function-scoped monkeypatch runs after this autouse fixture and wins.
+@pytest.fixture(scope="module", autouse=True)
+def _isolate_module_workspace(tmp_path_factory):
+    # Module-scoped TestClient lifespans run before function-scoped fixtures.
+    from tests.workspace_isolation import isolated_startup_workspace
+
+    with isolated_startup_workspace(tmp_path_factory.mktemp("module-workspace")) as ws:
+        yield ws
+
+
 @pytest.fixture(autouse=True)
 def _isolate_workspace(tmp_path_factory, monkeypatch):
     from backend.api import assembly, main
@@ -1126,6 +1135,28 @@ def pytest_addoption(parser):
     )
 
 
+def pytest_ignore_collect(collection_path, config):
+    # Deselecting items is too late: CPD imports may read external campaign evidence.
+    from tests.scientific_validation import cpd_experiment
+
+    if not config.getoption("--scientific") and cpd_experiment(collection_path):
+        return True
+    return None
+
+
+def _require_explicit_experimental_selection(config):
+    from tests.scientific_validation import cpd_experiment
+
+    if not config.getoption("--scientific"):
+        for target in config.args:
+            if cpd_experiment(target):
+                raise pytest.UsageError(
+                    "CPD experiments require an explicitly requested CPD session; "
+                    "use just test-scientific TARGET. No campaign evidence is required "
+                    "for broader software validation."
+                )
+
+
 def pytest_collection_modifyitems(config, items):
     """Auto-apply the ``slow`` marker to the heavy real-sim/trajectory tests
     registered above, plus an ``area`` marker so ``just test-smart`` can run
@@ -1210,6 +1241,7 @@ def _sim_guard() -> tuple[bool, str]:
 
 
 def pytest_configure(config):
+    _require_explicit_experimental_selection(config)
     # Prime the cache during the clean startup window (no test has run yet, so no
     # test-spawned sim can be mistaken for a production job).
     _sim_guard()

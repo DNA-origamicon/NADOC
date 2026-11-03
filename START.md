@@ -74,6 +74,47 @@ Saved Tailscale HTTP/IP peers are upgraded automatically to HTTPS MagicDNS when
 the updated remote server is detected. If an unusually configured legacy peer
 does not upgrade, remove it and pair the computers again.
 
+## Test scratch on different machines
+
+No hostname or Archive disk is required for ordinary tests. The history-preview
+launcher defaults to the OS temporary directory, checks at least 1 GiB free and
+actual write access, then allocates a unique disposable directory. It redirects
+workspace saves, profiles, downloads and caches there; cleanup follows process
+shutdown on both success and failure. Use the project Python environment:
+
+```bash
+just validate-safe uv run --no-sync python scripts/run_deformation_history_e2e.py --check-storage
+just validate-safe uv run --no-sync python scripts/run_deformation_history_e2e.py
+```
+
+The first command checks storage without launching services/browser. The second
+runs only the two history cases; it is not full release qualification. No browser
+installation/download is performed automatically.
+
+For a different scratch location, set `NADOC_TEST_SCRATCH_ROOT` to an existing
+absolute directory in your local shell/CI configuration. Do not commit a personal
+path. Explicit unavailable destinations fail; they never silently fall back.
+The previous `NADOC_HISTORY_E2E_OUTPUT_PARENT` is an alias; conflicting values refuse.
+
+On the original space-constrained workstation, configure both root and required
+mount (example only; verify the existing directory on that machine):
+
+```bash
+export NADOC_TEST_SCRATCH_ROOT=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts
+export NADOC_TEST_SCRATCH_MOUNT=/media/jojo/Archive
+```
+
+On this ample-space machine or CI, neither setting is necessary. A configured
+mount must be mounted and contain the resolved scratch root on the same filesystem.
+Do not create an unmounted path, alter user data, or move old artifacts implicitly.
+
+Other test/native tools retain their own configuration: set `TMPDIR` (and Windows
+`TEMP`/`TMP`) or the tool's explicit scratch option before starting them. The new
+variables are consumed by the history launcher, not automatically by every legacy
+script. Its free-space check is not a continuous quota; budget large campaigns
+separately. Shell resource guards retain their current platform support; portable
+storage/process APIs do not imply Windows/macOS end-to-end qualification.
+
 ## Run it (two terminals, if you prefer separate logs)
 
 ```bash

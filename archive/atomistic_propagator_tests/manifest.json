@@ -1,0 +1,9 @@
+{
+  "reason": "Learned atomistic-propagator work is shelved per memory/project_atomistic_propagator.md. Preserve these unchanged reference tests outside the active software suite.",
+  "archived_on": "2026-11-01",
+  "original_paths": [
+    "tests/test_propagator_baseline.py",
+    "tests/test_propagator_scaling.py"
+  ],
+  "reactivation": "Restore these tests under tests/ when the corresponding learned-propagator work resumes. Shared experiment utilities and the registered BLADE API remain covered in tests/."
+}

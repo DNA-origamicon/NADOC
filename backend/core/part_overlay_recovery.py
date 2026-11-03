@@ -7,6 +7,24 @@ No commands or validation are executed on this recovery path.
 """
 
 
+def restore_diagnostic_reference(design, snapshot):
+    """Seek the recorded molecular stage without executing a candidate solver.
+
+    Diagnostic process histories explicitly record atom-reference creation.
+    Retaining the live reference would show the final candidate at earlier steps
+    with identical topology. Ordinary histories retain their existing behavior.
+    This is snapshot recovery for inspection, never construction provenance.
+    """
+    if any(getattr(entry, 'op_kind', None) == 'diagnostic-process'
+           for entry in design.feature_log):
+        # Materialization also removes source placement owners. Earlier source
+        # lattice frames must regain those owners when navigating backwards.
+        return design.copy_with(atomistic_reference=snapshot.atomistic_reference,
+                                cluster_transforms=snapshot.cluster_transforms,
+                                deformations=snapshot.deformations)
+    return design
+
+
 def restore_authored_fields(design, snapshot):
     if any(entry.feature_type == "cluster_create" and entry.proof_version == 3
            for entry in design.feature_log):

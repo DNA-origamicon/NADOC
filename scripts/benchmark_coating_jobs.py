@@ -331,7 +331,7 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
         "retained_sources": len(design.input_sources), "history_rows": len(design.feature_log),
         "retained_draft_json_bytes": (len(design.repair_draft.model_dump_json().encode())
                                       if design.repair_draft is not None else 0),
-        "retained_recovery_encoded_bytes": sum(len(row.design_snapshot_gz_b64) + len(row.post_state_gz_b64 or "")
+        "retained_recovery_encoded_bytes": sum(len(getattr(row, 'design_snapshot_gz_b64', '') or '') + len(getattr(row, 'post_state_gz_b64', '') or '')
                                               for row in design.feature_log),
         "capture_refusals": sum(row["http_status"] == 413 for row in capture_rows),
         "correct_publications": sum(row["correct_publication"] for row in commit_rows),
@@ -477,10 +477,10 @@ def main():
         state._lock, state.capture_design_for_evaluation, state.set_design, state._snapshot_copy)
     probe, snapshots = LockProbe(original_lock), []
 
-    def snapshot(design):
+    def snapshot(design, **kwargs):
         begin = perf_counter()
         try:
-            return original_snapshot(design)
+            return original_snapshot(design, **kwargs)
         finally:
             snapshots.append((perf_counter() - begin) * 1000)
 

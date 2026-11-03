@@ -95,30 +95,46 @@ def _handles(source, rod, particles, settings, history=None):
             *rod.staple_groups,
         ],
     )
-    # An applied handle's saved unbound helix can predate a particle move.
-    # Rebuild its free radial carrier at the current body pose before rebinding.
-    for particle in particles:
-        refreshed = replace_gold_nanosphere(rod, particle.id, pose=particle.pose.values)
-        old_helices = {h.id: h for h in rod.helices}
-        # Rebuilding an already-current radial carrier can differ by floating
-        # point roundoff alone. Keep the exact original in that case.
-        refreshed = refreshed.copy_with(helices=[
-            old_helices[h.id] if h.id in old_helices
-            and h.model_dump(exclude={"axis_start", "axis_end"}) == old_helices[h.id].model_dump(exclude={"axis_start", "axis_end"})
-            and np.allclose(h.axis_start.to_array(), old_helices[h.id].axis_start.to_array(), atol=1e-12, rtol=0)
-            and np.allclose(h.axis_end.to_array(), old_helices[h.id].axis_end.to_array(), atol=1e-12, rtol=0)
-            else h for h in refreshed.helices])
-        rod = refreshed
-    if rod != before:
-        _record(
-            history,
-            before,
-            rod,
-            "nanoparticle-strand-bind",
-            "Prepare existing nanoparticle handles",
-            {},
-            "prepare-handles",
-        )
+    if history and history.native_assets:
+        # Retained handles already exist in the destination. Their inclusion in
+        # the local construction view is not an authored addition.
+        from backend.api.part_proof_commands import execute
+        for particle in particles:
+            owners = [c.id for c in rod.nanoparticle_conjugations if c.nanoparticle_id == particle.id]
+            if not owners:
+                continue
+            params = {'_proof_version': 1, 'nanoparticle_version': 1, 'thiol_version': 1,
+                'nanoparticle_id': particle.id, 'conjugation_ids': owners,
+                'pending_connection_version_ids': []}
+            before = rod
+            rod = execute('nanoparticle-patch', rod, params)
+            _record(history, before, rod, 'nanoparticle-patch', 'Refresh existing nanoparticle handles',
+                params, f'prepare-handle:{particle.id}')
+    else:
+        # An applied handle's saved unbound helix can predate a particle move.
+        # Rebuild its free radial carrier at the current body pose before rebinding.
+        for particle in particles:
+            refreshed = replace_gold_nanosphere(rod, particle.id, pose=particle.pose.values)
+            old_helices = {h.id: h for h in rod.helices}
+            # Rebuilding an already-current radial carrier can differ by floating
+            # point roundoff alone. Keep the exact original in that case.
+            refreshed = refreshed.copy_with(helices=[
+                old_helices[h.id] if h.id in old_helices
+                and h.model_dump(exclude={"axis_start", "axis_end"}) == old_helices[h.id].model_dump(exclude={"axis_start", "axis_end"})
+                and np.allclose(h.axis_start.to_array(), old_helices[h.id].axis_start.to_array(), atol=1e-12, rtol=0)
+                and np.allclose(h.axis_end.to_array(), old_helices[h.id].axis_end.to_array(), atol=1e-12, rtol=0)
+                else h for h in refreshed.helices])
+            rod = refreshed
+        if rod != before:
+            _record(
+                history,
+                before,
+                rod,
+                "nanoparticle-strand-bind",
+                "Prepare existing nanoparticle handles",
+                {},
+                "prepare-handles",
+            )
     selected = []
     used_handles = set()
     for index in range(len(particles) * settings.connections_per_particle):
@@ -162,31 +178,44 @@ def _handles(source, rod, particles, settings, history=None):
             or set(seq.upper()) - set("ACGT")
         ):
             raise ValueError("A generated handle needs 12–60 defined A/C/G/T bases.")
-        c, hs, ss = build_thiol_conjugation(
-            particle,
-            scheme="direct_thiol",
-            sequence=seq,
-            count=1,
-            spacer_nm=hp["spacer_nm"],
-        )
-        ss, group = assign_conjugate_group(rod, ss, prefix="NP", fallback="NP")
-        record = c.surface_strands[0]
-        spec = OverhangSpec(
-            id=record.overhang_id,
-            helix_id=record.helix_id,
-            strand_id=record.strand_id,
-            sequence=seq,
-            label=ss[0].name,
-            auxiliary_endpoint=True,
-        )
-        before = rod
-        rod = rod.copy_with(
-            helices=[*rod.helices, *hs],
-            strands=[*rod.strands, *ss],
-            overhangs=[*rod.overhangs, spec],
-            nanoparticle_conjugations=[*rod.nanoparticle_conjugations, c],
-            staple_groups=[*rod.staple_groups, group],
-        )
+        if history and history.native_assets:
+            from backend.api.part_proof_commands import execute
+            hp = {**hp, '_proof_version': 1, 'thiol_version': 2,
+                'nanoparticle_id': particle.id, 'history_seed': str(uuid.uuid4()),
+                'conjugation_id': str(uuid.uuid4()), 'replace_conjugation_ids': [],
+                'retained_conjugation_ids': [c.id for c in rod.nanoparticle_conjugations
+                                            if c.nanoparticle_id == particle.id],
+                'scheme': 'direct_thiol', 'count': 1, 'attach_end': '5p', 'seed': 1}
+            before = rod
+            rod = execute('nanoparticle-conjugate', rod, hp)
+            c = next(c for c in rod.nanoparticle_conjugations if c.id == hp['conjugation_id'])
+            record = c.surface_strands[0]
+        else:
+            c, hs, ss = build_thiol_conjugation(
+                particle,
+                scheme="direct_thiol",
+                sequence=seq,
+                count=1,
+                spacer_nm=hp["spacer_nm"],
+            )
+            ss, group = assign_conjugate_group(rod, ss, prefix="NP", fallback="NP")
+            record = c.surface_strands[0]
+            spec = OverhangSpec(
+                id=record.overhang_id,
+                helix_id=record.helix_id,
+                strand_id=record.strand_id,
+                sequence=seq,
+                label=ss[0].name,
+                auxiliary_endpoint=True,
+            )
+            before = rod
+            rod = rod.copy_with(
+                helices=[*rod.helices, *hs],
+                strands=[*rod.strands, *ss],
+                overhangs=[*rod.overhangs, spec],
+                nanoparticle_conjugations=[*rod.nanoparticle_conjugations, c],
+                staple_groups=[*rod.staple_groups, group],
+            )
         _record(
             history,
             before,
@@ -1117,17 +1146,26 @@ def materialize(
             progress(f"Attach connection {i + 1}/{len(connections)}", "Fit and bind at fixed center", .80 + .10 * i / len(connections))
             before = rod
             try:
-                rod, diagnostics = attach_nanoparticle(rod, item["particle_id"], item["overhang_id"],
-                    strand_id=item["strand_id"], fixed_center=True, frame=frame,
-                    place_new_graft=settings.connections_per_particle > 1 and not item["reused"],
-                    pending_connections=connections[i + 1:] if settings.connections_per_particle > 1 else ())
+                if history and history.native_assets:
+                    from backend.api.part_generated_np_fitting import prepare
+                    from backend.api.part_proof_commands import execute_long
+                    fit_params = prepare(rod, item, alignment_rotation=Rotation.from_matrix(frame).as_quat().tolist(),
+                        place_new_graft=settings.connections_per_particle > 1 and not item['reused'],
+                        pending_connections=connections[i + 1:] if settings.connections_per_particle > 1 else ())
+                    rod = execute_long('nanoparticle-attach-overhang', rod, fit_params)
+                else:
+                    rod, diagnostics = attach_nanoparticle(rod, item["particle_id"], item["overhang_id"],
+                        strand_id=item["strand_id"], fixed_center=True, frame=frame,
+                        place_new_graft=settings.connections_per_particle > 1 and not item["reused"],
+                        pending_connections=connections[i + 1:] if settings.connections_per_particle > 1 else ())
+                    fit_params = {**item, 'nanoparticle_id': item['particle_id'], **diagnostics}
             except ValueError as exc:
                 raise ValueError(
                     f"Connection {i // len(particles) + 1}/{settings.connections_per_particle} "
                     f"for nanoparticle {particle_indices[item['particle_id']] + 1}: {exc}"
                 ) from exc
             _record(history, before, rod, "nanoparticle-attach-overhang", "Attach nanoparticle to overhang",
-                {**item, "nanoparticle_id": item["particle_id"], **diagnostics}, f"attach:{i}")
+                fit_params, f"attach:{i}")
     else:
         for i, v in enumerate(rod.nanoparticle_connection_versions):
             particle_index = particle_indices[v.nanoparticle_id]

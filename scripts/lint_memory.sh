@@ -17,7 +17,10 @@ warn() {
     warnings=$((warnings + 1))
 }
 
-for file in memory/*.md; do
+# Supporting topic pages obey the same length/metadata rules as their heads.
+# Archives remain historical; moving an active page into a subdirectory is not an exemption.
+mapfile -t memory_files < <(find memory -type f -name '*.md' | sort)
+for file in "${memory_files[@]}"; do
     base=$(basename "$file")
     case "$base" in
         MEMORY.md|*_archive.md)
@@ -61,7 +64,7 @@ for file in memory/*.md; do
     esac
 done
 
-mapfile -t link_sources < <(find memory -maxdepth 1 -type f -name '*.md' ! -name '*_archive.md' -print | sort)
+mapfile -t link_sources < <(find memory -type f -name '*.md' ! -name '*_archive.md' -print | sort)
 link_sources=(CLAUDE.md MEMORY.md "${link_sources[@]}")
 
 while IFS=: read -r source raw; do

@@ -70,7 +70,7 @@ def without_commands(log, removed):
 
 
 def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_failures=False,
-               prefix=None, executor=None, entry_binder=None, use_cache=True):
+               prefix=None, executor=None, entry_binder=None, use_cache=True, preserve_document=True):
     """Execute input commands only; replace every recovery snapshot and child diff."""
 
     executor = executor or execute
@@ -175,7 +175,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
             )
         )
         current = current.copy_with(feature_log=list(rebuilt_log))
-    return preserve_document_state(source, current).copy_with(
+    return (preserve_document_state(source, current) if preserve_document else current).copy_with(
         feature_log=rebuilt_log,
         feature_log_cursor=-1,
         feature_log_sub_cursor=None,

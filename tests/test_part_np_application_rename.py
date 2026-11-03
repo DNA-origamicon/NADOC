@@ -53,8 +53,9 @@ def deny_application(monkeypatch):
     monkeypatch.setattr(design_geometry, "fitting_geometry", forbidden)
 
 
-def test_pure_rename_changes_only_version_name_without_relocation_or_restoration(applied, monkeypatch):
-    values = rename_params(applied)
+@pytest.mark.parametrize("application_version", [1, 2])
+def test_pure_rename_changes_only_version_name_without_relocation_or_restoration(applied, monkeypatch, application_version):
+    values = {**rename_params(applied), "nanoparticle_application_version": application_version}
     original = applied.model_dump_json()
     deny_application(monkeypatch)
     actual = commands().build(PATCH, applied, values)
@@ -218,7 +219,7 @@ def test_rename_requires_exact_conflict_selector_without_changing_other_versions
 @pytest.mark.parametrize("change", [
     {"name": None}, {"name": ""}, {"name": "  "}, {"name": 42},
     {"applied": None}, {"applied": True}, {"duplex_id": "invented"},
-    {"duplex_created_at": 99.0}, {"nanoparticle_application_version": 2},
+    {"duplex_created_at": 99.0}, {"nanoparticle_application_version": 4},
     {"nanoparticle_application_version": True}, {"prior_driven_topology": {}},
 ])
 def test_name_only_schema_never_supplies_outputs_or_weakens_transition_inputs(applied, change):

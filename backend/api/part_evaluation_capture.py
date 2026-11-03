@@ -3,8 +3,8 @@
 The caller either owns the state lock for mutable content or supplies a private
 materialization of a sealed immutable source with its captured revision. This
 module neither acquires job admission nor launches a worker. It chooses one
-capture before copying, never retries a refusal with larger limits, and is not
-used by ordinary edits, drag handlers or verification endpoints.
+capture before copying and never retries a refusal with larger limits. Ordinary
+asset controls use these explicit jobs; drag frames do not launch evaluations.
 
 The 100 ms timer is cooperative. Qualified active/retained-history p95 holds
 were below 100 ms after scalar-atom copy/accounting improvements; occasional
@@ -30,8 +30,9 @@ COATING_PROFILE = MappingProxyType({"max_nodes": 100_000, "max_bytes": 4_000_000
 # Request data cannot change it or the fixed profile. See coating_input_plan.md
 # for retained failed runs, final p95 evidence and the recovery-growth boundary.
 COATING_APPEND_ENABLED = True
-BIOTIN_APPEND_ENABLED = False
-NP_FITTING_APPEND_ENABLED = False
+BIOTIN_APPEND_ENABLED = True
+NP_FITTING_APPEND_ENABLED = True
+GENERATED_ASSETS_ENABLED = True
 MAX_COATING_HISTORY_ROWS = 32
 MAX_COATING_INPUT_SOURCES = MAX_COATING_HISTORY_ROWS + 1
 _GOLD_KINDS = frozenset({"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete", "nanoparticle-biotin-dna"})
@@ -66,6 +67,27 @@ def _coating_intent(design):
         for entry in design.feature_log[:MAX_COATING_HISTORY_ROWS + 1])
 
 
+def _single_editable_loadout(design):
+    """Bound desktop branch metadata; its snapshot is never replay input."""
+    from backend.core.models import DesignLoadout
+    from backend.core.part_recovery_storage import MAX_RECOVERY_BYTES, retained_recovery_bytes
+    if len(design.loadouts) != 1 or type(design.loadouts[0]) is not DesignLoadout:
+        return False
+    loadout = design.loadouts[0]
+    if (loadout.protected or loadout.simulation_engine is not None or loadout.simulation_job_id is not None
+            or design.active_loadout_id != loadout.id or design.last_editable_loadout_id not in {None, loadout.id}
+            or any(value is not None and (type(value) is not str or len(value) > 256)
+                   for value in (loadout.id, loadout.name, loadout.head_revision_id, loadout.base_revision_id))):
+        return False
+    payload = loadout.design_snapshot_gz_b64
+    if type(payload) is not str:
+        return False
+    charge = len(payload) * (1 if payload.isascii() else 4)
+    retained_recovery_bytes(design.feature_log, max_rows=MAX_COATING_HISTORY_ROWS,
+                            limit=MAX_RECOVERY_BYTES - charge)
+    return charge <= MAX_RECOVERY_BYTES
+
+
 def _scope(design):
     from backend.api.part_streptavidin_commands import (
         MAX_ASSET_ATOMS, MAX_ASSET_BONDS, MAX_REQUESTED_SITES, PDB_SHA256,
@@ -85,6 +107,18 @@ def _scope(design):
             if getattr(design, field) != getattr(baseline, field):
                 _reject(f"Coating evaluation does not yet admit additional {field}")
         elif role in {"physical", "presentation"} and getattr(design, field) != getattr(baseline, field):
+            if field in {'loadouts', 'active_loadout_id', 'last_editable_loadout_id'} and _single_editable_loadout(design):
+                continue
+            # The ordinary desktop creates one empty animation on first open.
+            # Admit that bounded presentation placeholder, preserving it on
+            # publication. Authored keyframes still need separate qualification.
+            if field == 'animations' and len(design.animations) == 1:
+                from backend.core.models import DesignAnimation
+                animation = design.animations[0]
+                if (len(animation.id) <= 256 and len(animation.name) <= 256
+                        and animation.model_dump(exclude={'id', 'name'})
+                        == DesignAnimation().model_dump(exclude={'id', 'name'})):
+                    continue
             # Commit snapshots the complete live source for undo under the state
             # lock. Excluding these fields from proof is not a publication bound.
             _reject(f"Coating evaluation initially requires default {field}")
@@ -176,7 +210,7 @@ def _source_envelope(design):
     # explicit repair. This gate neither resolves source closure nor parses it.
 
 
-def capture_for_evaluation(design, *, request, revision, preserve_entry_types=True, atom_copies=None):
+def capture_for_evaluation(design, *, request, revision, preserve_entry_types=True, atom_copies=None, model_copies=None):
     """Select exactly one capture from host-owned input; never claim proof.
 
     Existing ordinary jobs retain their normal capture. Extended coating
@@ -191,6 +225,8 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
         return capture_batch(design, request, revision=revision, preserve_entry_types=preserve_entry_types)
     _revision(design, request, revision)
     from backend.api.part_np_fitting_commands import KINDS as FITTING_KINDS
+    if request.operation == "generate" and not GENERATED_ASSETS_ENABLED:
+        _reject("Native generated assets are disabled on this server", code="generated_assets_unavailable")
     if request.operation == "append" and request.kind in FITTING_KINDS and not NP_FITTING_APPEND_ENABLED:
         _reject("Nanoparticle fitting append is disabled on this server", code="np_fitting_append_unavailable")
     coating_append = request.operation == "append" and request.kind == "streptavidin-coating"
@@ -201,7 +237,8 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
         _reject("Coating append is disabled on this server",
                 code="coating_append_unavailable")
     if not coating_append and not biotin_append and not _coating_intent(design):
-        return capture(design, preserve_entry_types=preserve_entry_types)
+        return capture(design, preserve_entry_types=preserve_entry_types,
+            **({'model_copies': model_copies} if model_copies is not None else {}))
     if request.operation == "selection":
         _reject("Coating reference selection requires its separately reviewed catalog",
                 code="unsupported_reference_slot")
@@ -216,4 +253,5 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
         particle.coating is not None for particle in design.nanoparticles))
     _source_envelope(design)
     return capture(design, preserve_entry_types=preserve_entry_types, **COATING_PROFILE,
+        **({'model_copies': model_copies} if model_copies is not None else {}),
         **({'atom_copies': atom_copies} if atom_copies is not None else {}))

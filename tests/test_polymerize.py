@@ -24,6 +24,7 @@ from backend.core.assembly_polymer import (
     transform_joint_axis,
 )
 from backend.core.models import (
+    LatticeType,
     Assembly,
     AssemblyJoint,
     ConnectionType,
@@ -134,7 +135,7 @@ def _seed_two_different_parts_assembly() -> tuple[Assembly, str]:
     design_b = Design()  # separate inline design — DIFFERENT object
     # Touch one of them so the dumps actually differ (the bare Design() dumps
     # are equal, but lattice_type / metadata can differ trivially).
-    design_b = design_b.model_copy(update={"lattice_type": "square"})
+    design_b = design_b.model_copy(update={"lattice_type": LatticeType.SQUARE})
     inst_a = _rod_instance("inst-A", "Rod A", design_a, _translation(0, 0, 0))
     inst_b = _rod_instance("inst-B", "Rod B", design_b, _translation(0, 0, 10))
     joint = AssemblyJoint(
@@ -170,7 +171,7 @@ def test_sources_match_inline_different_objects_same_dump():
 
 def test_sources_match_inline_different_dumps():
     a = PartSourceInline(design=Design())
-    b = PartSourceInline(design=Design().model_copy(update={"lattice_type": "square"}))
+    b = PartSourceInline(design=Design().model_copy(update={"lattice_type": LatticeType.SQUARE}))
     assert not _sources_match(a, b)
 
 

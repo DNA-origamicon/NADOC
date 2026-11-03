@@ -543,10 +543,11 @@ async def _wait_for_segment_process(
     )
 
 
-def _read_xsc_step(xsc_path: Path) -> Optional[int]:
+def _read_xsc_step(xsc_path: Path, *, reader=None) -> Optional[int]:
     """Return the NAMD step recorded in an .xsc / .restart.xsc file, or None."""
     try:
-        for line in xsc_path.read_text(errors="replace").splitlines():
+        text = xsc_path.read_text(errors="replace") if reader is None else reader(xsc_path)
+        for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
@@ -711,9 +712,9 @@ def _jsonl_has_segment(path: Path, segment_name: str) -> bool:
     return False
 
 
-def _segment_outputs_complete(output_dir: Path, segment_name: str) -> bool:
+def _segment_outputs_complete(output_dir: Path, segment_name: str, *, exists=None) -> bool:
     return all(
-        (output_dir / f"{segment_name}.{ext}").exists()
+        (exists or Path.exists)(output_dir / f"{segment_name}.{ext}")
         for ext in ("coor", "vel", "xsc")
     )
 
@@ -760,7 +761,7 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
     return job
 
 
-def _reconcile_min_name(job: MdJob, manifest_path: Path) -> Optional[str]:
+def _reconcile_min_name(job: MdJob, manifest_path: Path, *, reader=None) -> Optional[str]:
     """The minimisation output stem, from the job or its manifest, or None.
 
     The manifest is authoritative (it is what ``run_job`` itself reads), with the job's
@@ -769,7 +770,8 @@ def _reconcile_min_name(job: MdJob, manifest_path: Path) -> Optional[str]:
     rather than guess.
     """
     try:
-        name = json.loads(manifest_path.read_text())["minimization"]["name"]
+        text = manifest_path.read_text() if reader is None else reader(manifest_path)
+        name = json.loads(text)["minimization"]["name"]
         if isinstance(name, str) and name:
             return name
     except (OSError, ValueError, KeyError, TypeError):
@@ -828,7 +830,10 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         or _external_process_running(job, workspace_dir)
     ):
         return job
-    if not (0 <= job.current_segment_idx < len(job.segments)):
+    from backend.core.activity_assessment import namd_activity
+    observations = {'running': True, 'live': False,
+                    'segment_valid': 0 <= job.current_segment_idx < len(job.segments)}
+    if namd_activity(observations).action == 'finalization_required':
         _finish_job(job, workspace_dir)
         return job
 
@@ -842,7 +847,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     # This is checked FIRST: completed outputs are stronger evidence than any
     # inference below, and a finished segment must be advanced past even if the
     # minimisation coordinates it chained from have since been cleaned up.
-    if not _segment_outputs_complete(output_dir, active.name):
+    observations['outputs_complete'] = _segment_outputs_complete(output_dir, active.name)
+    if namd_activity(observations).action != 'segment_finalization_required':
         # ── Interrupted during MINIMISATION ───────────────────────────────────
         # Every segment chains from `output/<min>.coor` (its conf's binCoordinates),
         # so while that file is absent no segment can have run — the interruption
@@ -860,7 +866,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         # Leaving the job `running` is safe against a relaunch loop: a minimisation that
         # truly cannot run fails inside `run_job`, with the real rc and log.
         min_name = _reconcile_min_name(job, manifest_path)
-        if min_name and not (output_dir / f"{min_name}.coor").exists():
+        observations["minimization_missing"] = bool(min_name and not (output_dir / f"{min_name}.coor").exists())
+        if namd_activity(observations).action == "resume_minimization":
             if job.minimization is not None and job.minimization.status == "running":
                 job.minimization.status = "pending"
             job.status = MdStatus.running
@@ -872,7 +879,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
             return job
 
         step = _read_xsc_step(output_dir / f"{active.name}.restart.xsc")
-        if step and step > 0:
+        observations["checkpoint"] = bool(step and step > 0)
+        if namd_activity(observations).action == "resume_checkpoint":
             # Interrupted mid-segment but a NAMD checkpoint survives → resumable.
             active.status = "running"
             job.error = (
@@ -888,7 +896,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         # system.  A restart landing in that gap used to be reported as a failed
         # segment that had in fact never run.  The segment's LOG is the evidence of
         # a launch: NAMD creates it on spawn, so no log means no attempt.
-        if not _latest_segment_log(package_dir, active.name).exists():
+        observations["log_exists"] = _latest_segment_log(package_dir, active.name).exists()
+        if namd_activity(observations).action == "resume_unstarted_segment":
             active.status = "pending"
             job.status = MdStatus.running
             job.error = (

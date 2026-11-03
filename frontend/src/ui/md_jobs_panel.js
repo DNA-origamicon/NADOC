@@ -1903,6 +1903,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         void _runpod.refreshSession()
       }
       void _fetchQueue()         // who's waiting, and is the machine busy (▶ Run vs ＋ Queue)
+      _startRemotePoll()
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()
     } catch (err) {
@@ -2643,10 +2644,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     const job = _selectDisplayJob()
     if (!job) {
-      // No job to warm — release any previously-warmed socket (free its Universe)
-      // but keep the re-check timer running so a job that starts later gets warmed.
-      mdDisplayController.stopPrewarm?.()
-      _prewarmKey = null
+      // Job discovery/selection restarts warming. An empty part needs no timer.
+      _stopMdPrewarm()
       _setDisplayIndicator('off')
       return false
     }
@@ -2663,6 +2662,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _setDisplayIndicator('off')
       return false
     }
+
+    if (!_prewarmTimer) _prewarmTimer = setInterval(_refreshMdPrewarm, _MD_PREWARM_INTERVAL_MS)
 
     try {
       const d = await _fetchDisplayMeta(job.job_id)
@@ -2711,7 +2712,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // force=false lets the first refresh REUSE an already-warm socket (e.g. right
     // after toggling display off — see _stopMdDisplay) instead of re-parsing the PSF.
     _refreshMdPrewarm(force)
-    _prewarmTimer = setInterval(_refreshMdPrewarm, _MD_PREWARM_INTERVAL_MS)
   }
 
   function _stopMdPrewarm() {
@@ -2722,7 +2722,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _startRemotePoll() {
-    if (_remotePollTimer) return
+    if (_remotePollTimer || !hasActiveRemoteJob(_jobs)) return
     _remotePollTimer = setInterval(_maybePollRemote, _MD_REMOTE_POLL_MS)
   }
 
@@ -2746,6 +2746,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         const sel = _jobs.find(j => j.job_id === _selectedId)
         if (sel) { _applyJobState(sel); _fetchJobMetrics(sel.job_id) }
       }
+      if (!hasActiveRemoteJob(_jobs)) _stopRemotePoll()
       return
     }
     _hadActiveRemote = true
@@ -3624,24 +3625,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   })
 
-  // Editing the design after a prep invalidates every MD job — refetch so the
-  // out-of-date ⚠ markers appear immediately (main.js dispatches this on each design
-  // change), not only on the next poll.  Then, if the design has a loadable MD job,
-  // start warming the display socket in the BACKGROUND regardless of which tab is
-  // active — so opening a design that has a running MD job makes Display MD instant
-  // to toggle (Option 1).  Both are cheap no-ops when nothing applies: _startMdPrewarm
-  // is idempotent, and _refreshMdPrewarm opens no socket unless a ready job exists.
+  // Edits affect freshness only for known jobs belonging to this part. An unused
+  // engine must not scan the workspace or start background display checks on a seek.
+  // Opening the panel and explicit job actions retain their discovery paths.
   let _designChangeRefreshTimer = null
   window.addEventListener('nadoc:design-changed', () => {
     _metricsCard?.refresh()   // cached twist/curve/bp graphs no longer match the edited design
     clearTimeout(_designChangeRefreshTimer)
+    const path = _currentPartPath()
+    if (!filterJobsForPart(_jobs, path, false).length) return
     _designChangeRefreshTimer = setTimeout(async () => {
+      if (path !== _currentPartPath()) return
       await _fetchJobs()
       // Sequence assignment changes the exact CHARMM atom count by base identity.  As
       // soon as a previously-unsequenced job becomes buildable, prepare it in place
       // (without running) so disk/VRAM/throughput/resource projections consume the
       // sequenced PSF count before the user presses Run.
-      for (const job of _jobs.filter(j => j?.awaiting_sequence)) {
+      for (const job of filterJobsForPart(_jobs, path, false).filter(j => j?.awaiting_sequence)) {
+        if (path !== _currentPartPath()) return
         const prepared = await api.prepareMdSequenceJob(job.job_id)
         if (prepared) {
           showToast('Sequences assigned — refreshing atom counts and preparing the job', 'ok')

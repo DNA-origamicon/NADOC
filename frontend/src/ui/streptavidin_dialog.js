@@ -1,3 +1,4 @@
+import { store } from '../state/store.js'
 import { generateRandomSequence } from '../api/overhang_endpoints.js'
 import { patchNanoparticle, createNanoparticleBiotinDNA, removeNanoparticleBiotinDNA } from '../api/client.js'
 import './gold_creation_dialog.css'
@@ -71,6 +72,11 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
   }
   for (const [id, text] of Object.entries(tips)) { $(id).title = text; for (const option of $(id).options ?? []) option.title = text }
 
+  const nativeHistory = particle.kind === 'gold_nanosphere' && Boolean(store.getState().currentDesign?.recipe_root)
+  const maxSequence = nativeHistory ? 32 : 200, maxTetramers = nativeHistory ? 64 : 1500
+  $('strep-count').max = String(maxTetramers)
+  $('strep-dna-length').max = String(maxSequence)
+  $('strep-dna-sequence').maxLength = maxSequence
   const old = particle.coating
   $('strep-size').textContent = `Core diameter: ${particle.diameter_nm} nm${old ? ` · Current coating: ${old.poses.length} tetramers (target ${old.target_count})` : ''}`
   $('strep-scope').textContent = particle.kind === 'quantum_dot'
@@ -97,15 +103,16 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
     const count = Number($('strep-dna-count').value)
     const seq = $('strep-dna-sequence').value.trim().toUpperCase()
     const linker = Number($('strep-dna-linker').value)
-    const valid = Number.isInteger(count) && count >= 1 && count <= maxDNA && /^[ACGT]{2,200}$/.test(seq) && linker >= 1 && linker <= 10
-    const locked = !applied || dirty || busy || hasDNA
+    const valid = Number.isInteger(count) && count >= 1 && count <= maxDNA && /^[ACGT]+$/.test(seq) && seq.length >= 2 && seq.length <= maxSequence && linker >= 1 && linker <= 10
+    const outsideSites = nativeHistory && appliedCount > 4
+    const locked = !applied || dirty || busy || hasDNA || outsideSites
     for (const id of ['strep-dna-count', 'strep-dna-sequence', 'strep-dna-length', 'strep-dna-generate', 'strep-dna-linker']) $(id).disabled = locked
     if (count > 1) $('strep-dna-pocket').value = 'auto'
     $('strep-dna-pocket').disabled = locked || count > 1
     for (const option of $('strep-dna-pocket').options) option.disabled = old?.mode === 'biotin_tether' && option.value === 'A'
     $('strep-dna-create').disabled = locked || !valid || $('strep-dna-pocket').selectedOptions[0]?.disabled
     $('strep-dna-remove').disabled = busy || !hasDNA
-    $('strep-dna-current').textContent = !applied ? 'Apply the strep coating first.' : dirty ? 'Apply coating changes before attaching DNA.' : hasDNA
+    $('strep-dna-current').textContent = !applied ? 'Apply the strep coating first.' : outsideSites ? 'Biotin attachment supports up to 4 tetramers. Reduce the coating count first.' : dirty ? 'Apply coating changes before attaching DNA.' : hasDNA
       ? `${particle.biotin_dna.length / appliedCount} DNA / strep · ${particle.biotin_dna.length} attached`
       : `Applied: ${appliedCount} strep · ${valid ? count * appliedCount : '—'} DNA requested`
   }
@@ -128,7 +135,7 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
   }
   $('strep-dna-generate').onclick = async () => {
     const length = Number($('strep-dna-length').value)
-    if (!Number.isInteger(length) || length < 2 || length > 200) { $('strep-error').textContent = 'Use an integer length of 2–200.'; return }
+    if (!Number.isInteger(length) || length < 2 || length > maxSequence) { $('strep-error').textContent = `Use an integer length of 2–${maxSequence}.`; return }
     $('strep-dna-generate').disabled = true
     try {
       const generated = await generateRandomSequence(length)
@@ -144,7 +151,7 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
   function update() {
     updateDNA()
     const count = Number($('strep-count').value), spacer = Number($('strep-spacer').value)
-    const valid = particle.diameter_nm >= 5 && particle.diameter_nm <= 100 && Number.isInteger(count) && count >= 1 && count <= 1500 && spacer >= .2 && spacer <= 20
+    const valid = particle.diameter_nm >= 5 && particle.diameter_nm <= 100 && Number.isInteger(count) && count >= 1 && count <= maxTetramers && spacer >= .2 && spacer <= 20
     $('strep-apply').disabled = busy || !valid
     for (const id of ['strep-mode', 'strep-reference', 'strep-count', 'strep-reset', 'strep-spacer']) $(id).disabled = busy || hasDNA
     $('strep-remove').disabled = busy || !old || hasDNA
@@ -152,7 +159,7 @@ export function openStreptavidinDialog(particle, { container = null, onSaved = n
     $('strep-reference').title = `${preset.note} Source: ${preset.url}`
     $('strep-source').href = preset.url
     $('strep-reference-note').textContent = preset.note
-    $('strep-estimate').textContent = compact && valid ? `Target: ${count} tetramers` : valid ? `Publication target: ${estimate()} tetramers. Requested: ${count}${manual ? ' (override)' : ''}. Actual count may be lower after clash checks.` : 'Use a 5–100 nm core, an integer count of 1–1500 and a 0.2–20 nm spacer.'
+    $('strep-estimate').textContent = compact && valid ? `Target: ${count} tetramers` : valid ? `Publication target: ${estimate()} tetramers. Requested: ${count}${manual ? ' (override)' : ''}. Actual count may be lower after clash checks.` : `Use a 5–100 nm core, an integer count of 1–${maxTetramers} and a 0.2–20 nm spacer.`
     if (valid) onPreview?.({ mode: $('strep-mode').value, coverage_reference: preset.id, count_override: manual ? count : null, spacer_nm: spacer, seed: old?.seed ?? 1 })
   }
   $('strep-mode').onchange = () => { $('strep-spacer').value = $('strep-mode').value === 'adsorption' ? .3 : 4; update() }

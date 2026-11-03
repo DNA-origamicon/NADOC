@@ -6,6 +6,14 @@ a file or using `-m slow`; `NADOC_RUN_OXDNA_SLOW` no longer enables them.
 A FULL smart-test decision means the full **software** suite. Scientific campaigns
 are never automatic change-based debt.
 
+**CPD policy (user clarification, October 17, 2026):** all CPD/photoproduct
+experiments, including their fixture and software checks, are opt-in only. Ordinary
+collection excludes named CPD/photoproduct modules and the explicit related campaign
+module inventory before import, so external CPD evidence is not a development
+prerequisite. CPD-named cases in mixed modules are scientifically classified.
+Explicit ordinary CPD targets fail with guidance; use `just test-scientific TARGET`
+only when working on CPD by request. Existing non-CPD software coverage remains.
+
 List individual collected cases without executing fixtures or simulations:
 
 ```sh

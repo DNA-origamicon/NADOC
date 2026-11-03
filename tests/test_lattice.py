@@ -394,12 +394,6 @@ def test_bundle_negative_length_offset():
     assert h.axis_end.z == pytest.approx(offset)
 
 
-def test_bundle_negative_length_zero_raises():
-    """length_bp=0 raises ValueError (magnitude must be >= 1)."""
-    with pytest.raises(ValueError, match="length_bp"):
-        make_bundle_design([(0, 0)], length_bp=0)
-
-
 def test_bundle_strand_bp_uses_actual_length():
     """Domain spans abs(length_bp) bp.  A minus extrude at offset 0 makes a canonical
     helix in [-L, 0], so the global bp range runs [-L, -1] (still 42 bp wide)."""

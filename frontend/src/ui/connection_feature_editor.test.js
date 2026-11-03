@@ -79,8 +79,10 @@ it('exposes native nanoparticle names and creation choices without active/output
       name: 'Alternative', direct_variant: 'end-to-root', active_version_id: 'active', active_duplex_id: 'duplex', version_id: 'new' } }
   expect(connectionFeatureFields(feature).map(field => field.key)).toEqual(['name', 'direct_variant'])
   expect(connectionFeatureFields({ ...feature, op_kind: 'nanoparticle-connection-version-patch' }).map(field => field.key)).toEqual(['name'])
+  expect(connectionFeatureFields({ ...feature, op_kind: 'nanoparticle-connection-version-patch',
+    params: { ...feature.params, nanoparticle_application_version: 2 } }).map(field => field.key)).toEqual(['name'])
   for (const changes of [{ nanoparticle_connection_version: 2 }, { nanoparticle_pending_context_version: 2 },
-    { nanoparticle_application_version: 2 }, { _generated_scope: {} }]) {
+    { nanoparticle_application_version: 3 }, { _generated_scope: {} }]) {
     expect(connectionFeatureFields({ ...feature, params: { ...feature.params, ...changes } })).toEqual([])
   }
   expect(connectionFeatureFields({ ...feature, op_kind: 'nanoparticle-connection-version-delete' })).toEqual([])

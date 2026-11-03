@@ -487,6 +487,12 @@ export function orderStrandNucleotides(nucs) {
   nucs.sort((a, b) => {
     const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
     if (di !== 0) return di
+    // Extension indices count outward from the attachment, independently of
+    // the parent helix direction. Geometry places 5′ tails in domain -1 and
+    // 3′ tails after the last domain; thread each from 5′ to 3′ accordingly.
+    if (a.extension_id && a.extension_id === b.extension_id) {
+      return a.domain_index < 0 ? b.bp_index - a.bp_index : a.bp_index - b.bp_index
+    }
     const bpDiff = a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
     if (bpDiff !== 0) return bpDiff
     const ca = copyIdx.get(a) ?? 0

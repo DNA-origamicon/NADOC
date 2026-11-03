@@ -1226,6 +1226,9 @@ export function initSimulateJobs({
   })
   // A design edit / feature-log seek re-evaluates staleness + list membership.
   window.addEventListener('nadoc:design-changed', () => {
+    // Editing geometry cannot create a simulation job. Keep a successfully loaded
+    // empty list idle; panel opens, document switches and job events still discover.
+    if (!_fetchPending && _listReady && _loadedPath === _currentPath() && !_nodes.length) return
     _fetchEpoch++
     if (_dynamicsActive) _fetch()
   })

@@ -85,6 +85,39 @@ def test_noncoating_jobs_retain_ordinary_defaults_and_optional_revision(captures
     assert captures == [(design, {"preserve_entry_types": True})]
 
 
+def test_desktop_coating_metadata_is_bounded_without_decoding_loadout(captures, monkeypatch):
+    from backend.core import design_loadouts
+    design = source()
+    design.animations = [m.DesignAnimation(name='animation 1')]
+    design.loadouts = [m.DesignLoadout(id='main', design_snapshot_gz_b64='not a replay input')]
+    design.active_loadout_id = 'main'
+    monkeypatch.setattr(design_loadouts, 'decode_snapshot', lambda *_: pytest.fail('Decoded desktop recovery'))
+    assert policy.capture_for_evaluation(design, request=request(), revision=7) == 'isolated'
+    assert captures[-1][1] == {'preserve_entry_types': True, **policy.COATING_PROFILE}
+
+
+@pytest.mark.parametrize('defect', ['protected', 'multiple', 'simulation', 'oversized', 'combined'])
+def test_desktop_loadout_admission_cannot_expand_recovery_budget(captures, defect):
+    from backend.core.part_recovery_storage import MAX_RECOVERY_BYTES
+    design = source()
+    loadout = m.DesignLoadout(id='main', design_snapshot_gz_b64='x')
+    design.loadouts = [loadout]
+    design.active_loadout_id = 'main'
+    if defect == 'protected':
+        loadout.protected = True
+    elif defect == 'multiple':
+        design.loadouts.append(m.DesignLoadout(id='other'))
+    elif defect == 'simulation':
+        loadout.simulation_job_id = 'job'
+    else:
+        loadout.design_snapshot_gz_b64 = 'x' * (MAX_RECOVERY_BYTES + (1 if defect == 'oversized' else -10))
+        if defect == 'combined':
+            design.feature_log[0].design_snapshot_gz_b64 = 'r' * 11
+    with pytest.raises((CommandContractError, ValueError)):
+        policy.capture_for_evaluation(design, request=request(), revision=7)
+    assert captures == []
+
+
 @pytest.mark.parametrize("removed", [False, True])
 @pytest.mark.parametrize("preserve", [False, True])
 def test_coating_recipe_selects_fixed_profile_once_even_after_final_removal(captures, removed, preserve):

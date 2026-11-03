@@ -25,6 +25,28 @@ function deps() {
 }
 
 describe('initSnupiDisplay', () => {
+  it('does not restore the shared scene when idle or already stopped', async () => {
+    const d = deps(), restoreDesignVisible = vi.fn()
+    const c = initSnupiDisplay({ ...d, restoreDesignVisible })
+    const expectUntouched = () => {
+      expect(restoreDesignVisible).not.toHaveBeenCalled()
+      for (const method of Object.values(d.designRenderer)) expect(method).not.toHaveBeenCalled()
+      for (const method of Object.values(d.api)) expect(method).not.toHaveBeenCalled()
+    }
+    c.stopAndRestore()
+    c.cancelPending()
+    await c.refresh()
+    expectUntouched()
+    await c.showDeform('job')
+    c.stopAndRestore()
+    expect(restoreDesignVisible).toHaveBeenCalledOnce()
+    vi.clearAllMocks()
+    c.stopAndRestore()
+    c.cancelPending()
+    await c.refresh()
+    expectUntouched()
+  })
+
   it('keeps the historical-job snapshot path', async () => {
     const d = deps()
     const c = initSnupiDisplay(d)

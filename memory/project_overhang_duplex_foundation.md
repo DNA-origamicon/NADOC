@@ -8,6 +8,12 @@ metadata:
 
 # Overhang Duplex foundation (Proposal B)
 
+## Topic navigation and current boundaries
+
+Reorganized October 17, 2026. Read the retained contracts here, then only the
+matching detail below. Dated results and old handoffs are not new verification
+or authorization; current user instructions and `CLAUDE.md` take precedence.
+
 **Rank:** P1 — the model is live, wired and is the direction the assembly tier already
 committed to; two concrete Phase-4b follow-ups remain and Phase 6 is untouched.
 
@@ -60,75 +66,20 @@ everything current is below.
   touches `Domain.start_bp/end_bp`. Pinned by `test_duplex_crud.py:114`
   (`test_connect_different_lengths_preserves_both`) + `test_duplex_length_preserve.py`.
 
-### TRAP — the "one ends up the length of the other" bug (user-reported 2026-06-30)
+<a id="trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2026-06-30"></a>
+- [TRAP — the "one ends up the length of the other" bug (user-reported 2026-06-30)](details/project_overhang_duplex_foundation/01-trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2.md#trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2026-06-30)
 
-A `patch_overhang` **sequence write resizes the backing domain** to `len(sequence)`
-(`crud.py:4778`, `new_length_bp = len(new_seq)`). The old connect flow set `B = RC(full A)`,
-which silently resized B to A's length. Two guards keep it fixed, and **both must survive any
-rewrite of the connect/Gen path**:
+<a id="code-map-every-line-probed-2026-07-30"></a>
+- [Code map (every line probed 2026-07-30)](details/project_overhang_duplex_foundation/01-trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2.md#code-map-every-line-probed-2026-07-30)
 
-1. frontend `capSequenceToLength` (`design_queries.js:186`) caps every RC write to the target's
-   current length (mirrors backend `_cv_sequence_for_live_overhang`, `crud.py:7454`);
-2. backend `_cv_create_bound_binding` (`crud.py:7622`) **skips different-length pairs**
-   (`crud.py:7648-7655`) — the Duplex represents them instead.
+<a id="backend"></a>
+- [Backend](details/project_overhang_duplex_foundation/01-trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2.md#backend)
 
-Related: RC-of-partner is **register-aware** (`overhangRcOfPartner`, `design_queries.js:364`) —
-it overwrites only the paired-window bases and preserves the toehold. The old blunt
-`capSeq(reverseComplement(fullPartner))` was wrong for different-length pairs.
+<a id="frontend"></a>
+- [Frontend](details/project_overhang_duplex_foundation/01-trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2.md#frontend)
 
-## Code map (every line probed 2026-07-30)
-
-### Backend
-
-| Thing | Where | Note |
-|---|---|---|
-| `DuplexEnd` / `Duplex` | `models.py:493` / `:515` | fields `id`541 `name`542 `left`544 `right`545 `driver`546 `bound`547 `binding_mode`548 `allow_n_wildcard`549 `target_joint_id`551 `locked_angle_deg`552 `connection_type`553 `prior_driven_topology`558 |
-| `Design.duplexes` / `_validate_duplexes` | `models.py:2260` / `:2475` | short-circuits when empty (`:2492`) |
-| `OverhangBinding` / `Design.overhang_bindings` | `models.py:579` / `:2255` | **still fully live** — see Phase 6 |
-| `core/duplex.py` | classifier + graph ops | `classify_duplex_pairing`174, `overhang_pairing_map`197, `duplex_wc_ok`219, `smallest_unused_duplex_name`235, `longest_driver`243, `connect_register`256, `relocate_duplex`295, `revert_duplex_relocation`347, `shift_duplex_ends`359, `drop_invalid_duplexes`381, `sync_duplexes_from_bindings`406, `summarize_duplexes`427, `synthesize_duplexes_from_bindings`62 |
-| `routes_duplex.py` (carved out of crud.py) | registered `main.py:65,242` | 9 routes: GET`:138` POST`:144` connect`:177` sync-from-bindings`:223` PATCH`:236` DELETE`:283` relax`:296` pairing`:336` pairing-map`:343`; `_propagate_driver_to_binding`:116 (called once, `:269`) |
-| migration-on-load | `crud.py:6297` `_derive_duplexes_if_empty` | both call sites live: `/design/load` `crud.py:1367`, `/design/import` `:1401` |
-| cadnano-drag robustness | `crud.py:2611` `_build_domain_shift` → `shift_duplex_ends`+`drop_invalid_duplexes`; `:2571` `_build_strand_end_resize` → `drop_invalid_duplexes` | register preserved on move, dropped on out-of-range resize |
-| driver → geometry | `routes_duplex.py:272` → `crud.reapply_binding_driver` (`crud.py:8796`) | revert + re-bind with the new driver (equal-length/binding-backed only) |
-| relocation (binding-less) | `duplex.relocate_duplex:295` → `binding_relax.compute_bind_topology:193` with `target_start_override`198/`target_end_override`199 | relocates the driven's WHOLE domain onto only the driver's paired window |
-| relax | `direct_relax.relax_direct_binding:320`, wired `routes_duplex.py:310` | linker-bridge method (see below) |
-| validator | `validator.py:270-282` | flags a duplex register with zero complementary bases |
-| headless / oracles | `headless_build.py` `connect_duplex`869 `relax_duplex`896 `add_strand_extension`932; `tests/automation_harness.py` `assert_duplex_relocated`1130 `assert_extension_present`1235 `assert_duplex_relaxed`1854 | |
-| tests (all fast, none `slow`) | `test_duplex_model.py`15 · `test_duplex_crud.py`19 · `test_duplex_relax.py`6 · `test_duplex_classifier.py`6 · `test_duplex_automation.py`5 · `test_extensions_automation.py`4 · `test_direct_connection_unified.py`10 · `test_duplex_geometry.py`**1** · `test_duplex_relocate.py`**1** · `test_duplex_length_preserve.py`**1** | frozen fixtures `tests/fixtures/relax_2x2_binding.nadoc`, `relax_2x2_closebond.nadoc` — the live `workspace/2x2_OH_test.nadoc` is hand-edited between sessions, never depend on it in a test |
-
-### Frontend
-
-| Thing | Where |
-|---|---|
-| pure JS mirror of `core/duplex.py` | `scene/design_queries.js`: `capSequenceToLength`186, `classifyDuplex`317 (kernel `classifyAntiparallel`332), `overhangRcOfPartner`364, `overhangDuplexCoverage`412, `overhangHasDuplex`431, `overhangDuplexSegments`495 |
-| client fns | `api/overhang_endpoints.js`: `createDuplex`285 `patchDuplex`292 `deleteDuplex`298 `connectDuplex`303 `syncDuplexesFromBindings`311 `relaxDuplex`317 |
-| the only consumer panel | `ui/overhang_connections_panel.js`: `_boundDuplexForPair`424 `_onSecondary`438 `_duplexLineEl`510 `_renderDriverToggle`540 `_ensureDuplexForPair`595 `_ensureComplementarySequences`862 `_genSide`942 |
-| sidebar coverage line + ▶ driver marker | `ui/overhang_sequences_panel.js:109` / `:114-119` |
-| Gen flow | `ui/overhang_gen.js:59` `runOverhangGen` (injected `rcOfPartner`) → `ui/primitives/choice.js:32` `showChoice` |
-| extensions reach from an overhang bead | `ui/overhang_orientation_menu.js:119-132` → `selection_manager.js:4089` `openExtensionsForStrands` (wired `main.js:2983`) |
-| render read (the only one) | `scene/helix_renderer.js:111-115` — collects duplex endpoint overhang ids, gated on `bound !== false && DIRECT_CONNECTION_TYPES.has(connection_type)` |
-| tests | `design_queries.test.js` (duplex cases `:102-211`) · `overhang_gen.test.js`10 · `overhang_orientation_menu.test.js`20 · `overhang_connections_panel.{duplex,driver,lengthcap}.test.js` **1/2/1** |
-| e2e | `e2e/duplex_pairing_display.spec.js` (derive-on-load colouring + driver flip), `e2e/fluorophore_toggle.spec.js` |
-| **deleted 2026-07-01, confirmed gone** | `scene/overhang_binding_lines.js`, `ui/overhang_binding_menu.js` — zero dangling refs |
-
-### The relax that is actually running (2026-07-01 rewrite — supersedes every earlier swing description)
-
-`relax_direct_binding` no longer swings the overhang about its root. Three steps:
-1. **Arc minimization via cluster kinematics** — anchors are the two embedded-staple root beads;
-   rotate the connecting joint (`linker_relax._optimize_chord_angle`) or rigid-translate the
-   driven cluster to bring `|P_A−P_B|` → `span + n_bonds·target`. Same rigid body ⇒ no motion.
-2. **Re-seat** at the oriented midpoint (`duplex_midpoint_placement` → writes the driver's
-   `OverhangSpec.rotation` **and** `OverhangSpec.translation`, `models.py:274-282`), so both
-   root bonds land equal at `target_nm`.
-3. **Clash spin of the DUPLEX ONLY** (`_min_clash_rotation`) about the root→root axis; the
-   clusters are not touched. Compose about the *un-seated* junction pivot:
-   `q_final = q_clash⊗q_seat`, `t_final = R_clash·(p0u+t_seat−P_A)+P_A−p0u`.
-
-Two-sided target (opens an over-compressed bond back to 0.67 nm) — this **supersedes LESSONS E7's**
-one-sided "never back off" floor. `info["mode"]` ∈ `same_body`/`joints`/`translate`; `swing_*`
-fields are gone (0 hits). A 1-DOF revolute joint can't always reach a large gap — partial close,
-bonds still symmetric. Axis-line gotcha: `_apply_ovhg_rotations_to_axes` (`deformation.py:1871`)
-must **de-apply the translation** to recover the pre-transform pivot, or the shift double-counts.
+<a id="the-relax-that-is-actually-running-2026-07-01-rewrite--supersedes-every-earlier-swing-description"></a>
+- [The relax that is actually running (2026-07-01 rewrite — supersedes every earlier swing description)](details/project_overhang_duplex_foundation/01-trap--the-one-ends-up-the-length-of-the-other-bug-user-reported-2.md#the-relax-that-is-actually-running-2026-07-01-rewrite--supersedes-every-earlier-swing-description)
 
 ## Open items (rewritten against the probe — these are what is genuinely left)
 
@@ -172,53 +123,8 @@ must **de-apply the translation** to recover the pre-transform pivot, or the shi
    `test_duplex_relocate.py`, `test_duplex_length_preserve.py` are **one test each**, and the three
    panel duplex specs are 1/2/1 cases — for Phases 4/4b, the ones that move geometry.
 
-### Coexistence hazards (found 2026-07-30 resolving the contradicting peer — none covered by any test)
-
-9. ~~Different-length pairs are excluded from overhang co-motion.~~ **CONFIRMED BY TEST, THEN
-   FIXED 2026-07-30.** The prediction was right: a 90° driver rotation moved the WC pair distance
-   from **1.93 nm → 5.25 nm** — the driven overhang stayed behind — and the materialized duplex
-   cluster's `domain_ids` held only `('oh_strand_a', 0)`, omitting the driven domain entirely.
-   Root cause was **one lookup read by three sites**: `driven_to_driver` (co-rotation partners),
-   `driven_bound_oh_ids` (the driven-side self-rotation skip), and transitively
-   `_duplex_domain_refs` → `materialize_duplex_cluster` (the gizmo-drag scope) all built their map
-   from `design.overhang_bindings` **only**, while `relocate_duplex`'s `__duplex_reloc__` binding
-   is transient and never persisted (`duplex.py:311`).
-   **Fix:** new `deformation._bound_driver_driven_pairs(design)` returns `driven → driver` from
-   **both** bound bindings and bound duplexes (bindings win on conflict — they agree anyway, since
-   `_propagate_driver_to_binding` syncs duplex→binding); both call sites now use it, which fixes
-   the cluster scope for free. **Pinned by** `tests/test_overhang_binder_rotation.py`
-   `test_diff_length_duplex_partner_follows_rotated_driver` (geometry: WC pair distance preserved
-   through a 90° driver rotation) + `test_diff_length_duplex_cluster_contains_the_driven_domain`
-   (structure: the driven domain is in the cluster's `domain_ids`). Both assert the no-binding
-   precondition first, so they fail loudly if the length fork ever changes. Still **not
-   app-verified** — the in-app check is: connect a 10-mer to a 24-mer, rotate the duplex, confirm
-   the driven overhang follows.
-10. **Driver sync is one-directional.** `PATCH /design/duplexes/{id}` pushes duplex→binding
-    (`_propagate_driver_to_binding` + `reapply_binding_driver`). **Nothing pushes binding→duplex** —
-    `patch_overhang_binding` (`crud.py:8586`) has zero `duplexes` references, so flipping the driver
-    through a binding-side route leaves `Duplex.driver` stale and the panel's toggle shows the
-    wrong side.
-11. **Deleting either record leaves the other dangling.** `delete_duplex`
-    (`routes_duplex.py:283-294`) never touches bindings; `delete_overhang_binding`
-    (`crud.py:8887`) never touches `duplexes`.
-12. **Re-Connect on the same pair reuses a stale duplex.** `apply_connection_version`'s teardown
-    (`crud.py:7741-7759`) reverts topology and strips `overhang_bindings` but **never strips
-    `duplexes`**, so the follow-up `connect_duplex` 409s ("already connected by a duplex") and the
-    panel swallows it — the old register survives a reconnect.
-13. **Headless can't produce what the UI produces.** No headless method makes both records; a
-    different-length `apply_connection_version` makes **neither**. Any automation oracle built on
-    the headless path is therefore testing a state the app never produces (and vice versa). This is
-    also why the disjoint test sets never caught items 9-12: apply-path tests assert bindings and
-    never inspect duplexes, connect-path tests assert duplexes and never inspect bindings, and
-    **no test exercises the panel's apply→connectDuplex sequence** (`connectDuplex` has zero hits
-    in any `*.test.js`).
-
-**Phase 5 (attachments) needs no work** — fluorophores/quenchers/biotin are the pre-existing
-`StrandExtension.modification` feature (full CRUD, Bézier-arc bead geometry on a `__ext_` helix,
-emission glow + FRET). To label an overhang: add `StrandExtension{strand_id, end,
-modification:'cy3'}` on the overhang's staple terminus. A duplicate `Attachment` model was built
-and fully reverted (user caught it). If internal-base labels are ever wanted, EXTEND
-`StrandExtension` — never a second model.
+<a id="coexistence-hazards-found-2026-07-30-resolving-the-contradicting-peer--none-covered-by-any-test"></a>
+- [Coexistence hazards (found 2026-07-30 resolving the contradicting peer — none covered by any test)](details/project_overhang_duplex_foundation/02-coexistence-hazards-found-2026-07-30-resolving-the-contradicting.md#coexistence-hazards-found-2026-07-30-resolving-the-contradicting-peer--none-covered-by-any-test)
 
 ## The doc fork (read this before trusting a sibling)
 
@@ -234,10 +140,5 @@ longer the only entry point, and two heavily-trafficked siblings are **duplex-bl
 | cross-part pairing | [[assembly_overhang_bindings]] | the **most current** duplex doc (2026-07-11); owns `AssemblyDuplex` + the shared `classify_antiparallel` kernel |
 | sub-domain metadata / Domain Designer | [[overhang_subdomains]] | **duplex-blind**; its Phase 5/6 is exactly what Phase 6 above retires |
 
-## Related
-
-[[overhang_binding_extensions]] (the `compute_bind_topology`/`apply_bind_topology`/
-`revert_bind_topology` primitives this plan reuses — inverted dependency: the Duplex wraps them
-via a transient binding carrier) · [[bond_relax]] · [[overhang_sequence_display]] ·
-[[protein_attachment]] · [[oh_binder]] (a *third* pairing representation,
-`Domain.binds_overhang_id` — this plan has never accounted for it).
+<a id="related"></a>
+- [Related](details/project_overhang_duplex_foundation/03-related.md#related)

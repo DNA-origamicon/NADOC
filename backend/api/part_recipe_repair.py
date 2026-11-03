@@ -47,7 +47,10 @@ def _current_numerical_pins(kind, _params):
         from backend.core.part_streptavidin_contract import contract_defaults
     else:
         raise CommandContractError("This command has no supported numerical upgrade", code="unsupported_numerical_upgrade")
-    return contract_defaults()
+    defaults = contract_defaults()
+    if kind == "nanoparticle-attach-overhang" and _params.get("np_fitting_version") == 2:
+        defaults["np_fitting_version"] = 2
+    return defaults
 
 
 def _numerical_parser(kind, previous=None):

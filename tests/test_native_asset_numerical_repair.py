@@ -53,6 +53,19 @@ def test_biotin_removal_has_no_numerical_upgrade():
         repair._upgrade('nanoparticle-biotin-dna', params, action, repair._current_numerical_pins)
 
 
+def test_generated_fit_upgrade_preserves_v2_and_every_authored_selection():
+    params = {**definition('nanoparticle-attach-overhang'), 'np_fitting_version': 2,
+              'alignment_rotation': [0., 0., 0., 1.], 'place_new_graft': True,
+              'pending_connections': []}
+    before = deepcopy(params)
+    action = UpgradeNumericalContract(action='upgrade_numerical_contract', feature_id='generated-fit',
+        expected_engine=deepcopy(params['engine']))
+    changed, report = repair._upgrade('nanoparticle-attach-overhang', params, action, repair._current_numerical_pins)
+    assert report['changed'] and changed['engine'] != params['engine']
+    assert {k: v for k, v in changed.items() if k != 'engine'} == {k: v for k, v in params.items() if k != 'engine'}
+    assert params == before and changed['np_fitting_version'] == 2
+
+
 @pytest.mark.parametrize('parameter', ['tether_source', 'coating_source'])
 def test_biotin_source_repair_restores_only_the_recorded_assembly(parameter):
     from backend.api.part_repair_source_policy import admit_descriptor

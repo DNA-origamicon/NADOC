@@ -1,11 +1,11 @@
 # Feature-history campaign handoff
 Binding: [operating_contract.md](operating_contract.md); current user instructions take precedence.
-Sessions since last gate flip or milestone close: 0 (ordinary protein import gate ON November 1).
-The user requested the next three independent milestones after the original 14:00 campaign; no new deadline was supplied.
+Sessions since last gate flip or milestone close: 2 (part navigation and broad regression repair; no gate flip).
+Latest user follow-up (November 2): track the polymerization-to-extension conversion change as follow-on work; correct Full's S37 attachment to `Extension - 0[-5›1]`; defer general long-extension geometry until after the feature-log/dependency overhaul.
+Latest priority decision (November 2): part scrub/Revert is complete; qualify early Extrude edits through downstream Autoscaffold and Autostaple. The three remaining broad-suite failures are explicitly deferred and non-blocking for rollout. Assembly parity and transaction repairs remain subsequent work.
 
-**Tools done: 4/4. CAD: 30/34 complete; FH-27/31/32/36 remain open.**
-FH-30/34/35 closed in the preceding campaign; FH-18/25/26/28, ISSUE-99 and ISSUE-126 remain closed.
-
+**Tools done: 4/4. CAD: 33/34 complete; FH-31/32/36 close; FH-27 remains open.**
+No molecular candidate was approved. No new host, queue, storage format or scientific algorithm was added.
 Evidence root **C**: `.development-artifacts/feature-history-focus/`.
 
 ## November 3 — actual workspace autosave interruption
@@ -126,7 +126,32 @@ Launcher cleanup verified `/tmp/__e2e__history-xq5zb3l_` absent. Test-only addit
 no fresh broad suite needed. Ruff and diff whitespace checks pass.
 No molecular algorithm change; `main.js` LOC delta:0.
 
-## November 2 — piercing visualizer and performance
+## November 2 — broad regression repair
+
+User authorized the broad run: **20,618 passed /37 failed /26 skipped**, 4,257.87 s.
+FULL previously omitted numerical thread pinning: all scopes now default to one BLAS/OpenMP thread; native fingerprints and resource gates are unchanged.
+The benchmark fixture inherited a 6 nm solvent reservoir (1.09M atoms). Explicit test-only 1.5 nm padding retains real solvation and every simulation stage; **47 benchmark tests pass**, native run 91.59 s.
+The generator history check now uses native commands and the ordinary evaluation job/commit, preserved loadout and unrelated DNA, scrub/edit/refusal/Revert/undo/redo and poisoned-recovery proof.
+Recovery-poisoning supports input-only transform rows. The joined-path file passes unchanged after an intermittent 25 ms capture refusal; no capture budget was raised.
+Final SMART **FULL: 20,655 passed /3 failed /26 skipped**, 1,961.16 s (32m41s versus 70m57s before repair): **34 original failures resolved, zero new failures**. No deferred selection; failed FULL does not clear regression debt.
+Zero unmarked tests exceed five seconds; summed test time 7,381.5 s versus 16,774.5 s. Guard tests:19 passes; lint passes; memory lint has zero errors and one existing unrelated warning. Desktop completion notification submitted successfully.
+Evidence: `C/broad-regression-20261102/`. Remaining unchanged failures: mrDNA zero-step mean0.691175 nm versus <0.10; assembly ring piercing (ISSUE-163/164 follow-on); excluded corner optimizer13 versus ≤11 clashes. No molecular candidate/oracle change, reclassification or production geometry change.
+Cleanup verified: no active scratch readers; removed 4,029,968,236 bytes from the three owned final pytest roots. Original broad and cancelled oversized-benchmark roots were already absent. Compact logs/timings and cleanup manifest remain under C; `main.js` LOC delta:0.
+
+## November 2 — recipe-backed part scrub/Revert
+
+Part navigation now reconstructs unavailable/corrupt recovery from recorded prefix inputs; native Revert always rebuilds its retained prefix.
+F0, Fine Routing child boundaries, retained identities, source revision checks and one undo/redo are covered; unsupported commands refuse atomically.
+The UI offers native Revert despite eviction. Retired named-group admission remains unchanged; no assembly-specific implementation was changed.
+Final SMART **FAST: 19,982 passed /19 skipped** (401.41 s pytest); full regression remains deferred by the selector message below.
+Timing triage: zero individual violators, maximum3.91 s, summed1,483.6 s; no budget/classification change or new shared delay.
+Full frontend: **803 files,9,562 passed /one skipped** (367.22 s). Lint passes; memory lint has zero errors and one unrelated existing length warning.
+Final isolated app: rail to empty F0 and back, evicted-row Revert, undo/redo, save/reopen, independent native proof and rendered pixels pass (5.8 s test).
+Isolated smoke: **23 passed** (2.5 min); all four browser/smoke scratch roots independently verified absent. Evidence: `.development-artifacts/feature-history-focus/recipe-navigation-20261102/`.
+Initial FAST failures were obsolete snapshot-refusal expectations/retired-group admission plus one verification timeout; all resolved in focused and final FAST runs.
+Next priority remains completion of part-related FH-27 acceptance before assembly parity/transaction work. `main.js` LOC delta:0.
+
+## November 2 scope correction
 
 **Piercing performance follow-up (ISSUE-166):** precomputed ring triangles and
 bounded vectorized intersection batches preserve the existing criteria and exact
@@ -177,69 +202,96 @@ Five reviewed screenshots (1,773,667 bytes) were pruned after visual inspection;
 compact results and reusable exercise scripts remain in the evidence directory.
 Production conversion (ISSUE-163) and long-extension repair (ISSUE-164) stay deferred.
 
-## Current three-milestone scope — November 1
+Use the base Properties-card designations when discussing geometry. In retained
+01 Terminal linker, S37's internal piercing is `Extension - 0[-5›3]` O3′ to
+`Extension - 0[-5›2]` P, through the former's sugar. The separately reported Full
+attachment must join S37 position 1 to `Extension - 0[-5›1]`, not ›16 (ISSUE-162).
+The renderer ordering repair is qualified: 58 focused frontend checks, an isolated
+app check of all 12 extension roots and S37's Properties labels, plus the full
+frontend suite (800 files, 9,527 passed / 1 skipped; 384.68 s). No atom coordinates changed.
+Evidence: `.development-artifacts/extension-connectivity-20261102/`.
 
-Selected FH-33 original protein inputs/library placement, FH-31 fitting/bound motion/multi-anchor relaxation,
-and FH-32 coupled biotin create/remove. New explicit goal was not created: the prior deadline campaign was complete.
-FH-33 closes: ordinary free/library placement gate is ON after retained-state, desktop and required SMART passes.
-FH-31/32 have tested native numerical commands in the existing worker; both append rollout gates stay OFF.
-No molecular review was approved. Old-file compatibility, experimental CPD and Python-only corner optimization stay excluded.
-No new host, queue, storage layer or scientific algorithm was added. Organization/PartGroup gates remain OFF.
-Evidence root **C**: `.development-artifacts/feature-history-focus/`.
+Agent publication additionally rejects private diagnostic and assembly commands
+in part logs even when they independently replay. Focused guard coverage: 18 passed.
+All six old process-review files contain private diagnostic stages; retain them
+as evidence rather than newly accepted part deliverables. This restriction does
+not edit their saved bytes or alter production molecular placement.
 
-## Protein source and placement qualification
+Polymerization strands must not be converted to ordinary extensions (ISSUE-163).
+The existing materializer's terminal-tail policy is rejected; simulation handling
+requires its own explicit development. The user chose **“Track the conversion
+change as follow-on work”**, rather than adding an immediate unsupported-case
+refusal. Production simulation preparation is unchanged; ISSUE-163 is deferred.
+Do not substitute another topology.
 
-See [FH-33 contract/evidence](protein_free_import_contract.md#fh-33-source-and-placement-qualification--november-1-2026).
-Library imports retain exact source/filter choices; placement copies the existing source envelope into the document,
-with import plus attachment/conjugation in one revision/undo. Replay has no library fallback or atom-to-PDB reconstruction.
-Both entry routes preserve original bytes; equal atoms with different source/filter inputs do not deduplicate.
-The source table survives native bundle reconstruction: a red regression and the real desktop edit both exposed its loss.
-`next3-protein-destinations-20261101`: **330/330** expected outcomes, eleven boundary/retained cases, eight cold proofs.
-Worst p95 route/capture-lock/publication-lock/light request: **294.452/15.280/4.056/24.047 ms**; max capture **23.984 ms**.
-Empty atom-copy destinations allocate before the lock and receive scalar source values under existing isolation/accounting.
-No GC policy, 25 ms capture, 30,000 nodes/2 MB, 8 MB recovery, scientific formulas or old numerical pins changed.
-`next3-protein-desktop-qualified-20261101`: **2 pass**, actual File and Tools menus, upstream edit, undo/redo,
-save/reopen, original-byte equality and cold proof; zero console errors. Observed display adoption **223/695 ms**.
-Library fixture uses the existing harness's unrelated-request stubs and paused software GPU raster.
-Earlier failed benchmarks, browser fixture/menu attempts and actual missing-source failure remain in C.
+**General long-extension molecular geometry is separate follow-on ISSUE-164,
+deferred until after the feature-log/dependency overhaul.** Prior FH-27 ring-piercing
+evidence is retained as that issue's evidence, not a requirement to promote the
+isolated linker candidate during the overhaul. This does not mark a failing test
+passed, relax an oracle, approve any candidate or automatically close FH-27.
+See [the binding scope decision](../../../memory/feedback_polymerization_extension_scope.md).
 
-## Two numerical candidates — rollout remains open
+## Enabled asset work — November 1, 2026
 
-[FH-31 contract](nanoparticle_connection_contract.md#fh-31-numerical-candidate--november-1-2026): exact bounded
-particle/graft/target/active-anchor selection, deterministic identities and numerical code/runtime provenance;
-unchanged fit, constrained movement and one-to-four-anchor solve. Solved poses remain outputs.
-[FH-32 contract](coating_input_plan.md#fh-32-biotin-candidate--november-1-2026): pinned original coating/tether PDB,
-sequence/pocket/linker/site intent and exact owned removal. Existing pocket/clearance math is unchanged.
-Explicit pin upgrades and exact source restoration use existing repair; ordinary edits cannot refresh pins.
-`next3-assets-final-focused-20261101`: **169 pass**, including native full-output parity, two/four anchors,
-cold-worker lifecycle/edits, exact ownership/bounds, actual capture/commit/undo/cancel/stale publication.
-`next3-numerical-repair-20261101`: **99 pass**; `next3-bundle-source-green-20261101`: **18 pass**, including new repair/source controls.
-Actual biotin deadline failures remain evidence. Bounded preallocated destinations in the existing coating capture
-preserve its 100 ms/100,000-node/4 MB profile; three later real job checks pass at **49.45–91.59 ms** capture.
-Worker correctness separately uses a test-only 1 s capture clock; this is never production qualification.
-Remaining FH-31/32: ordinary entry-point/editor integration, complete admitted connection removal/replacement,
-downstream diagnostics and repeated boundary/retained-history/display qualification. Neither milestone is closed.
+**FH-31:** ordinary Attach, bound Move/Rotate and Relax now use the existing private worker and one guarded publication.
+Native history forms preserve exact references, output identities and numerical pins. Application v2 supports exact
+removal/replacement after fitting, relaxation and multiple anchors. [Contract](nanoparticle_connection_contract.md#fh-31-ordinary-integration--november-1-2026).
+**FH-32:** ordinary coating and biotin create/remove plus historical edits use pinned original inputs. Invalid upstream
+site-count edits name the failing biotin row, refuse publication and leave history unchanged; valid edits rebuild it.
+Save coordination preserves the original path across in-flight/queued autosave, private edits and reopen (ISSUE-159).
+The unchanged 100 ms coating capture profile admits only the saved empty default animation and one editable main loadout;
+combined retained data stays within 8 MB. [Contract](coating_input_plan.md#fh-32-ordinary-integration--november-1-2026).
+**FH-36:** recipe-rooted Generate Design records additive native grafts and explicit fitting intent through final connections.
+Source and complete candidate independently reproduce. Regeneration tears down exact prior anchors and retains unrelated DNA.
+Admitted maximum: four source-free uncoated particles, twelve grafts/active anchors, 128 handles/retained versions,
+50,000 bases subject to existing capture/recovery limits. Explicit numerical repair preserves generated v2.
+Imported molecular geometry, unrelated duplex ownership, flexible/CPD/protein/individual-pose scopes and scientific
+mechanics remain excluded. [Contract](remaining_native_contracts.md#fh-36-generated-asset-integration--november-1-2026).
 
-## Validation and next task
+## Qualification and measured limits
 
-`next3-smart-20261101`: first required FAST **19,994 pass /8 fail /19 skip**, 467.23 s; six protein route-contract failures and two wrapper Unix-socket path failures. No broad test session is open.
-Protein HTTP status/revision/metrics contracts are restored; typed native prevalidation retains exact reference diagnostics and legacy checks remain parametrized.
-The 5.03 s slow-guard offender was the socket startup timeout: owned reproduction at 112 bytes gives `AF_UNIX path too long`. Wrapper roots are shortened to `/tmp/n3-*`; no budgets/markers change.
-`next3-protein-http-regression-20261101`: 139 pass /one new assertion used the wrong missing-reference code; corrected. `next3-protein-pins-explicit-20261101`: **142 pass**, including current duplex/coating pins and retired-pin refusals.
-The prior pin invocation split its exclusion argument and was refused before collection; explicit duplex/coating nodes replace it. No CPD test ran.
-`next3-smart-final-20261101`: required **FAST 20,005 pass /19 skip**, 459.60 s pytest /467.74 s wrapper. Zero per-test violators; maximum 4.43 s. Full sweep stays deferred below.
-Slow-test skill review: aggregate runtime warning only; summed test time fell 1,728.0→1,702.3 s. Existing solver/replay families dominate; no new shared accidental delay identified. No reclassification or budget change.
-Next: FH-31 ordinary job/editor integration and complete connection removal/replacement after relaxed/multiple-anchor state; keep its gate OFF until app and repeated-boundary qualification pass.
-No frontend production code changed; final app exercise passes. Scoped Ruff (36 Python files), memory lint (zero errors/warnings) and `git diff --check` pass.
-All 26 completed wrapper roots and browser-owned workspace/cache/report/profile roots are verified absent; final FAST removed 2,754,042,855 scratch bytes.
-The prior campaign's required FAST/frontend/smoke outcomes remain in C and the linked milestone plans.
-The broad window expired **October 31, 10:52:09–14:52:09 MDT**. Do not renew its marker. Selector output (verbatim):
+`remaining-assets-lifecycle-correctness-20261101`: 110 focused passes; `generated-repair-v2-green-20261101`: eight.
+`generated-assets-boundaries-corrected-20261101` plus `generated-assets-regeneration-20261101`: seven generated cases,
+including platform/curved construction, four particles/twelve anchors, upstream edits, cold proof and repeated generation.
+`generated-capture-final-correctness-v2-20261101`: 145 passes; final complete-model copying adds two checks (18 in that file).
+ISSUE-160 fixes capture allocation, recursive memo retention and repeated header-default introspection; exact aliases,
+unknown fields, history/display undo data and original accounting remain. No deadline/node/byte limit or GC policy changed.
+`remaining-assets-boundaries-release-20261101`: 239/240 captures, 240/240 publications, eight real worker commits and
+cold proofs; actual cancellation/stale cases reap and preserve source. Fitted capture/publication lock p95 ≤1.89/0.81 ms;
+biotin ≤36.19/21.97 ms. Its one safe timeout makes the script's zero-refusal criterion exit1; not an all-green benchmark.
+`generated-largest-final-20261101`: 29/30 captures, 30/30 publications; capture lock p95/max 24.522/25.135 ms,
+publication lock 18.177/20.241 ms. Actual maximum generation completed in 152.639 s; a real edit took 49.834 s,
+with one undo and correct source guards. Cancellation/stale commit returns409 and releases the worker admission.
+These are cooperative bounded-work observations, not hard real-time guarantees. Both safe refusals and earlier failures remain.
+`remaining-assets-browser-release-20261101`: fitting and generated app flows pass; biotin hit a 5 s test wait after commit.
+`remaining-assets-browser-biotin-release-20261101`: corrected worker wait passes (58.3 s flow, 4.166 s creation-to-adoption).
+Together they cover actual Move/Rotate preview cancellation/Apply, ordinary dialogs, historical/downstream edits with visible
+failure feedback, undo/redo, save/reopen and independent cold proof; zero tool console errors. Fit/biotin screenshots inspected.
+Owned workspace/profile/cache/report/process roots were verified absent; retained review PNGs live only in C.
+Required frontend rerun: **799 files, 9,518 passed /1 skipped**, 367.49 s. Initial failure was an obsolete missing-revision
+fixture; the guarded attachment rejection test now supplies a real revision. `just lint` and `git diff --check` pass.
+`remaining-assets-routes-release-20261101`: seven passes /64.25 s; isolated `just smoke`: 23 passes /2.6 min.
+Smoke workspace, project stores, profiles, caches, credentials and owned processes were removed and absence verified.
+First required SMART FAST: 19,928 passed /2 failed /19 skipped, 438.76 s pytest /468 s wrapper. Failures were stale
+application-version and repair-capability assertions. Updated contract files pass 39 tests, including actual v1/v2 rename.
+Slow-test skill review: zero per-test violators (max 3.66 s); 1,625.2 s summed test time, versus prior 1,702.3 s.
+Existing replay/worker/runner families dominate; no new shared accidental delay identified. No budget or classification change.
+`remaining-assets-smart-final-20261101`: required **FAST 19,931 passed /19 skipped**, 438.73 s pytest /470 s wrapper.
+No per-test violations (max4.27 s; summed1,617.6 s); aggregate warning reviewed under the slow-test skill. No broad sweep ran.
+Selector output (verbatim):
 ```
 DEFERRED: this change would have needed the FULL suite, but no test-dedicated
 session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 Only request `just test-session` when a broad/full sweep is actually needed.
 ```
+
+## Remaining release exit
+
+FH-27 remains the final aggregate acceptance milestone. The November 2 repaired FULL run resolves all 34 newly found failures; the three pre-existing failures above remain. Never renew its session marker automatically.
+The full suite is not green. No remaining part-history regression was reported in this run. The user explicitly deferred all three remaining failures on November 2 as non-blocking for feature-log rollout; do not reopen them as release blockers. Current priority is early Extrude edits rebuilding downstream Autoscaffold and Autostaple. Assembly parity follows part completion. Terminal-extension geometry and polymerization conversion remain separate follow-on work under ISSUE-163/164, not candidate-promotion requirements for this task.
+Legacy-file migration, PartGroup motion, sealed rollout, strict-agent/provenance milestones, experimental CPD and
+Python-only corner optimization stay outside this release queue. No simulation or molecular promotion is authorized.
 
 ## Scientific constraints and prior FULL evidence
 
@@ -297,8 +349,84 @@ Phase-control helix namespaces preserve 210° on reopen. Generator: `experiments
 evidence `I/nadoc-review/`. Atom/bond feeds verified, max component rounding 0.000006704 nm; 12 views/four tour checks passed.
 Preserve `Platform - Root-preserving.nadoc` (9 attachments); its later user save is not requalified.
 
-Entry HEAD `06ec94bd`; baseline **203 dirty entries**, recorded in `C/next-three-20261101-baseline.json`.
-The task's new/previously-clean owned paths are inventoried in `C/next3-owned-paths.json`; all baseline hashes
-were unchanged before documentation updates. Stage only this task's added milestone note in the mixed memory file.
-Other API/VR/simulation/activity/memory-hygiene changes remain untouched and unstaged. `main.js` delta is zero.
-Commit explicit owned paths locally; no push, stash, reset, restore, amend, rebase or hook bypass.
+November 1 FH-27 process correction: the original six snapshot-only walkthrough parts were
+**noncompliant**. Atom/camera checks did not establish construction history. The binding rule is now
+in root `AGENTS.md`, `CLAUDE.md` and `memory/feedback_structure_requires_process.md`: structure
+without process is disallowed for every agent, including diagnostic candidates and flattened assemblies.
+The old capture writer refuses publication. `scripts.agent_structure_guard.publish` verifies the
+serialized/reopened state by executing all inputs from an empty root; recovery snapshots are not proof.
+It checks authoring plus atom references and refuses unlogged changes or changed diagnostic implementations.
+This is a mandatory agent publication boundary, not an operating-system write restriction.
+
+The six reconstructed files are in **`workspace/Geometry Review/Process Complete/`**:
+`FH-27 - 01 Terminal linker - Current/Candidate` (11/12 steps, 49,086 atoms),
+`FH-27 - 02 Adverse contact - Current/Candidate` (15/16 steps, 4,136 atoms), and
+`FH-27 - 03 mrDNA zero-step - Current/Candidate` (11/11 steps, 2,800 atoms).
+Terminal process: six original native source commands → Add Part → Polymerize Origami (three repeats)
+→ Prepare NAMD materialization → current molecular placement → optional isolated candidate → Rename.
+**Subsequent user correction: the terminal pair is not an accepted part deliverable.**
+Its replay is complete, but F7/F8 perform assembly operations inside a diagnostic part
+history and F9 replaces the part with a flattened three-repeat assembly. `Prepare NAMD`
+is the diagnostic display label for `assembly-flatten`, not a legitimate part-level
+polymerization feature. The flattener retains unmatched terminal staples' missing halves
+as extensions; source-part periodic seam strands should remain source-part instructions.
+The proper ownership is source construction/seam routing in `.nadoc`, repeated instances
+and joins in `.nass`, and materialization in derived assembly simulation/export evidence.
+Existing terminal files remain diagnostic evidence; neither their replay/app checks nor
+the original replay-only publication guard establish this ownership contract. The
+November 2 guard now refuses private diagnostic/assembly publication. No file
+migration or molecular change was made by this clarification.
+The 2HB is explicitly reconstructed from two helix and five strand inputs, then derived connectivity;
+this does not invent its missing original actions. Four extension commands and the +210° diagnostic
+phase step precede the adverse atoms. The zero-step control records resolved zero-degree frames and
+actual Fine PSF/PDB production reconstruction or candidate transport; no dynamics run.
+Every resulting atom coordinate and bond is checked against retained original review evidence.
+
+Existing top-level Candidate filenames had divergent payloads at inspection: Terminal Candidate held
+Current atoms; Adverse Candidate held the terminal assembly. They are preserved. The top-level Terminal
+Current was repaired in place with identical coordinates before this mismatch was discovered; use the
+separate Process Complete set for the matching atom comparisons, subject to the terminal ownership
+defect above. No cause of the filename/payload divergence
+is asserted. New parts have distinct identities.
+
+Feature logs retain input parameters and recovery states. Ordinary production editing does not execute
+the isolated diagnostic stages; their process can be independently replayed with the agent guard.
+History recovery restores each diagnostic atom reference and its source placement owners. Atom-reference
+changes require a complete render refresh, preventing the final candidate from leaking into earlier steps.
+Use **Feature Log**, or **Animations → Construction process - recorded feature steps**.
+Use Stick/Ball & Stick for atom inspection. Camera poses01–04 retain the original views;
+new matched poses05/06 inspect the 5′/3′ roots on both terminal and adverse pairs.
+
+**New root diagnosis:** all16 root bonds join the expected strand endpoint, host nucleotide and
+chemical atom pair. All8 5′ roots have C3′–C5′ gaps **0.689715–0.708733 nm**, exceeding the
+four canonical bridge lengths' total **0.606 nm**. O3′–P is **0.20326–0.20792 nm** instead of
+0.160 nm, with strain spread through the other bonds. All8 5′ roots and2 of8 3′ roots reverse the
+native C3′ oriented-volume sign (C2′,C4′,O3′ about C3′). The native tail and host templates have
+negative signs. Terminal chainAR and adverse chainA are the affected3′ examples. Thus correct endpoint
+identity and even canonical bridge lengths do not prove a valid attachment pose. All16 roots are exactly
+unchanged by the existing candidate, which targets internal self-piercing tail links only.
+The radial Bézier/template placement in `atomistic._build_extension_atoms` and the unconstrained
+C3′ exit in `_minimize_backbone_bridge` are the inspection targets. Root placement needs a separate
+isolated proposal preserving stereochemistry and reachable anchors; no production molecular change,
+phase/oracle change or approval has occurred. FH-27 remains open.
+
+Process/replay, root measurements and app evidence: `.development-artifacts/fh27-process-repair-20261101/`.
+All six exact atom/bond feeds,88 history positions,26 saved-camera checks and6 camera-tour playback checks
+pass in isolated app copies, with zero browser errors. Adverse F14→F16 changes OP2(3243) in the live
+atom renderer to the correct candidate coordinate. Source-owner and physical-reference recovery regressions
+are ISSUE-161. Three owned browser scratch roots and32 disposable PNGs are removed; existing user servers
+remain running. Required SMART: **FAST19,946 passed /19 skipped**,441.45 s pytest/477 s wrapper.
+Aggregate runtime warning reviewed via `.claude/skills/triage-slow-tests/SKILL.md`: zero per-test
+violators, maximum4.17 s, summed1,636.0 s vs prior1,617.6 s. No new shared accidental delay found;
+no test classification or budget changed. Focused15pass; code lint and memory lint pass.
+The same FULL deferral quoted above remains; no broad session was opened.
+Earlier walkthrough evidence remains in `.development-artifacts/fh27-native-review-20261101/` and
+is historical, not current process acceptance. Required frontend: **799 files,9,519 passed /1 skipped**,
+376.83 s. All six delivered file hashes still match publication; final `git diff --check` passes.
+`frontend/src/main.js` delta0. No commit, simulation, broad-suite gate bypass or molecular promotion.
+
+Entry HEAD `a79ee35655b15a738e047aa807ad41b91724c1db`; baseline hashes/status are in
+`C/remaining-rollout-baseline-20261101.json`. Preserve unrelated shared changes, including API/VR/simulation/activity
+and memory hygiene. Task hunks in the mixed client/issues/memory files must not absorb other sessions' edits.
+`frontend/src/main.js` delta is zero. No staging, commit, push, stash, reset, restore, rebase or hook bypass was performed.
+Final ownership/cleanup inventory: `C/remaining-rollout-final-20261101.json`; unrelated baseline files remain unchanged.

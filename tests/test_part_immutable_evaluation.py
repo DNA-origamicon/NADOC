@@ -312,12 +312,14 @@ def test_preparation_refusal_is_actionable_and_preserves_retryable_job(immediate
     slot_available()
 
 
-def test_strict_http_reuses_jobs_and_never_returns_a_mutable_source(immediate):
+def test_strict_http_reuses_jobs_and_never_returns_a_mutable_source(immediate, monkeypatch):
     from fastapi.testclient import TestClient
     from backend.api.part_strict_http import StrictPartDispatch
+    from backend.api import part_immutable_geometry_publication as geometry
     from tests.test_part_strict_http import forbidden_app, JOBS, REVISION
 
     doc, source = immediate
+    monkeypatch.setattr(geometry, "ENABLED", False)
     with TestClient(StrictPartDispatch(forbidden_app), headers={"X-NADOC-Doc": doc}) as client:
         response = client.post(JOBS, json=body(source))
         assert response.status_code == 202, response.text
@@ -327,6 +329,8 @@ def test_strict_http_reuses_jobs_and_never_returns_a_mutable_source(immediate):
         published = client.post(f"{JOBS}/{identity}/commit")
         assert published.status_code == 200, published.text
         assert client.get(REVISION).json()["revision"] == published.json()["revision"]
-        assert client.get("/api/design").status_code == 403
+        display = client.get("/api/design")
+        assert display.status_code == 409
+        assert display.json()["detail"]["code"] == "immutable_geometry_unavailable"
         assert "design" not in published.json()
     assert revisions.is_prepared_revision(state._sessions[doc].design)

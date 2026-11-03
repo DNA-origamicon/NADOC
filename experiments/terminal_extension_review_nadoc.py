@@ -117,6 +117,7 @@ def cameras(bundle, assembly):
 
 
 def write_pair(design, bundle, output, stem, assembly, source_path):
+    raise ValueError('AGENT_PROCESS_REQUIRED: snapshot-only review publication is retired; use experiments.fh27_review_parts')
     # Establish that the saved all-atom specimen belongs to this exact graph and
     # placement, before adding review metadata / capturing its topology root.
     current = build_atomistic_model(design, frame_sink={})
@@ -223,6 +224,7 @@ def write_pair(design, bundle, output, stem, assembly, source_path):
 
 
 def main(source, review, two_hb, output, manifest):
+    raise ValueError('AGENT_PROCESS_REQUIRED: snapshot-only review publication is retired; use experiments.fh27_review_parts')
     names = ['Polymerized assembly', 'Tail phase 210']
     output.mkdir(parents=True, exist_ok=True)
     for name in names:

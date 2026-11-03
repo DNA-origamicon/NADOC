@@ -1056,7 +1056,7 @@ def _design_replace_response(
         # Tag with the rejecting field so the frontend perf log shows
         # why positions_only didn't fire (e.g. path:full_geometry_strands).
         trace._steps.append((f"path:full_geometry_{diff_field}", 0.0))
-    if diff_field in {"flexible_segment_marks", "nucleotide_transforms"} or design.flexible_connections:
+    if diff_field in {"flexible_segment_marks", "nucleotide_transforms", "atomistic_reference"} or design.flexible_connections:
         # Residue-pose changes need complete site-frame and inserted-base data;
         # compact coordinates alone would retain stale metadata after undo/seek.
         # The compact deformed arrays omit per-nuc metadata (see
@@ -6651,12 +6651,13 @@ def roll_active_to_job_state(
 
 @router.post("/design/features/{index}/revert", status_code=200)
 def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
-    """Restore the pre-state snapshot of feature_log[index] and TRUNCATE
-    feature_log to [0..index-1].
+    """Rebuild the prefix before feature_log[index] and truncate the history.
 
-    Valid for both ``SnapshotLogEntry`` (auto-op snapshots) and
-    ``RoutingClusterLogEntry`` (Fine Routing clusters). Returns 410 GONE if
-    the entry's snapshot bytes were evicted to free space.
+    Parts with an explicit recipe root execute their recorded inputs. Rootless
+    histories retain the snapshot recovery path below.
+
+    Rootless snapshot/routing histories return 410 GONE when their recovery
+    bytes are unavailable; native recipes do not require those bytes.
 
     ``sub_index`` (optional, query param) reverts to just BEFORE a single
     sub-step inside a Fine Routing cluster: children[0..sub_index-1] are kept,
@@ -6678,7 +6679,9 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     )
     from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
+    design, revision = design_state.get_design_with_revision()
+    if design is None:
+        raise HTTPException(404, detail="No design loaded")
     log = list(design.feature_log)
 
     if index < 0 or index >= len(log):
@@ -6688,6 +6691,12 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
         )
 
     entry = log[index]
+    if design.recipe_root is not None:
+        from backend.api.part_history_navigation import revert_recipe
+        restored = revert_recipe(design, index, sub_index)
+        report = validate_design(restored)
+        design_state.set_design(restored, expected_revision=revision)
+        return _design_replace_response(design, restored, report)
 
     # Per-sub-step revert inside a Fine Routing cluster.
     if sub_index is not None:
@@ -6915,10 +6924,11 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
                 + [c for c in snap_design.cluster_transforms if c.id in touched_clusters]),
         )
     from backend.core.sweep_edit import restore_follow_poses
-    from backend.core.part_overlay_recovery import restore_authored_fields
+    from backend.core.part_overlay_recovery import restore_authored_fields, restore_diagnostic_reference
     from backend.core.feature_history_clusters import restore_dissolve_fields
     design = restore_dissolve_fields(design, snap_design)
     design = restore_authored_fields(design, snap_design)
+    design = restore_diagnostic_reference(design, snap_design)
     if any(getattr(e, "op_kind", None) == "placement-poses"
            or getattr(e, "params", {}).get("reclassify_unpaired") for e in design.feature_log):
         # These snapshots own cluster poses or membership remapped by unpairing.
@@ -7194,7 +7204,14 @@ def _seek_snapshot_base(
     return _topology_substitute(design, snap_design)
 
 
-def _seek_feature_log(
+def _seek_feature_log(design: Design, position: int, sub_position: int | None = None,
+                      *, optimized: bool | None = None) -> Design:
+    from backend.api.part_history_navigation import seek_with_recovery
+    return seek_with_recovery(design, position, sub_position, _seek_feature_log_recovery,
+                              optimized=optimized)
+
+
+def _seek_feature_log_recovery(
     design: Design, position: int, sub_position: int | None = None,
     *, optimized: bool | None = None,
 ) -> Design:

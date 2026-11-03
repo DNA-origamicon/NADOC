@@ -170,3 +170,26 @@ def test_atom_record_accounting_preserves_exact_generic_admission_boundary(monke
     optimized = minimum_budget()
     monkeypatch.setattr(part_capture_copy, "seed_scalar_atom_copy", lambda *_args: None)
     assert minimum_budget() == optimized
+
+
+def test_complete_publication_copy_retains_history_display_and_cross_field_aliases():
+    from backend.api import state
+    from backend.core.models import SnapshotLogEntry
+    from backend.core.part_capture_copy import allocate_atom_copies
+
+    source = design_with_atoms()
+    source.feature_log = [SnapshotLogEntry(op_kind='nanoparticle-create', label='Retained',
+        params={'nested': [1]}, design_snapshot_gz_b64='opaque recovery')]
+    source.metadata.description = 'Preserve document state'
+    first = source.nanoparticles[0].coating.protein.atoms[0]
+    source.nanoparticles[0].coating.protein.metadata['fields'] = first.__dict__
+    expected = deepcopy(source)
+    copied = state._snapshot_copy(source, atom_copies=allocate_atom_copies(2))
+    assert copied == expected
+    protein = copied.nanoparticles[0].coating.protein
+    assert protein.atoms[0] is protein.atoms[1] is protein.metadata['first']
+    assert protein.atoms[0].__dict__ is protein.metadata['fields']
+    protein.atoms[0].x = 123
+    copied.feature_log[0].params['nested'].append(2)
+    assert first.x == 1
+    assert source.feature_log[0].params['nested'] == [1]

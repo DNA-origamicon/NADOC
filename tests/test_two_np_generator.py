@@ -9,7 +9,6 @@ from backend.api import state
 from backend.api.headless_build import scratch_session
 from backend.api.routes_generate_design import (
     generate_design,
-    plan_design,
     GenerateRequest,
 )
 from backend.api.two_np_build import materialize
@@ -156,113 +155,104 @@ def assert_materialized(d, original, roll=0):
         )
 
 
-@pytest.mark.slow
-def test_current_loadout_history_scrub_edit_revert_and_undo(monkeypatch):
-    # Saved v1 generator features retain their original dependent replay editor.
-    from functools import partial
-    from backend.api import routes_generate_design
-    from backend.api.generated_history import build_recorded
-    monkeypatch.setattr(routes_generate_design, "build_recorded", partial(build_recorded, standard=False))
-    from backend.api.headless_build import create_bundle
-    from backend.api.routes_design_loadouts import create_loadout, LoadoutCreateBody
-    from backend.api.crud import (
-        _seek_feature_log,
-        edit_feature,
-        EditFeatureBody,
-        revert_to_before_feature,
-    )
+@pytest.fixture
+def native_asset_client(monkeypatch):
+    # Reuse the actual generation job/commit harness, including job cleanup.
+    from tests.test_part_asset_routes import client
+    yield from client.__wrapped__(monkeypatch)
 
-    with scratch_session():
-        state.set_design(source())
-        create_bundle(
-            [(0, 0), (0, 1)], 42, lattice=LatticeType.HONEYCOMB, name="Existing DNA"
-        )
-        state.mutate_with_feature_log(
-            "nanoparticle-create",
-            "Place gold pair",
-            {},
-            lambda d: d.copy_with(nanoparticles=source().nanoparticles),
-        )
-        create_loadout(LoadoutCreateBody(name="Working loadout"))
-        original = state.get_or_404().model_copy(deep=True)
-        start = len(original.feature_log)
-        plan = plan_design(GeneratorSettings(roll_deg=53))
-        response = generate_design(
-            GenerateRequest(expected_revision=plan["revision"], roll_deg=53)
-        )
-        d = state.get_or_404()
-        assert d.loadouts == original.loadouts
-        assert d.active_loadout_id == original.active_loadout_id
-        assert d.feature_log[:start] == original.feature_log
-        assert len(d.feature_log) > 15
-        assert all(e.op_kind != "generate-design" for e in d.feature_log)
-        assert response["generation"]["connections"]
-        for h in original.helices:
-            assert d.find_helix(h.id) == h
-        for s in original.strands:
-            assert d.find_strand(s.id) == s
-        assert_materialized(d, original, 53)
-        fields = (
-            "helices",
-            "strands",
-            "nanoparticles",
-            "nanoparticle_conjugations",
-            "nanoparticle_connection_versions",
-            "duplexes",
-            "cluster_transforms",
-        )
-        for i, e in enumerate(d.feature_log):
-            expected = state.decode_design_snapshot(e.post_state_gz_b64)
-            scrubbed = _seek_feature_log(d, i)
-            for field in fields:
-                assert getattr(scrubbed, field) == getattr(expected, field), (i, field)
-            assert scrubbed.active_loadout_id == original.active_loadout_id
-        # Earlier parameter edit rebuilds every dependent command and retains
-        # feature identities, while unrelated DNA and loadout identity persist.
-        pose_index = next(
-            i
-            for i, e in enumerate(d.feature_log)
-            if e.params.get("_generator", {}).get("key") == "rod-pose"
-        )
-        feature_ids = [e.id for e in d.feature_log]
-        edit_feature(pose_index, EditFeatureBody(params={"roll_deg": 0}))
-        edited = state.get_or_404()
-        assert [e.id for e in edited.feature_log] == feature_ids
-        assert edited.active_loadout_id == original.active_loadout_id
-        assert_materialized(edited, original, 0)
-        before_failure = edited.model_dump_json()
-        revision = state.revision()
-        with pytest.raises(HTTPException) as error:
-            edit_feature(start, EditFeatureBody(params={"length_bp": 2016}))
-        assert error.value.status_code == 422
-        assert state.revision() == revision
-        assert state.get_or_404().model_dump_json() == before_failure
-        root_index = next(
-            i
-            for i, e in enumerate(edited.feature_log)
-            if e.op_kind == "overhang-extrude"
-        )
-        expected = state.decode_design_snapshot(
-            edited.feature_log[root_index].design_snapshot_gz_b64
-        )
-        revert_to_before_feature(root_index)
-        reverted = state.get_or_404()
+
+@pytest.mark.slow
+def test_current_loadout_history_scrub_edit_revert_and_undo(native_asset_client):
+    from backend.api.crud import _seek_feature_log, revert_to_before_feature
+    from backend.core.design_loadouts import encode_snapshot
+    from backend.core.models import DesignLoadout
+    from backend.api.headless_build import build_bundle
+    from tests.test_part_pending_np_connections import append, gold
+    from tests.test_native_asset_evaluation import worker, poison
+    from tests.test_part_asset_routes import publish, PATH
+    from backend.core.part_overlay_commands import command_input
+    from backend.api.part_proof_commands import execute
+
+    client = native_asset_client
+    original = build_bundle([(0, 0), (0, 1)], 42,
+        lattice=LatticeType.HONEYCOMB, name="Existing DNA")
+    for i, particle in enumerate(source().nanoparticles):
+        identity = f"gold-{i}"
+        original = append(original, 'nanoparticle-create', gold(identity), f'particle-{i}')
+        original = append(original, 'nanoparticle-patch', {'_proof_version': 1,
+            'nanoparticle_version': 1, 'nanoparticle_id': identity,
+            'pose': particle.pose.values}, f'pose-{i}')
+    payload, size = encode_snapshot(original)
+    loadout = DesignLoadout(id="main", name="Working loadout",
+        design_snapshot_gz_b64=payload, snapshot_size_bytes=size)
+    original = original.copy_with(loadouts=[loadout], active_loadout_id=loadout.id)
+    state.load_design(original)
+    start = len(original.feature_log)
+    generated = publish(client, "POST", "/api/design/generate-design", {
+        "expected_revision": state.revision(), "roll_deg": 53, "extend_rod": False})
+    assert generated.loadouts == original.loadouts
+    assert generated.active_loadout_id == original.active_loadout_id
+    # Replay regenerates recovery bytes; authored commands and identities stay exact.
+    inputs = {'id', 'op_kind', 'label', 'timestamp', 'params', 'suppressed'}
+    assert [e.model_dump(mode='json', include=inputs) for e in generated.feature_log[:start]] == [
+        e.model_dump(mode='json', include=inputs) for e in original.feature_log]
+    assert len(generated.feature_log) > 15
+    assert all(getattr(e, "op_kind", None) != "generate-design" for e in generated.feature_log)
+    assert len(generated.duplexes) == 2
+    for helix in original.helices:
+        assert generated.find_helix(helix.id) == helix
+    for strand in original.strands:
+        assert generated.find_strand(strand.id) == strand
+    assert worker(poison(generated), {"operation": "verify"})["status"] == "verified"
+    fields = ("helices", "strands", "nanoparticles", "nanoparticle_conjugations",
+              "nanoparticle_connection_versions", "duplexes", "cluster_transforms")
+    for i, entry in enumerate(generated.feature_log):
+        if entry.feature_type == 'snapshot':
+            expected = state.decode_design_snapshot(entry.post_state_gz_b64)
+        else:
+            # Transform rows are input-only; evaluate them over the prior stage.
+            kind, params = command_input(entry)
+            expected = execute(kind, expected, params)
+        scrubbed = _seek_feature_log(generated, i)
         for field in fields:
-            assert getattr(reverted, field) == getattr(expected, field)
-        assert len(reverted.feature_log) == root_index
-        assert reverted.active_loadout_id == original.active_loadout_id
-        state.undo()
-        assert state.get_or_404().model_dump() == edited.model_dump()
-        revert_to_before_feature(start)
-        assert state.get_or_404().model_dump() == original.model_dump()
-        state.undo()
-        revert_to_before_feature(start + 1)
-        edit_feature(start, EditFeatureBody(params={"length_bp": 42}))
-        partial = state.get_or_404()
-        assert len(partial.feature_log) == start + 1
-        assert partial.feature_log[-1].params["length_bp"] == 42
-        assert not partial.nanoparticle_conjugations
-        assert partial.active_loadout_id == original.active_loadout_id
+            assert getattr(scrubbed, field) == getattr(expected, field), (i, field)
+        assert scrubbed.active_loadout_id == original.active_loadout_id
+
+    index = next(i for i, e in enumerate(generated.feature_log)
+                 if getattr(e, "op_kind", None) == "nanoparticle-conjugate")
+    edited = publish(client, "POST", PATH, {"operation": "edit", "index": index,
+        "params": {"spacer_nm": .8}, "expected_revision": state.revision()})
+    assert [e.id for e in edited.feature_log] == [e.id for e in generated.feature_log]
+    assert edited.active_loadout_id == original.active_loadout_id
+    assert worker(poison(edited), {"operation": "verify"})["status"] == "verified"
+    state.undo()
+    assert state.get_or_404().model_dump() == generated.model_dump()
+    state.redo()
+    assert state.get_or_404().model_dump() == edited.model_dump()
+
+    before, revision, depth = state.get_or_404(), state.revision(), state.undo_depth()
+    response = client.post(PATH, json={"operation": "edit", "index": start,
+        "params": {"length_bp": 0}, "expected_revision": revision})
+    assert response.status_code == 202, response.text
+    failed_job = response.json()["job_id"]
+    result = client.get(f"{PATH}/{failed_job}").json()["result"]
+    assert result["status"] != "ready", result
+    assert state.get_or_404() is before and state.revision() == revision
+    assert state.undo_depth() == depth
+
+    revert_to_before_feature(start)
+    reverted = state.get_or_404()
+    for field in fields:
+        assert getattr(reverted, field) == getattr(original, field)
+    assert len(reverted.feature_log) == start
+    assert reverted.loadouts == original.loadouts
+    assert reverted.active_loadout_id == original.active_loadout_id
+    assert worker(poison(reverted), {"operation": "verify"})["status"] == "verified"
+    state.undo()
+    assert state.get_or_404().model_dump() == edited.model_dump()
+    state.redo()
+    assert state.get_or_404().model_dump() == reverted.model_dump()
 
 
 @pytest.mark.slow

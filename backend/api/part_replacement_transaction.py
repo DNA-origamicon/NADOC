@@ -8,7 +8,7 @@ the complete bounded undo/redo stacks. There is still only one undo snapshot.
 from backend.api import doc_context
 
 
-def publish_replacement(session, candidate, *, publication_permit=None):
+def publish_replacement(session, candidate, *, publication_permit=None, atom_copies=None, model_copies=None):
     from backend.api import state
     from backend.api import part_publication_permit as permits
     from backend.api.part_group_organization_gate import require_group_publication
@@ -37,7 +37,9 @@ def publish_replacement(session, candidate, *, publication_permit=None):
         from fastapi import HTTPException
         raise HTTPException(409, detail={"code": "immutable_publication_scope", "detail": "Immutable content requires a registered publication permit"})
     next_history = retained_history(session, candidate, max_steps=state.MAX_UNDO_STEPS) if immutable else None
-    snapshot = state._snapshot_copy(before) if before is not None and not immutable else None
+    snapshot = (state._snapshot_copy(before, **({'atom_copies': atom_copies} if atom_copies is not None else {}),
+                    **({'model_copies': model_copies} if model_copies is not None else {}))
+                if before is not None and not immutable else None)
     history, redo = list(session.history), list(session.redo)
     revision = session.revision
     request_revision = doc_context.current_request_revision()

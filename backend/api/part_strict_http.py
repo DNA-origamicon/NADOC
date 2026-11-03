@@ -40,6 +40,10 @@ def _strict_application():
         cancel_part_evaluation, commit_part_evaluation, get_part_evaluation, start_part_evaluation,
     )
     from backend.api.part_strict_geometry_http import definitions as geometry_definitions
+    from backend.api.part_strict_deformation_preview_http import definitions as preview_definitions
+    from backend.api.part_immutable_display_reads import definitions as display_definitions
+
+    from backend.api.part_strict_service_reads import definitions as service_definitions
 
     definitions = (
         (_EMPTY, "POST", create_registered_empty, 201, MAX_EMPTY_BYTES),
@@ -51,7 +55,7 @@ def _strict_application():
         (_JOBS + "/{job_id}", "GET", get_part_evaluation, 200, 0),
         (_JOBS + "/{job_id}", "DELETE", cancel_part_evaluation, 200, 0),
         (_JOBS + "/{job_id}/commit", "POST", commit_part_evaluation, 200, 0),
-    ) + geometry_definitions()
+    ) + geometry_definitions() + preview_definitions() + display_definitions() + service_definitions()
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, redirect_slashes=False)
     matches = []
     for path, method, endpoint, status, limit in definitions:
@@ -202,8 +206,16 @@ class StrictPartDispatch:
             return
         context = StrictRequestContext(doc, selected.generation)
         from backend.api import part_strict_geometry_http as geometry
+        from backend.api import part_strict_deformation_preview_http as preview
+        from backend.api import part_immutable_display_reads as display
         geometry_context = None
-        if path.startswith(geometry.PREFIX + '/'):
+        if path in preview.PATHS:
+            try:
+                geometry_context = preview.capture_context(doc, selected.generation)
+            except HTTPException as error:
+                await JSONResponse({'detail': error.detail}, status_code=error.status_code)(scope, receive, send)
+                return
+        elif path in display.PATHS or path.startswith(geometry.PREFIX + '/'):
             try:
                 geometry_context = geometry.capture_context(doc, selected.generation,
                     recovering=path in {geometry.PREFIX + '/recovery/jobs', geometry.PREFIX + '/empty'})

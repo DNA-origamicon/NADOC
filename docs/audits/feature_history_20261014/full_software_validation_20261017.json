@@ -1,0 +1,400 @@
+{
+  "date": "2026-10-17",
+  "baseline": "96ab701e",
+  "command": "NADOC_TEST_CONFIRM=1 just validate-safe just test",
+  "duration_seconds": 2334.68,
+  "passed": 19852,
+  "failed": 38,
+  "skipped": 31,
+  "errors": 28,
+  "warnings": 3372,
+  "complete_software_pass": false,
+  "scientific_campaigns_requested": false,
+  "full_rerun_after_repairs": false,
+  "entries": [
+    {
+      "status": "FAILED",
+      "node": "tests/test_connection_owner_selection.py::test_creator_dependency_and_independent_worker_after_edit",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_native_protein_free_import.py::test_broken_prefix_and_draft_remain_diagnosable_without_whole_prefix_proof",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_part_routing_worker.py::test_real_spawned_prefix_and_edit_close_unlink_and_publish_once",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_mrdna_pipeline.py::TestSyntheticRoundTrip::test_zero_step_position_accuracy",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_part_immutable_deformation.py::test_real_worker_bend_and_upstream_edit",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_benchmark.py::test_namd_benchmark_completes_end_to_end_on_a_6hb",
+      "category": "benchmark_timeout_and_teardown"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_atomistic_validation.py::test_audit_trajectory_frames_catches_bad_frame",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_native_streptavidin_proof.py::test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery[adsorption]",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_part_strict_geometry_http.py::test_real_http_workers_and_durable_acknowledgement",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface-detail]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_headless_corner_build.py::test_fold_optimizer_reduces_clashes_and_beats_reference",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_part_immutable_transform.py::test_transform_append_edit_tail_save_undo_recover[nucleotide-transform-delete]",
+      "category": "worker_or_capture_budget",
+      "serial_rerun": "passed unchanged limits; concurrent acceptance remains open"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_surface_visual_regression.py::test_fine_surface_invariants[VoltronCore]",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_generator_connections.py::test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_branch_optimizer.py::test_screened_i_uses_full_scaffold_and_closes_three_connections_per_particle",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_vr_startup.py::test_launch_starts_viewer_before_scheduling_export",
+      "category": "unit_test_host_dependency",
+      "serial_rerun": "passed after test-only platform stub"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_joined_branches.py::test_generate_join_branches_with_history_without_cando[4np-auto]",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_joined_branches.py::test_generate_join_branches_with_history_without_cando[4np-7249]",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "FAILED",
+      "node": "tests/test_joined_branches.py::test_generate_join_branches_with_history_without_cando[4np-8064]",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_gpu_npt_context_v4.py",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_gpu_npt_context_v4.py",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_gpu_npt_context_v4.py",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_gpu_npt_context_v4.py",
+      "category": "missing_scientific_evidence"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-line-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-line-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-s-curve-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-s-curve-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-arc-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[8-arc-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-line-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-line-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-s-curve-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-s-curve-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-arc-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[11-arc-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-line-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-line-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-s-curve-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-s-curve-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-arc-variable_fast]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_unstable_profiles_remove_wandering_and_preserve_curve[15-arc-variable_deliberate]",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_vr_sweep_calibration.py::test_physical_smoothing_is_consistent_across_zoom",
+      "category": "missing_native_dependencies"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_benchmark.py::test_namd_benchmark_completes_end_to_end_on_a_6hb",
+      "category": "benchmark_timeout_and_teardown"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+      "category": "geometry_or_recipe_assertion"
+    },
+    {
+      "status": "ERROR",
+      "node": "tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry",
+      "category": "geometry_or_recipe_assertion"
+    }
+  ],
+  "frontend": {
+    "command": "just test-frontend",
+    "files_passed": 770,
+    "passed": 9271,
+    "skipped": 1,
+    "duration_seconds": 362.08,
+    "unhandled_error_report": false,
+    "canvas_context_diagnostics": 663
+  },
+  "focused_distinct_passes": 88,
+  "focused_worker_capture_failures_all_passed_serially": true,
+  "full_debt_cleared": false,
+  "final_remote_live_frame": {
+    "passed": 37,
+    "warnings": 2,
+    "duration_seconds": 3.36
+  },
+  "cleanup": {
+    "removed_roots": [
+      "/tmp/pytest-of-joshua/pytest-12",
+      "/tmp/pytest-of-joshua/pytest-13",
+      "/tmp/pytest-of-joshua/pytest-14"
+    ],
+    "files": 42,
+    "bytes": 159672,
+    "protected_preexisting_daemons_not_inspectable": [
+      {
+        "pid": 428,
+        "create_time": 1792270171.24,
+        "name": "systemd",
+        "username": "joshua"
+      },
+      {
+        "pid": 430,
+        "create_time": 1792270171.25,
+        "name": "(sd-pam)",
+        "username": "joshua"
+      }
+    ],
+    "retained_logs": {
+      "backend.log": 549052,
+      "remote_final.log": 1602,
+      "frontend.log": 231465,
+      "focused.log": 15725
+    }
+  }
+}

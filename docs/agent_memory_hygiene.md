@@ -17,6 +17,10 @@ Use this rubric when auditing `CLAUDE.md`, `memory/`, `.claude/rules/`, runbooks
 2. Resolve errors immediately. Treat size warnings as an ordered migration queue, largest first.
 3. When a head passes 200 lines, move dated/resolved narrative to its matching archive. Keep current
    state, binding invariants, open decisions, next actions, and verification evidence in the head.
+   Split extensive current contracts into named `memory/details/<topic>/` pages, linked from the
+   existing head; these obey the same 200-line target. Reserve `*_archive.md` for dated history,
+   not as a size exemption for active instructions. Preserve original heading destinations or
+   update inbound links, rebase relative paths, and verify content preservation after moving it.
 4. Add a new topic to `memory/MEMORY.md` as a Markdown link. Do not put its changing project status
    in the index unless that status is necessary for routing.
 5. Record a recurring failure as one symptom hook in `LESSONS.md` and its full evidence in

@@ -144,6 +144,11 @@ class SnupiJob:
 
         path = resolve_job_json(workspace_dir, "snupi_jobs", job_id)
         data = json.loads(path.read_text())
+        return cls.from_metadata(data)
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "SnupiJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = SnupiStatus(data["status"])
         data["stages"] = [SnupiStageStatus(**s) for s in data.get("stages", [])]
         data.setdefault("pid", None)

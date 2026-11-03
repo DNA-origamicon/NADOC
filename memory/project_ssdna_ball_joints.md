@@ -9,6 +9,12 @@ metadata:
 
 # Flexible ssDNA segments + real-time "ssDNA constrained" drag
 
+## Topic navigation and current boundaries
+
+Reorganized October 17, 2026. Read the retained contracts here, then only the
+matching detail below. Dated results and old handoffs are not new verification
+or authorization; current user instructions and `CLAUDE.md` take precedence.
+
 Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run bridging two **existing** clusters becomes a fixed-contour-length `FlexibleConnection`. The move/rotate tool gains an **"ssDNA constrained"** pivot option (enabled only when every inter-cluster connection from the selected cluster is flexible); dragging the cluster is clamped per-frame so no tether exceeds its contour length ("free until taut"), and the segment renders as a fixed-length geometric arc. Display-layer only — NEVER mutates topology. Plan: `~/.claude/plans/we-want-to-create-indexed-pancake.md`.
 
 **REPLACED the earlier auto-cut "ball joint" approach** (mark beads → derive new arms → Powell solve). The user found that paradigm wrong. Rigid arms are now the user's OWN clusters; no auto-cut, no solver, no new clusters. (Old `ball_joint_arms.py`/`ball_joint_solve.py` deleted; `ClusterRigidTransform.kind` removed.)
@@ -28,233 +34,53 @@ Mark a contiguous run of UNPAIRED beads as a flexible tether. Each marked run br
   - `main.js`: `_flexibleRunForBead` (contiguous unpaired run on the strand around the clicked bead → mark/unmark the whole run via batch replace). Move/rotate pivot dropdown gains "ssDNA constrained" when `_flexGates[clusterId].gate` (fetched via `_refreshFlexGates` on tool open / cluster switch); selecting it calls `clusterGizmo.setConstraint('ssdna', {connections, resolveWorldPos})` via `_buildSsdnaPayload`.
   - `cluster_gizmo.js`: `setConstraint('ssdna', {connections, resolveWorldPos})` (reuses normal translate/rotate TC — projection only). Armed at drag start (`_ssArmed` = per-tether {pM0 cloned, pF cloned, contour}). `_projectSsdnaConstraints()` runs in the `'change'` handler after `_incrQuat`: PBD rigid solve (6 iters), each iter = rotation about pivot from tether torque (clamped 0.25 rad/iter) + residual translation, gain 0.6. Candidate moving-anchor pos = `incrQuat·(pM0−startDummyPos)+dummyPos`. Free until taut (skips slack tethers). 1 taut → slide on sphere; 2+ → rotation about the taut-anchor line (emergent hinge axis). **The torque-rotation is a linearised no-SVD approx — most likely piece to need tuning.**
 
-## mini_hinge.nadoc (worked example, verified)
-2 clusters, 0 inter-cluster crossovers, 4 inter-cluster forced ligations (extra_bases=None); each FL adjacent to an unpaired scaffold run (2× 2-nt on C2 helices bp22-23; 2× 16-nt on C1 helices bp8-23). Marking all 4 runs → 4 connections C1↔C2, both gates True (0 rigid). Short 2-nt tethers go taut first (hinge line); 16-nt loose.
+<a id="mini_hingenadoc-worked-example-verified"></a>
+- [mini_hinge.nadoc (worked example, verified)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#mini_hingenadoc-worked-example-verified)
 
-## Verification (2026-05-30)
-Backend: 11 tests in `tests/test_flexible_segments.py` (incl. three-layer guard: apply_marks leaves strands/helices/crossovers/forced_ligations/cluster_transforms byte-identical; real mini_hinge → 4 conns + gates). Full suite 1637 passed; the 2 router failures are pre-existing test-isolation flakiness (test_seamed pre-existing; test_seamless passes alone, fails after seamed — my test-file rename shifted collection order). Live HTTP on mini_hinge: load→batch mark→4 conns/gates True→is_flexible_segment flags→paired rejected→clear. Frontend build + 33 vitest pass. **NOT human-verified in browser**: the arc visual + the real-time constrained drag dynamics (the PBD projection gains/oscillation). Needs an eyeball pass.
+<a id="verification-2026-05-30"></a>
+- [Verification (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#verification-2026-05-30)
 
-## "Drawstring" arc fix (2026-05-30)
-The straight blue chord across a flexible run is the **unfold_view cross-helix backbone arc** (`getCrossHelixConnections`, built from byStrand consecutive cones). Root cause: helix_renderer excludes flexible beads from `byStrand`, so the run's two RIGID anchors become ADJACENT → a cross-helix cone bridges them → a chord arc (the cone itself is r=0/invisible; the visible line is the unfold arc). The chord's endpoints exactly equal the FlexibleConnection's `anchor_a`/`anchor_b` (anchors = the byStrand-flanking rigid beads, reached via backbone/FL edges). Fixed in `unfold_view.js _reapplyArcHidden`: hide arcs whose endpoint PAIR matches a flexible connection's anchor pair (resolve anchor→helix:bp:dir via strands), plus the touches-a-flexible-bead rule, reusing the existing hidden-arc collapse path. (First attempt only hid arcs *touching* a flexible bead — missed the chord because its endpoints are rigid anchors.) `flexible_arcs.js` draws that connection as the bowed arc, so nothing is lost.
+<a id="drawstring-arc-fix-2026-05-30"></a>
+- ["Drawstring" arc fix (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#drawstring-arc-fix-2026-05-30)
 
-## Axis-stick suppression over flexible regions (2026-05-30)
-The helix axis line still ran straight through a flexible run (beads bow away → stray straight axis). Fixed in `backend/core/deformation.py`: `_segments_for_helix` now carves flexible bp ranges out of each scaffold-domain axis segment via `_flexible_bps_on_helix` (marks→(helix,bp)) + `_split_segment_by_bps` (splits [bp_lo,bp_hi] into rigid runs, drops fully-flexible). Backend-only — the frontend already renders one cylinder per `axDef.segments` entry, so carved ranges just have no stick. Splitting also yields >1 segment → curved helices take the per-segment path (skips the single full-helix shaft). Verified on mini_hinge (h_XY_1_1 bp8-23 carved → axis 24-47). NOTE: mini_hinge.nadoc on disk now has 36 marks + 4 connections saved (user testing).
+<a id="axis-stick-suppression-over-flexible-regions-2026-05-30"></a>
+- [Axis-stick suppression over flexible regions (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#axis-stick-suppression-over-flexible-regions-2026-05-30)
 
-## Base slabs on the flexible arc (2026-05-30)
-`flexible_arcs.js _drawArc` draws synthetic ball-and-slab decorations at each arc bead (formerly tube + spherical beads only). One `InstancedMesh(GEO_SLAB)` is used per connection with Box 0.30×0.06×0.70 and a fixed `SLAB_DISTANCE` of 0.55. This arc-only offset is independent of the canonical duplex solver in `helix_renderer.js` and must not be copied back into it. The arc base-normal faces the arc's **centre of curvature**. Per bead: tangent = `pts[i+2]-pts[i]`; arc plane normal `planeN = cross(chordDir, bow)`; `bn = cross(planeN, tan)`, negated if `bn·bow>0` (bow points outward, away from centre). Display-only, no topology touch. Verified: standalone geometry check → bn·toCenter=1.000, bn·tangent=0.000 for all beads. **NOT yet eyeballed in browser** (servers were down).
+<a id="base-slabs-on-the-flexible-arc-2026-05-30"></a>
+- [Base slabs on the flexible arc (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#base-slabs-on-the-flexible-arc-2026-05-30)
 
-## Feature-log + right-click-arc unmark (2026-05-30)
-- **Feature log**: mark/unmark/batch routes now go through `state.mutate_with_feature_log` (op_kinds `flexible-segment-mark` / `flexible-segment-unmark`, added to `SnapshotOpKind`) → a `SnapshotLogEntry` that is revertable (`POST /design/features/{i}/revert` rolls marks back) and deletable (`DELETE /design/features/{i}` forgets the row but KEEPS state — app-wide delete convention, like deleting an auto-break keeps nicks). Replaced the old `set_design`-based `_flex_response` with `_flex_log_response`. Tests: `test_api_mark_adds_feature_log_entry_and_reverts`, `test_api_mark_feature_log_deletable`.
-- **Right-click the bowed arc to unmark**: flexible arc beads are excluded from rigid meshes (not in backboneEntries), so they weren't pickable. `flexible_arcs.js` now tags each tube/bead mesh with `userData.connectionId` and exposes `hitTest(x,y,cam,canvas)`. `selection_manager.js` (opt `getFlexibleArcs`) hit-tests it when no rigid bead is frontmost → `_showFlexibleConnectionMenu` ("Unmark as flexible" / "Clear all"). `main.js onFlexibleSegmentRightClick` handles `unmark_connection` (extra=connId): drops the connection's `segment_bead_keys` marks via batch-replace. (Left-click selection/highlight not separately wired — pickable for the context menu only.)
+<a id="feature-log--right-click-arc-unmark-2026-05-30"></a>
+- [Feature-log + right-click-arc unmark (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#feature-log--right-click-arc-unmark-2026-05-30)
 
-## Undo fix (2026-05-30)
-Mark-then-undo deleted the segment: `_design_replace_response` (used by undo/redo/seek/revert) took the `positions_only` fast path for a marks-only diff (topology unchanged), which omits per-bead `is_flexible_segment`. Result: beads stayed excluded with a stale flag while `flexible_connections` cleared → segment invisible. Fixed in `crud.py`: (1) `_topology_diff_field` now returns `"flexible_segment_marks"` when marks differ → forces full geometry; (2) `_design_replace_response` special-cases that field to ship the **per-nuc** form (`compact_deformed=False`) — the compact arrays also omit `is_flexible_segment`, so per-nuc is required for beads to re-classify. Tests: `test_marks_change_forces_full_geometry`, `test_undo_mark_restores_rigid_beads`.
+<a id="undo-fix-2026-05-30"></a>
+- [Undo fix (2026-05-30)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#undo-fix-2026-05-30)
 
-## Undo fix #2 — non-marks topology change drops the flag (2026-06-07)
-Sibling of the 2026-05-30 fix, different trigger. Symptom: a flexible **scaffold** run renders RIGID after "Generate OH binding strand" → **undo** (remaking the binder fixes it). Root cause: the 2026-05-30 guard only forced per-nuc geometry when the diff field was `flexible_segment_marks`. But generate-binder is a **strand** change (marks unchanged), so its undo routes `_design_replace_response` to the final `compact_deformed=True` path — and `_compact_geometry_from_nucleotides` omits `is_flexible_segment` (it ships bp/bb/bs/bn/at/sid/stype/is5/is3/did/ohid/extid/ismod/mod/base only). Flag dropped → beads re-classify rigid. NOT a scaffold-routing bug (the user's hypothesis) — purely the undo/redo/seek response compaction. Forward generate-binder uses `_design_response_with_geometry(...)` default (`compact_deformed=False`) so it looks correct; only the replace path compacts. Fix (`crud.py` ~2333): broadened the guard to `diff_field == "flexible_segment_marks" or design.flexible_connections` → any replace whose TARGET still has connections ships per-nuc. Test: `test_topology_change_replace_keeps_flexible_flag` (pin proven: fails on stashed crud.py shipping `nucleotides_compact`). `just test` 1747 passed (1 pre-existing seamed→seamless isolation flake, passes alone).
+<a id="undo-fix-2--non-marks-topology-change-drops-the-flag-2026-06-07"></a>
+- [Undo fix #2 — non-marks topology change drops the flag (2026-06-07)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#undo-fix-2--non-marks-topology-change-drops-the-flag-2026-06-07)
 
-## Relax command (right-click → "Relax", 2026-05-31)
+<a id="relax-command-right-click--relax-2026-05-31"></a>
+- [Relax command (right-click → "Relax", 2026-05-31)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#relax-command-right-click--relax-2026-05-31)
 
-**BUG (fixed 2026-05-31): relax entry not appearing + "nothing saving".** Root cause was a one-line client.js omission: `relaxFlexibleSegments` returned the raw `_request(...)` result WITHOUT calling any sync function (`_syncFromDesignResponse` / `_syncClusterOnlyDiff` / `_syncPositionsOnlyDiff`). Every other mutation endpoint in client.js calls one of these; mine was the sole exception. Consequence: the backend created the feature-log entry and applied the transform correctly (verified live: feature_log 12→13, op_kind `flexible-relax`, snapshot type), but the frontend STORE's `currentDesign` (which holds `feature_log`) was never updated → the panel showed no entry and `persistDesign()` never ran ("nothing saving"). Fix: mirror `relaxBond` — `await` the request then branch on `diff_kind` (cluster_only/positions_only) else `_syncFromDesignResponse(json)`. Since the endpoint uses `_design_response_with_geometry` (no diff_kind), it takes the full-sync path. **NOTE: the feature-log panel has NO op_kind allowlist — it renders any `feature_type === 'snapshot'` via `entry.label || entry.op_kind` (panel line ~1219). Earlier theories about a `KNOWN_SNAPSHOT_OPS`/`SNAPSHOT_LABELS` registry in feature_log_panel.js were WRONG — those symbols don't exist; no panel change is needed for a new snapshot op_kind.**
-Right-click a flexible bead (when marked) OR the bowed arc → **"Relax this segment"** / **"Relax all flexible segments"** (in `selection_manager.js` `_showFlexibleSegmentMenu` + `_showFlexibleConnectionMenu`; routed via `onFlexibleSegmentRightClick(nuc, 'relax_one'|'relax_all', connId?)`). Pulls the SMALLER cluster of each flexible-connected pair in until no tether exceeds its contour length (taut at 0.59 nm/base — the existing `contour_length_nm`; slack tethers untouched). **Single flexible region between a pair → translate only** (a lone tether has no rotation basis); **multiple regions → translate + rotate** (emergent from the PBD).
-- **Reuses the existing constrained-drag PBD headlessly.** `cluster_gizmo.js relaxClusterHeadless(clusterId, {connections, resolveWorldPos, translateOnly})` sets up a math-only `_dummy`/`_pivot` from the cluster's current+pending transform (NO TransformControls widget, NOT added to scene) then calls internal `relaxSsdna(...)`: mirrors a drag start→change→end — captureBase, snapshot start pose, arm tethers from current live anchor positions, run `_projectSsdnaConstraints` to convergence (`_maxSsViolation()` < 1e-3 nm, ≤80 outer iters), fire `onLiveTransform`+`onTransformUpdate` (paints preview) + `_recordCurrentTransform` (queues a PENDING transform — overwritten per cluster, never double-counts across sweeps). `translateOnly` gates the rotation pass via `_ssTranslateOnly`. `getAllPendingTransforms()` reads them back.
-- **main.js `_relaxFlexible(scope, connId)`**: groups connections by unordered cluster pair; per pair picks the smaller cluster (`_clusterBeadCount` = backbone beads on its helices) as mover, `translateOnly = (conns in pair === 1)`, skips if not overstretched (chord > contour + 0.05 nm). Solves all pairs headlessly accumulating pending (scope `all` sweeps ≤8× Gauss-Seidel — handles chains heuristically; toasts if residual remains), then commits ALL moved clusters in **ONE atomic call** `api.relaxFlexibleSegments(transforms, label)` → `POST /design/flexible-relax`. Helpers `_connIdForBead`, `_buildRelaxPayload`, `_clusterBeadCount` next to `_buildSsdnaPayload`. **Display/pose-layer only** — no topology mutation.
-- **Atomic feature-log commit (revertable + deletable + single undo, BOTH scopes).** `POST /design/flexible-relax` (crud.py, body `{transforms:[{cluster_id,pivot,translation,rotation}], label}`) applies all transforms via `mutate_with_feature_log('flexible-relax', …)` → ONE `SnapshotLogEntry` (op_kind `'flexible-relax'` added to `SnapshotOpKind`). Snapshot entries are generically revertable (`POST /design/features/{i}/revert` restores pre-state), deletable (`DELETE …` forgets the row, keeps the relaxed pose — app-wide convention), and a single undo/redo reverses ALL moved clusters at once. Ships full geometry (`_design_response_with_geometry`) so the frontend re-renders the committed pose (replacing the live-paint preview). **Replaced** the earlier per-cluster `_confirmTranslateRotateTool`/`cluster_op` commit (that produced N entries + N undos for relax-all and could double-commit across sweeps).
-- **Undo/redo arc-sync fix (2026-05-31).** Relax commits via the full-geometry endpoint, but its UNDO/REDO (and revert→undo) restores only `cluster_transforms` → backend classifies a `cluster_only` diff → frontend `_applyClusterUndoRedoDeltas` (main.js, Plan-B fast path) moves beads imperatively and **skips geometry**. The flexible arcs are anchor-derived, and the `currentDesign` subscriber's `flexibleArcs.rebuild` fires BEFORE the bead delta is applied → arcs rebuilt from stale positions → "cluster snaps to relaxed pose but arcs stay pre-relaxed." Fix: added `flexibleArcs?.rebuild?.(cd)` to the anchor-derived-overlay refresh block at the tail of `_applyClusterUndoRedoDeltas` (after `commitClusterPositions` + axis rebake), same place bridges/hulls/overhang overlays are re-emitted. This is the [[#D3]] Plan-B pattern (re-emit anchor-derived geometry in the cluster reconcile path) — flexible arcs were the missing consumer. Covers both revert→undo and direct undo/redo of a relax.
-- **Verified 2026-05-31**: solver math (translate-only single tether → pure 4 nm slide, 0° rotation; two tethers → rotation convergence to contour, residual <1e-3) via node replica; backend `tests/test_flexible_segments.py` +7 relax tests (apply/one-entry, revert, delete-keeps-state, undo/redo, multi-cluster→one-entry-one-undo, 404, 400) — full suite 1653 passed (2 pre-existing seamed/seamless router failures, unrelated); frontend build + 33 vitest; **live server round-trip**: load mini_hinge → relax → translation applied + `snapshot/flexible-relax` entry → undo restores. **Interactive right-click→menu path NOT eyeballed in browser** (LESSONS H7 — can't drive 3D context menu headlessly); needs a manual pass on an overstretched flexible design.
+<a id="imported--overlapping-cluster-fix-2026-06-01"></a>
+- [Imported / overlapping-cluster fix (2026-06-01)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#imported--overlapping-cluster-fix-2026-06-01)
 
-## Imported / overlapping-cluster fix (2026-06-01)
+<a id="headless-relax-port--jspython-parity-af-29-2026-06-25"></a>
+- [Headless relax port + JS↔Python parity (AF-29, 2026-06-25)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#headless-relax-port--jspython-parity-af-29-2026-06-25)
 
-**BUG: marked flexible segments vanished on imported structures** (`Ultimate Polymer Hinge2.nadoc`). Root cause was NOT import parsing — it was cluster-ownership resolution against **overlapping auto-detected clusters**. cadnano import + cluster autodetect produces a large scaffold-spanning cluster ("Scaffold Cluster 1", 74/75 helices) ON TOP OF the smaller geometry clusters that are the real rigid arms. `_owning_cluster_id` gave every helix-level match the same score and, on a tie, kept the **first cluster in the list** — the spanning scaffold cluster — for BOTH ends of a marked run. Both anchors collapsed onto one cluster → `len(rigid_nb) < 2` → 0 connections → beads excluded from rigid mesh ([[helix_renderer `_isFlexibleSegmentNuc`]]) with no arc drawn → "disappeared". File on disk had 30 marks / 0 connections. mini_hinge worked only because its 2 clusters didn't overlap.
+<a id="duplex-child-cluster-must-be-transparent-to-the-ssdna-gate-2026-07-01"></a>
+- [Duplex-child cluster must be TRANSPARENT to the ssDNA gate (2026-07-01)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#duplex-child-cluster-must-be-transparent-to-the-ssdna-gate-2026-07-01)
 
-Three-part fix (all Layer-3 display, no topology touched):
-- **A — `_owning_cluster_id` tie-break** (`flexible_segments.py`): among equal-score matches prefer the **fewest-helix** cluster (`key=(score, -len(helix_ids))`). Each anchor now resolves to its own geometry arm (Geo 1 / Geo 2) instead of the shared scaffold cluster → connection forms. Geometry clusters are the intended rigid arms (user-confirmed); the spanning scaffold cluster is just a convenience grouping.
-- **A.5 — recompute connections on load/import** (`crud.py` `load_design`+`import_design` → new `_recompute_flexible_connections` helper calling `apply_marks`). `flexible_connections` is a derived cache; load previously trusted the stored (stale, 0) value, so the fix wouldn't take effect on existing files without re-marking. Now self-corrects on load (idempotent, only when marks present). Sits with the other "self-correct on load" passes (`autodetect_all_overhangs`, `_backfill_sub_domains_if_empty`).
-- **B — safety net**: `is_flexible_segment` per-bead flag in `_strand_nucleotide_info` is now driven by **connection membership** (`flexible_connections[].segment_bead_keys`), NOT raw marks. A mark that forms no connection leaves its bead rigid-rendered → marking can NEVER silently delete geometry. The right-click Mark/Unmark menu reads raw `flexible_segment_marks` (not the flag), so an unconnected mark is still unmarkable.
+<a id="connected-overhangs-as-move-constraints--constrained-tethers-2026-07-01"></a>
+- [Connected overhangs as move constraints — "Constrained (tethers)" (2026-07-01)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#connected-overhangs-as-move-constraints--constrained-tethers-2026-07-01)
 
-Tests: `test_flexible_segments.py` 24 pass (updated `test_api_mark_requires_unpaired` + `test_undo_mark_restores_rigid_beads` to mark the full bridging run via batch — single mid-run mark now correctly yields no flag; added `test_unconnected_mark_leaves_bead_rigid`). **Verified via TestClient load of the real file**: 30 marks → 1 connection (Geo1↔Geo2, 30 beads, 17.7 nm) recomputed on load → exactly 30 `is_flexible_segment` beads in geometry. **NOT eyeballed in browser** (arc draw is existing tested `flexible_arcs.js`). Full suite: 6 pre-existing failures unrelated to this change (WIP `auto_crossover` 21-nt filter + staple_scoring WIP + documented seamed/seamless isolation flakes).
+<a id="movable-link-tethers-duplexds-linker-swing-live-during-a-drag-2026-07-01"></a>
+- [Movable-link tethers: duplex/ds-linker swing live during a drag (2026-07-01)](details/project_ssdna_ball_joints/01-mini_hingenadoc-worked-example-verified.md#movable-link-tethers-duplexds-linker-swing-live-during-a-drag-2026-07-01)
 
-## Headless relax port + JS↔Python parity (AF-29, 2026-06-25)
+<a id="unified-scaffold-context-menu-2026-07-01"></a>
+- [Unified scaffold context menu (2026-07-01)](details/project_ssdna_ball_joints/02-unified-scaffold-context-menu-2026-07-01.md#unified-scaffold-context-menu-2026-07-01)
 
-The relax PBD solver (`relaxSsdna`/`_projectSsdnaConstraints`/`_maxSsViolation` in `cluster_gizmo.js`) was **JS-only** — `POST /design/flexible-relax` just *applies* pre-computed transforms, so a headless script could not COMPUTE a relax (blocked automated hinge-angle testing). Now there is a faithful Python port: **`backend/core/flexible_relax.py`** (`relax_cluster_pose` solver + `compute_relax_transforms` orchestration mirroring `flex_relax.js relaxFlexible`) + **`hb.relax_flexible_segments(*, scope, conn_id)`** (commits via the route → headless coverage 42→43). Uses scipy `Rotation`; constants mirror the JS exactly. Display/pose-layer only (asserted: `canonical_topology` unchanged).
-- **JS↔Python parity:** the solver math was extracted into pure **`frontend/src/scene/flexible_relax_solver.js`** (THREE-free, vitest `flexible_relax_solver.test.js`), and the Python port is pinned to its asymmetric-fixture golden in `tests/test_flexible_relax.py` (pos+rotation to 1e-6). **Shared golden — edit one ⇒ edit the other.**
-- **`cluster_gizmo.js` was NOT rewired** to the new pure module (its live 3D drag can't be headlessly verified, so a rewire is unverifiable here) — the module is a faithful tested copy of cluster_gizmo's math. **Clean follow-up:** wire `_projectSsdnaConstraints`/`_maxSsViolation`/`relaxSsdna` to `flexible_relax_solver.js` (the math is proven equal by the parity test) to make it the single source of truth, then eyeball the live drag.
-- Oracle: `assert_flexible_segments_relaxed(before, after)` (`tests/automation_harness.py`) — every connection chord (on posed geometry) ≤ contour+tol + a pose moved + topology unchanged. Fixture `_overstretched_flexible_hinge` in `test_headless_build.py`.
-
-## Duplex-child cluster must be TRANSPARENT to the ssDNA gate (2026-07-01)
-
-**BUG:** after the overhang-duplex-cluster work materialized each direct-connection duplex into
-its own CHILD cluster ([[overhang-duplex-cluster]] P1b), regular clusters carrying a duplex LOST
-the "ssDNA constrained" pivot option. Root cause: `_gate` in `flexible_segments.py` counts every
-inter-cluster crossing; the overhang-junction bond between a parent cluster and its new duplex-child
-cluster is UNMARKED → registered as a `rigid_blocking` crossing → parent gate flipped to `False`.
-Before materialization the overhang beads belonged to the parent (helix-level), so the junction was
-intra-cluster and never blocked. Reproduced on `workspace/2x2_OH_test.nadoc`: Cluster 1/2 gate went
-`false` (`rigid_blocking` = the overhang junction) so the pivot dropdown showed only `centroid`.
-**Fix:** `_gate` takes `duplex_ids` (`_duplex_cluster_ids(design)` = clusters with
-`overhang_duplex_driver_id`) and SKIPS any crossing where either side is a duplex child — a duplex is
-a movable connector (its own `dup:taut` free-until-taut mode), not a rigid pin. `cluster_flexible_gate`
-+ `all_cluster_gates` pass it. After: Cluster 1/2 gate `true` again (n_crossings=2, the marked C1↔C2
-runs), Duplex 1 gate `false`/0-crossings (correct — duplex uses `dup:taut`, not `ssdna`). Pin:
-`test_flexible_segments.py::test_gate_treats_duplex_child_cluster_as_transparent` (synthetic `_gate`
-graph; control asserts it blocks WITHOUT the duplex set). e2e probe (throwaway) confirmed the pivot
-dropdown regains `ssdna` on both the direct-activate and the new auto-open selection path.
-
-## Connected overhangs as move constraints — "Constrained (tethers)" (2026-07-01)
-
-The move/rotate "ssDNA constrained" option was GENERALIZED to also constrain a regular cluster
-by its applied overhang CONNECTIONS (directly-connected duplex + ss/ds linker bridge), not just
-ssDNA flexible segments. Renamed the option **"Constrained (tethers)"**. Live-responsive: reuses
-the SAME gizmo free-until-taut projector (`setConstraint('ssdna', {connections,resolveWorldPos})`),
-just with a bigger tether set.
-- **Backend `backend/core/connection_tethers.py`** (new): `cluster_connection_tethers(design, cluster)`
-  → `[{moving,fixed,contour_nm}]` (same shape as `duplex_cluster_tethers`). moving = anchor on the
-  dragged cluster, fixed = on the partner. Direct duplex REUSES `duplex_cluster_tethers` bond
-  endpoints (c↔P) and re-assigns moving/fixed via a bead→cluster owner resolver that remaps a
-  duplex CHILD to its parent (so `owner(c)`=driver-parent, `owner(P)`=driven-part). Contours (user
-  decision): direct duplex = 0.67 nm (near-rigid junction, `_DEFAULT_TARGET_NM`); ss linker =
-  n·0.59; ds linker = (n_bp−1)·0.34 (`linker_relax._ds_target_length_nm`). `_overhang_attach_bead`
-  resolves an overhang's root/free_end bead (root = end_bp if OH domain is strand's first, else
-  start_bp — mirrors deformation/direct_relax). `clusters_with_connection_tethers(design)` = the
-  availability list. Skips a connection where both/neither end lands on the cluster.
-- **API**: `GET /design/cluster/{id}/connection-tethers` ([routes_clusters.py](backend/api/routes_clusters.py));
-  `/design/flexible-connections` gains `connection_tether_clusters` ([routes_flexible_segments.py](backend/api/routes_flexible_segments.py)).
-- **Frontend** ([flex_relax.js](frontend/src/scene/flex_relax.js)): `hasTetherOption(id)` = `hasGate(id)
-  || _connTetherClusters.includes(id)` (option appears for connection-ONLY clusters, no ssDNA marks
-  needed); `buildTethersPayload(id)` (async) MERGES ssDNA tethers (`buildSsdnaPayload`) + connection
-  tethers (GET) into one payload. [move_rotate_panel.js](frontend/src/scene/move_rotate_panel.js):
-  option gated on `hasTetherOption`, labeled "Constrained (tethers)", handler awaits
-  `buildTethersPayload` (fallback to centroid + warn if null).
-- **Verified**: `tests/test_connection_tethers.py` (3: duplex both-parents mirror-image 0.67 nm,
-  ds-linker contour = duplex length, availability list) on real fixtures `2x2_OH_test` (duplex) +
-  `3x6_hinge_interior_linker` (ds linker 9.69 nm); `move_rotate_panel.test.js` updated (async merged
-  payload + connection-only availability). Playwright probe (throwaway): endpoint returns the 0.67 nm
-  tether, dropdown shows "Constrained (tethers)", select runs clean. **NOT hand-driven:** the live
-  free-until-taut DRAG against a duplex/linker tether on the WebGL canvas is human-eye (MV, same tier
-  as MV-DUPTAUT / the ssDNA drag). ss-linker path unverified on a fixture (no ss-linker design handy;
-  code is symmetric with ds).
-
-## Movable-link tethers: duplex/ds-linker swing live during a drag (2026-07-01)
-
-Extends "Constrained (tethers)" so a connected DUPLEX or ds-linker is a movable LINK, not a fixed
-anchor. User decisions: **B (far part) stays fixed, the link follows**; **ds-linker = rigid strut**
-(bilateral, resists compression too); **duplex swings LIVE every frame**.
-- **Phase 1 — ds-linker rigid strut.** `connection_tethers._emit` tags ds-linker tethers `rigid=True`
-  (ss/duplex stay free-until-taut). Threaded through `buildTethersPayload` → gizmo `_ssArmed`. Pure
-  predicate `ssTetherViolated(rigid, dist, contour)` (exported from
-  [cluster_gizmo.js](frontend/src/scene/cluster_gizmo.js)): rigid ⇒ violated when `|dist−contour|>eps`
-  (both over AND under); free ⇒ only `dist>contour`. `_projectSsdnaConstraints` uses it in both passes.
-  Pins: `test_connection_tethers.py` (ds `rigid=True`), `cluster_gizmo.test.js` (`ssTetherViolated`).
-- **Phase 2 — duplex live movable body.** Backend `connection_tethers.cluster_movable_links(design,
-  cluster)` → for the dragged part, each connected duplex-CHILD cluster as `{kind:'duplex',
-  link_cluster_id, helix_ids, domain_ids, tethers:[{l, part, contour_nm, part_dragged}]}` (bonds to
-  BOTH parts; `part_dragged` = the bond on the dragged part). **Split by parent-ness:** dragging the
-  duplex's OWN parent → it rides rigidly → a STATIC tether via `cluster_connection_tethers` (now
-  parent-gated for direct-duplex); dragging the NON-parent part → the duplex is a movable link.
-  Endpoint `GET /design/cluster/{id}/movable-links`. `clusters_with_connection_tethers` counts links
-  too. `_bead_owner_resolver(design, remap_duplex=False)` distinguishes a bead ON the link from a
-  part bead.
-  - **Gizmo coupled live solve** ([cluster_gizmo.js](frontend/src/scene/cluster_gizmo.js)):
-    `setConstraint` payload gains `links`; armed at drag start (`_ssLinks`: base pose + bond start
-    positions + `captureBase` for the link's beads). Per `change` frame `_solveLinksChain()`: 2
-    Gauss-Seidel passes — solve each link via the pure `flexible_relax_solver.relaxToConvergence`
-    (near bond tracks A's LIVE anchor, far bond fixed to B), then re-project A against each moved
-    link's near bead (`_ssLinkNearArmed`, folded into `_projectSsdnaConstraints`). `_paintLinks()`
-    paints each swung link via a SECOND `onLiveTransform(link.helixIds,startPos,resultPos,incrQ,
-    domainIds)` + records its pending transform (committed with A by `commitPendingTransforms`).
-    **Uses the pure solver, NOT `relaxClusterHeadless`** (which clobbers the gizmo `_dummy`/`_clusterId`
-    singletons mid-drag). Link commit reuses the duplex-cluster pending convention (child-frame safe).
-  - **Scoped:** movable-link swing only when dragging the NON-parent part (dragging the parent = the
-    duplex rides it, static tether; avoids the A/L helix-overlap paint problem). ss-linker is not a
-    movable body (rendered from anchors).
-  - Pins: `test_connection_tethers.py` (parent static vs non-parent movable-link split, 2 bonds,
-    dragged flags), `flexible_relax_solver.test.js` (chain: link follows displaced near-anchor while
-    staying anchored to fixed far-anchor). Playwright probe (throwaway): endpoint→payload→arm clean.
-  - **GOTCHA (fixed): main cluster froze while only the link swung.** `helixCtrl.captureClusterBase`
-    CLEARS its base-snapshot maps unless `append=true` ([helix_renderer.js ~4242](frontend/src/scene/helix_renderer.js)).
-    Arming a second body (the link) called `captureBase(link)` which wiped the DRAGGED cluster's base
-    (captured just before) → the dragged cluster's beads had no base → `applyClusterTransform` left them
-    put → it looked frozen while the link (captured last) painted. Fix: the main.js `captureBase`
-    callback gained an `append` param (threaded to `helixCtrl`/`bluntEnds` captureClusterBase); the gizmo
-    captures the dragged cluster with append=false (clears+captures) then each link with **append=true**.
-    Any future multi-body live paint MUST append the extra bodies' base captures.
-  - **NOT hand-driven / RISK:** the live WebGL drag — the duplex visibly swinging, no jitter (the
-    ~0.67 nm near-rigid bonds are the flagged short-tether PBD oscillation risk), and the dual commit
-    (A + duplex) — is human-eye only. MV-CONNLINK. Also the ds-strut "can't compress" feel.
-
-## Unified scaffold context menu (2026-07-01)
-
-The three previously-conflicting scaffold right-click menus were collapsed into ONE
-standard-format menu. Before: a scaffold strand gave a *different* menu per pixel — the
-raw-HTML `#scaffold-split-ctx-menu` (Nick/Assign-seq/Delete) on a terminus cone, the
-styled `_showFlexibleSegmentMenu` on an unpaired bead, and `_showLoopSkipMenu` on a paired
-bead in bead-mode. Now **`_showScaffoldMenu(x,y,{strandId,nuc},cbs)`** in
-`selection_manager.js` fires for ANY right-click that resolves to a scaffold strand (cone
-`fromNuc` OR frontmost bead — both are full nucleotides, same shape) via new
-`_resolveScaffoldCtx(design,hitBead,hitCone,beadFrontmost)`. Sections: Nick · Assign
-sequence… · flexible (mark/unmark + relax sub-items + clear) · loop/skip · Representation ·
-Delete strand. Dispatch intercept sits right after the cluster branch (before the
-unpaired-bead flexible branch + bead-mode loop/skip). Overhang tips on the scaffold still
-divert to the overhang menu first.
-- User decisions: flexible "Mark" **always shown, greyed** on paired (dsDNA) regions
-  (`disabled:!nuc.is_unpaired` + tooltip); relax kept as sub-items (only when marked);
-  loop/skip kept as a 6th section.
-- `_showFlexibleSegmentMenu` / `_showFlexibleConnectionMenu` **still live** — the former for
-  NON-scaffold unpaired beads (ssDNA staple runs), the latter for the bowed flexible ARC.
-- main.js: `onScaffoldRightClick` opt REPLACED by `onScaffoldAssignSequence(strandId)` →
-  `_scaffoldModal.openModal`. Old HTML menu + `_showScaffoldSplitCtx`/`_hideScaffoldSplitCtx`
-  + 3 button listeners DELETED; `#scaffold-split-ctx-menu` removed from index.html. `onNick`
-  now also calls `_clearScaffoldChecks()` (scaffold Nick used to clear the scaffold-ends
-  routing indicator; general onNick didn't).
-- Verified: build + 1921 vitest pass; smoke render+teardown gates green. **NOT eyeballed in
-  browser** — the 3D right-click menu is a WebGL-canvas gesture (LESSONS H7). MV pending.
-
-## oxDNA seed + display of flexible runs (2026-07-02)
-
-Two fixes so the flexible-region representation and the oxDNA sim AGREE (the whole
-point of marking ssDNA flexible was to cut relaxation time on conformationally-naïve
-segments). Before: the oxDNA writer never consulted `flexible_connections` (`grep
-flexible backend/physics/` = nothing) — a marked run was seeded as a rigid B-DNA
-half-helix rooted on whichever cluster owns its helix (jutting out of one anchor,
-ignoring the other), and the display arc kept floating over the sim.
-
-- **Fix #1 — backend contour-length arc SEED** (`oxdna_interface.py`). New pass 3 in
-  `resolved_nuc_map` (after the extra-base pass, unconditional — same philosophy as
-  the extra-base chord interp): `_apply_flexible_segment_arc(design, resolved_map)`
-  re-seats each connection's `segment_bead_keys` onto a contour-length circular arc
-  between the two ALREADY-POSED anchors (anchors are posed because the seed geometry
-  = `_geometry_for_design` = deformed+clustered snapshot). Bond spacing ≈
-  contour/(n+1) ≈ ssDNA rise → FENE-safe, near-relaxed start. Helpers:
-  `_flexible_arc_points` (port of `flexible_arcs.js _arcPoints` BUT rewritten to a
-  direct ψ∈[-θ,+θ] parametrization — the JS `acos`-sweep silently COLLAPSES slack
-  arcs that exceed 180°; the JS has this latent bug, harmless for its visual),
-  `_perp_bow` (deterministic ⟂-chord bow; direction is physically irrelevant for a
-  seed, so NO obstacle-repulsion like the frontend), `flexible_segment_geo_keys`
-  (FlexibleAnchor {strand,domain,bp,dir} → oxDNA geo key (helix,bp,dir)).
-  nuc_conf_line negates the stored tangent for REVERSE beads, so a3 is stored
-  pre-flipped to track the arc tangent either way. Physical-layer only (topology
-  untouched — pinned). Tests: `tests/test_oxdna_flexible_seed.py` (6): arc taut→lerp
-  / slack→even FENE-safe bonds, geo-key resolve, resolved-map re-seat (beads moved,
-  bonds 0.2–0.75 nm, within contour of both anchors, unit ⟂ a1/a3), read-only guard,
-  no-connections identity.
-- **Fix #2 — display beads follow the oxDNA/MD frame** (was: stale geometric arc).
-  Flexible run beads are excluded from the rigid mesh, so `applyFemPositions` never
-  moved them. `flexible_arcs.js` gains `applySimPositions(updates|null)`: stores a
-  `"helix:bp:dir"→{pos,a1}` map; `_render` then draws each run at its SIMULATED
-  positions (tube+beads+slabs, slab oriented from the sim a1 ⟂ tangent), anchors from
-  the sim-repositioned rigid mesh; missing bead → per-connection fallback to the
-  geometric arc; null → revert. `oxdna_display.js` routes ALL 7 `applyFemPositions`
-  sites through one `_applyFem(updates)` chokepoint that also calls a new `onFrame`
-  dep (null on stopAndRestore). `main.js` wires `onFrame: u =>
-  flexibleArcs.applySimPositions(u)` into BOTH `initOxdnaDisplay` calls (oxdnaDisplay
-  + mdViz) — thin factory-dep wiring, main.js LOC +~6 (pure wiring, no cohesive
-  block). Tests: `flexible_arcs.test.js` (4), `oxdna_display.test.js` (+1 onFrame).
-  **NOT hand-verified in app** (needs a flexible design + a real GPU relax) →
-  `manual_validation_debt.md` **MV-FLEXSIM**.
-
-Verified: backend `just test` 3639 passed / 0 failed; frontend vitest 1926 passed;
-build clean. Lint: 14 pre-existing ruff errors in untouched files (no_bulk_reformat),
-none in changed files.
+<a id="oxdna-seed--display-of-flexible-runs-2026-07-02"></a>
+- [oxDNA seed + display of flexible runs (2026-07-02)](details/project_ssdna_ball_joints/02-unified-scaffold-context-menu-2026-07-01.md#oxdna-seed--display-of-flexible-runs-2026-07-02)
 
 ## Deferred / refine
 Kabsch (SVD) rigid fit instead of linearised torque; bow direction from exit-tangents; refresh gate dropdown when marks change while tool already open; per-frame arc rebuild allocates geometry (fine for few tethers, optimize if many).

@@ -324,17 +324,18 @@ def test_coor_to_single_frame_dcd_round_trip(tmp_path):
     n = 12
     universe = mda.Universe.empty(n, trajectory=True)
     universe.atoms.positions = np.arange(n * 3, dtype=np.float32).reshape(n, 3)
-    pdb, coor = tmp_path / "tiny.pdb", tmp_path / "tiny.coor"
-    universe.atoms.write(str(pdb))
+    coor = tmp_path / "tiny.coor"
     with mda.Writer(str(coor), n_atoms=n, format="NAMDBIN") as writer:
         writer.write(universe.atoms)
 
     dest = tmp_path / "out" / "seg0.dcd"
     # The converter only validates topology at the outer fetch boundary. Supplying a
     # nonexistent path here proves this hot conversion path does not parse it.
-    assert rlf._write_single_frame_dcd(tmp_path / "must-not-be-read.psf", coor, dest) == n
+    with pytest.warns(UserWarning, match="No dimensions set for current frame"):
+        assert rlf._write_single_frame_dcd(tmp_path / "must-not-be-read.psf", coor, dest) == n
 
-    reread = mda.Universe(str(pdb), str(dest))
+    reread = mda.Universe.empty(n)
+    reread.load_new(str(dest))
     assert len(reread.trajectory) == 1
     assert reread.atoms.positions == pytest.approx(universe.atoms.positions, abs=1e-3)
     assert list(dest.parent.glob("*.part")) == []  # temp cleaned up by rename
@@ -493,15 +494,15 @@ def test_the_written_dcd_carries_the_box(tmp_path):
     n = 12
     universe = mda.Universe.empty(n, trajectory=True)
     universe.atoms.positions = np.arange(n * 3, dtype=np.float32).reshape(n, 3)
-    pdb, coor = tmp_path / "tiny.pdb", tmp_path / "tiny.coor"
-    universe.atoms.write(str(pdb))
+    coor = tmp_path / "tiny.coor"
     with mda.Writer(str(coor), n_atoms=n, format="NAMDBIN") as writer:
         writer.write(universe.atoms)
 
     dest = tmp_path / "out" / "seg0.dcd"
     rlf._write_single_frame_dcd(
-        pdb, coor, dest, [92.5, 104.25, 130.75, 90.0, 90.0, 90.0]
+        tmp_path / "must-not-be-read.psf", coor, dest, [92.5, 104.25, 130.75, 90.0, 90.0, 90.0]
     )
 
-    reread = mda.Universe(str(pdb), str(dest))
+    reread = mda.Universe.empty(n)
+    reread.load_new(str(dest))
     assert reread.dimensions[:3] == pytest.approx([92.5, 104.25, 130.75], abs=1e-2)

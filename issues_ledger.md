@@ -735,24 +735,11 @@ configuration plays back as a no-op, in the app and in every export.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. **Last updated 2026-10-16 (geometry-first G1 checkpoint).**_
-
-**NEXT PICK: ISSUE-100 isolated bend/twist history preview.** Ordinary grouping
-now always records its native input under one lock-owned publication transaction
-(ISSUE-99). G1 remains in progress: preview/Apply/Cancel still changes canonical
-state before acceptance. Follow the [geometry delivery map](docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
-Grouping has 102 unique focused checks at its checkpoint; the ten deformation
-cases include explicit characterizations of unresolved defects. App, broad-suite
-and performance qualification are outstanding (MV-48); `main.js` delta is zero.
-Forced ligation (ISSUE-101), batch nick/resize (ISSUE-102) and stale auto-crossover
-publication (ISSUE-103) are focused-fixed. The private deformation prefix, host,
-DTO, disabled HTTP adapter, transport/controller and native renderer now have
-focused coverage. The router remains unregistered and the existing editor is
-not wired. Next finish complete control validation, correct group retargeting
-(ISSUE-105), connect the popup, then qualify response/desktop behavior. Do not
-treat private preparation as a live preview fix.
-Nanoparticle/asset expansion, assemblies and machine-specific VR work remain
-outside this next step.
+Feature-history status was reconciled October 26, 2026. Use the
+[current handoff](docs/audits/feature_history_20261014/session_handoff.md)
+for counts and next work. ISSUE-100 is resolved for ordinary supported history;
+cluster lifecycle, ordinary connections, remaining repair, retained host lifecycle
+and integrated qualification remain. Older S/U narratives below are history.
 
 **Earlier queued work, deferred behind the user's geometry priority:** ISSUE-22
 live revalidation, then ISSUE-23. The complete oxDNA/MD roll-return lifecycle is
@@ -2316,7 +2303,33 @@ MV-48 retains aggregate FH-27 integration/resource debt only.
   Count remains 18/38, no changed exit/denominator. MV-48/FH-27 retain desktop and
   measured latency acceptance.
 
-## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, REPRODUCED; OPEN)
+## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, RESOLVED FOR ORDINARY SUPPORTED HISTORY)
+
+**October 26 reconciliation:** October 20 Bend/Twist C1–C9 acceptance and enabled isolated production paths supersede the open claims below. Exact Cancel and canonical-state isolation are qualified. FH-18/27/28 retain their distinct cluster/integration/lifecycle exits; excluded sealed rollout is not a prerequisite.
+
+**Historical evidence (superseded status/queue):**
+
+  **User sequencing (October 18):** Complete Bend, Twist, Sweep and Extrude, including outstanding desktop/latency acceptance, before other areas. FH-21/FH-22 implementation credit does not close that acceptance. S54 remains the sole next task; fixed exits and counts unchanged.
+
+  **Bend-series current:** S53 qualifies independent, attached-start and sticky-detached Sweep history editing with later Extrude. Native fixture4 and source-contract40 passed, harness22 passed, focused frontend23 passed; final three-case browser matrix passed with clean consoles. Prefix source inventory, ligation draft controls, fixed-origin orientation, saved source/detach identity, exact Cancel, full native geometry, Apply and persistence are covered. Test synchronization corrections required no production change. S54 Sweep downstream-nick success/refusal desktop workflow is the sole unstarted successor. No milestone advanced. See [S53 evidence](docs/audits/feature_history_20261014/sweep_source_matrix_20261018.md). **21/38 complete, 17 remaining (8 core, 9 parked), delta +0/+0; U1–U60 (60 engineering checkpoints; FH-20 at 5 and FH-28 at 11, both growth flagged).** ISSUE-100/MV-48 remain open; production legacy paths, polymer/all-target controls, routing/Sweep chains, failure cases and full resource/broad acceptance remain. Historical sequencing below is superseded.
+
+  **S04 current evidence:** [one guarded attempt](docs/audits/feature_history_20261014/deformation_history_browser_20261017.md), 2 launch failures because isolated XDG cache hides installed headless Chromium; zero lifecycle assertions. Root/process/port/fixture cleanup checked. S07 repairs this boundary only, unstarted. Issue/debt remain open; no gate or milestone changes. Earlier S03 no-browser claims are historical.
+
+- Latest broad evidence: [full software run](docs/audits/feature_history_20261014/full_software_validation_20261017.md) completed with failures; no baseline or desktop clearance. S05 test isolation and [S06 native revalidation](docs/audits/feature_history_20261014/native_offline_revalidation_20261017.md) are delivered (30 targeted native passes); S04 launch is blocked; S07 browser-path repair is next, unstarted. This issue remains open.
+
+  October 17 follow-up: [failure triage](docs/audits/feature_history_20261014/preexisting_failure_triage_20261017.md) fixes four unrelated assertions and classifies three timing offenders; 88 focused cases pass. Non-CPD geometry failures persist; S06 subsequently resolves the 30 native dependency entries in focused runs only. CPD experiments are now excluded from broader development tests by explicit user instruction; their evidence is not required here. This does not clear ISSUE-100/MV-48 or S02 broad debt; S04 subsequently failed at browser launch.
+
+
+- **October 17 S03 current reconciliation:** isolated history harness source is
+  delivered (4 app/recipe, 4 launcher, 3 frontend checks pass), but no browser ran.
+  Actual history popup/private scene, persistence and one-Apply assertions await
+  S04. The later user-requested portability correction removes Archive as a
+  prerequisite here: OS-temp storage preflight passes; browser acceptance is still pending. See the [acceptance matrix](docs/audits/feature_history_20261014/bend_twist_release_acceptance.md#s03-isolated-history-harness-source-delivered-browser-blocked).
+  Production registration from S02 remains disabled; legacy peel/delete/seek is
+  still live, so ISSUE-100 remains OPEN. S02 incomplete FAST/deferred FULL,
+  three timing violations and recorded failures remain in [compact evidence](docs/audits/feature_history_20261014/validation_deformation_registration.json).
+  No baseline/regression clearance, paired enablement or obsolete preview retirement.
+  Historical missing-implementation statements below describe earlier checkpoints.
 
 - `tests/test_geometry_history_preview_lifecycle.py` mirrors the current desktop
   sequence on a tiny native part: delete the committed deformation with preview
@@ -2794,7 +2807,11 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
   CPD fixture during collection. Fixing the test ID does not clear that environment
   failure or deferred FULL-suite debt; focused multiworker validation is separate.
 
-## ISSUE-125 — Historical constrained movement omits linked owner writes (2026-10-16, OPEN)
+## ISSUE-125 — Historical constrained movement omits linked owner writes (2026-10-16, RESOLVED FOR QUALIFIED CLUSTER/INDIVIDUAL SCOPE)
+
+**October 26 reconciliation:** October 26 FH-23 acceptance covers atomic complete multi-owner publication and linked/joint constraints, cold replay and desktop behavior. The old single-owner limitation below is historical. Arbitrary named-group motion is retired; differential-end rigid-insert motion explicitly refuses.
+
+**Historical evidence (superseded status/queue):**
 
 - Code audit: `cluster_gizmo._paintLinks` queues solved absolute poses for linked
   owners, while `translate_rotate_tool`'s history branch edits and clears only
@@ -2969,7 +2986,11 @@ FH-25 and the independent ISSUE-143 remain open.
   snapshots/publication. U25 evidence retains regression failures and corrections;
   desktop behavior and representative latency remain unverified.
 
-## ISSUE-135 — Saved terminal-nucleotide pose moves atomistic tail but not Full tail (2026-10-16, OPEN)
+## ISSUE-135 — Saved terminal-nucleotide pose moves atomistic tail but not Full tail (2026-10-16, RESOLVED UNDER USER-SELECTED LOCALITY)
+
+**October 26 reconciliation:** The user selected single-nucleotide locality: unselected tails remain fixed. Later identity-alias/bridge repairs and the October 26 accepted Move/Rotate scope supersede the historical discrepancy and unresolved-policy claims below. Current regression: `tests/test_part_motion_native_characterization.py::test_saved_terminal_pose_preserves_unselected_tail_in_both_representations`. This does not authorize a new tail-placement policy.
+
+**Historical evidence (superseded status/queue):**
 
 - Native empty-root 8-bp duplex → two extension-upsert v2 sequence tails → one
   terminal nucleotide rotation/translation reproduces the disagreement at both
@@ -3163,6 +3184,56 @@ case commits once and reloads. Ordinary historical recipes are not rewritten on
 load. Desktop qualification and ISSUE-143's independent unequal native output
 failure remain, so this is private migration evidence, not a full public closure.
 
+
+## ISSUE-144 — Full software suite can touch real job metadata and audit logs (2026-10-17, FIXED — focused validation)
+
+The authorized October 17 full run touched existing
+`workspace/mrdna_jobs/102c5d2a99dc/job.json` and `.runtime.lock` and added two
+`logger_ready` events to the real Alpine audit log. The mrDNA seed test directly
+calls `build_namd_seed_from_mrdna` with real `_WS`, which reconciles status.
+No pre-run byte snapshot exists; preserve the completed job and audit provenance.
+The [full validation report](docs/audits/feature_history_20261014/full_software_validation_20261017.md)
+records the original evidence, scope and limits. S05 now isolates both demonstrated
+paths using module-scoped startup workspace/logger state and private verified seed
+inputs. Source hash/stat/namespace guards and failure cleanup pass, including real
+seed reconstruction: 18 distinct focused tests, lint clean. See
+[repair evidence](docs/audits/feature_history_20261014/regression_repair_20261017.md).
+No new broad run or claim about every possible workspace writer. Existing source
+job/audit provenance is preserved. Other full-run failures remain separate.
+
+## ISSUE-145 — Bend end menus lack sidebar DOM and discard explicit scope (2026-10-17, FIXED — targeted browser validation and S18 production smoke)
+
+S16 real-browser acceptance at `96ab701e` plus existing worktree reproduces two
+blockers. Sidebar left-click reaches a path whose `blunt-panel-*`/`blunt-bend-btn`
+elements are absent from real HTML; optional listener/access wiring silently skips
+it. Context right-click → Bend prepares `targets: null` despite explicit strand
+`scaf_XY_0_0` selection; `beginDeformation` hardcodes null. Existing unit tests
+manufacture sidebar DOM and assert null, so their passes do not qualify either
+requirement. No correction performed: S16 stops on demonstrated production defects.
+
+[S16 evidence](docs/audits/feature_history_20261014/bend_end_menu_20261017.md):
+2 browser failures in one invocation; context end placement, preview/Cancel
+canonical/browser/saved-byte preservation, disposal and empty console pass before
+scope failure. 104 focused unit tests pass. Apply/undo/reopen unexecuted in these
+cases. S17 is the sole unstarted repair/reacceptance successor in the handoff;
+FH-20/FH-27/ISSUE-100/MV-48 remain open. No geometry or gate change is authorized
+by this report; no milestone credit.
+
+S17 correction: restored real sidebar markup and Properties reveal; both owned
+menu paths now resolve explicit selection with the existing toolbar resolver,
+refuse invalid explicit selections, and use null/default placement scope only
+when selection is empty. Both S16 browser cases pass through Apply/undo/reopen,
+with exact Cancel preservation, strict console/disposal and no legacy mutations.
+[S17 evidence](docs/audits/feature_history_20261014/bend_end_menu_repair_20261017.md)
+records tests and cleanup. Required production smoke is S18, not yet run. No
+rollout/milestone credit; earlier S16 failure and unexecuted claims above are history.
+
+S18 follow-up to ISSUE-145: required production smoke now passes **23/23** in one
+isolated invocation, with cleanup and unchanged Example digest independently
+verified. [Smoke evidence](docs/audits/feature_history_20261014/production_smoke_20261017.md).
+Earlier S17 smoke-pending text is historical. No full deformation release claim;
+S19 Twist menu parity is the sole current successor in the handoff.
+
 ## ISSUE-146 — Part recipe repair launcher hidden in configuration-only toolbar (2026-10-19, FIXED)
 
 The part history repair launcher was mounted inside the assembly configuration toolbar,
@@ -3197,6 +3268,128 @@ Classify residue-pose changes as requiring the existing full per-nucleotide
 response, including inserted-base data; positions-only is also insufficient.
 Native response regression reproduces the old failure; host6/render-diff22 and
 browser1 pass after repair, with exact geometry after undo/redo/save/reopen.
+
+## ISSUE-150 — Fine Routing rebuild refusals omit feature-log failure badges (2026-10-25, FIXED)
+
+The native routing editor preserves its refused draft and displays the attributed
+error, but does not connect the shared transient feature-history feedback. The
+failing child and blocked suffix consequently appear healthy. Attach feedback to
+the source-bound editor lifetime, clear it before retry, and dispose it on Cancel,
+reset or success. Canonical geometry/history remain unchanged on refusal.
+Regression: `feature_log_routing_history.test.js` checks the failing child, blocked
+suffix and exact cleanup; native browser refusal and corrected-retry cases pass.
+
+## ISSUE-151 — Ordinary large-part Fine Routing editor refuses during capture (2026-10-25, FIXED)
+
+The actual 18HB × 504 bp scaffolded/autostapled desktop fixture cannot open its
+resize history editor: HTTP 413 `routing_capture_limit`. The generic source copy
+has a 25 ms allowance; measured native capture needs about 34 ms. Select the
+existing Bend/Twist/Sweep CAD capture capacity for routing before copying, retain
+its finite node/byte/time bounds, and apply matching candidate admission. No
+fallback retry, new host, test-budget change or molecular change. Other ordinary
+recipe families retain their existing capture policy. Reference catalogs also
+separate the 30,000 record/domain allowance from expanded JSON nodes (32 per
+record); the 2 MB transport bound remains. Large native and actual app validation pass. The five-second owned-operation deadline remains intact.
+
+## ISSUE-152 — Seamless fallback changes across Python hash seeds (2026-10-25, FIXED)
+
+The 6×3 honeycomb scaffold adjacency has four degree-one vertices and no
+Hamiltonian path. Seamless routing falls back to its connected-component order;
+unordered set traversal made that order differ between ordinary creation and the
+isolated replay worker. Identical authored inputs then produced different native
+helices, strands and crossovers, and history correctly refused the mismatch.
+Sort newly visited neighbors before pushing them onto the traversal stack. The
+existing fallback and native geometry builders remain; no phase constant, seed,
+lock or golden changes. Native 18HB cold replay now agrees under hash seeds 1
+and 2, and the large routing lifecycle/atomic-capacity regression passes.
+
+## ISSUE-153 — Nested routing forms hide fields outside the modal (2026-10-25, FIXED)
+
+Live desktop inspection of the positional resize editor showed only the first
+reference fields: the shared no-wrap flex layout pushed Direction, End and Delta
+past the dialog's horizontal edge. Keyboard/browser automation could scroll them
+into view, masking the defect in earlier functional checks. Give this editor a
+scoped responsive grid: nested lists/objects span the full row, scalar controls
+wrap into two columns (one on narrow screens), and action rows wrap. The app
+matrix now checks every input/select's horizontal bounds in all 22 forms.
+
+## ISSUE-154 — Organized placement Apply loses carried member poses (2026-10-25, FIXED)
+
+The organization recorder applied selected placements sequentially, falsely refusing
+common movement of both ends of an individually posed insert. It also published
+only cluster transforms, dropping the carried residue poses. Stage all accepted
+owners through the existing complete-pose command, publish their member poses,
+and record one snapshot-backed feature. Single-owner moves carrying poses use the
+same recovery path. Native regressions compare every atom to independent rigid
+arithmetic, both input orders, history seeking, undo/redo and cold replay.
+
+## ISSUE-155 — Move/Rotate entry drops multiple selected placements (2026-10-25, FIXED)
+
+Menu/keyboard activation passed the primary selected placement as an explicit
+target, bypassing the existing common group gizmo. Preserve multiple valid
+placement selections at activation. Explicit targeted actions retain their
+single-placement meaning. Both entry paths have factory regression coverage;
+the organized posed-insert browser case requires both owners in one feature.
+
+## ISSUE-156 — Organized-part HTTP undo/redo/reopen refuses an admitted lifecycle (2026-10-25, FIXED)
+
+The HTTP routes checked legacy_undo/legacy_redo/legacy_design_load while the
+organization gate admits the reviewed undo/redo/load_design lifecycle names. Native undo worked, but the UI
+received409 and retained its moved display. Align the route checks with the
+existing state lifecycle names; retain the default-off gate and strict policy.
+HTTP regression covers accepted move, undo, redo and reopen on an organized posed insert.
+
+
+## ISSUE-157 — Ordinary multi-cluster Apply publishes sequentially (2026-10-25, FIXED)
+- Reproducer: select two clusters and Apply; `placement_commit.js` called `patchCluster` in a loop, retaining the first accepted move if the second refused.
+- Root cause: ordinary placement publication had no complete-operation boundary, unlike the experimental organized path.
+- Fix: one revision-checked ordinary cluster-pose request uses the existing `placement-poses` command and replacement publisher, complete member transport, recovery snapshots and one undo step.
+- Evidence: backend8pass (cold replay/seek/reopen, undo/redo and six refusal modes), frontend79pass; actual ordinary two-cluster posed-insert creation1pass with exact Cancel and replay.
+- Scope: no organizational-group authoring, native geometry constants or scientific manifests changed.
+
+## ISSUE-158 — Posed cluster undo can retain moved display coordinates (2026-10-26, FIXED)
+- Reproducer: Move/Rotate a single cluster in the nucleotide-pose fixture, Apply, then undo; owner state restores but the geometry differs from its original native records.
+- Root cause: topology classification took precedence over pose recovery. A simultaneous staple reclassification admitted a partial occupancy patch and omitted other moved helices; unchanged pose records also admitted lean cluster recovery.
+- Fix: pose recovery takes priority over topology classification; cluster changes with residue poses require full native geometry even when pose records compare equal.
+- Regression: render-diff22pass/1fail became23pass; real partial-response regression8pass/1fail became9pass. Final creation/undo/reopen app5pass, backend19429pass with exact83 baseline failures unchanged. Evidence in the transform plan.
+
+## ISSUE-159 — Asset publication races autosave and loses its save target (2026-11-01, FIXED)
+- Reproducer: File → New, coat a particle, attach biotin DNA, edit an earlier coating row, save/reopen. Autosave replaces source objects during a private job; rebuilt publication drops the existing identity path and subsequent saves can fork the file.
+- Root cause: recipe publication rebuilt authoring from its root without retaining host identity metadata; the asset controller had no coordination with in-flight/queued saves and treated metadata-only object replacement as an authoring change.
+- Fix: retain the exact source identity path/confirmation, wait for in-flight saves, hold new saves through editing/publication, and bind adoption to document/loadout/revision/session. Unknown publication retains the hold until the same job confirms its outcome.
+- Evidence: controller/save/editor focused19pass; real biotin flow passes through upstream edit, undo/redo, library reopen and cold proof (`remaining-assets-browser-library-20261101.log`). Generated app flow also passes (`generated-assets-browser-capture-20261101.log`). Final aggregate validation remains in the campaign handoff.
+
+## ISSUE-160 — Generated history capture exhausts its unchanged deadline (2026-11-01, FIXED)
+- Reproducer: create a generated native part, then edit its graft. The app returned413; all30 original captures failed. The twelve-anchor fixture independently reproduced the deadline refusal.
+- Root causes: generic model/container allocation dominated the source lock; a recursive copy closure retained its memo in a cycle; history header construction repeatedly inspected built-in empty-container factories. Biotin undo copying also allocated its large scalar atom graph under the publication lock.
+- Fix: bounded empty destinations allocate outside the source lock; exact model/crossover/atom copies retain aliases and unknown-field fallbacks. Module-level copy recursion releases acyclic copies immediately; fresh header defaults preserve the original fields-set. Complete undo copies retain history/display data.
+- Evidence: lifetime regression fails before/passes after; capture/copy/admission checks **145pass**, final complete-copy file **18pass**. Final twelve-anchor HTTP qualification has **29/30 captures, 30/30 publications**, capture-lock p95 **24.522 ms** and publication-lock p95 **18.177 ms**; one safe clock refusal remains. Real generated edit/save/reopen/cold proof passes in the app. These are cooperative bounds, not real-time guarantees; full evidence is in the campaign handoff.
+- No field, byte/node allowance, deadline, GC policy, molecular formula or geometry lock changed. Scalar-leaf seeding and prefilled dictionaries worsened timings and were removed; failed profiles remain in `.development-artifacts/feature-history-focus/`.
+
+## ISSUE-161 — Diagnostic history retains final atoms and loses source placement owners (2026-11-01, FIXED)
+- Reproducer: seek a fully logged FH-27 materialized assembly back to its source bundle or current molecular stage. The final atom reference survived backward seeks; missing source cluster owners made recovered lattice frames invalid.
+- Cause: topology substitution retained live physical references and final cluster lists. Render classification also treated changed atom references as unchanged geometry.
+- Repair: diagnostic snapshot recovery restores its recorded reference, placements and deformations; atom-reference changes require a full render refresh. No candidate solver runs during seeking. Ordinary histories retain their prior reference recovery behavior.
+- Focused regression: missing references before creation, exact return to tip, source-owner roundtrip validation and mandatory molecular render refresh. App qualification is recorded in the FH-27 handoff; no molecular placement or detector changed.
+
+## ISSUE-162 — Full representation connects an extension's far tip to its host (2026-11-02, FIXED)
+- User reproducer: 01 Terminal linker, staple S37 position 1 connects to `Extension - 0[-5›16]`; it must connect to `Extension - 0[-5›1]`, as in atomistic views.
+- Cause: the Full renderer sorts extension indices by the parent helix's FORWARD/REVERSE direction. Extension indices instead count away from the attachment; 5′ tails traverse descending indices and 3′ tails ascending indices.
+- Scope: correct rendered connector ordering, including the cross-helix arc; do not move any nucleotide or alter atomistic geometry/topology.
+- Reproduction: actual renderer regression fails for FORWARD 5′ and REVERSE 3′ 16-base tails; single-base controls and the other two orientations pass. Eight extension cases pass after the correction; existing loop/continuation checks make 58 focused passes. Isolated app confirms all 12 roots use ›1, S37's actual Properties labels and Full→Beads→Full recovery; zero browser errors. Complete frontend: 800 files, 9,527 passed / 1 skipped (384.68 s). Evidence: `.development-artifacts/extension-connectivity-20261102/`.
+
+## ISSUE-163 — Assembly materialization silently converts polymerization strands to extensions (2026-11-02, DEFERRED)
+- User decision: polymerization strands retain their identity and require dedicated simulation treatment. There is no user-facing convert-overhang-to-extension operation.
+- Current defect: `assembly_flatten._materialize_periodic_strands` completes unmatched terminal staple fragments by synthesizing ordinary `StrandExtension` records. This is reached by assembly simulation preparation and readiness, not only the retired review writer.
+- Required behavior: no implicit conversion and no private agent authoring feature. Preserve source topology/process; do not guess a replacement by truncating, discarding sequence, or restoring synthetic duplex tails.
+- Agent publication now refuses private diagnostic/assembly feature rows even when they independently replay; focused regression covers valid native publication, refused private steps and unrecorded physical references (18 passed). This blocks republishing the old review construction as a part; it does not repair the production simulation materializer.
+- Explicit follow-up decision: **“Track the conversion change as follow-on work.”** Leave production simulation preparation unchanged for now; do not add an immediate unsupported-case refusal. Dedicated molecular treatment remains unimplemented; deferral does not approve the existing conversion policy.
+
+## ISSUE-164 — Long-extension molecular geometry needs further development (2026-11-02, DEFERRED)
+- **Separate from the feature-log/dependency overhaul; schedule afterwards.** The user says extensions were intended to be short, and long-tail geometries were never comprehensively developed. No arbitrary length cap is authorized.
+- Retained example: 01 Terminal linker, S37, bond from O3′ of `Extension - 0[-5›3]` to P of `Extension - 0[-5›2]` pierces the former's sugar ring. The long polymer tails themselves came from the rejected conversion in ISSUE-163.
+- Existing diagnostics also expose overstretched 5′ attachment bonds and reversed local C3′ stereochemistry. The isolated internal-linker candidate leaves the roots unchanged and introduces a 0.07524 nm OP2–C4′ contact in the phase stress control; it is not a production solution.
+- Future acceptance: native user-operation reproducers with complete feature logs, appropriate short/long 5′/3′ controls, chemical connectivity, reachable anchors, stereochemistry, ring-piercing/clash checks and representation agreement. Establish dedicated polymerization simulation semantics separately. Preserve phase constants/oracles and require concrete molecular review before promotion.
 
 ## ISSUE-165 — Clash visualizer omits ring piercings and can show a failed read as clean (2026-11-02, FIXED)
 - User request: add piercing detection and distinguish it from clashes in the visualizer legend. Existing backbone distance checks cannot detect a bond passing through a nucleotide ring.

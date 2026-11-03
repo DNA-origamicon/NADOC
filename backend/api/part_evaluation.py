@@ -18,7 +18,7 @@ from backend.core.part_operation_input import validate_operation_input
 class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["verify", "append", "edit", "delete", "reorder", "suppress", "repair", "selection", "batch"]
+    operation: Literal["verify", "append", "edit", "delete", "reorder", "suppress", "repair", "selection", "batch", "generate"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating", "nanoparticle-biotin-dna",
                   "nanoparticle-attach-overhang", "nanoparticle-bound-move", "nanoparticle-connection-relax",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
@@ -77,6 +77,12 @@ class EvaluationRequest(BaseModel):
                 raise ValueError("Selection revision guards must agree")
         elif self.repair is not None or self.selection is not None:
             raise ValueError("Only repair or selection operations accept their nested requests")
+        elif self.operation == "generate":
+            from backend.api.part_generated_evaluation import parse_settings
+            if (self.params is None or self.expected_revision is None or self.kind is not None
+                    or self.index is not None or self.sub_index is not None or self.cascade):
+                raise ValueError("Generation requires settings and the expected revision only")
+            parse_settings(self.params)
         elif self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Append needs a supported long-operation kind and authored inputs only")
@@ -269,6 +275,10 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None, inp
 
             candidate, validation = prepare_reorder(source, request.index, request.destination,
                 executor=executor, dependency_resolver=dependency_resolver)
+        elif request.operation == "generate":
+            from backend.api.part_generated_evaluation import generate
+            candidate, validation, generation = generate(source, request, header, executor, dependency_resolver)
+            metadata['generation'] = generation
         elif request.operation == "append":
             from backend.api.part_evaluation_append import append_features
 

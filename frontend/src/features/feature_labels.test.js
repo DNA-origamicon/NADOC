@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest'
 import { featureLabels } from './feature_labels.js'
 
+it('names recorded diagnostic stages by their actual operations', () => {
+  expect(featureLabels([
+    { op_kind: 'diagnostic-process', params: { action: 'assembly-add' }, label: 'Logged source' },
+    { op_kind: 'diagnostic-process', params: { action: 'assembly-polymerize' }, label: 'Three repeats' },
+    { op_kind: 'diagnostic-process', params: { action: 'assembly-flatten' }, label: 'No simulation' },
+    { op_kind: 'diagnostic-process', params: { action: 'terminal-candidate' }, label: 'Isolated candidate' },
+  ])).toEqual(['F1: Add Part 1 [Logged source]', 'F2: Polymerize Origami 1 [Three repeats]',
+    'F3: Prepare NAMD 1 [No simulation]', 'F4: Molecular Placement Audit 1 [Isolated candidate]'])
+})
+
 it('numbers tools independently of history positions and keeps user elaboration', () => {
   expect(featureLabels([
     { feature_type: 'snapshot', op_kind: 'bundle-create', label: 'Two helices' },

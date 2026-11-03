@@ -193,12 +193,12 @@ def test_legacy_compound_output_is_explicitly_unverified():
     assert "saved status is not readiness" in c["repair_contract"]["drafts"]
     assert "restoration requires rebase" in c["repair_contract"]["source_repair"]
     assert "apply retains proposal" in c["repair_contract"]["draft_evaluation"]
-    assert c["repair_contract"]["ui"] == "pending"
-    assert "visual preview pending" in c["repair_contract"]["comparison"]
+    assert "desktop input/reference repair" in c["repair_contract"]["ui"]
+    assert "native DNA candidate comparison enabled" in c["repair_contract"]["comparison"]
     assert "streptavidin-coating" in c["evaluation_jobs"]["append_kinds"]
     assert c["coating_contract"]["live_append"].startswith("Enabled")
     assert "ordinary limits unchanged" in c["coating_contract"]["capture"]
-    assert "32 flat native gold/coating rows" in c["coating_contract"]["publication_scope"]
+    assert "bounded native coating/biotin rows" in c["coating_contract"]["publication_scope"]
     assert c["evaluation_jobs"]["registered_batch_enabled"] is False
     assert "batch" not in c["evaluation_jobs"]["operations"]
     assert c["photoproduct_create_methods"] == ["preflight", "convert"]

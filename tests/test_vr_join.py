@@ -55,6 +55,7 @@ def test_join_feedback_publication_is_private_atomic_ordered_and_document_bound(
     from backend.api import doc_context
 
     state = {"doc_id": "join-doc", "event_path": str(tmp_path / "events.json"), "view_rotation": np.eye(3).tolist()}
+    monkeypatch.setattr(vr, "_native_platform_reason", lambda: None)
     monkeypatch.setattr(vr, "_read_state", lambda: state)
     monkeypatch.setattr(doc_context, "get_current_doc", lambda: "join-doc")
     request = Request({"type": "http", "client": ("127.0.0.1", 9999), "headers": []})

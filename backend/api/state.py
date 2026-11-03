@@ -62,7 +62,7 @@ from backend.api.part_immutable_storage import (
 )
 from backend.api.part_group_organization_gate import require_live_design as _require_live_design
 
-def _snapshot_copy(design: Design) -> Design:
+def _snapshot_copy(design: Design, *, atom_copies=None, model_copies=None) -> Design:
     """Independent copy of ``design`` for the undo/redo stack and pre/post-mutation
     diffing — semantically identical to ``design.model_copy(deep=True)`` but ~2-3x
     faster on a large design.
@@ -81,6 +81,9 @@ def _snapshot_copy(design: Design) -> Design:
     # Frame authoring may hold intermediate references while clusters are replaced.
     # Snapshot those values without rerunning document-load validators.
     _mutable_design(design)
+    if atom_copies is not None or model_copies is not None:
+        from backend.core.part_capture_copy import copy_complete_design
+        return copy_complete_design(design, atom_copies, model_copies)
     if design.lattice_frames:
         return design.model_copy(deep=True)
     return Design.model_validate(design.model_dump())
@@ -334,11 +337,14 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
     # allocation hint, allocate outside the document lock, then capture the
     # authoritative current source below with every existing guard and budget.
     from backend.core.part_capture_copy import allocate_atom_copies
+    from backend.core.part_model_copy import model_copy_hint, allocate_model_copies
     with _lock:
         hint = _sessions.get(get_current_doc())
         particles = hint.design.nanoparticles[:1] if hint and type(hint.design) is Design else ()
         atom_count = sum(min(len(p.coating.protein.atoms), 4100) for p in particles if p.coating is not None)
+        model_counts = model_copy_hint(hint.design) if hint and type(hint.design) is Design else {}
     atom_copies = allocate_atom_copies(atom_count) if atom_count else None
+    model_copies = allocate_model_copies(model_counts) if any(model_counts.values()) else None
 
     with _lock:
         if expected_policy_generation is not None and (
@@ -361,6 +367,7 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
             doc_id, generation = get_current_doc(), configuration.generation
         else:
             captured = capture_for_evaluation(s.design, request=request, revision=s.revision,
+                **({'model_copies': model_copies} if model_copies is not None else {}),
                 **({'atom_copies': atom_copies} if atom_copies is not None else {}))
             result = (s.design, captured, s.revision)
             if include_admission:
@@ -598,6 +605,18 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
                expected_source: Design | StrictPartRevision | None = None,
                expected_session_identity: str | None = None, expected_policy_generation=None,
                publication_permit=None) -> int:
+    # These empty scalar destinations contain no source data. Allocate them
+    # before publication; the guarded live source is still copied under lock.
+    from backend.core.part_capture_copy import allocate_atom_copies
+    from backend.core.part_model_copy import model_copy_hint, allocate_model_copies
+    atom_count, model_counts = 0, {}
+    if type(expected_source) is Design:
+        with _lock:
+            particles = expected_source.nanoparticles[:1]
+            atom_count = sum(min(len(p.coating.protein.atoms), 4100) for p in particles if p.coating is not None)
+            model_counts = model_copy_hint(expected_source)
+    atom_copies = allocate_atom_copies(atom_count) if atom_count else None
+    model_copies = allocate_model_copies(model_counts) if any(model_counts.values()) else None
     with _lock:
         if publication_permit is None:
             _require_compatibility_write("set_design")
@@ -621,7 +640,8 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
             _assert_photoproduct_dependencies(d)
             _assert_occupancy(d, s.design)
         from backend.api.part_replacement_transaction import publish_replacement
-        return publish_replacement(s, d, publication_permit=publication_permit)
+        return publish_replacement(s, d, publication_permit=publication_permit,
+                                   atom_copies=atom_copies, model_copies=model_copies)
 
 
 def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:

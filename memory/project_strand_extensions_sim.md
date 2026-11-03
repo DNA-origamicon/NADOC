@@ -1,5 +1,13 @@
 # Strand extensions → oxDNA + NAMD (terminal ssDNA tails)
 
+**November 2, 2026 scope correction:** polymerization strands must not be converted
+to these ordinary extensions (ISSUE-163). Long-extension molecular geometry was
+not fully developed and belongs to separate follow-on work after the feature-log/
+dependency overhaul (ISSUE-164). Existing spacing/export checks below do not
+establish general long-tail stereochemistry or clash freedom. Full representation
+must attach the host to the nearest extension bead (›1), independently of host
+helix direction (ISSUE-162). See [the user decision](feedback_polymerization_extension_scope.md).
+
 `StrandExtension` (a 5′/3′ terminal tail, e.g. the single T on every staple end of a
 scadnano import) used to be **display-only**: model, CRUD, validation, 3D geometry — and
 zero hits in *every* simulation exporter. A relaxation of `workspace/VoltronCoreScad.nadoc`

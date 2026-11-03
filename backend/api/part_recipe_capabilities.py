@@ -8,10 +8,12 @@ command, or confer a certificate. Verification remains an explicit operation.
 def editing_capabilities(kinds):
     from backend.api.part_overhang_commands import ACTIONS
     from backend.api.part_aptamer_commands import NATIVE_ROUTE_ENABLED
-    from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED, BIOTIN_APPEND_ENABLED, NP_FITTING_APPEND_ENABLED
+    from backend.api.part_evaluation_capture import (COATING_APPEND_ENABLED, BIOTIN_APPEND_ENABLED,
+        NP_FITTING_APPEND_ENABLED, GENERATED_ASSETS_ENABLED)
     from backend.api.routes_design_interchange import NATIVE_FREE_IMPORT_ENABLED
     from backend.api.part_batch_evaluation import REGISTERED_BATCH_ENABLED
     from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
+    from backend.api.routes_part_sweep_preview import SWEEP_PREVIEW_ENABLED
 
     # Existing history editors; other authoring tools edit current objects, not
     # their historical input commands, so must not be advertised as equivalents.
@@ -25,6 +27,11 @@ def editing_capabilities(kinds):
         "overhang_rotation",
         "nanoparticle-connection-version-create",
         "nanoparticle-connection-version-patch",
+        "nanoparticle-conjugate",
+        "nanoparticle-attach-overhang",
+        "nanoparticle-patch",
+        "nanoparticle-connection-relax",
+        "nanoparticle-biotin-dna",
     }
     return {
         "history_edit": {
@@ -42,7 +49,7 @@ def editing_capabilities(kinds):
                 "Native extrusion edits rebuild eligible earlier rows through later features without recovery snapshots; other UI editors may still restrict earlier rows.",
                 "Historical-preview edits and mixed/legacy recipes retain recovery editors and cannot gain native proof from snapshots.",
                 "Owned extrusion/pattern edits use bounded capture and an isolated worker within a five-second capture/proof/publication budget; response geometry formatting is outside that budget. Other ordinary regeneration remains cooperative.",
-                "Generated native subpart scopes are immutable references; legacy compound branch/asset construction remains unverified.",
+                "Generated native subpart scopes retain exact references; admitted graft and fit inputs regenerate downstream construction. Legacy compound construction remains unverified.",
                 "Native Join requires preview-selected flexible orientation references; older Join receipts without them remain unverified.",
             ],
         },
@@ -64,7 +71,7 @@ def editing_capabilities(kinds):
         },
         "sweep_history_editor": {
             "endpoint": "POST /api/design/features/sweep-preview",
-            "rollout": "disabled pending desktop and latency qualification",
+            "rollout": "enabled for qualified ordinary desktop scope" if SWEEP_PREVIEW_ENABLED else "disabled",
             "inputs": "Complete ordinary native Sweep inputs, including historical source, footprint, path and orientation",
             "preview": "Isolated selected-feature stage; downstream and source equivalence are not certified",
             "apply": "Fresh full source proof and downstream native regeneration; one source-bound publication and undo",
@@ -75,7 +82,8 @@ def editing_capabilities(kinds):
             "inspect": "GET /api/design/features/evaluation/jobs/{job_id}",
             "cancel": "DELETE /api/design/features/evaluation/jobs/{job_id}",
             "commit": "POST /api/design/features/evaluation/jobs/{job_id}/commit",
-            "operations": ["verify", "append", "edit", "delete", "repair", "selection"],
+            "operations": ["verify", "append", "edit", "delete", "repair", "selection"]
+                + (["generate"] if GENERATED_ASSETS_ENABLED else []),
             "append_kinds": ["photoproduct-create", "photoproduct-relax", "duplex-relax"]
                 + (["streptavidin-coating"] if COATING_APPEND_ENABLED else [])
                 + (["nanoparticle-biotin-dna"] if BIOTIN_APPEND_ENABLED else [])
@@ -101,9 +109,9 @@ def editing_capabilities(kinds):
             },
             "limits": ["64 actions", "16 path tokens", "256 KB operation input", "10000 operation nodes"],
             "numerical_upgrade_families": ["native CPD v1", "native duplex relaxation v1", "native streptavidin packing v1",
-                                          "native nanoparticle fitting v1", "native biotin attachment v1"],
+                                          "native nanoparticle fitting v1/v2", "native biotin attachment v1"],
             "publication": "Explicit commit of a complete regenerated candidate; source state need not reproduce",
-            "comparison": "Changed authored fields/counts and numerical provenance; on-demand visual preview pending",
+            "comparison": "Changed authored fields/counts and numerical provenance; bounded native DNA candidate comparison enabled",
             "drafts": "Bounded proposals persist with the part; explicit rebase preserves exact old-value expectations; saved status is not readiness",
             "draft_endpoints": {
                 "inspect": "GET /api/design/features/repair-draft",
@@ -114,7 +122,7 @@ def editing_capabilities(kinds):
             },
             "source_repair": "Explicit named proposed-input staging or published-source restoration; original bounded bytes and exact prior-byte receipt; restoration requires rebase",
             "draft_evaluation": "Existing isolated repair job; exact saved generation and published base; apply retains proposal; job results expire after 15 minutes",
-            "ui": "pending",
+            "ui": "desktop input/reference repair, saved proposals and candidate review",
         },
         "reference_selection": {
             "version": 1,
@@ -126,7 +134,7 @@ def editing_capabilities(kinds):
             "limits": ["100 candidates", "existing evaluation and recovery budgets"],
             "publication": "Never publishable; full repair evaluates the chosen replacement",
             "unsupported": ["compound selectors", "generated scopes", "coating/thiol/conjugate ownership"],
-            "ui": "pending",
+            "ui": "desktop reference picker for the admitted slots",
         },
         "photoproduct_create_methods": ["preflight", "convert"],
         "nanoparticle_contract": {
@@ -140,19 +148,22 @@ def editing_capabilities(kinds):
             "kinds": ["nanoparticle-connection-version-create", "nanoparticle-connection-version-patch",
                       "nanoparticle-connection-version-delete"],
             "scope": "Direct candidates on source-free gold thiol handles; create, rename, apply, reapply, switch, unapply and delete",
-            "application_version": 1,
+            "application_version": 2 if NP_FITTING_APPEND_ENABLED else 1,
             "pending_context_version": 1,
             "ownership": "Exact particle, conjugation, strand, ordinary overhang and version selectors; applied contexts select their active version and duplex",
             "limits": ["128 handles for unbound pending metadata; 16 handles / 4096 bases / 128 versions for application or active context",
-                       "10000 reference-inventory nodes / 256KB reference data", "one active version per particle"],
+                       "10000 reference-inventory nodes / 256KB reference data",
+                       "up to four fitted active anchors per particle" if NP_FITTING_APPEND_ENABLED else "one active version per particle"],
             "history_ui": "Names and creation direct variants through guarded historical edits",
-            "unsupported": ["relaxed or multiple active versions", "generated scopes", "coated or catalog particles", "bound motion"],
+            "unsupported": ["coated or catalog particles", "generated application except exact v3 teardown/naming"]
+                + ([] if NP_FITTING_APPEND_ENABLED else ["relaxed or multiple active versions", "bound motion"]),
             "legacy": "Sparse older receipts remain unverified; recorded native inputs are required",
         },
         "thiol_contract": {
             "version": 1,
+            "additive_version": 2,
             "kinds": ["nanoparticle-conjugate", "nanoparticle-conjugation-delete", "nanoparticle-patch"],
-            "scope": "Unbound radial DNA on uncoated gold; explicit exact replacement ownership",
+            "scope": "Unbound radial DNA on uncoated gold; exact replacement ownership in v1, exact retained ownership in additive v2",
             "motion": "Exact current conjugation selection; existing native movement and resize calculations",
             "limits": ["128 surface handles", "50000 generated nucleotides"],
             "legacy": "Larger, asset-backed or opaque ownership remains unverified",
@@ -166,7 +177,7 @@ def editing_capabilities(kinds):
             "limits": ["64 requested sites", "350 KB PDB source", "4096 bytes coverage JSON"],
             "live_append": "Enabled for the qualified single-gold-particle scope" if COATING_APPEND_ENABLED else "disabled",
             "capture": "Explicit coating jobs only: 4 MB, 100000 nodes, 100 ms cooperative capture; ordinary limits unchanged",
-            "publication_scope": "Explicit empty root, at most one unowned gold particle, 32 flat native gold/coating rows, default physical/presentation state, bounded retained recovery and sources",
+            "publication_scope": "Explicit empty root, at most one gold particle, bounded native coating/biotin rows and sources, empty default animation and one editable main loadout; authored physical/presentation state refuses",
         },
         "quantum_dot_contract": {
             "version": 1,
@@ -271,8 +282,23 @@ def editing_capabilities(kinds):
             "photoproduct-create:convert": "Explicit native-source contract with pinned template and numerical engine",
             "photoproduct-relax": "Existing native CPD with pinned template and numerical engine",
             "duplex-relax": "Existing bound native DNA duplex with explicit joint/cluster selections and numerical engine",
-            "nanoparticle-fitting": "Existing fit, bound motion and one-to-four anchor relaxation; explicit selections and numerical pins; append rollout disabled pending qualification",
-            "nanoparticle-biotin-dna": "Pinned original coating/tether source and exact create/remove ownership; append rollout disabled pending qualification",
+            "nanoparticle-fitting": "Existing fit, bound motion and one-to-four anchor relaxation; explicit selections and numerical pins; "
+                + ("ordinary append enabled" if NP_FITTING_APPEND_ENABLED else "append rollout disabled pending qualification"),
+            "nanoparticle-biotin-dna": "Pinned original coating/tether source and exact create/remove ownership; "
+                + ("ordinary append enabled" if BIOTIN_APPEND_ENABLED else "append rollout disabled pending qualification"),
+        },
+        "generated_assets": {
+            "enabled": GENERATED_ASSETS_ENABLED,
+            "endpoint": "POST /api/design/generate-design",
+            "operation": "generate",
+            "fitting_version": 2,
+            "teardown_version": 3,
+            "scope": "Native generated DNA with two to four source-free gold particles, additive grafts and exact final anchors",
+            "limits": ["12 anchors", "128 handles", "50000 bases", "existing 30,000-node/2 MB capture and 8 MB recovery bounds", "180-second worker deadline"],
+            "publication": "Existing cancellable recipe worker; independent full source/candidate proof and one source-bound commit/undo",
+            "history_ui": "Generated graft sequence/spacer and fit fixed-center intent; solved geometry remains output",
+            "unsupported": ["coated/catalog particles", "imported residue geometry", "unrelated duplex/molecular ownership",
+                            "individual nucleotide poses", "scientific mechanics", "experimental branched generation"],
         },
         "unverified_methods": {
             "legacy photoproduct-create:convert": "Receipts without an explicit native source and engine pins remain unverified",

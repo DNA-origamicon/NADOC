@@ -47,6 +47,24 @@ def plan_design(settings: GeneratorSettings):
 
 @router.post("/design/generate-design")
 def generate_design(body: GenerateRequest):
+    from backend.api.part_evaluation_capture import GENERATED_ASSETS_ENABLED
+    if GENERATED_ASSETS_ENABLED and body.shape != 'branched' and body.mechanics not in {'fem-linear', 'fem-nonlinear', 'oxdna'}:
+        from backend.api.part_evaluation_jobs import start
+        with state._lock:
+            session = state._session()
+            source = session.design
+            if source is not None and source.recipe_root is not None:
+                if session.revision != body.expected_revision:
+                    raise HTTPException(409, 'Design changed. Recalculate before generating.')
+                state._assert_active_loadout_editable(source)
+                if source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None:
+                    raise HTTPException(409, 'Return to the latest feature before generating.')
+                identity = session.identity
+            else:
+                source = None
+        if source is not None:
+            return start({'operation': 'generate', 'params': body.model_dump(exclude={'expected_revision', 'progress_id'}),
+                'expected_revision': body.expected_revision}, expected_source=source, expected_session_identity=identity)
     with tracking(body.progress_id):
         return _generate_design(body)
 

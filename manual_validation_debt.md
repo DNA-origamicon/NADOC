@@ -294,6 +294,16 @@ section — open only the one being processed.
 - **MV-AUTOREFINE-FT** — Autorefine **fine-tune pass** live progress + result block on a REAL GPU run (it is always-on and has never been seen against a real engine). In the Simulate section select oxDNA, load a square-lattice bundle (e.g. a 3×6 SQ design; the seeded `3x6x200_test.nadoc` is the cheap fixture), click **✦ Autorefine** and let it converge. Verify: (a) after the uniform secant converges the panel switches to fine-tune progress and shows the `ft_phase` sequence baseline → candidates → edit with per-edit accept/revert readout (the poll loop reads `phase="finetune"`); (b) the result panel's `_finetuneBlock` renders edits-kept + worst-deviation before→after; (c) on completion the toast reads "Autorefine finetuned skips applied" and the **explicit non-uniform** pattern lands in the design (Feature Log entry is revertable/seekable, and the skip marks are NOT evenly spaced); (d) on a homogeneous design it keeps **0 edits** and does no harm; (e) the run's per-iteration jobs are tagged `[AR]`, selectable and stoppable, and the deviation-map toggle still paints. Backend is pinned only against mock/stub engines (`test_skip_finetune.py` 10, `test_skip_twist_tuning.py` 22) and the 4 e2e specs are mocked (`frontend/e2e/autorefine_button.spec.js`) — **no part of this has ever run on a real GPU pass**, and `identify_finetune_edits` still ranks on an unsigned `dev_max` (LESSONS A6 violation, logged in `project_tech_debt`), so a real run may legitimately pick the wrong sign. Needs a CUDA oxDNA build + ~hours. See [[project_regional_autorefine]] (open defect 2) and `project_skip_twist_curvature_sweep.md` (exp34 Gate 2 was designed as this validation and never resolved it).
 - **MV-EDITORDOC** — Cadnano editor **multi-document** path (per-doc `X-NADOC-Doc` routing + independent undo stacks). Pushed here 2026-07-31 by `/audit-debt` TD-03: probing confirmed the editor's only e2e coverage is `cadnano_sliceview_positions.spec.js:86` and `autobreak_edges.spec.js:194,257` — **2 specs, 3 `goto('/cadnano-editor')` calls, none with `?doc=`** — so every automated run exercises only the backend `__default__` document. That is exactly where the undo/redo header bug (`api.js:691`) lived. Manual op: from the 3D app open **two different documents** (each main-app tab mints its own `?doc=`), open the editor from each via `btn-open-editor` (named window per doc, so you should get two distinct editor tabs, not one focused). In editor A make an edit (nick a strand); in editor B make a different edit. Verify: (a) B's pathview does not show A's edit and vice-versa; (b) `Ctrl+Z` in A undoes only A's edit — B's stays; (c) neither tab throws *"Feature index N out of range (log has 1 entries)"* (the symptom of a mutation that lost `docHeaders()`); (d) the Feature Log panel in each editor lists only its own doc's ops; (e) a *standalone* editor tab opened directly at `/cadnano-editor.html` with no `?doc=` still lands on `__default__` and is unaffected by A/B (that asymmetry is deliberate — `shared/doc_id.js:16`). Fixture: any two `.nadoc` from `workspace/`. See `.claude/rules/cadnano-editor.md` → *Doc scoping* / *Two header conventions*.
 
+- **MV-VR-AUTOSTAPLE-SCOPE** — VR machine only (2026-10-18; authored on a machine without VR). The
+  VR routing panel now mirrors the desktop "Autostaple scope" popup (Cancel / Entire structure /
+  Selection only) when Full Autostaple runs with a selection. Covered only by
+  `frontend/src/scene/vr_routing.test.js`. Owed: (a) create a reusable VR tour/test (select a
+  strand in VR → Full Autostaple → Selection only → one "Region autostaple" feature, unselected
+  staples unchanged; repeat with Entire structure and Cancel; with no selection no popup appears)
+  and register it in `tools/vr_workflows/tour_catalog.py` (Debug → VR Tours & Tests, group
+  `authoring`); (b) through-lens check that the popup text and three buttons are readable and
+  reachable. Fixture: any autostapled 6HB part. See
+  `docs/audits/feature_history_20261014/session_handoff.md` (region autostaple).
 
 ## MV-PANELS-1 — Sidebar stack (layout accepted; broader real-file checks remain)
 
@@ -984,7 +994,27 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — AGGREGATE INTEGRATION/RESOURCE SCOPE (reconciled 2026-10-27).**
-  FH-18 cluster lifecycle and ISSUE-99 are qualified; ordinary Bend/Twist acceptance is complete. The remaining debt is FH-27 aggregate integration/resource acceptance, including broad regression failures and the unrelated Dimensions-save toast seen during visual inspection. Current authority and evidence: [handoff](docs/audits/feature_history_20261014/session_handoff.md). Historical APP OPEN, cluster lifecycle and PartGroup requirements below are superseded.
+  FH-18 cluster lifecycle and ISSUE-99 are qualified; ordinary Bend/Twist acceptance is complete. The remaining debt is FH-27 aggregate integration/resource acceptance, including broad regression failures. The Dimensions-save toast was traced to retired passive reads, corrected and verified in an isolated close/reopen browser case on October28. Current authority and evidence: [handoff](docs/audits/feature_history_20261014/session_handoff.md). Historical APP OPEN, cluster lifecycle and PartGroup requirements below are superseded.
+  Ordinary Bend/Twist acceptance is complete; ISSUE-100 is resolved at that scope. Only aggregate integration/resource gaps remain. S53/S54 queues, gate-OFF claims and PartGroup requirements below are historical.
+
+  **Historical charter and evidence; old status/next-task claims superseded:**
+
+  **User sequencing (October 18):** Complete Bend, Twist, Sweep and Extrude, including outstanding desktop/latency acceptance, before other areas. FH-21/FH-22 implementation credit does not close that acceptance. S54 remains the sole next task; fixed exits and counts unchanged.
+
+  **Bend-series current:** S53 qualifies independent, attached-start and sticky-detached Sweep history editing with later Extrude. Native fixture4 and source-contract40 passed, harness22 passed, focused frontend23 passed; final three-case browser matrix passed with clean consoles. Prefix source inventory, ligation draft controls, fixed-origin orientation, saved source/detach identity, exact Cancel, full native geometry, Apply and persistence are covered. Test synchronization corrections required no production change. S54 Sweep downstream-nick success/refusal desktop workflow is the sole unstarted successor. No milestone advanced. See [S53 evidence](docs/audits/feature_history_20261014/sweep_source_matrix_20261018.md). **21/38 complete, 17 remaining (8 core, 9 parked), delta +0/+0; U1–U60 (60 engineering checkpoints; FH-20 at 5 and FH-28 at 11, both growth flagged).** ISSUE-100/MV-48 remain open; production legacy paths, polymer/all-target controls, routing/Sweep chains, failure cases and full resource/broad acceptance remain. Historical sequencing below is superseded.
+
+  **S04 current evidence:** [one guarded attempt](docs/audits/feature_history_20261014/deformation_history_browser_20261017.md), 2 launch failures because isolated XDG cache hides installed headless Chromium; zero lifecycle assertions. Root/process/port/fixture cleanup checked. S07 repairs this boundary only, unstarted. Issue/debt remain open; no gate or milestone changes. Earlier S03 no-browser claims are historical.
+  Latest [full software validation](docs/audits/feature_history_20261014/full_software_validation_20261017.md) is failed, not app acceptance. S05 test isolation (ISSUE-144) and [S06 native revalidation](docs/audits/feature_history_20261014/native_offline_revalidation_20261017.md) are delivered (30 targeted native passes); S04 launch is blocked; S07 is next, unstarted; no gate or manual acceptance changes.
+
+  October 17 follow-up: [failure triage](docs/audits/feature_history_20261014/preexisting_failure_triage_20261017.md) fixes four unrelated assertions and classifies three timing offenders; 88 focused cases pass. Non-CPD geometry failures persist; S06 subsequently resolves the 30 native dependency entries in focused runs only. CPD experiments are now excluded from broader development tests by explicit user instruction; their evidence is not required here. This does not clear ISSUE-100/MV-48 or S02 broad debt; S04 subsequently failed at browser launch.
+
+  **October 17 S03:** [Current acceptance matrix](docs/audits/feature_history_20261014/bend_twist_release_acceptance.md#s03-isolated-history-harness-source-delivered-browser-blocked)
+  records the new tiny Bend/single-helix Twist history spec, isolated launch and
+  cleanup contract; 11 focused checks pass. **No browser/app check ran.** Archive
+  belongs to the other machine; subsequent user-requested portable storage
+  correction passes local preflight. S04 attempted this spec once; both cases failed before their bodies. All gates remain false;
+  ISSUE-100 and this debt stay open. Resource/representative workflow/creation
+  acceptance and S02 incomplete FAST/deferred FULL remain separate requirements.
   **October 16 U15 ordinary patterns (FH-18 checkpoint 13):** after qualified
   organization enablement, select explicit placements and create both Linear
   (including 2D/custom/negative spacing) and Circular patterns (axis/center).
@@ -1205,7 +1235,10 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   (8,441 passed/one existing skip, 727 files, 320.32 s). Those results leave all
   desktop, broad backend and measured responsiveness debt above outstanding.
 
-- **MV-49 — PENDING — Recover a saved recipe as a separate copy (2026-10-16).**
+- **MV-49 — OUTSIDE REQUIRED COMPLETION — LEGACY RECOVERY (reconciled 2026-10-26).**
+  Operating contract §10 excludes old-file conversion/repair from completion. Retain the optional recovery evidence and test charter below as historical convenience work; no app qualification is claimed and no milestone credit is added.
+
+  **Historical charter and evidence; old status/next-task claims superseded:**
   **NOT VERIFIED IN APP.** Open File → Recover recipe from file… with a supported
   native empty-root `.nadoc` containing the known v1 grouping ownership defect;
   the tiny fixture is generated by `tests/test_part_recipe_file_recovery.py:saved`.
@@ -1226,8 +1259,11 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   latency. Full desktop acceptance remains FH-27; this does not add a milestone.
 
 
-- **MV-50 — PENDING — Complete extrusion history editor (2026-10-16).**
-  **NOT VERIFIED IN APP.** With Archive mounted, exercise Bundle, Segment,
+- **MV-50 — DONE — ORDINARY SUPPORTED EDITOR (reconciled 2026-10-26).**
+  October 19 Extrude C1–C9 acceptance and source-reference repair supersede the S51/S52 partial status below. Aggregate FH-27 remains; retired organization/legacy work is not part of MV-50.
+
+  **Historical charter and evidence; old status/next-task claims superseded:**
+  **PARTIALLY VERIFIED IN APP (S51/S52).** Initial Bundle, Segment, Continuation, Deformed Continuation, Frame, Circle and Overhang lifecycles pass Cancel, source-bound Save, native geometry/proof, downstream replay and undo/redo/save/reopen with clean consoles. S52 commits changed cells/placement organization where applicable, offsets/strand filters, Continuation source frame, Deformed Continuation derived frame, independent Frame translation/name and Overhang length/reuse choice. See [S52 evidence](docs/audits/feature_history_20261014/extrude_family_matrix_20261018.md). Remaining alternate input/source modes and failure/resource charter stay open; use verified machine-local scratch. Continue coverage for Bundle, Segment,
   Continuation, Deformed Continuation, Frame, Circle and Overhang history edits
   from the latest cursor, including earlier rows with later features and evicted
   recovery. Change cells/lengths and each relevant ordinary option; check source
@@ -1244,9 +1280,12 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Organized mode requires its existing disabled host gate; this task does not
   qualify rollout. This is part of existing FH-27, not an added milestone.
 
-- **MV-51 — PENDING — Owned Sweep history editor (2026-10-16).**
-  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the paired
-  client/host gates and edit an earlier native Sweep with evicted recovery.
+- **MV-51 — DONE — ORDINARY SUPPORTED EDITOR (reconciled 2026-10-26).**
+  October 19 Guide-only Sweep C1–C9 acceptance supersedes the S50/S53 partial status below. Both production gates are ON; aggregate FH-27 remains.
+
+  **Historical charter and evidence; old status/next-task claims superseded:**
+  S48/S49 verify upstream Bend/Twist edits with downstream attached Sweep in the ordinary app, including exact native placement and persistence; they do not qualify editing Sweep itself. S50/S53 exercise that editor. See [S49 evidence](docs/audits/feature_history_20261014/twist_sweep_replay_20261018.md).
+  **PARTIALLY VERIFIED IN APP (S50/S53).** Attached-end (S50), independent, attached-start and sticky-detached source modes (S53) pass the tiny editor lifecycle with later Extrude, native geometry/proof, exact Cancel/redo preservation, Apply and undo/redo/save/reopen. S53 verifies prefix source inventory, plane availability, ligation draft toggles, explicit endpoint orientation and saved source/detach identity; moving the origin back stays detached. [S53 evidence](docs/audits/feature_history_20261014/sweep_source_matrix_20261018.md). S54's two Sweep→nick success/refusal scenarios are the sole next task, unstarted. Source switching, alternate planes/strands, cell picking, canvas transforms, races and resource acceptance remain open; the full charter below is retained.
   Exercise independent and attached start/end sources, prefix-only cells and
   frames, plane/strands/ligation, add/remove path points, automatic and explicit
   orientation, canvas translation/rotation and sticky origin detachment.
@@ -1265,72 +1304,42 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   the existing FH-27 exit, not additional milestone scope. VR stays deferred.
 
 
-- **MV-52 — PENDING — Owned Move/Rotate history editor (2026-10-16).**
-  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the paired
-  transform client/host gates. Edit earlier placement, nucleotide single/batch,
-  saved-pose reset and complete-placement rows with evicted recovery. Exercise
-  exact numeric/45-degree inputs, global/local frames, snap, Tab and gizmo drags;
-  verify native joint limits/locks, duplex root pivots and tether/linked controls.
-  Explicitly upgrade a single-owner row before including linked poses. Confirm
-  every selected/auxiliary owner, original parent/driver frame and fixed owner;
-  inspect extra bases, CPD, extensions, flexible strands and both linker types.
-  Apply must rebuild later inputs once, retain stable feature identities and
-  survive undo/redo/save/reload/cold proof. Missing sources/downstream references
-  must preserve the document and draft with actionable diagnostics.
-  Exercise Reset after upgrade, Cancel/Escape during Prepare/evaluation/Apply,
-  expiry, lost publication responses, same-ID reset, live-tool conflicts and
-  comparison-view transitions. Check restored camera/panel ownership and focus.
-  Measure representative HTTP/render/drag responsiveness, memory retention and
-  lock costs; bounded data/tests do not establish interactive performance.
-  U24 qualifies CPD free motion and relaxed-duplex root/taut/joint gestures through
-  the real private tool and numerical host, including upgrade and cold proof.
-  This headless native evidence does not close the desktop/performance debt.
-  U23 integrates the numerical worker pair into the gated host/controller.
-  Test long CPD/duplex preparation and Apply with visible
-  Cancel, separate computing/ready/receipt expiry, result retrieval after network
-  loss and no automatic recommit. Confirm ordinary edits keep their existing
-  responsiveness and selected-only evaluation does not rerun the solvers.
-  Complete historical-prefix and arbitrary organizational-group movement exits
-  remain FH-23/FH-18; desktop qualification is the existing FH-27 exit. Both
-  transform gates remain false. No assembly or machine-specific VR claim.
-  U21 adds actual native gesture/host automation but does not close this debt.
-  During a joint drag, let an intermediate preview response arrive before the
-  next movement and release; inspect the same axis/limits before and after Apply.
-  Verify terminal CRUD/batch now creates one history row per action,
-  keeps deletion fast, and reports missing source references after upstream edits.
-  U25 implements post-conversion extension upsert privately. In both 2D and 3D,
-  edit unchanged values, sequence/modification/labels and both termini; inspect
-  tails on posed overlapping/opposite-domain, parent/driver and empty-frame owners.
-  Failed/stale Apply must retain inputs; deletion must preserve newer selection
-  and unrelated cached geometry. Verify one changed row/undo, no-op without a row,
-  save/reload and replay after an earlier pose edit. Closing after dispatch retires
-  UI callbacks but does not cancel a synchronous server commit. Measure full
-  request/render latency and source-capture/undo lock cost on representative parts.
-  Arbitrary new-group movement remains unfinished; numerical gesture software
-  evidence does not replace its remaining desktop qualification.
+- **MV-52 — DONE (revised cluster/individual scope) — Move/Rotate history (2026-10-26).**
+  Production client/host gates ON. Existing creation/history controls, constraints,
+  chronological poses, downstream failure/dependents, mid-log refusal, exact Cancel,
+  single Apply/undo, redo/save/reopen and independent cold replay qualified in app.
+  Single and multiple clusters publish complete native geometry atomically; pose
+  recovery takes priority over partial topology display after staple reclassification.
+  Small6×84 / large18×504 / posed-large preview translation p9576/889/909ms,
+  rotation67/877/890ms; Apply421/2670/3059ms; Cancel59/59/77ms.
+  Forty samples each; GPU raster excluded (SwiftShader). One follow-up remains for
+  nominal500ms preview; all C8 values satisfy existing2× allowances. Experimental
+  arbitrary named-group motion is retired. Assembly/VR and broad regression debt
+  are excluded from this closure; see the transform plan and current handoff.
 
 
-- **MV-53 — PENDING — Fine Routing history inputs (2026-10-16).**
-  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the routing
-  history editor and, for organized fixtures, the existing group host gate.
-  Expand Fine Routing and edit earlier resize/domain-shift, nick/ligation,
-  crossover and loop/skip children with evicted recovery. Check all 22 listed
-  kinds, nested batch add/remove/reorder and protected creation identities.
-  Reference choices must describe the state immediately before that child.
-  Clear-all has an honest no-input summary. Apply must rebuild later children,
-  deformation, extrusion and loop realization, with complete current/straight
-  geometry, one undo and save/reload parity. Missing targets or invalid later
-  steps must identify the failing row and retain the draft and current design.
-  Exercise Cancel/loading, reset/same-ID replacement, protected loadouts, refused
-  Apply and stale responses. Verify ordinary 2D/3D loop and crossover tools retain
-  their current behavior and successful movement runs native work once.
-  Measure representative opening/Apply/HTTP/render, ordinary-tool lock duration
-  and retained memory. No full history proof should run per field or frame.
-  This is the existing FH-27 qualification allocation, not new counted scope.
-  Editor rollout remains off; assembly and machine-specific VR stay deferred.
+- **MV-53 — DONE (ordinary-part editor) — Fine Routing history inputs (2026-10-25).**
+  Production editor ON. All22 native forms exercised through the Feature Log,
+  including reference-prefix controls, nested batch add/remove/reorder, immutable
+  output slots, exact Cancel, downstream sibling/Bend/Extrude rebuild, one undo/redo,
+  save/reopen and independent cold replay. Clear-all has an honest no-input view.
+  Actual native downstream failure retains the draft and source, marks the failing
+  child/blocked suffix, and clears on Cancel or corrected retry. Dependency deletion,
+  mid-log refusal and delayed reference-load Cancel/reset pass. Full field bounds
+  and the corrected18×84 desktop were inspected; final matrix/visual23pass.
+  Small6×84 / large18×504 input p9528/41ms, Apply1.95/7.51s, Cancel78/286ms;
+  opening2.04/4.64s. Large Cancel has one retained200ms-target performance task,
+  within the contract's2× allowance. GPU raster excluded;18×504 SwiftShader visual
+  timeout remains a stated limitation. No retained preview session after repeated
+  opens; RSS includes warm caches. Source capture and packet capacities now admit
+  the representative large part without weakening native proof or request guards.
+  Organizational rollout, assembly/VR, physical qualification and broad baseline
+  debt remain separate. Evidence and final regression counts:
+  [Fine Routing acceptance](docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md).
 
 - **MV-54 — DONE — Ordinary connection lifecycle/removal (reconciled 2026-10-28).**
   Production Unapply/delete, source guards, failed-operation atomicity, undo/reopen and cold replay are qualified across direct, finite and indirect ordinary DNA connections. [FH-25 acceptance](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#ordinary-connection-qualification--october-28-2026). Aggregate FH-27 regression/resource debt remains separate. Gate-OFF statements below are historical.
+
   **October 26 scope/defect update:** ISSUE-126 is corrected by native and
   publication occupancy refusal; incompatible dsDNA choices must fail atomically,
   not be qualified as successful connections. ISSUE-143 and ordinary desktop/

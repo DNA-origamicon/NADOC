@@ -22,9 +22,20 @@ CORE_REPAIR_FIXTURES = {'repair-core-bend', 'repair-core-twist', 'repair-core-cl
                        'repair-core-cascade'}
 FIXTURES.update(CORE_REPAIR_FIXTURES)
 FIXTURES.update({"connection-np-small", "connection-np-large"})
+FIXTURES.update({'asset-fit', 'asset-empty', 'asset-generated'})
 
 
 def fixture(kind):
+    if kind == 'asset-generated':
+        from tests.test_generated_asset_recipe import native_source
+        return native_source('__e2e__generated-assets')
+    if kind in {'asset-fit', 'asset-empty'}:
+        from backend.core.part_history_contract import create_empty_part
+        from tests.test_part_pending_np_connections import native_prefix, append
+        if kind == 'asset-empty':
+            return create_empty_part('__e2e__assets', 'HONEYCOMB')
+        return append(native_prefix.__wrapped__(), 'assign-scaffold-sequence',
+            {'_proof_version': 1, 'scaffold_name': 'M13mp18'}, 'scaffold-sequence')
     if kind in {"connection-np-small", "connection-np-large"}:
         from scripts.benchmark_np_application_route import fixture as np_fixture
         from backend.api.part_recipe_edit import regenerate
@@ -366,6 +377,10 @@ def create_app():
 
     @asynccontextmanager
     async def lifespan(_app):
+        from backend.api import part_evaluation_capture as asset_policy
+        if os.environ.get('NADOC_HISTORY_E2E_ASSETS') == '1':
+            assert asset_policy.NP_FITTING_APPEND_ENABLED and asset_policy.BIOTIN_APPEND_ENABLED
+            assert asset_policy.GENERATED_ASSETS_ENABLED, 'Asset checks must use production gates'
         from backend.api import part_evaluation_comparison as comparison
         if os.environ.get('NADOC_HISTORY_E2E_REPAIR') == '1':
             assert comparison.DNA_COMPARISON_ENABLED, 'DNA comparison must use the production gate'

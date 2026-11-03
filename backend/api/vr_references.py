@@ -42,22 +42,27 @@ def validate_references(data):
     return data
 
 
-def session_state(request):
+def session_state(request, *, reader=None):
     from backend.api import routes_vr as vr
     from backend.api.doc_context import get_current_doc
     vr._require_local(request, check_platform=False)
-    state = vr._read_state()
+    state = vr._read_state() if reader is None else vr._read_state(reader=reader)
     return state if state and state.get('doc_id') == get_current_doc() and state.get('event_path') else None
 
 
 @router.get('/vr/references')
 def get_references(request: Request):
-    state = session_state(request)
+    return read_references(request)
+
+
+def read_references(request, *, reader=None):
+    state = session_state(request, reader=reader)
     if not state:
         return {'session': None}
     event = None
     try:
-        event = json.loads(Path(state['event_path'] + '.references-event').read_text())
+        path = Path(state['event_path'] + '.references-event')
+        event = json.loads(path.read_text() if reader is None else reader(path))
     except (OSError, ValueError):
         pass
     return {'session': Path(state['event_path']).name, 'event': event}

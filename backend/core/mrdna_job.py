@@ -119,6 +119,11 @@ class MrdnaJob:
 
         path = resolve_job_json(workspace_dir, "mrdna_jobs", job_id)
         data = json.loads(path.read_text())
+        return cls.from_metadata(data)
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "MrdnaJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = MrdnaStatus(data["status"])
         data["stages"] = [MrdnaStageStatus(**s) for s in data.get("stages", [])]
         data.setdefault("fine_steps", 0)

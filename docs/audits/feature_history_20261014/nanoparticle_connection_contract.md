@@ -623,3 +623,14 @@ Optional identity inputs thread through `attach_nanoparticle`; default callers a
 Evidence C=`.development-artifacts/feature-history-focus/`: `next3-assets-final-focused-20261101` **169 pass** includes complete native fit/move/relax parity, two/four-anchor solver parity, actual spawned cold replay, upstream edits, undo/redo, cancellation and stale-source publication refusal.
 `next3-real-asset-jobs-destinations-20261101` fitting jobs captured in **2.17–2.72 ms**, complete publication/cancel/stale checks in **1.50–1.58 s**; these three observations are not rollout latency qualification.
 Remaining: ordinary entry-point/editor integration, aggregate repeated live capture/publication/display qualification and complete admitted connection removal/replacement after relaxed/multiple-anchor state. Do not count private worker support as the finished milestone.
+
+## FH-31 ordinary integration — November 1, 2026
+
+`NP_FITTING_APPEND_ENABLED=True`: ordinary Attach, explicit bound Move/Rotate and Relax use the existing cancellable evaluation worker and one guarded publication. Historical editors retain exact references, outputs and numerical pins.
+Application v2 restores fitted, relaxed and multiple-anchor owners through the unchanged native teardown; replacement/removal preserves unrelated ownership. V1 remains unchanged, and generated v3 is teardown/name-only.
+Failed historical edits refuse publication, retain the source and name the earliest failing row; descendants use the existing blocked status. Protected/history-cursor/stale selections refuse before dispatch.
+C=`.development-artifacts/feature-history-focus/`; `remaining-assets-lifecycle-correctness-20261101` has 110 focused passes across routes, capture, connection lifecycle and repair. `generated-repair-v2-green-20261101` adds eight passing pin/source repair checks, including preservation of generated v2.
+`remaining-assets-boundaries-release-20261101`: both fitting cases complete 30/30 captures and publications; capture-lock p95 1.74–1.89 ms, publication-lock p95 0.75–0.80 ms. Real spawned jobs, cold proofs and cancellation/stale-source refusal pass.
+The shared eight-case asset report retains one biotin capture timeout and exits nonzero for its zero-refusal criterion; it is not an all-green benchmark. No deadline, node/byte allowance, numerical formula or GC policy changed.
+App acceptance, required aggregate checks and final milestone disposition are recorded in the [current handoff](session_handoff.md). Earlier candidate-OFF text above is historical.
+`remaining-assets-browser-release-20261101`: real Attach, Move/Rotate preview Cancel/Apply, Relax, historical edit, undo/redo, save/reopen and cold proof pass; rendered output inspected. `remaining-assets-routes-release-20261101`: all seven route cases pass, including relaxed removal.

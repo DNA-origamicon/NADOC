@@ -191,7 +191,32 @@ def test_autorefine_route_rejects_non_square():
     assert "SQUARE" in ei.value.detail
 
 
-def test_autorefine_route_starts_for_square(monkeypatch):
+@pytest.fixture
+def isolated_autorefine(monkeypatch, tmp_path):
+    """Keep stub results private and finish workers before restoring route globals."""
+    import threading
+    from types import SimpleNamespace
+    from backend.api import routes_autorefine as routes
+
+    threads = []
+    def thread(**kwargs):
+        worker = threading.Thread(**kwargs)
+        threads.append(worker)
+        return worker
+
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes, "_RUNS", {})
+    monkeypatch.setattr(routes, "_STOP", {})
+    monkeypatch.setattr(routes, "threading", SimpleNamespace(Thread=thread, Event=threading.Event))
+    yield tmp_path
+    for event in routes._STOP.values():
+        event.set()
+    for worker in threads:
+        worker.join(timeout=5)
+        assert not worker.is_alive(), "autorefine stub worker did not stop"
+
+
+def test_autorefine_route_starts_for_square(monkeypatch, isolated_autorefine):
     """A square-lattice design is accepted: the route returns a run id and a pollable
     registry entry (the heavy loop is stubbed so no real simulation runs)."""
     import backend.api.skip_twist_tuning as stt
@@ -230,7 +255,7 @@ def test_autorefine_route_starts_for_square(monkeypatch):
     assert get_autorefine(rid)["state"] == "done"
 
 
-def test_autorefine_stop_route_cancels_run(monkeypatch):
+def test_autorefine_stop_route_cancels_run(monkeypatch, isolated_autorefine):
     """Stopping a run sets the cooperative cancel flag the loop honors: a stubbed runner
     that blocks until should_stop() exits, and the run transitions to 'stopped'."""
     import time

@@ -842,11 +842,14 @@ def job_progress(job: MrdnaJob, workspace_dir: Path) -> dict:
     }
 
 
-def _dcd_frame_count(path: Path) -> int:
+def _dcd_frame_count(path: Path, *, reader=None) -> int:
     """Read the DCD NSET header while ARBD is writing it (no trajectory scan)."""
     try:
-        with path.open("rb") as fh:
-            header = fh.read(12)
+        if reader is None:
+            with path.open("rb") as fh:
+                header = fh.read(12)
+        else:
+            header = reader(path)
         if len(header) < 12 or header[4:8] != b"CORD":
             return 0
         return max(0, struct.unpack("<i", header[8:12])[0])
@@ -855,7 +858,7 @@ def _dcd_frame_count(path: Path) -> int:
 
 
 def _multiresolution_progress(
-    job: MrdnaJob, workspace_dir: Path
+    job: MrdnaJob, workspace_dir: Path, *, frame_count=None
 ) -> Optional[tuple[float, str, float]]:
     """Actual Fine-job progress from frames written by its three ARBD phases."""
     if job.fine_steps <= 0:
@@ -872,7 +875,7 @@ def _multiresolution_progress(
     active_fraction = 0.0
     saw_output = False
     for idx, (name, steps, period) in enumerate(phases):
-        frames = _dcd_frame_count(jd / "output" / f"{_SIM_STEM}-{idx}.dcd")
+        frames = (frame_count or _dcd_frame_count)(jd / "output" / f"{_SIM_STEM}-{idx}.dcd")
         if frames <= 0:
             break
         saw_output = True
@@ -1239,8 +1242,10 @@ def reconcile_mrdna_status(
     if runtime.is_owned(job.job_dir(workspace_dir)):
         return job
 
+    from backend.core.activity_assessment import mrdna_activity, raw_mrdna_complete
     pid = _external_arbd_pid(job, workspace_dir, proc_scan=proc_scan)
-    if is_running(job.job_id) or pid is not None:
+    observations = {"live": is_running(job.job_id) or pid is not None}
+    if mrdna_activity(observations).action == "live":
         changed = False
         if pid is not None and job.arbd_pid != pid:
             job.arbd_pid = pid
@@ -1252,7 +1257,8 @@ def reconcile_mrdna_status(
             job.save(workspace_dir)
         return job
     jd = job.job_dir(workspace_dir)
-    if (jd / "display.json").exists():
+    observations["cached"] = (jd / "display.json").exists()
+    if mrdna_activity(observations).action == "completed_cache":
         job.status = MrdnaStatus.completed
         for st in job.stages:
             st.status = "done"
@@ -1262,7 +1268,8 @@ def reconcile_mrdna_status(
     # runner. Recover the complete raw three-phase output instead of leaving the
     # old (formerly mis-persisted) queued job stuck forever or rerunning it.
     actual = _multiresolution_progress(job, workspace_dir)
-    if (job.fine_steps > 0 and actual and actual[0] >= 0.99):
+    observations["raw_complete"] = raw_mrdna_complete(job.fine_steps, actual[0] if actual else None)
+    if mrdna_activity(observations).action == "finalization_required":
         design = _load_snapshot_design(jd)
         if design is not None:
             try:
@@ -1276,7 +1283,8 @@ def reconcile_mrdna_status(
                     exc,
                     exc_info=True,
                 )
-    if job.status != MrdnaStatus.running:
+    observations.update(raw_complete=False, running=job.status == MrdnaStatus.running)
+    if mrdna_activity(observations).action == "unchanged":
         return job
     job.status = MrdnaStatus.stopped
     job.arbd_pid = None

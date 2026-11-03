@@ -192,6 +192,11 @@ class OxdnaJob:
 
         path = resolve_job_json(workspace_dir, "oxdna_jobs", job_id)
         data = json.loads(path.read_text())
+        return cls.from_metadata(data)
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "OxdnaJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = OxdnaStatus(data["status"])
         data["stages"] = [OxdnaStageStatus(**s) for s in data.get("stages", [])]
         data["health_samples"] = [

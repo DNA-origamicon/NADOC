@@ -97,7 +97,8 @@ it('ignores an in-flight readiness response after dismissal', async () => {
   await vi.advanceTimersByTimeAsync(200)
   const badge = document.querySelector('[data-role="design-readiness"]')
   badge.querySelector('[aria-label="Dismiss design readiness"]').click()
-  expect(fetch.mock.calls[0][1].signal.aborted).toBe(true)
+  // Dismissal retires the subscriber; keep transport ownership until its body drains.
+  expect(fetch.mock.calls[0][1].signal.aborted).toBe(false)
   finish({ ok: true, json: async () => ready })
   await vi.advanceTimersByTimeAsync(20000)
   expect(badge.hidden).toBe(true)

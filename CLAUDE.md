@@ -5,6 +5,18 @@ vanilla ES modules, `uv` for Python dependencies.
 
 ## Binding scientific rules
 
+### Agent-created structures require their complete process
+
+**Structure without process is disallowed.** Agents must use truthful feature-recording
+construction and preserve every upstream and subsequent operation, including review,
+candidate and flattened-assembly steps. Never clear history, replace it with an import
+capture, fabricate rows, or hide unrecorded changes in atomistic references. Verify the
+saved log and independent replay before delivery; otherwise fail publication with
+`AGENT_PROCESS_REQUIRED` and repair the recording path first. No unilateral diagnostic
+exception. Read [the binding process rule](memory/feedback_structure_requires_process.md).
+Compose only user-facing operations valid in the target editor. Private diagnostic
+steps and internal export/simulation helpers cannot become part-authoring features.
+
 ### Three-Layer Law
 
 1. **Topological** — strand graph and crossover graph. Ground truth; edits happen here.
@@ -57,10 +69,11 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
   and timing thresholds. October 6 overlapping checks exhausted RAM and killed
   VS Code's process scope; do not raise parallelism to chase the time budget.
 
+- All CPD/photoproduct work is experimental and excluded from broader development tests (user clarification, 2026-10-17). Only explicitly requested CPD sessions may select it through the scientific opt-in; other machines need not acquire CPD campaign evidence.
 - Normal test commands validate software only. Physical sampling/convergence and production simulations require a specific user request and `just test-scientific TARGET`; never launch them from change-based selection. See [scientific inventory](docs/scientific_validation.md).
 
 - Keep test/development output out of the main user workspace. Delete disposable artifacts; retain useful evidence under `.development-artifacts/`. Follow [artifact cleanup](memory/feedback_development_artifact_cleanup.md), including dependency checks and final cleanup verification.
-- **Archive-first bulk storage (2026-10-11):** create all large development outputs, downloads, captures and native/temporary scratch on the mounted Archive filesystem from the first byte; configure `TMPDIR` and engine scratch explicitly. Verify the mount and resolved filesystem; never fall back to `/tmp`, checkout `runs/`, home caches, or an unmounted archive directory. Existing-data relocation/deletion requires the user's review of the current inventory. Preserve workspace user designs/jobs, active runtimes and historical provenance. See the same [artifact policy](memory/feedback_development_artifact_cleanup.md#archive-first-storage-and-review--2026-10-11).
+- **Portable test/development storage (2026-10-17 clarification):** select scratch by explicit local configuration and filesystem capabilities, never by hostname or a hardcoded drive. Ordinary isolated tests may use the OS temporary directory on machines with sufficient local capacity. Use `NADOC_TEST_SCRATCH_ROOT` to select another existing directory; an explicitly configured unavailable destination must fail without fallback. On the space-constrained Archive workstation, set `NADOC_TEST_SCRATCH_MOUNT` as well and verify that mount and resolved filesystem before writing. Bound output, check space for the workload, propagate scratch to child tools and clean up on failure. Keep user designs/jobs, active runtimes and historical provenance intact; existing-data relocation/deletion still requires review. See [artifact policy](memory/feedback_development_artifact_cleanup.md#portable-storage-across-machines--2026-10-17) and [local setup](START.md#test-scratch-on-different-machines).
 
 - Backend behavior change → run `just test-smart`; report its `FAST`/`fast+slow[area]` decision, pass count, and any `DEFERRED` groups verbatim.
 - Frontend behavior change → run `just test-frontend` and exercise the feature in the running app. If that is impossible, lead the final report with `NOT VERIFIED IN APP` and explain why.

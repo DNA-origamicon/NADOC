@@ -497,6 +497,49 @@ describe('unified list + master card', () => {
     expect(api.listSimJobs.mock.calls.length).toBeGreaterThan(afterOpen)
   })
 
+  it('keeps a known-empty list idle on edits, but discovers newly launched jobs and switched parts', async () => {
+    mount()
+    let path = '/w/D.nadoc'
+    const { sim, api } = make([], {}, { getWorkspacePath: () => path })
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', { detail: { activeTab: 'dynamics' } }))
+    await sim.refresh()
+    api.listSimJobs.mockClear()
+    window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(api.listSimJobs).not.toHaveBeenCalled()
+
+    api.listSimJobs.mockResolvedValue([oxNode()])
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(api.listSimJobs).toHaveBeenCalledOnce()
+    expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]')).toHaveLength(1)
+
+    api.listSimJobs.mockResolvedValue([])
+    await sim.refresh()
+    api.listSimJobs.mockClear()
+    path = '/w/Another.nadoc'
+    window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change'))
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(api.listSimJobs).toHaveBeenCalledOnce()
+    expect(api.listSimJobs.mock.calls[0][0]).toBe(path)
+  })
+
+  it('invalidates a pending discovery after an edit even when the previous list was empty', async () => {
+    mount()
+    const { sim, api } = make([])
+    await sim.refresh()
+    api.listSimJobs.mockClear()
+    let finish
+    api.listSimJobs.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      .mockResolvedValue([oxNode({ out_of_date: true })])
+    const pending = sim.refresh()
+    await Promise.resolve()
+    window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+    finish([oxNode({ out_of_date: false })])
+    await pending
+    expect(api.listSimJobs).toHaveBeenCalledTimes(2)
+  })
+
   it('renders both engines in one list, LAMMPS carrying an [L] badge', async () => {
     mount()
     const { sim } = make([oxNode(), lmNode()])

@@ -67,6 +67,7 @@ def test_launch_starts_viewer_before_scheduling_export(monkeypatch, tmp_path):
     from backend.api import vr_dimensions, vr_view_volumes
     import tempfile
 
+    monkeypatch.setattr(routes_vr, '_native_platform_reason', lambda: None)
     monkeypatch.setattr(tempfile, 'tempdir', str(tmp_path))
     monkeypatch.setattr(routes_vr, '_LOG_PATH', tmp_path/'viewer.log')
     monkeypatch.setattr(routes_vr, '_start_steamvr', lambda: None)

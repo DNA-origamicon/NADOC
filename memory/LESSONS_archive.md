@@ -2069,6 +2069,13 @@ Join/Pattern recovery inspected `op_kind` with `getattr(..., None)` on every pos
 How to avoid: check the feature discriminator before accessing variant-specific fields in large scans. Retain independent output equivalence and paired latency gates; do not raise thresholds to accommodate avoidable dispatch overhead. See ISSUE-81 and `docs/audits/feature_history_20261014/evaluation_benchmark_p2_completion.json`.
 
 
+<a id="c16"></a>
+### C16 — Recipe publication must retain host save ownership
+
+Recipe replay reconstructs authoring, not the desktop's save target. Asset publication omitted the source's identity path while autosave acknowledgements replaced captured frontend objects; a valid private job became stale or a later save forked the file. A revision check alone did not cover in-flight saves or restore lost host metadata (ISSUE-159).
+
+**How to avoid:** retain source-owned file identity during publication, wait for in-flight saves before capturing the edit context, and hold queued saves until cancellation or confirmed publication. Bind adoption to the document/loadout/revision/session and resolve uncertain commits through the same job. Metadata-only object replacement is not an authoring revision.
+
 <a id="c15"></a>
 ### C15 — Ordinary edit completion is not necessarily a changed revision
 

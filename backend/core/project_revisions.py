@@ -541,16 +541,17 @@ class ProjectRevisionStore:
             _atomic_json(destination, record)
         return self.read_revision(record["project_id"], expected)
 
-    def load_design(self, project_id: str, revision_id: str) -> Design:
+    def load_design(self, project_id: str, revision_id: str, *, reader=None) -> Design:
+        reader = read_file if reader is None else reader
         # Legacy revision objects may embed a base64 snapshot. The document
         # bound applies to that JSON envelope before its separate decoded gate.
-        data = json.loads(read_file(self.object_path(project_id, revision_id)))
+        data = json.loads(reader(self.object_path(project_id, revision_id)))
         if data.get("format") != FORMAT or data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported project revision format")
         if "snapshot_gz_b64" in data:  # v1 development compatibility
             raw = decode_snapshot_bytes(data["snapshot_gz_b64"])
         else:
-            raw = decode_gzip(read_file(
+            raw = decode_gzip(reader(
                 self.snapshot_path(project_id, data["snapshot_sha256"]),
                 limit=MAX_COMPRESSED_BYTES, label="Compressed project snapshot"))
         if hashlib.sha256(raw).hexdigest() != data.get("snapshot_sha256"):

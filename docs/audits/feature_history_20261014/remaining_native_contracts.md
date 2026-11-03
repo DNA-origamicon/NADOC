@@ -1,5 +1,16 @@
 # Remaining native contracts — October 15, 2026
 
+## FH-36 generated asset integration — November 1, 2026
+
+`GENERATED_ASSETS_ENABLED=True`: recipe-rooted Generate Design uses the existing worker, independently proves its source and complete candidate, and publishes once. Native rows replace empty handle preparation and fitted diagnostic receipts.
+Additive thiol v2 retains exact existing owners; generated fitting v2 records particle/graft/target/strand, fixed-center/alignment intent, pending/active anchors and deterministic identities. Generated application v3 restores exact ownership during regeneration; it cannot apply a connection.
+Admitted scope is 2–4 source-free uncoated particles, 1–12 grafts, at most 128 handles, 12 active/128 retained versions and 50,000 bases, subject to unchanged 30,000-node/2 MB capture and 8 MB recovery bounds. Foreign duplex ownership, individual poses, imported molecular geometry, flexible/CPD/protein scopes and scientific generator mechanics refuse explicitly.
+C=`.development-artifacts/feature-history-focus/`; `generated-assets-boundaries-corrected-20261101` and `generated-assets-regeneration-20261101` total seven passes: platform/curved construction, four particles/twelve anchors, independent cold proof, upstream edits, retained unrelated DNA and repeated generation/teardown.
+The actual maximum generation worker completed in 152.639 s and published once. `generated-largest-final-20261101` records a 49.834 s real edit, cancellation/stale-source rejection, 29/30 captures and 30/30 prepared publications; one safe deadline refusal remains visible.
+At that maximum, capture-lock p95/max is 24.522/25.135 ms and publication-lock p95/max 18.177/20.241 ms. Complete undo copies retain display/history fields and alias semantics; bounded empty allocations, acyclic copying and equivalent fresh defaults remove allocation overhead without changing limits or GC policy.
+Generated graft and fit editors preserve v2 and authored references; explicit numerical repair changes only pins. App acceptance, aggregate checks and final disposition are in the [current handoff](session_handoff.md). Older P3-only gaps below are historical.
+`remaining-assets-browser-release-20261101`: actual Generate Design dialog, upstream graft edit, undo/redo, save/reopen and independent complete cold proof pass (1.5 min); zero tool console errors. The final seven-case route suite also passes.
+
 Implementation guide for the next P3 checkpoint, following
 [the architecture review](architecture_review.md). This is a read-only code audit
 and proposed decomposition, not completed implementation or test evidence.

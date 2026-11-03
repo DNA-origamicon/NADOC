@@ -85,13 +85,15 @@ def _revision_identity(workspace, project_id, revision_id, _mtime, _size):
     return design.id, design_build_fingerprint(design)
 
 
-def _metadata_paths(workspace, folder):
+def _metadata_paths(workspace, folder, reader=None):
     """Live and archived metadata without job.load()'s archive-cache writes."""
     from backend.core.job_archive import read_index
 
     root = workspace / folder
-    paths = {path.parent.name: path for path in root.glob("*/job.json")}
-    for job_id, archive in read_index(workspace, folder).items():
+    paths = {path.parent.name: path for path in (root.glob("*/job.json") if reader is None else reader.live_paths(root))}
+    for job_id, archive in (read_index(workspace, folder) if reader is None else reader.archive_index(root)).items():
+        if reader is not None:
+            reader.visit()
         if job_id in paths:
             continue
         try:
@@ -103,19 +105,19 @@ def _metadata_paths(workspace, folder):
     return paths
 
 
-def _job_identity(job, path, paths, workspace):
+def _job_identity(job, path, paths, workspace, reader=None):
     """Resolve the immutable snapshot, including production-parent inheritance."""
     current, current_path, seen = job, path, set()
     while current_path not in seen:
         seen.add(current_path)
         snapshot = current_path.parent / "design.json"
         if snapshot.is_file():
-            return _snapshot_identity(*_stamp(snapshot))
+            return _snapshot_identity(*_stamp(snapshot)) if reader is None else reader.snapshot_identity(snapshot)
         parent_id = current.get("parent_job_id")
         if not parent_id or parent_id not in paths:
             break
         current_path = paths[parent_id]
-        current = _read_json(*_stamp(current_path))
+        current = _read_json(*_stamp(current_path)) if reader is None else reader.read_json(current_path)
     project, revision = job.get("project_id"), job.get("design_revision_id")
     if project and revision:
         from backend.core.project_revisions import ProjectRevisionStore
@@ -123,13 +125,14 @@ def _job_identity(job, path, paths, workspace):
         revision_path = ProjectRevisionStore(workspace).object_path(project, revision)
         if revision_path.is_file():
             _, mtime, size = _stamp(revision_path)
-            return _revision_identity(str(workspace), project, revision, mtime, size)
+            return (_revision_identity(str(workspace), project, revision, mtime, size) if reader is None
+                    else reader.revision_identity(workspace, project, revision))
     # Positive exact stored hashes can qualify modern archived metadata even if
     # the archive is offline. Unknown/legacy hashes never become a pass.
     return project, job.get("design_fingerprint")
 
 
-def completed_simulation(design: Design | str, workspace: Path, fingerprint: str | None = None) -> dict:
+def completed_simulation(design: Design | str, workspace: Path, fingerprint: str | None = None, *, reader=None) -> dict:
     """Return one completed, current-design Fine/Production run, or explain its absence."""
     design_id = design if isinstance(design, str) else design.id
     if fingerprint is None:
@@ -139,20 +142,20 @@ def completed_simulation(design: Design | str, workspace: Path, fingerprint: str
     stale = unknown = unreadable = 0
     for engine, folder in ENGINE_FOLDERS.items():
         try:
-            paths = _metadata_paths(workspace, folder)
+            paths = _metadata_paths(workspace, folder, reader)
         except (OSError, ValueError, TypeError):
             unreadable += 1
             continue
         for job_id, path in paths.items():
             try:
-                job = _read_json(*_stamp(path))
+                job = _read_json(*_stamp(path)) if reader is None else reader.read_json(path)
                 kind = completed_simulation_kind(engine, job)
                 if not kind:
                     continue
                 project = job.get("project_id")
                 if project and project != design_id:
                     continue
-                snapshot_id, saved_fingerprint = _job_identity(job, path, paths, workspace)
+                snapshot_id, saved_fingerprint = _job_identity(job, path, paths, workspace, reader)
                 if (project or snapshot_id) != design_id:
                     continue
                 if not saved_fingerprint or not str(saved_fingerprint).startswith(fingerprint.split(":", 1)[0] + ":"):

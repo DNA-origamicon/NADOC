@@ -2764,10 +2764,10 @@ def _build_viewer_locked() -> None:
         )
 
 
-def _read_state() -> dict | None:
+def _read_state(*, reader=None) -> dict | None:
     _capture_configuration()
     try:
-        state = json.loads(_STATE_PATH.read_text())
+        state = json.loads(_STATE_PATH.read_text() if reader is None else reader(_STATE_PATH))
         pid = int(state["pid"])
         expected = _VIEWER.resolve()
         actual = Path(f"/proc/{pid}/exe").resolve()

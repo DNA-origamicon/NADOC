@@ -659,7 +659,9 @@ def test_start_rejected_while_one_running(monkeypatch):
 
 @pytest.mark.slow
 def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch, tmp_path, request):
+    from functools import partial
     from backend.api import routes_benchmark
+    from backend.core import namd_solvate
     from backend.api.headless_build import build_bundle
     from backend.core.hardware import cpu_count
     from backend.core.models import LatticeType
@@ -678,6 +680,12 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch, tmp_path, req
     )
     design_state.set_design(design)
     monkeypatch.setattr(routes_benchmark, "_WORKSPACE_DIR", tmp_path)
+    # Software integration fixture, not a production reservoir: the default
+    # 6 nm padding creates 1.09M atoms even for this 8-bp proxy. Keep the real
+    # solvation and unchanged settle/trial stages, with explicit 1.5 nm padding
+    # (larger than the 1.0 nm nonbonded cutoff). Production defaults stay intact.
+    monkeypatch.setattr(namd_solvate, "build_namd_solvated_package",
+        partial(namd_solvate.build_namd_solvated_package, padding_nm=1.5))
 
     # Keep the sweep to a single CPU trial so the real solvate→minimize→MD→parse path
     # runs in ~a minute (the point is "does it complete", not "which config wins").

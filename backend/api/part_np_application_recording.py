@@ -20,6 +20,14 @@ def try_record_locked(kind, particle_id, choices, *, session, source, version_id
     """Called only by the lock-owning ordinary connection dispatcher."""
     from backend.api import state
     from backend.api.feature_recording import record_feature
+    from backend.api.part_evaluation_capture import NP_FITTING_APPEND_ENABLED
+
+    active = [v for v in source.nanoparticle_connection_versions
+              if v.nanoparticle_id == particle_id and v.applied]
+    posed = any(list(o.rotation) != [0., 0., 0., 1.] or list(o.translation) != [0., 0., 0.]
+                for o in source.overhangs if o.id == (choices.get('overhang_id') if version is None else version.overhang_id))
+    numerical = len(active) > 1 or posed or any(v.relaxed or v.residual_nm is not None for v in active)
+    application_version = 2 if NP_FITTING_APPEND_ENABLED and numerical else 1
 
     creating = kind == "nanoparticle-connection-version-create"
     deleting = kind == "nanoparticle-connection-version-delete"
@@ -62,7 +70,8 @@ def try_record_locked(kind, particle_id, choices, *, session, source, version_id
             prior_duplex_id=None if creating else version.duplex_id,
             conflict_version_ids=tuple(item.id for item in source.nanoparticle_connection_versions
                 if item.id != version_id and (item.strand_id == strand_id or item.overhang_id == overhang_id)),
-            direct_variant=choices.get("direct_variant", "end-to-root") if creating else None)
+            direct_variant=choices.get("direct_variant", "end-to-root") if creating else None,
+            application_version=application_version)
         selection = application._select_inputs(source, inputs, prepared)
     except CommandContractError as error:
         if error.code in {"unsupported_np_application_source", "unsupported_np_connection_source"}:
@@ -72,7 +81,7 @@ def try_record_locked(kind, particle_id, choices, *, session, source, version_id
     # Structural fallback ends here. Defaults are allocated only for an admitted
     # selection, and the final command owns every generated identity and time.
     values = {"_proof_version": 1, "nanoparticle_connection_version": 1,
-        "nanoparticle_application_version": 1, "history_seed": str(uuid4()),
+        "nanoparticle_application_version": application_version, "history_seed": str(uuid4()),
         "nanoparticle_id": particle_id, "conjugation_id": inputs.conjugation_id,
         "strand_id": strand_id, "overhang_id": overhang_id,
         "handle_overhang_id": inputs.handle_overhang_id,

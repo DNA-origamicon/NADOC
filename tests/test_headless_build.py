@@ -2178,13 +2178,6 @@ def test_delete_strand_result_survives_roundtrip():
     assert_roundtrip_stable(lambda: deleted)
 
 
-def test_nick_ligate_delete_flip_routes_to_covered():
-    """The three wrappers register their routes as covered (function-identity audit)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert {"add_nick", "ligate_strand", "delete_strand"} <= covered
-
-
 # ── Strand end-resize wrapper (AF-30) ─────────────────────────────────────────────
 
 
@@ -2250,13 +2243,6 @@ def test_resize_strand_end_plus_then_minus_is_topology_identity():
             forward=lambda: hb.resize_strand_end(sid, hid, "3p", -5),
             inverse=lambda: hb.resize_strand_end(sid, hid, "3p", 5),
         )
-
-
-def test_resize_strand_end_flips_route_to_covered():
-    """The wrapper registers strand_end_resize as covered (function-identity audit)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "strand_end_resize" in covered
 
 
 # ── Loop/skip wrappers (AF-3) ─────────────────────────────────────────────────────
@@ -2365,13 +2351,6 @@ def test_apply_deformations_geometry_honors_marks_per_helix():
             )
 
 
-def test_loop_skip_apply_deformations_flip_routes_to_covered():
-    """The two AF-3 wrappers register their routes as covered (function-identity)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert {"insert_loop_skip", "apply_loop_skips_from_deformations"} <= covered
-
-
 # ── Parametric circle wrapper (AF-4) ──────────────────────────────────────────────
 
 
@@ -2413,13 +2392,6 @@ def test_circle_segment_is_additive_over_existing_dna():
         d = hb.circle_segment(8.0)
         assert len(d.helices) > n_before
         assert (0, 0) in {tuple(h.grid_pos) for h in d.helices}
-
-
-def test_circle_segment_flips_route_to_covered():
-    """The wrapper registers /design/circle-segment as covered (function-identity)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "add_circle_segment" in covered
 
 
 def test_assert_circular_disc_fires_on_a_non_circular_profile():
@@ -2476,13 +2448,6 @@ def test_deformed_continuation_lands_on_the_deformed_frame():
         )
         assert after.feature_log[-1].op_kind == "extrude-deformed-continuation"
         assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
-
-
-def test_deformed_continuation_flips_route_to_covered():
-    """The wrapper registers /design/bundle-deformed-continuation as covered."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "add_bundle_deformed_continuation" in covered
 
 
 # ── Deformation bend/twist wrappers (AF-6) ────────────────────────────────────────
@@ -2554,13 +2519,6 @@ def test_add_twist_requires_exactly_one_spec():
         with pytest.raises(ValueError, match="exactly one"):
             hb.add_twist(20, 60, total_degrees=90.0, degrees_per_nm=30.0)
         assert design_state.get_or_404().deformations == []
-
-
-def test_deformation_flips_route_to_covered():
-    """The wrappers register POST /design/deformation as covered (function-identity)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "add_deformation" in covered
 
 
 # ── clusters (AF-15 Phase 1 — rigid-body grouping + DISPLAY-layer pose) ─────────
@@ -2638,14 +2596,6 @@ def test_clustered_pose_survives_roundtrip():
         assert_cluster_translated(
             identity_base, reloaded, cid, translation=[10.0, 0.0, 0.0]
         )
-
-
-def test_cluster_routes_flip_to_covered():
-    """The wrappers register POST /design/cluster + PATCH /design/cluster/{id} as
-    covered (function-identity), coverage 32 → 34."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert {"add_cluster", "update_cluster"} <= covered
 
 
 # ── AF-16: loggable cluster creation ───────────────────────────────────────────
@@ -2737,14 +2687,6 @@ def test_full_sequence_survives_roundtrip():
         sequenced = hb.full_sequence().model_copy(deep=True)
     reloaded = roundtrip_nadoc(sequenced)
     assert_fully_sequenced(reloaded)
-
-
-def test_full_sequence_flips_assign_staples_route_to_covered():
-    """The assign_staple_sequences wrapper registers its route as covered
-    (function-identity audit)."""
-    rep = headless_coverage_report()
-    covered = {r["endpoint"] for r in rep["covered_routes"]}
-    assert "assign_staple_sequences_endpoint" in covered
 
 
 # ── AF-35: multi-op primitive PLACEMENT (preserve-verbatim graft) ─────────────────

@@ -9,6 +9,37 @@ status: active
 User instruction, 2026-09-15/16: delete disposable development/test artifacts;
 retain useful evidence only where it does not clutter the main user workspace.
 
+## Portable storage across machines — 2026-10-17
+
+User clarification: Archive belongs to another machine whose system drive was
+space-constrained. This machine has ample local storage. The October 11 Archive
+restriction below applies to that workstation, not every checkout or test.
+This clarification supersedes globally applying its absolute mount path.
+
+- Tests depend on isolated writable scratch with sufficient capacity, not a named
+  disk or hostname. Use the OS temporary directory by default for ordinary tests.
+- Explicit local configuration selects external scratch where needed. The history
+  harness accepts `NADOC_TEST_SCRATCH_ROOT`; the older
+  `NADOC_HISTORY_E2E_OUTPUT_PARENT` remains a compatibility alias. Conflicting
+  settings, missing/unwritable paths and insufficient capacity fail without fallback.
+- On a machine requiring an external filesystem, also configure
+  `NADOC_TEST_SCRATCH_MOUNT`. Require a mounted directory and resolve scratch onto
+  that filesystem. Never create the missing mount directory to satisfy preflight.
+- These variables are local shell/CI settings, not committed machine identities.
+  For other tools, configure their supported scratch settings (`TMPDIR`, `TEMP`,
+  `TMP`, pytest placement, native-engine scratch) before imports/child launches.
+  Do not assume legacy tools automatically read the new harness variables.
+- Large campaigns must estimate their own storage and check available capacity.
+  The small capture-free history spec's 1 GiB free-space preflight is operational
+  headroom, not a general campaign budget or a continuous disk quota.
+- Keep every run in a fresh owned directory and clean up after success/failure.
+  Retain compact summaries; no user-workspace output or implicit migration of
+  existing data. Scientific authorization and resource/test guards are unchanged.
+- Instructions saying Archive is universally required, including older handoffs,
+  are historical. Apply this machine-local policy to future validation decisions.
+
+See [setup and commands](../START.md#test-scratch-on-different-machines).
+
 ## Feature-validation cleanup — 2026-10-13
 
 User clarification: “make sure we are cleaning up all data after validation” and
@@ -30,7 +61,7 @@ User clarification: “make sure we are cleaning up all data after validation”
 
 ## Archive-first storage and review — 2026-10-11
 
-The user reports the system disk is nearly full and explicitly requires review
+On the Archive workstation, the user reported its system disk was nearly full and explicitly requires review
 before moving or deleting the existing development artifacts in this inventory.
 The October 11 request takes precedence over the earlier general cleanup rule:
 inventory and propose exact paths/actions first; do not execute this cleanup until
@@ -38,7 +69,7 @@ the user approves a selection. Workspace user designs and their managed jobs are
 excluded. Flag development copies derived from user designs separately rather
 than assuming they fall within that exclusion-free scope.
 
-All future large development files must be created on the mounted Archive drive
+On that space-constrained workstation, large development files must be created on the mounted Archive drive
 from the first byte, including simulation outputs, native integral scratch,
 temporary simulation packages, frame/profile captures, browser traces, downloads,
 and new large development caches/tool environments. Use
@@ -48,7 +79,7 @@ variables before imports/child launches, or pass an explicit archive `dir=` to
 temporary-directory APIs. Do not stage large output in `/tmp`, the checkout,
 `runs/`, or a home-directory cache before archiving it.
 
-Verify `/media/jojo/Archive` is actually mounted and the resolved output/scratch
+On that workstation, verify `/media/jojo/Archive` is actually mounted and the resolved output/scratch
 paths are on its filesystem before a bulk writer starts. Stop if the mount is
 unavailable; never silently create bulk output on the system filesystem at an
 unmounted archive path. Existing live runtimes, source pins, and managed-job paths
@@ -67,11 +98,11 @@ scratch in `~/.cache/nadoc-qm/` is separately listed for review.
   create top-level campaign, benchmark, literature-download or diagnostic folders
   there. A filename containing “test” is not evidence that a user design is disposable.
 - Use `tempfile.TemporaryDirectory` or pytest `tmp_path` for disposable work, with
-  cleanup on success and failure. For large output, explicitly place these on
-  Archive as described above. Remove empty output folders at task completion.
+  cleanup on success and failure. For large output, select and verify scratch
+  according to the machine-local policy above. Remove empty output folders at task completion.
 - Retain necessary raw scientific evidence, checkpoints, source assets and large
   diagnostic outputs under repository-local `.development-artifacts/<task>/`.
-  On this workstation it is a gitignored symlink to
+  On the original Archive workstation this was a gitignored symlink to
   `/media/jojo/Archive/NADOC_archive/runtime/development-artifacts`, outside the
   main user workspace. On another machine create/configure an equivalent local
   directory; never fall back silently to the user workspace.

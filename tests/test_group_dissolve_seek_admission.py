@@ -155,7 +155,7 @@ def test_plain_evicted_history_retains_legacy_seek_behavior(document, monkeypatc
     assert live.model_dump(mode="json") == before
 
 
-def test_conservative_recovery_refusal_does_not_disable_independent_native_proof(document):
+def test_native_dissolution_replays_without_recovery(document):
     grouped, group, _ = _create(document)
     routes_clusters.delete_cluster(group.id)
     live = state.get_or_404().model_copy(deep=True)
@@ -164,8 +164,10 @@ def test_conservative_recovery_refusal_does_not_disable_independent_native_proof
     row.design_snapshot_gz_b64 = row.post_state_gz_b64 = ""
     live = _install(live)
     before = _snapshot()
-    with pytest.raises(HTTPException) as caught:
-        crud._seek_feature_log(live, -1)
-    assert caught.value.status_code == 410
+    restored = crud._seek_feature_log(live, -1)
+    assert restored.helices == live.helices
+    assert restored.cluster_transforms == live.cluster_transforms
+    assert crud._geometry_for_design(restored) == crud._geometry_for_design(live)
+    _verified(restored)
     _verified(live)
     _unchanged(before)

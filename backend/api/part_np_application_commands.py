@@ -31,7 +31,7 @@ _Time = Annotated[float, Field(strict=True, ge=0, allow_inf_nan=False)]
 
 
 class _Application(pending._Input):
-    nanoparticle_application_version: StrictInt = Field(ge=1, le=1)
+    nanoparticle_application_version: StrictInt = Field(ge=1, le=3)
     history_seed: pending._Id
     handle_overhang_id: pending._Id
     prior_duplex_id: pending._Id | None
@@ -130,6 +130,7 @@ class _SelectionInputs:
     prior_duplex_id: str | None
     conflict_version_ids: tuple[str, ...]
     direct_variant: Literal["end-to-root", "root-to-root"] | None
+    application_version: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +179,8 @@ def _inputs_for(kind, body):
         version_id=None if action == "create" else body.version_id,
         prior_duplex_id=body.prior_duplex_id,
         conflict_version_ids=tuple(body.conflict_version_ids),
-        direct_variant=body.direct_variant if action == "create" else None)
+        direct_variant=body.direct_variant if action == "create" else None,
+        application_version=body.nanoparticle_application_version)
 
 
 def _unsupported(detail):
@@ -492,7 +494,21 @@ def _select_inputs(design, inputs, prepared):
     relevant = ([current] if current is not None else []) + ([index[("nanoparticle_connection_version", identity)]
         for identity in inputs.conflict_version_ids] if applying else [])
     active = [item for item in design.nanoparticle_connection_versions if item.nanoparticle_id == particle.id and item.applied]
-    if len(active) > 1:
+    numerical = inputs.application_version >= 2
+    if inputs.application_version == 3:
+        from backend.api.part_generated_np_fitting import source
+        source(design)
+        if applying:
+            _unsupported("Generated application v3 admits teardown and naming only; new connections require native fitting")
+    elif numerical:
+        from backend.api.part_np_fitting_commands import _source
+        # Validate every active owner, including the anchors this operation must
+        # preserve. The existing solver is never called by a lifecycle change.
+        _source(design, particle.id)
+        surviving = [item for item in active if item not in relevant]
+        if applying and len(surviving) >= 4:
+            _unsupported("Native nanoparticle application admits at most four active anchors")
+    if not numerical and len(active) > 1:
         _unsupported("Native nanoparticle application admits one active version per particle")
     restoring = []
     for item in relevant:
@@ -500,10 +516,11 @@ def _select_inputs(design, inputs, prepared):
             continue
         if item.nanoparticle_id != particle.id:
             _unsupported("Native nanoparticle application cannot displace another particle's applied version")
-        restoring.append((item, *_restoration(design, index, owner, item)))
-    if any(item.id not in {version.id for version, *_ in restoring} for item in active):
+        checked = item.model_copy(update={"relaxed": False, "residual_nm": None}) if numerical else item
+        restoring.append((item, *_restoration(design, index, owner, checked)))
+    if not numerical and any(item.id not in {version.id for version, *_ in restoring} for item in active):
         _unsupported("Another applied handle lies outside the selected restoration")
-    if applying and not restoring and (list(target.rotation) != [0., 0., 0., 1.] or list(target.translation) != [0., 0., 0.]):
+    if not numerical and applying and not restoring and (list(target.rotation) != [0., 0., 0., 1.] or list(target.translation) != [0., 0., 0.]):
         _unsupported("Native application requires an unposed target overhang before relocation")
     return _Selection(design, inputs, prepared, particle, owner, strand, target,
                       endpoint, current, variant, attaches, tuple(restoring))
@@ -575,7 +592,14 @@ def _materialize(design, bound):
         radial = set_version_applied(radial, old.id, False)
     radial_index = identity_index(radial)[0] if restoring else index
     try:
-        resolve_owned_handles(radial, particle.id, [owner.id], radial_index, parameter="conjugation_id")
+        if body.nanoparticle_application_version == 3:
+            from backend.api.part_generated_np_fitting import source
+            source(radial)
+        elif body.nanoparticle_application_version == 2:
+            from backend.api.part_np_fitting_commands import _source
+            _source(radial, particle.id)
+        else:
+            resolve_owned_handles(radial, particle.id, [owner.id], radial_index, parameter="conjugation_id")
     except ReferenceResolutionError as error:
         raise ReferenceResolutionError(str(error), code=error.code, references=[
             {**reference, "parameter_path": ["conjugation_id"]} for reference in error.references]) from error
@@ -621,6 +645,11 @@ def _materialize(design, bound):
 
 def build(kind, design, params):
     body = parse_command(kind, params)
-    prepared = _prepare_source(design)
+    if body.nanoparticle_application_version == 3:
+        from backend.api.part_generated_np_fitting import source
+        index, _, _ = source(design)
+        prepared = pending._PreparedSource(design, index)
+    else:
+        prepared = _prepare_source(design)
     selected = _select_inputs(design, _inputs_for(kind, body), prepared)
     return _materialize(design, _bind_command(kind, design, body, selected))

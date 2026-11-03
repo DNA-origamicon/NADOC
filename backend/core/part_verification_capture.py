@@ -4,7 +4,7 @@ from backend.core.part_capture_inputs import CaptureLimit as CaptureLimit, visit
 
 
 def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
-            preserve_entry_types=False, atom_copies=None):
+            preserve_entry_types=False, atom_copies=None, model_copies=None):
     """Caller owns the state lock; isolation retains the cooperative deadline.
 
     Recovery payloads and display/physical data are excluded. Immutable strings
@@ -13,7 +13,8 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
     without constructing another isolated graph.
     """
     return visit_inputs(design, max_nodes=max_nodes, max_bytes=max_bytes, seconds=seconds,
-                        preserve_entry_types=preserve_entry_types, copy_inputs=True, atom_copies=atom_copies)
+                        preserve_entry_types=preserve_entry_types, copy_inputs=True, atom_copies=atom_copies,
+                        model_copies=model_copies)
 
 
 def admit(design, *, max_nodes=30_000, max_bytes=2_000_000, preserve_entry_types=False):

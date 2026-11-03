@@ -1,12 +1,14 @@
 import asyncio
 
 import httpx
+import pytest
 
 from backend.core import collaboration_status as status
 from backend.core.collaboration_peers import Peer, PeerRegistry
 
 
-def test_tabs_share_probe_and_disconnect_does_not_cancel_it(monkeypatch, tmp_path):
+@pytest.mark.parametrize("read_only", [False, True])
+def test_tabs_share_probe_and_disconnect_does_not_cancel_it(monkeypatch, tmp_path, read_only):
     registry = PeerRegistry(tmp_path)
     registry.register(peer_id='peer', name='Other', base_url='http://localhost:9999', token='test')
     calls = []
@@ -14,33 +16,34 @@ def test_tabs_share_probe_and_disconnect_does_not_cancel_it(monkeypatch, tmp_pat
     async def run():
         started, release = asyncio.Event(), asyncio.Event()
 
-        async def probe(ws, peer):
+        async def probe(ws, peer, **kwargs):
+            assert kwargs == ({"read_only": True} if read_only else {})
             calls.append(peer)
             started.set()
             await release.wait()
             return {**peer.public(), 'online': False}
 
         monkeypatch.setattr(status, '_probe_peer', probe)
-        first = asyncio.create_task(status.peer_statuses(tmp_path))
+        first = asyncio.create_task(status.peer_statuses(tmp_path, read_only=read_only))
         await started.wait()
         first.cancel()
         try:
             await first
         except asyncio.CancelledError:
             pass
-        others = [asyncio.create_task(status.peer_statuses(tmp_path)) for _ in range(8)]
+        others = [asyncio.create_task(status.peer_statuses(tmp_path, read_only=read_only)) for _ in range(8)]
         release.set()
         results = await asyncio.gather(*others)
         assert len(calls) == 1
         assert all(r == results[0] for r in results)
-        assert await status.peer_statuses(tmp_path) == results[0]
+        assert await status.peer_statuses(tmp_path, read_only=read_only) == results[0]
         assert len(calls) == 1
         registry.register(peer_id='peer', name='Changed', base_url='http://localhost:9998', token='changed')
-        changed = await status.peer_statuses(tmp_path)
+        changed = await status.peer_statuses(tmp_path, read_only=read_only)
         assert changed['peers'][0]['name'] == 'Changed'
         assert len(calls) == 2
         monkeypatch.setattr(status, '_STATUS_TTL_SECONDS', -1)
-        await status.peer_statuses(tmp_path)
+        await status.peer_statuses(tmp_path, read_only=read_only)
         assert len(calls) == 3
     asyncio.run(run())
     assert not status._in_flight

@@ -80,6 +80,11 @@ class LammpsJob:
     def load(cls, job_id: str, workspace_dir: Path) -> "LammpsJob":
         path = workspace_dir / "lammps_jobs" / job_id / "job.json"
         data = json.loads(path.read_text())
+        return cls.from_metadata(data)
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "LammpsJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = LammpsStatus(data["status"])
         for k, v in (
             ("parent_job_id", None),

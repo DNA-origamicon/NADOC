@@ -1,0 +1,686 @@
+{
+  "date": "2026-11-01",
+  "base_commit": "a79ee356",
+  "scope": {
+    "recipe": "just test-fast",
+    "before_tests": 20024,
+    "before_files": 1113,
+    "after_tests": 19912,
+    "after_files": 1108,
+    "removed_from_fast": 114,
+    "added_selection_regressions": 2,
+    "net_reduction": 112,
+    "reduction_percent": 0.559
+  },
+  "method": [
+    "Collected every selected node and recorded its function origin, parameters, fixtures and marks.",
+    "Parsed every selected test file: imports, call expressions, assertions, duplicate definitions/bodies, repeated parameter values and unused parameter arguments.",
+    "Traced local module imports from backend.api.main and inspected non-app dependencies, lifecycle notes, private function callers, string dispatch and test/reference consumers before pruning.",
+    "Identical bodies across distinct fixture/backend contexts were retained. Same setup with different assertions was not treated as duplicate behavior.",
+    "Ran the full fast suite before and after; the CSV attaches final test outcomes. This is a static dependency and redundancy audit plus runtime validation, not per-test production coverage or a formal proof of semantic uniqueness."
+  ],
+  "changes_by_category": {
+    "archived": 16,
+    "consolidated": 24,
+    "duplicate": 2,
+    "scientific_opt_in": 15,
+    "unused_target": 57
+  },
+  "retained_examples": {
+    "BLADE": "Hidden UI tab, but routes_blade is registered in main.py and routes_md still supports BLADE seeds.",
+    "propagator_shared_utilities": "systems, local_run and windows still support experiment scripts; only shelved baseline/scaling reference tests were archived.",
+    "native_connection_matrices": "Distinct connection families, direct replacement, organization transport, disconnect, persistence, replay and HTTP ownership behavior.",
+    "string_dispatched_functions": "md_frames_atomistic and _build_nick_batch are selected by string registries despite lacking direct call expressions.",
+    "reference_oracles": "Legacy PDB assembly, native binary unpackers and numerical reference helpers independently check optimized/current outputs.",
+    "same_setup": "66 groups found, mostly different assertions or inputs; retained except registration-only checks consolidated without dropping endpoint assertions."
+  },
+  "limitations": [
+    "Static imports/call names are dependency evidence, not proof that every assertion reaches a user-facing feature.",
+    "Compatibility, numerical reference and isolated experiment checks can be useful without a direct application caller; uncertain candidates were retained.",
+    "No performance-driven demotion or guard/threshold changes. The aggregate fast-suite runtime remains well above the 90-second warning threshold."
+  ],
+  "validation": {
+    "baseline": {
+      "passed": 20005,
+      "skipped": 19,
+      "pytest_seconds": 454.8,
+      "guard_seconds": 470,
+      "per_test_budget_violators": 0
+    },
+    "focused": {
+      "passed": 534,
+      "deselected": 4,
+      "pytest_seconds": 33.39
+    },
+    "retained_test_bodies_identical": 448,
+    "scientific_collection_only": {
+      "selected": 15,
+      "executed": 0
+    },
+    "final": {
+      "passed": 19893,
+      "skipped": 19,
+      "failed": 0,
+      "errors": 0,
+      "pytest_seconds": 427.76,
+      "guard_seconds": 445,
+      "per_test_budget_violators": 0,
+      "command": "PYTEST_ADDOPTS='-ra --junitxml=.development-artifacts/fast-suite-audit-20261101/final-junit.xml' just validate-safe just test-fast"
+    },
+    "rejected_validation_attempt": {
+      "passed": 19891,
+      "skipped": 19,
+      "failed": 2,
+      "pytest_seconds": 446.91,
+      "reason": "Audit-selected basetemp created 143-byte Unix socket paths, exceeding AF_UNIX length limit; two unchanged Alpine worker tests could not start their sockets. Direct bind reproduced AF_UNIX path too long. Rerun with short /tmp scratch paths.",
+      "log": ".development-artifacts/fast-suite-audit-20261101/long-scratch-run.log"
+    },
+    "consolidated_endpoint_assertions_preserved": 31,
+    "archived_sources_byte_identical": true,
+    "inherited_scratch_attempt": {
+      "passed": 19889,
+      "skipped": 19,
+      "failed": 4,
+      "pytest_seconds": 429.77,
+      "reason": "Four pytest subprocess self-tests inherited the audit basetemp override, which points to an ancestor of their working directory. Pytest correctly refused that unsafe configuration before collecting. Remove the override; retain and explicitly review the resulting gate incidents.",
+      "log": ".development-artifacts/fast-suite-audit-20261101/short-scratch-run.log",
+      "reviews": [
+        {
+          "incident_id": "20261101T225944-69e7da9e5a9f",
+          "review": ".development-artifacts/fast-suite-audit-20261101/20261101T225944-69e7da9e5a9f-review.json",
+          "original_report_sha256": "8336e63ab73c92833b367d98038783016f6b2a8c4dcc30c7d5d4dc0d7016f3be"
+        },
+        {
+          "incident_id": "20261101T225944-8146b7147ef5",
+          "review": ".development-artifacts/fast-suite-audit-20261101/20261101T225944-8146b7147ef5-review.json",
+          "original_report_sha256": "8db7c9b6eb3f5dd909756acf31d5e24c52d98846e8361d7735a7ec03ea37527c"
+        },
+        {
+          "incident_id": "20261101T225944-8c8353d12f92",
+          "review": ".development-artifacts/fast-suite-audit-20261101/20261101T225944-8c8353d12f92-review.json",
+          "original_report_sha256": "026c02e32c53f75cfbac8de73be995f58e56e85d2e00533e011c1749dd7aae12"
+        },
+        {
+          "incident_id": "20261101T225945-7b2ffada1487",
+          "review": ".development-artifacts/fast-suite-audit-20261101/20261101T225945-7b2ffada1487-review.json",
+          "original_report_sha256": "0c99f8ac747f0c1c5fdc439780c4863e011b3cbdc338fe546e68deca4398e272"
+        }
+      ]
+    },
+    "default_scratch_confirmation": {
+      "passed": 34,
+      "deselected": 1,
+      "pytest_seconds": 7.84,
+      "note": "Tests passed; command remained blocked by the preserved incidents until the explicit reviews above. Gate check passed after review."
+    },
+    "socket_path_confirmation": {
+      "passed": 12,
+      "pytest_seconds": 4.2,
+      "log": ".development-artifacts/fast-suite-audit-20261101/socket-focused.log"
+    },
+    "lint": "Ruff and git diff --check passed for changed files.",
+    "final_skips": [
+      {
+        "nodeid": "tests/test_snupi_ssdna.py::test_snupi_mesh_ssdna_elements_match_the_real_binary[6hbx100_noT-expected0]",
+        "reason": "6hbx100_noT.nadoc not present"
+      },
+      {
+        "nodeid": "tests/test_snupi_ssdna.py::test_snupi_mesh_ssdna_elements_match_the_real_binary[3x4SQ-expected1]",
+        "reason": "3x4SQ.nadoc not present"
+      },
+      {
+        "nodeid": "tests/test_native_full_placement.py::test_manual_benchy_entire_model_has_one_native_placement",
+        "reason": "preserved local Manual_Benchy not available"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_native_transport_extrude_and_stale_command",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_native_partial_client_does_not_stop_frame_progress",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_native_malformed_request_then_recovery",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_native_control_lease_releases_buttons_without_losing_pose",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_backend_discovery_reconnects_without_retargeting_old_actions",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_capture_without_submitted_frames_fails_and_recovers",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_trackpad_axis_uses_normal_sequenced_transport",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_scrywrite_live.py::test_analog_trigger_uses_normal_sequenced_transport",
+        "reason": "set SCRYWRITE_LIVE_TEST_BIN to the CMake application harness"
+      },
+      {
+        "nodeid": "tests/test_simple_router.py::test_full_autostaple_preserves_manual_connections_and_overhangs",
+        "reason": "3x6_hinge_bound_end_to_root.nadoc absent (hand-built fixture; see 3x6_autogen_hinge.nadoc)"
+      },
+      {
+        "nodeid": "tests/test_vr_motion.py::test_behavior_uses_recorded_intervals_not_simulation_dt",
+        "reason": "could not import 'h5py': No module named 'h5py'"
+      },
+      {
+        "nodeid": "tests/test_vr_motion.py::test_live_motion_against_production_native_handlers",
+        "reason": "build nadoc-vr-scrywrite-live-test for native IPC validation"
+      },
+      {
+        "nodeid": "tests/test_headless_hinge_build.py::test_real_bound_end_to_root_design_routes_and_preserves_all_fls",
+        "reason": "workspace/3x6_hinge_bound_end_to_root.nadoc not present in this checkout"
+      },
+      {
+        "nodeid": "tests/test_join_scaffold_router.py::test_temporary_user_design_routes_without_losing_join_bonds[auto_scaffold_seamed]",
+        "reason": "Optional local design validation"
+      },
+      {
+        "nodeid": "tests/test_join_scaffold_router.py::test_temporary_user_design_routes_without_losing_join_bonds[auto_scaffold_seamless]",
+        "reason": "Optional local design validation"
+      },
+      {
+        "nodeid": "tests/test_seamed_router.py::test_seamed_autoscaffold_preserves_hinge_forced_scaffold_anchors",
+        "reason": "workspace/Hinge3.nadoc not available"
+      },
+      {
+        "nodeid": "tests/test_seamed_router.py::test_seamed_autoscaffold_does_not_place_hinge_xovers_on_manual_anchor_strands",
+        "reason": "workspace/Hinge3.nadoc not available"
+      }
+    ]
+  },
+  "removed_tests": [
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af2_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af6_route_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af7_assembly_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af8_mate_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af9_gear_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af31_crossover_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af30_strand_end_resize_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af32_forced_ligation_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af9_belt_route_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af9_polymerize_route_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_periodic_polymerize_route_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af9_overhang_binding_routes_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_automation_harness.py::test_coverage_report_marks_af14_route_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_nick_ligate_delete_flip_routes_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_resize_strand_end_flips_route_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_loop_skip_apply_deformations_flip_routes_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_circle_segment_flips_route_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_deformed_continuation_flips_route_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_deformation_flips_route_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_cluster_routes_flip_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_build.py::test_full_sequence_flips_assign_staples_route_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_cluster_obb.py::test_place_cluster_joint_flips_add_joint_to_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_cluster_obb.py::test_align_cluster_edge_adds_no_coverage",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_headless_assembly_build.py::test_assembly_routes_now_covered",
+      "reason": "Registration-only checks of the identical headless_coverage_report are consolidated in test_coverage_report_shape_and_known_wrappers; all route assertions are preserved."
+    },
+    {
+      "node": "tests/test_lattice.py::test_bundle_negative_length_zero_raises",
+      "reason": "Identical arguments and ValueError assertion already covered by test_invalid_length_raises in the same module."
+    },
+    {
+      "node": "tests/test_group_organization_permits.py::test_rollout_is_disabled_by_default",
+      "reason": "Exact same gate constant and assertion retained in tests/test_part_group_organization_routes.py::test_host_switch_defaults_off; permit refusal behavior remains covered."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestConstants::test_cos_constants_match_canonical_angles",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestConstants::test_phosphate_atoms_set",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestConstants::test_weights_positive",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestConstants::test_linker_fractions_in_unit_interval",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestConstants::test_total_linker_lengths_consistent",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngle3pt::test_right_angle",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngle3pt::test_collinear_zero_angle",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngle3pt::test_collinear_180",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngle3pt::test_degenerate_arm_returns_one",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestSpinRotationDeriv::test_zero_angle_yields_skew",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestSpinRotationDeriv::test_finite_difference",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBackboneBridgeCost::test_canonical_geometry_zero_cost",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBackboneBridgeCost::test_stretched_bond_increases_cost",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBackboneBridgeCost::test_cost_nonnegative",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngleGrad::test_finite_difference_perpendicular",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestCosAngleGrad::test_degenerate_zeros",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBackboneBridgeCostGrad::test_finite_difference_match",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBackboneBridgeCostGrad::test_canonical_zero_grad",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCost::test_aligned_returns_zero",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCost::test_anti_aligned_returns_two",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCost::test_missing_n_returns_zero",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCost::test_missing_c1_returns_zero",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCost::test_zero_length_c1n_returns_zero",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCostGrad::test_finite_difference",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestGlycosidicCostGrad::test_zero_length_returns_zeros",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRepulsionCost::test_no_clash_zero_cost",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRepulsionCost::test_clash_increases_cost",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRepulsionCost::test_missing_atom_skipped",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRepulsionCostGrad::test_finite_difference",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRepulsionCostGrad::test_no_clash_zero_grad",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBPairRepulsion::test_no_clash",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBPairRepulsion::test_clash_positive",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBPairRepulsionGrad::test_finite_difference",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBPairRepulsionGrad::test_no_atoms_zero",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBGradPropagate::test_translation_gradient",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBGradPropagate::test_theta_gradient",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestRBGradPropagate::test_unknown_name_skipped",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestFwdBridgeX0::test_endpoints_in_chord",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_atomistic_helpers.py::TestBwdBridgeX0::test_endpoints_in_chord",
+      "reason": "These private cost/gradient/initial-guess helpers and their exclusive constants have no callers outside their dead helper subgraph. Active atomistic_minimisers implements the bridge objective directly; its tests and all active placement/arc tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_root_walks_to_bundle_anchored_root",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_root_returns_none_for_unknown_id",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_path_root_to_leaf",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_path_returns_empty_on_broken_chain",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_links_root_first_topological_order",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_overhang_chain.py::test_chain_links_root_first_drops_cycles",
+      "reason": "Unused private root/path/topological-order helpers have no production or tooling callers. Descendant lookup, model compatibility, validator and cascade-deletion tests remain."
+    },
+    {
+      "node": "tests/test_oxdna_surface.py::test_resolved_wall_position_converts_to_world_axis_coordinate",
+      "reason": "Private _wall_axis_position_nm is no longer called by any route, backend, tool or experiment. Active surface force, placement and route tests remain."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_straight_into_the_floor_is_opposed",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_away_from_the_surface_is_not_opposed",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_in_plane_field_is_not_opposed",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_mostly_in_plane_field_is_not_opposed",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_nearly_normal_field_is_opposed_within_tolerance",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_missing_or_zero_directions_are_not_opposed",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_no_field_never_needs_an_anchor",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_with_anchors_is_satisfied",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_alone_needs_an_anchor",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_into_opposing_surface_needs_no_anchor",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_field_anchor.py::test_field_with_non_opposing_surface_still_needs_an_anchor",
+      "reason": "backend.core.field_anchor has no Python callers. The current frontend warning uses field_anchor_rules.js and retains its dedicated Vitest coverage."
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_pair_indices_never_cross_a_segment_boundary",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_pair_indices_stride_stays_within_segments",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_min_image_removes_full_box_jump",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_min_image_noop_without_box",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_fit_recovers_known_coefficients",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_per_element_fit_specializes_by_element",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_baseline.py::test_evaluate_scores_a_learnable_synthetic_dataset",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_baseline.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_single_point_split_reconstructs_the_point",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_two_points_fit_exactly",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_gnn_cost_is_linear_in_n",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_accuracy_capable_tier_never_wins_per_step_single_gpu",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_levers_move_crossover_the_right_way",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_overhead_fit_reproduces_controlled_points_and_extrapolates_sanely",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_two_term_pme_fit_is_degenerate_on_sublinear_data",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_accuracy_capable_gnn_is_much_costlier_per_atom_than_namd",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    },
+    {
+      "node": "tests/test_propagator_scaling.py::test_report_runs_and_returns_structure",
+      "reason": "Archived unchanged with the shelved learned-propagator baseline/scaling work; neither module is used by the application. Shared systems/windows/local_run utilities remain tested.",
+      "destination": "archive/atomistic_propagator_tests/test_propagator_scaling.py"
+    }
+  ],
+  "scientific_only_modules": [
+    "tests/test_charmm_reference.py",
+    "tests/test_local_qm_continuation.py"
+  ],
+  "evidence_directory": ".development-artifacts/fast-suite-audit-20261101",
+  "screening": {
+    "test_files_with_static_app_module_references": 1035,
+    "test_files_without_direct_local_imports": 26,
+    "test_files_with_only_non_app_local_imports": 52,
+    "duplicate_collections_same_source_parameters_and_fixtures": 0,
+    "literal_duplicate_parameter_lists": 0,
+    "unused_parameter_flags": 12,
+    "empty_test_bodies": 0,
+    "unconditional_true_assertions": 0,
+    "same_setup_groups": 66,
+    "directly_imported_functions_without_syntactic_production_callers": 108
+  },
+  "shared_worktree_scope": {
+    "tests/scientific_validation.py": "Added only test_local_qm_continuation and test_charmm_reference to the pre-existing CPD inventory, with a comment. The CPD gate implementation was already uncommitted before this audit.",
+    "tests/test_scientific_selection.py": "Added only those two target values to the pre-existing opt-in regression.",
+    "production_code": "No changes by this audit."
+  },
+  "per_test_ledger": ".development-artifacts/fast-suite-audit-20261101/test-audit.csv",
+  "cleanup": {
+    "deleted": [
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-0",
+        "files": 0,
+        "bytes": 0,
+        "already_cleaned": true
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-1",
+        "files": 174,
+        "bytes": 3898717
+      },
+      {
+        "path": "/home/joshua/NADOC/.development-artifacts/fast-suite-audit-20261101/pytest-scratch",
+        "files": 10005,
+        "bytes": 2752969651
+      },
+      {
+        "path": "/tmp/nfa-focused-1swvs1kt",
+        "files": 35,
+        "bytes": 28665
+      },
+      {
+        "path": "/tmp/nfa-final-cwwq2s31",
+        "files": 9978,
+        "bytes": 2752764330
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-2",
+        "files": 133,
+        "bytes": 359084
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-3",
+        "files": 10012,
+        "bytes": 2752902035
+      }
+    ],
+    "total_bytes": 8262922482,
+    "active_references": [],
+    "verified_absent": true,
+    "size_metric": "Logical file sizes (st_size); sparse files used fewer allocated disk bytes.",
+    "retained_evidence": {
+      "files": 61,
+      "bytes": 68580253
+    }
+  }
+}

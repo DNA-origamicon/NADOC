@@ -13,8 +13,12 @@ metadata:
 
 The new private creation path shares the history editor's fixed native prefix,
 lease, display and publication lifecycle. Named `part_group`/placement/strand/domain
-selectors retain their typed meaning and separate numerical placement context. End-menu clicks retain native scope and supply plane
-hints. Explicit null-target placement choices may change during preview; typed
+selectors retain their typed meaning and separate numerical placement context. S17
+end menus now preserve explicit selection through the same resolver as the toolbar,
+refuse stale selections, and retain native placement scope only with no selection.
+End clicks supply plane hints; both Bend menu surfaces and S19 Twist menu surfaces pass tiny-fixture browser
+creation/Cancel/Apply/undo/reopen. Sidebar markup and contextual reveal are restored.
+See [S17 evidence](../docs/audits/feature_history_20261014/bend_end_menu_repair_20261017.md). Explicit null-target placement choices may change during preview; typed
 selection Change/Clear cancels and reprepares. No canonical temporary operation,
 seek or delete occurs. Complete first evaluation precedes Apply; Apply freshly
 proves the source and appends one reproducible feature with one undo. Reset retires

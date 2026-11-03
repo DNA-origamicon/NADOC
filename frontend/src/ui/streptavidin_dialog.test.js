@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 vi.mock('../api/client.js', () => ({ patchNanoparticle: vi.fn(), createNanoparticleBiotinDNA: vi.fn(), removeNanoparticleBiotinDNA: vi.fn() }))
 import { patchNanoparticle, createNanoparticleBiotinDNA, removeNanoparticleBiotinDNA } from '../api/client.js'
 import { openStreptavidinDialog } from './streptavidin_dialog.js'
+import { store } from '../state/store.js'
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks(); HTMLDialogElement.prototype.showModal = function () { this.open = true } })
 const change = (id, value, event = 'change') => { const e = document.getElementById(id); e.value = value; e.dispatchEvent(new Event(event)) }
 it('uses publication counts, records an override and resets to the publication', async () => {
@@ -90,4 +91,17 @@ it('caps tethered occupancy at three and restores valid controls after a placeme
   await vi.waitFor(() => expect(document.getElementById('strep-error').textContent).toBe('Nothing was attached.'))
   expect(document.getElementById('strep-dna-create').disabled).toBe(false)
   expect(document.getElementById('strep-dna-remove').disabled).toBe(true)
+})
+
+it('shows native sequence/site limits before launching a biotin job', () => {
+  const previous = store.getState().currentDesign
+  store.setState({ currentDesign: { recipe_root: { kind: 'empty', version: 1 } } })
+  try {
+    const particle = appliedParticle()
+    open({ ...particle, coating: { ...particle.coating, poses: [{}, {}, {}, {}, {}] } })
+    expect(document.getElementById('strep-dna-sequence').maxLength).toBe(32)
+    expect(document.getElementById('strep-count').max).toBe('64')
+    expect(document.getElementById('strep-dna-create').disabled).toBe(true)
+    expect(document.getElementById('strep-dna-current').textContent).toContain('up to 4 tetramers')
+  } finally { store.setState({ currentDesign: previous }) }
 })

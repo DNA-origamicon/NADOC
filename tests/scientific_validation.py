@@ -5,6 +5,26 @@ Keep algebra, topology, startup/configuration and bounded engine smoke tests in
 software validation. Add physical sampling/production/convergence campaigns here.
 """
 
+# User policy (2026-10-17): all experimental CPD work is explicit opt-in,
+# including its software/fixture checks, not ordinary development regression.
+CPD_MODULES = {
+    "test_alpine_qm_campaign", "test_alpine_qm_local_fragment_campaign",
+    "test_alpine_qm_followup_campaigns", "test_local_qm_reassessment",
+    "test_local_qm_fragment_campaign", "test_run_post_qm_efficient_sequence",
+    "test_run_post_water_validation",
+    # These names do not contain CPD/photoproduct, but exercise only that work:
+    # the local fragment campaign controller and 1MTH reference parameterization.
+    "test_local_qm_continuation", "test_charmm_reference",
+}
+
+
+def cpd_experiment(nodeid):
+    key = str(nodeid).split("[", 1)[0].replace(".py", "")
+    module = key.split("::", 1)[0].replace("\\", "/").rsplit("/", 1)[-1]
+    tokens = key.lower().replace("::", "_").replace("/", "_").split("_")
+    return module in CPD_MODULES or "cpd" in tokens or "photoproduct" in tokens
+
+
 CAMPAIGNS = {
     "test_skip_twist_tuning_production": "Multi-million-step production and iterative physical twist convergence",
     "test_oxdna_extra_base_production": "Relaxation retention and five-million-step extra-base production",
@@ -50,6 +70,8 @@ for _module, (_reason, _names) in _GROUPS.items():
 
 def campaign_reason(nodeid):
     """Match complete components, never substrings or parameter values."""
+    if cpd_experiment(nodeid):
+        return "Experimental CPD work: explicitly requested sessions only"
     key = nodeid.split("/test_")[-1] if "/test_" in nodeid else nodeid
     if not key.startswith("test_"):
         key = "test_" + key

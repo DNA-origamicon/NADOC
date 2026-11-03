@@ -8,6 +8,54 @@ test-pinned, routed through extracted modules (NOT back into main.js), gated by 
 exercise — and to measure whether the loop is actually tight (wall-clock, edits-to-green, did a phase
 regress anything).
 
+## ISSUE-165 — Clash and piercing visualization (2026-11-02)
+
+The clash view now combines the existing posed-backbone clash report with the
+existing ring-piercing detector on the atomistic display model. Red halos and cyan
+wireframe diamonds remain distinguishable when both findings affect one base;
+the legend labels and counts them separately. Extension/insert/loop identities
+are retained, limited reports are labeled, and shared views preserve the legend.
+Pending/failure states replace the old false zero on a null response, and older
+async results cannot repaint newer geometry. No molecular geometry or detector
+criteria changed. `main.js` LOC delta: 0 (two existing comment lines updated).
+
+Focused checks: 55 frontend and five backend passes. Live app: terminal-linker
+zero clashes / one piercing at S37's `Extension - 0[-5›3]` and ›2; corner six
+clashes / one piercing. Full off/on and atomistic screenshots visually inspected;
+representation return, off clearing and zero browser errors verified. Exact
+read-only source copies and disposable app services were cleaned up. Evidence:
+`.development-artifacts/clash-piercing-20261102/`.
+
+Required qualification: SMART **FAST 19,954 passed / 19 skipped** (432.80 s),
+FULL deferred by the existing session gate; full frontend **9,538 passed / one
+skipped** across 801 files (369.40 s); isolated **smoke 23 passed** (2.5 min).
+Lint/memory hygiene pass. Aggregate FAST warning reviewed with the slow-test skill:
+zero per-test violators, maximum 3.88 s; no guards or test classifications changed.
+The handoff retains the selector's verbatim deferral and cleanup evidence.
+
+## ISSUE-162 — Full extension attachment order (2026-11-02)
+
+User-specified correction: S37 position 1 joins `Extension - 0[-5›1]`, not ›16.
+The renderer treated extension-local indices as helix bp indices, so parent
+FORWARD/REVERSE direction reversed two of the four end/orientation combinations.
+Sort extension beads by their 5′/3′ terminal domain before the ordinary helix sort;
+this fixes both internal arrows and the attachment arc without moving coordinates.
+Actual renderer regression: 2 failed / 6 passed before, 8 passed after; existing loop and
+continuation cases make 58 focused frontend passes. Isolated app: all 12 roots join
+›1, S37's Properties labels are verified, and the connections survive Full→Beads→Full.
+Complete frontend qualification: 800 files, 9,527 passed / 1 skipped (384.68 s). No backend geometry/topology or molecular
+candidate changed. The initial test harness lacked explicit slabless fields and
+used a nonexistent controller disposer; these fixture errors were corrected before
+recording the two genuine ordering failures.
+
+Agent publication also rejects private diagnostic and assembly operations in a
+part, even if their independent replay succeeds (18 focused checks pass). This
+closes the review-authoring route into ISSUE-163. The user explicitly chose to
+track the production conversion change as follow-on work; the shared materializer
+is unchanged and ISSUE-163 is deferred. ISSUE-164 records
+long-extension molecular geometry as separate work after the feature-log/dependency
+overhaul. No approval for the existing isolated linker candidate is inferred.
+
 ## FH-27 — private comparison renderer retention (2026-10-28)
 
 Root cause: live DNA templates were uploaded into each private WebGL renderer;
@@ -67,6 +115,7 @@ Broad regression results remain separate in the current handoff.
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 49 | 2026-10-17 | ISSUE-145; S17 end-menu repair | Real sidebar markup, existing Properties reveal, explicit selector resolution | S16 two real-gesture failures; real-HTML and scope regression tests | Browser final28.1s | 0 | Five unit cases; retained two browser cases | Both browser cases pass after numeric display-format assertion correction; full frontend result in evidence | **Yes**, isolated tiny native Bend; S18 production smoke 23/23 passed | Mock DOM concealed absent sidebar; hardcoded null discarded explicit selection. [Evidence](docs/audits/feature_history_20261014/bend_end_menu_repair_20261017.md) |
 | 48 | 2026-10-16 | ISSUE-135; FH-23 checkpoint 9, investigation only | Native ordering and terminal-tail characterization; production unchanged | Actual empty-root native recipes, independent rigid oracle, exact identities/bonds/unselected controls | 5 cases2.59s;4 cases2.66s;101 existing cases3.34s | 0 | Nine characterization cases | 110 focused passes; [U26 evidence](docs/audits/feature_history_20261014/validation_member_motion_order.json); issue remains open | **No** — isolated scalar evidence only, no approved molecular artifact | Atomistic terminal-key fallback also moves tail atoms, while Full synthetic tail IDs miss that pose; ordinary owners/final passes also fail chronological motion examples |
 | 47 | 2026-10-16 | ISSUE-130/134; FH-23 checkpoint 8 | Versioned extension-only v2, owned five-URL CRUD and shared 2D/3D controls | Native placement preservation, full recipe regeneration, exact source/session/policy, no-op and stale/failed UI guards | Backend matrix8.07s + focused3.00s; frontend327.34s + fixture1.25s | 0 | Closed contract/HTTP/permit/host cases and real client/dialog/menu tests | 346 distinct backend;9,208 distinct frontend/one existing skip after targeted mock fix; [U25 evidence](docs/audits/feature_history_20261014/validation_organized_extensions.json) | **No** — Archive unavailable; MV-48/MV-52/FH-27 remain | Legacy global reconciliation could rewrite placements; unchecked null replies lost edits/selection; omitted session scalar and no-op receipt confused ownership/success |
 | 46 | 2026-10-16 | ISSUE-133; FH-23 checkpoint 6 | Numerical lease host, cancellable owned progress and status recovery; shared one-undo publication | Stale sequence, busy result retirement, timer failures, unknown Status and local timing regressions | Backend315 checks18.46s; native2 checks8.40/189.24s; frontend327.96s | 0 | Finite host lifecycle, real native host chains and frontend polling/dialog cases | 317 distinct backend; frontend9151 passes/one skip; [U23 evidence](docs/audits/feature_history_20261014/validation_transform_numerical_lifecycle.json) | **No** — Archive unavailable; MV-52/FH-27 remain | Phase transitions confused completed computation with editable ownership, transport refusal with publication outcome, and response processing with fresh lease time |
@@ -140,6 +189,9 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-162 | Full treated anchor-outward extension indices as helix-axis bp indices → helix polarity selected the wrong chemical traversal → the host attached to the far tip. Use extension terminal-domain ordering for both cones and attachment arcs. | No alternative molecular-placement fix was tried; initial fixture identity/disposal errors were corrected before the genuine red regression. | `helix_renderer.extensions.test.js`; all12 roots checked in the isolated app |
+| ISSUE-160 | Generic allocation and a self-referencing recursive closure retained copied graphs until collection; repeated header factory introspection then consumed the remaining capture deadline. Empty destinations, exact fixed-shape copying, acyclic recursion and equivalent fresh header defaults remove that work without changing authority or budgets. | General leaf seeding and prefilled dictionaries added overhead. Crossover profiling and a failing weak-reference lifetime regression identified the narrower fixes. | `test_part_model_copy.py`, capture admission/copy regressions; qualification in feature-history handoff |
+| ISSUE-159 | Rebuild starts at the recipe root → host save identity was absent; asynchronous autosave also replaced the captured frontend object → valid private jobs became stale or saved under a new path. Preserve host identity and coordinate saves with revision-bound asset publication. | Ignoring object identity alone did not prevent in-flight save acknowledgements or preserve the publication's original path. Both boundaries needed correction. | `asset_operation_requests.test.js`, `asset_save_coordination.test.js`, `test_part_asset_routes.py` and the asset browser flow |
 | ISSUE-133 | Long computation introduced new phase boundaries → callbacks, busy admission and post-publication timer errors could retire the wrong state; Status transport failure was treated as direct Apply refusal. Bind sequence/deadline, preserve authoritative receipts and require validated terminal outcome before retry. | Global timer-count failures were JSDOM focus-selection one-shots, not leaked progress intervals; flush only zero-delay callbacks and still require no retained timers. | [C14](memory/LESSONS_archive.md#c14); backend lifecycle and controller regressions |
 | ISSUE-132 | Supervisor stopped retrying cleanup after three failures once the process died → shared buffers could remain named/mapped → releasing admission permitted repeated leaking allocations. Hold admission through successful close/unlink, reporting stopping meanwhile. | Child liveness alone cannot establish resource release. Updated the old regression that explicitly blessed the premature three-retry return. | `tests/test_part_verification_jobs.py`, `tests/test_part_verification_worker.py` |
 | ISSUE-109 | Repair capture cloned typed overlay fields but its scalar whitelist omitted native Direction → valid frozen ranges reached the generic rejection branch; exact enum admission retains native types and existing accounting | Converting every Enum to a string would silently expand accepted types and lose the typed capture contract; unrelated string enums remain refused | `tests/test_part_deformation_repair.py` |
@@ -1062,6 +1114,34 @@ without source mutation. Native4, compound31 and constraint16 regressions pass.
 [x] Changed residue poses now use the existing full native display response,
 refreshing site frames and inserted-base geometry rather than applying a cluster
 or compact-position delta. Host6/render-diff22 and actual browser1 pass.
+
+### ISSUE-150–153 — Fine Routing desktop completion (2026-10-25)
+
+[x] Source-bound routing feedback now marks the failing child and blocked suffix,
+then clears on retry/Cancel/reset. The ordinary18HB uses established CAD source
+capture capacity and bounded record/domain versus expanded-JSON accounting.
+Seamless fallback traversal is deterministic across Python hash seeds. Nested
+forms use a responsive grid so every control stays within the dialog.
+Native focused283 +large2 pass; final all22-form lifecycle/layout and visual23pass,
+with32 distinct app cases across applicable runs. Broader regression results live
+in the [tool plan](docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md).
+No native builder, phase constant, geometry lock or golden changed; `main.js` delta0.
+
+### ISSUE-154–156 — Complete organized-placement movement (2026-10-25)
+
+[x] One complete owner command carries saved member poses once, publishes them
+with the placement poses and records complete recovery for history seeking.
+Menu/shortcut activation retains multiple selected placements. HTTP undo/redo/reopen
+uses the existing reviewed lifecycle names. Native rigid-coordinate, atomic
+refusal, cold-replay and HTTP regression checks pass. Full evidence and rollout
+limits remain in the Move/Rotate plan; the production gates remain off.
+
+- 2026-10-25 — ISSUE-157 [x]: ordinary multi-cluster Apply uses one complete-pose publication. Backend8pass, focused frontend79pass, real posed-insert app1pass. Final qualification is tracked in the Move/Rotate plan. `main.js` delta0.
+- 2026-10-26 — ISSUE-158 [x]: cluster undo/redo on posed designs returns full native geometry even with unchanged pose records. Recovery precedes topology-patch selection. Regressions23+9pass; final creation/undo/reopen app5pass. Evidence in the Move/Rotate plan.
+- 2026-11-01 — ISSUE-159 [x]: native asset publication preserves the existing save identity and coordinates asynchronous saves; focused frontend19pass and ordinary biotin/generated save-reopen flows pass. Final aggregate checks are recorded in the feature-history handoff. `main.js` delta0.
+- 2026-11-01 — ISSUE-160 [x]: unchanged-budget generated capture and complete scalar-atom undo copies;145focused checks plus18 final model-copy checks pass after the red lifetime regression. Final maximum HTTP qualification:29/30 captures,30/30 publications, one safe clock refusal; generated app edit/reopen/cold proof passes. Failed profiles remain retained; full evidence is in the feature-history handoff. `main.js` delta0.
+
+- 2026-11-01 — ISSUE-161 [x]: diagnostic history restores recorded molecular references and source placement owners; changed references force a full render refresh. Safeguard/recovery regressions15pass; six real parts pass88 history positions and the adverse Current→Candidate atom-view transition. No molecular placement or detector changes. `main.js` delta0. Evidence: `.development-artifacts/fh27-process-repair-20261101/`.
 
 - 2026-11-02 — ISSUE-166 [x]: precomputed ring triangles and bounded vectorized tests reduce the terminal-linker scan from 31.76 s to 0.43 s with identical reports. Checks over 1 s show a spinner and measured bond percentage; stale work cancels and clears progress. Focused 55 backend / 27 frontend pass; SMART FAST 19,964 passed / 19 skipped (FULL deferred), frontend 9,545 passed / one skipped, isolated smoke 23 passed. Actual app progress/cancellation and screenshots verified; owned workspaces and screenshots removed. `main.js` delta0. Evidence: `.development-artifacts/piercing-performance-20261102/`.
 

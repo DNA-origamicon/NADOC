@@ -147,19 +147,19 @@ def _birth(pid):
         return None
 
 
-def known(job_dir):
+def known(job_dir, *, exists=None):
     reservation = _reservation(job_dir)
     if reservation is not None:
         return reservation.previous_state is not None
-    return (Path(job_dir) / _STATE).exists()
+    return (exists or Path.exists)(Path(job_dir) / _STATE)
 
 
-def is_owned(job_dir):
+def is_owned(job_dir, *, opener=None):
     """Probe without creating files or interpreting persisted status/PIDs."""
     if _reservation(job_dir) is not None:
         return False
     try:
-        fd = os.open(Path(job_dir) / _LOCK, os.O_RDONLY | os.O_CLOEXEC)
+        fd = (opener or os.open)(Path(job_dir) / _LOCK, os.O_RDONLY | os.O_CLOEXEC)
     except FileNotFoundError:
         return False
     try:

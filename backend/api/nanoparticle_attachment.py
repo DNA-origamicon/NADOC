@@ -24,6 +24,46 @@ from backend.core.protein import resolve_overhang_anchor, _rotation_between
 from backend.core.sequences import assign_staple_sequences
 
 
+def attachment_candidates(design, nanoparticle_id, overhang_id, strand_id=None):
+    """The existing ordered compatible-handle search, shared with recipe binding."""
+    from backend.api.routes_nanoparticles import _validate_np_connection_polarity
+    target = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if target is None or target.auxiliary_endpoint or not target.sequence:
+        raise ValueError("Select an ordinary overhang with a complete sequence.")
+    complement = target.sequence.upper().translate(str.maketrans("ACGT", "TGCA"))[::-1]
+    candidates = []
+    for owner in design.nanoparticle_conjugations:
+        if (
+            owner.nanoparticle_id != nanoparticle_id
+            or owner.sequence.upper() != complement
+        ):
+            continue
+        for record in owner.surface_strands:
+            if record.bound_overhang_id is not None or (
+                strand_id and record.strand_id != strand_id
+            ):
+                continue
+            if any(
+                v.applied and v.strand_id == record.strand_id
+                for v in design.nanoparticle_connection_versions
+            ):
+                continue
+            for variant in ("end-to-root", "root-to-root"):
+                try:
+                    _validate_np_connection_polarity(
+                        design, owner, overhang_id, variant
+                    )
+                except HTTPException:
+                    continue
+                candidates.append((record.strand_id, variant))
+    if not candidates:
+        raise ValueError(
+            "No free complementary handle with compatible polarity. Create one in Conjugate Manager first."
+        )
+
+    return candidates
+
+
 def attach_nanoparticle(
     design,
     nanoparticle_id,
@@ -39,7 +79,6 @@ def attach_nanoparticle(
 ):
     from backend.api.routes_nanoparticles import (
         _set_np_version_applied,
-        _validate_np_connection_polarity,
     )
     from backend.core.nanoparticle_kinematics import solve_nanoparticle_anchors
 
@@ -93,40 +132,16 @@ def attach_nanoparticle(
         raise ValueError("This overhang is already occupied.")
     if not target.sequence or any(b not in "ACGT" for b in target.sequence.upper()):
         raise ValueError("Assign a complete A/C/G/T sequence to the overhang first.")
-    complement = target.sequence.upper().translate(str.maketrans("ACGT", "TGCA"))[::-1]
-    candidates = []
-    for owner in design.nanoparticle_conjugations:
-        if (
-            owner.nanoparticle_id != nanoparticle_id
-            or owner.sequence.upper() != complement
-        ):
-            continue
-        for record in owner.surface_strands:
-            if record.bound_overhang_id is not None or (
-                strand_id and record.strand_id != strand_id
-            ):
-                continue
-            if any(
-                v.applied and v.strand_id == record.strand_id
-                for v in design.nanoparticle_connection_versions
-            ):
-                continue
-            for variant in ("end-to-root", "root-to-root"):
-                try:
-                    _validate_np_connection_polarity(
-                        design, owner, overhang_id, variant
-                    )
-                except HTTPException:
-                    continue
-                candidates.append((record.strand_id, variant))
-    if not candidates:
-        raise ValueError(
-            "No free complementary handle with compatible polarity. Create one in Conjugate Manager first."
-        )
+    candidates = attachment_candidates(design, nanoparticle_id, overhang_id, strand_id)
 
     failures = []
     for selected, variant in candidates:
         try:
+            from backend.core.nanoparticle_connections import connection_attaches
+            owner = next(c for c in design.nanoparticle_conjugations
+                         if c.nanoparticle_id == nanoparticle_id
+                         and any(r.strand_id == selected for r in c.surface_strands))
+            np_attach, target_attach = connection_attaches(owner, variant)
             version = NanoparticleConnectionVersion(
                 **({"id": identity_inputs["version_id"], "created_at": identity_inputs["created_at"]}
                    if identity_inputs is not None else {}),
@@ -135,6 +150,8 @@ def attach_nanoparticle(
                 strand_id=selected,
                 overhang_id=overhang_id,
                 direct_variant=variant,
+                nanoparticle_attach=np_attach,
+                target_attach=target_attach,
             )
             # An unapplied version can restore an older free carrier. Refresh
             # particle-owned free handles at the current body pose before use.

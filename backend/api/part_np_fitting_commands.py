@@ -29,7 +29,7 @@ class _Public(BaseModel):
 
 class FitInputs(_Public):
     overhang_id: Id
-    strand_id: Id
+    strand_id: Id | None = None
     fixed_center: StrictBool = False
 
 
@@ -59,6 +59,7 @@ class _Pinned(BaseModel):
 
 
 class FitRequest(FitInputs, _Pinned):
+    strand_id: Id
     history_seed: Id
     version_id: Id
     duplex_id: Id
@@ -85,6 +86,9 @@ def parse_inputs(kind, params):
 
 
 def parse_command(kind, params):
+    if kind == 'nanoparticle-attach-overhang' and params.get('np_fitting_version') == 2:
+        from backend.api.part_generated_np_fitting import GeneratedFit
+        return GeneratedFit.model_validate(params)
     kind = 'nanoparticle-bound-move' if kind == 'nanoparticle-patch' else kind
     return {'nanoparticle-attach-overhang': FitRequest, 'nanoparticle-bound-move': MoveRequest,
             'nanoparticle-connection-relax': RelaxRequest}[kind].model_validate(params)
@@ -191,6 +195,9 @@ def validate_inputs(kind, design, params):
 
 
 def evaluate(kind, design, params):
+    if kind == 'nanoparticle-attach-overhang' and params.get('np_fitting_version') == 2:
+        from backend.api.part_generated_np_fitting import evaluate as generated_evaluate
+        return generated_evaluate(design, params)
     command = validate_inputs(kind, design, params)
     validate_environment(command.engine)
     if isinstance(command, FitRequest):
@@ -235,4 +242,8 @@ def dependencies(kind, params):
     if isinstance(command, FitRequest):
         refs |= {Resource('strand', command.strand_id), Resource('overhang', command.overhang_id)}
         writes |= {Resource('nanoparticle_connection_version', command.version_id), Resource('duplex', command.duplex_id)}
+        if command.np_fitting_version == 2:
+            for selected in command.pending_connections:
+                refs.update({Resource('nanoparticle', selected.nanoparticle_id),
+                    Resource('strand', selected.strand_id), Resource('overhang', selected.overhang_id)})
     return Dependencies(frozenset(refs), frozenset(writes), barrier=True)

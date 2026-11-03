@@ -126,7 +126,11 @@ def import_quantum_dot(body: QuantumDotCreate) -> dict:
 
 
 @router.post("/design/nanoparticles/gold-nanospheres", status_code=201)
-def create_nanosphere(body: GoldNanosphereCreate) -> dict:
+def create_nanosphere(body: GoldNanosphereCreate, expected_revision: int | None = None, expected_design_id: str | None = None) -> dict:
+    from backend.api.part_asset_routes import enabled, start
+    if body.coating is not None and enabled('streptavidin-coating'):
+        return start('streptavidin-coating', {'action': 'create', **body.model_dump()},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     if body.coating is None:
         from uuid import uuid4
         from backend.api.part_nanoparticle_commands import record
@@ -158,7 +162,7 @@ def create_nanosphere(body: GoldNanosphereCreate) -> dict:
 
 
 @router.patch("/design/nanoparticles/{nanoparticle_id}")
-def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
+def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch, expected_revision: int | None = None, expected_design_id: str | None = None) -> dict:
     if body.pose is not None and len(body.pose) != 16:
         raise HTTPException(400, detail="pose must be 16 floats (row-major 4x4).")
     if body.gizmo_move is not None and not (
@@ -169,6 +173,14 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    from backend.api.part_asset_routes import enabled, start, coating_patch
+    if particle.kind == 'gold_nanosphere' and enabled('streptavidin-coating') and (particle.coating is not None or body.coating is not None):
+        return coating_patch(nanoparticle_id, body, expected_revision=expected_revision, expected_design_id=expected_design_id)
+    if enabled('nanoparticle-bound-move') and any(v.applied and v.nanoparticle_id == nanoparticle_id for v in current.nanoparticle_connection_versions):
+        if body.gizmo_move is None or body.model_fields_set != {'gizmo_move'}:
+            raise HTTPException(422, 'Bound nanoparticle motion requires only the explicit Move/Rotate gesture.')
+        return start('nanoparticle-bound-move', {'nanoparticle_id': nanoparticle_id, 'gizmo_move': body.gizmo_move.model_dump()},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     from backend.api.part_quantum_dot_commands import route_native_target as native_dot, record as record_dot
     if particle.kind == "quantum_dot" and body.coating is None and native_dot(current, nanoparticle_id):
         updated, report, _ = record_dot("nanoparticle-patch",
@@ -255,7 +267,12 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
 
 
 @router.delete("/design/nanoparticles/{nanoparticle_id}")
-def delete_nanoparticle(nanoparticle_id: str) -> dict:
+def delete_nanoparticle(nanoparticle_id: str, expected_revision: int | None = None, expected_design_id: str | None = None) -> dict:
+    from backend.api.part_asset_routes import enabled, start
+    particle = _particle_or_404(design_state.get_or_404(), nanoparticle_id)
+    if particle.kind == 'gold_nanosphere' and particle.coating is not None and enabled('streptavidin-coating'):
+        return start('streptavidin-coating', {'action': 'delete', 'nanoparticle_id': nanoparticle_id},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
     from backend.api.part_quantum_dot_commands import route_native_target as native_dot, record as record_dot
@@ -744,8 +761,12 @@ def delete_np_connection_version(nanoparticle_id: str, version_id: str, expected
 
 
 @router.post("/design/nanoparticles/{nanoparticle_id}/connection-versions/relax")
-def relax_np_connection_versions(nanoparticle_id: str) -> dict:
+def relax_np_connection_versions(nanoparticle_id: str, expected_revision: int | None = None, expected_design_id: str | None = None) -> dict:
     """Jointly relax every applied NP/duplex anchor as a closed-loop system."""
+    from backend.api.part_asset_routes import enabled, start
+    if enabled('nanoparticle-connection-relax'):
+        return start('nanoparticle-connection-relax', {'nanoparticle_id': nanoparticle_id},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     from backend.core.design_geometry import fitting_geometry
     from backend.core.nanoparticle_kinematics import solve_nanoparticle_anchors
 
@@ -836,7 +857,12 @@ class BiotinDNARequest(BaseModel):
 
 
 @router.post('/design/nanoparticles/{nanoparticle_id}/biotin-dna')
-def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest):
+def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest, expected_revision: int | None = None, expected_design_id: str | None = None):
+    from backend.api.part_asset_routes import enabled, start
+    if enabled('nanoparticle-biotin-dna'):
+        return start('nanoparticle-biotin-dna', {'action': 'create', 'nanoparticle_id': nanoparticle_id,
+            **body.model_dump(), 'sequence': body.sequence.strip().upper()},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     from backend.core.gold_strep_dna import build_dna_set
     def mutate(d):
         p = _particle_or_404(d, nanoparticle_id)
@@ -858,7 +884,11 @@ def create_biotin_dna(nanoparticle_id: str, body: BiotinDNARequest):
 
 
 @router.delete('/design/nanoparticles/{nanoparticle_id}/biotin-dna')
-def remove_biotin_dna(nanoparticle_id: str):
+def remove_biotin_dna(nanoparticle_id: str, expected_revision: int | None = None, expected_design_id: str | None = None):
+    from backend.api.part_asset_routes import enabled, start
+    if enabled('nanoparticle-biotin-dna'):
+        return start('nanoparticle-biotin-dna', {'action': 'remove', 'nanoparticle_id': nanoparticle_id},
+            expected_revision=expected_revision, expected_design_id=expected_design_id)
     def mutate(d):
         p = _particle_or_404(d, nanoparticle_id)
         sids={r.strand_id for r in p.biotin_dna}; hids={r.helix_id for r in p.biotin_dna}

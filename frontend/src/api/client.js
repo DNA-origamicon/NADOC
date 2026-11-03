@@ -1,4 +1,4 @@
-import { createAssetSaveCoordination } from './asset_save_coordination.js'
+import { passiveReadScheduler, isPassiveRead } from './passive_read_scheduler.js'
 import { nativeRepresentation } from '../scene/vr_representations.js'
 import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
@@ -15,6 +15,9 @@ import { recordAssemblyResponse } from './assembly_response_authority.js'
 import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
 import { createPartRepairEndpoints } from './part_repair_endpoints.js'
+import { createAssetOperationRequests } from './asset_operation_requests.js'
+import { createAssetSaveCoordination } from './asset_save_coordination.js'
+import { showAssetOperationProgress } from '../ui/asset_operation_progress.js'
 import { createPartRepairResponse } from './part_repair_response.js'
 import { createGroupOrganizationEndpoint, createClusterPoseEndpoint } from './group_organization_endpoints.js'
 import { createPatternRequests } from './pattern_requests.js'
@@ -86,6 +89,9 @@ const _assetSaves = createAssetSaveCoordination()
 const _partRepairResponse = createPartRepairResponse({ store, revisions: _designRevisions, getDocId, syncDesign: _syncFromDesignResponse })
 export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
   acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
+export const assetOperationAPI = createAssetOperationRequests({ store, request: _request, transport: partRepairAPI,
+  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests,
+  syncDesign: _syncFromDesignResponse, showProgress: showAssetOperationProgress, saves: _assetSaves })
 export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
   documentRequests: _documentRequests })
@@ -426,7 +432,19 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
   })
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false, onError } = {}) {
+export function _request(method, path, body, options = {}) {
+  const passive = isPassiveRead(method, path)
+  if (!passive && !/^\/design(?:\/|\?|$)/.test(path)) return _performRequest(method, path, body, options)
+  const version = _documentRequests.capture(), revision = currentRevisionWatermark()
+  const docId = options.docId === undefined ? getDocId() : options.docId
+  const current = () => _documentRequests.isCurrent(version) && revision === currentRevisionWatermark()
+  return passiveReadScheduler.run(JSON.stringify([docId, version, revision, method, path]),
+    () => !_documentRequests.isCurrent(version) ? null
+      : _performRequest(method, path, body, passive ? { ...options, signal: undefined } : options),
+    { passive, signal: options.signal, current: passive ? current : undefined })
+}
+
+async function _performRequest(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false, onError } = {}) {
   if (store.getState().featureSeekPending && method !== 'GET'
       && /^\/(design|assembly)(?:\/|$)/.test(path)
       && path !== '/design/loadouts/activate-editable'
@@ -2232,6 +2250,8 @@ export async function deleteProteinAttachment(attachmentId) {
 
 /** Create, resize/move, and delete display-layer nanoparticles. */
 export async function createGoldNanosphere(diameterNm, coating = null) {
+  if (coating) return assetOperationAPI.ordinary('POST', '/design/nanoparticles/gold-nanospheres',
+    { diameter_nm: diameterNm, coating }, { label: 'Create coated nanoparticle' })
   const json = await _request('POST', '/design/nanoparticles/gold-nanospheres', { diameter_nm: diameterNm, ...(coating ? { coating } : {}) })
   if (json) _syncFromDesignResponse(json)
   return json
@@ -2250,11 +2270,17 @@ export async function createQuantumDot(catalogId, diameterNm) {
 }
 
 export async function patchNanoparticle(id, patch) {
+  const design = store.getState().currentDesign
+  if (patch.coating || design?.nanoparticles?.find(p => p.id === id)?.coating
+      || design?.nanoparticle_connection_versions?.some(v => v.nanoparticle_id === id && v.applied))
+    return assetOperationAPI.ordinary('PATCH', `/design/nanoparticles/${id}`, patch, { label: 'Update nanoparticle' })
   const json = await _request('PATCH', `/design/nanoparticles/${id}`, patch)
   return _syncFromDesignResponse(json)
 }
 
 export async function deleteNanoparticle(id) {
+  if (store.getState().currentDesign?.nanoparticles?.find(p => p.id === id)?.coating)
+    return assetOperationAPI.ordinary('DELETE', `/design/nanoparticles/${id}`, undefined, { label: 'Delete coated nanoparticle' })
   const json = await _request('DELETE', `/design/nanoparticles/${id}`)
   return _syncFromDesignResponse(json)
 }
@@ -2287,13 +2313,11 @@ export async function bindNanoparticleStrand(id, strandId, overhangId) {
 }
 
 export async function attachNanoparticleToOverhang(id, overhangId, options = {}) {
-  const json = await _request('POST', `/design/nanoparticles/${id}/attach-overhang`, {
+  return assetOperationAPI.ordinary('POST', `/design/nanoparticles/${id}/attach-overhang`, {
     overhang_id: overhangId, ...options,
     expected_design_id: store.getState().currentDesign?.id,
     expected_revision: currentRevisionWatermark(),
-  })
-  if (!json) throw new Error(store.getState().lastError?.message || 'Nanoparticle attachment failed.')
-  return _syncFromDesignResponse(json)
+  }, { label: 'Fit nanoparticle attachment' })
 }
 
 export async function getNanoparticleConnectionVersions(id) {
@@ -2316,8 +2340,8 @@ export async function deleteNanoparticleConnectionVersion(id, versionId) {
 }
 
 export async function relaxNanoparticleConnectionVersions(id) {
-  const json = await _request('POST', `/design/nanoparticles/${id}/connection-versions/relax`, {})
-  return _syncFromDesignResponse(json)
+  return assetOperationAPI.ordinary('POST', `/design/nanoparticles/${id}/connection-versions/relax`, {},
+    { label: 'Relax nanoparticle anchors' })
 }
 
 export async function saveDesign(path) {
@@ -4071,6 +4095,12 @@ export async function planGeneratedDesign(settings) {
 }
 
 export async function generateDesign(settings, expectedRevision, docId = docHeaders()['X-NADOC-Doc'], onProgress) {
+  if (store.getState().currentDesign?.recipe_root) {
+    if (docId !== docHeaders()['X-NADOC-Doc']) throw new Error('The active part changed. Recalculate the plan.')
+    return assetOperationAPI.ordinary('POST', '/design/generate-design', {
+      ...settings, expected_revision: expectedRevision,
+    }, { label: 'Generate nanoparticle assembly' })
+  }
   return withGenerationProgress(docHeadersFor(docId), async progressId => {
     const json = await _request('POST', '/design/generate-design', {
       ...settings, expected_revision: expectedRevision, ...(progressId ? { progress_id: progressId } : {}),
@@ -5003,7 +5033,6 @@ export async function listActiveJobs() {
   // operation's final frame has rendered.
   if (activeOperationTiming() && _activeJobsCache && performance.now() - _activeJobsCachedAt < 4000) return _activeJobsCache
   if (_activeJobsInflight) return _activeJobsInflight
-  await whenOperationIdle()
   // Background activity polling must never own the centred operation popup. On a
   // saturated MD host this read can take tens of seconds and several independent
   // UI consumers call it concurrently; letting each one increment op-progress's
@@ -5531,12 +5560,10 @@ export async function importAptamer(args) {
 }
 
 export async function createNanoparticleBiotinDNA(id, spec) {
-  const json = await _request('POST', `/design/nanoparticles/${id}/biotin-dna`, spec)
-  return json ? _syncFromDesignResponse(json) : null
+  return assetOperationAPI.ordinary('POST', `/design/nanoparticles/${id}/biotin-dna`, spec, { label: 'Attach biotinylated DNA' })
 }
 export async function removeNanoparticleBiotinDNA(id) {
-  const json = await _request('DELETE', `/design/nanoparticles/${id}/biotin-dna`)
-  return json ? _syncFromDesignResponse(json) : null
+  return assetOperationAPI.ordinary('DELETE', `/design/nanoparticles/${id}/biotin-dna`, undefined, { label: 'Remove biotinylated DNA' })
 }
 
 export async function previewNanoparticleStreptavidin(id, spec) {

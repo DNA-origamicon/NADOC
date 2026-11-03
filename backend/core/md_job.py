@@ -454,6 +454,17 @@ class MdJob:
 
         path = resolve_job_json(workspace_dir, "md_jobs", job_id)
         data = json.loads(path.read_text())
+        job = cls.from_metadata(data)
+        if job.restart_events:
+            from backend.core.alpine_restart import apply_acknowledgments
+            apply_acknowledgments(job, workspace_dir)
+        from backend.core.alpine_transfer_state import apply_transfer_state
+        apply_transfer_state(job, workspace_dir)
+        return job
+
+    @classmethod
+    def from_metadata(cls, data: dict) -> "MdJob":
+        """Normalize a caller-owned metadata dictionary without filesystem reads."""
         data["status"] = MdStatus(data["status"])
         data["segments"] = [MdSegmentStatus(**s) for s in data.get("segments", [])]
         _min = data.get("minimization")
@@ -531,12 +542,8 @@ class MdJob:
         known = {f.name for f in fields(cls)}
         data = {k: v for k, v in data.items() if k in known}
         job = cls(**data)
-        if job.restart_events:
-            from backend.core.alpine_restart import apply_acknowledgments
-            apply_acknowledgments(job, workspace_dir)
-        from backend.core.alpine_transfer_state import apply_transfer_state
-        apply_transfer_state(job, workspace_dir)
         return job
+
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
         from backend.core.job_archive import archived_job_ids

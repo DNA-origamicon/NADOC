@@ -20,7 +20,7 @@ export function connectionFeatureFields(entry) {
   if (entry.op_kind?.startsWith('nanoparticle-connection-version-')) {
     const params = entry.params
     if (params.nanoparticle_connection_version !== 1 || params._generated_scope || params._generator
-      || (Object.hasOwn(params, 'nanoparticle_application_version') && params.nanoparticle_application_version !== 1)
+      || (Object.hasOwn(params, 'nanoparticle_application_version') && ![1, 2].includes(params.nanoparticle_application_version))
       || (Object.hasOwn(params, 'nanoparticle_pending_context_version') && params.nanoparticle_pending_context_version !== 1)) return []
     if (!['nanoparticle-connection-version-create', 'nanoparticle-connection-version-patch'].includes(entry.op_kind)) return []
     const fields = [{ key: 'name', label: 'Name', type: 'text' }]

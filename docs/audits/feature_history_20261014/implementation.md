@@ -58,8 +58,9 @@ with completed/estimated-total counts and visible scope changes after every majo
 update. Historical sections below are evidence, not additional completion credit.
 
 **Active delivery order:** core geometry and Fine Routing precede asset expansion.
-Use [G1–G6](remaining_standard_part_checkpoints.md) for current sequencing; the
-original P-phase table below retains architectural scope, not queue priority.
+Use the [current session handoff](session_handoff.md) for the next bounded task and
+[G1–G6](remaining_standard_part_checkpoints.md) for fixed delivery requirements.
+Historical next-step passages and the P-phase table are not the current task queue.
 
 The current grouping checkpoint preserves empty placement owners through a
 specific `cluster_create` v2 contract while retaining exact saved v1 behavior.
@@ -2276,3 +2277,229 @@ memory. The persistent goal remains active; no user decision is needed to begin
 the independent routing implementation.
 Changed Python lint passes; memory lint retains the existing6 errors/59 warnings,
 with the edited project head at200 lines. No unrelated cleanup is included.
+
+## S30/U59 bounded sealed readiness
+
+One closed readiness GET now preserves ordinary part facts and current simulation
+evidence through the existing bounded worker. Six focused targets pass; no browser
+or broad suite ran. [Evidence and limits](immutable_readiness_20261017.md).
+S29 remains partial; other refused polling and lifecycle acceptance remain open.
+S31 annotation read pair is the sole unstarted successor in the current handoff.
+21/38 complete, delta0; 59 engineering checkpoints, FH-20 checkpoint5 growth flagged.
+
+## S31 partial annotation reads
+
+Strict annotation reads support admitted dimensions and empty view volumes.
+Populated view volumes are rejected by existing sealed preservation, so S31
+acceptance is partial. [Evidence](immutable_annotation_reads_20261017.md).
+S32 is the sole unstarted successor: bounded preservation of that one field,
+publication/lifecycle checks and populated-read acceptance. No browser run or
+release qualification. 21/38, delta0; 59 engineering checkpoints unchanged.
+
+## S32/U60 geometry-only view-volume preservation
+
+Bounded exact view-volume records now survive sealed geometry publication,
+Apply, undo/redo and file recovery; populated annotation HTTP parity completes
+S31 acceptance. Batch and other preserved-field admission remain unchanged.
+[Evidence and limits](immutable_view_volume_preservation_20261017.md).
+21/38 complete, delta0; U60 is FH-28 checkpoint11, growth flagged. Full
+immutable/resource and desktop release exits remain open. S33 session-status
+read pair is the sole unstarted successor in the current handoff.
+
+## S33 strict service-status read pair
+
+VR-reference and peer-status GETs are admitted with bounded status input/output
+and existing service owners. Strict peer observation does not rewrite the registry;
+ordinary address repair remains. [Evidence](strict_service_status_reads_20261017.md).
+114 focused tests pass; no browser qualification. S34 active-job polling is the
+sole unstarted successor. 21/38, delta0; 60 engineering checkpoints unchanged.
+
+## S34 active-job admission stopped at side-effect boundary
+
+Polling reaches NAMD health/metrics/finalization and mrDNA extraction/cache
+publication; runtime reconciliation also creates lock files. Isolated tests
+intercept these calls. No production source or strict allowlist changed.
+[Evidence and remaining acceptance](active_job_observation_boundary_20261017.md).
+S35 assessment/finalization separation is the sole unstarted successor.
+21/38, delta0; 60 engineering checkpoints unchanged. No browser acceptance.
+
+## S35 bounded activity decision seam
+
+NAMD/mrDNA reconciliation now consumes shared pure decisions with explicit
+unknown/finalization-required outcomes. Existing ordinary effects remain.
+[68-test evidence and limits](activity_assessment_seam_20261017.md).
+At S35 closeout, S36 bounded evidence acquisition was the successor; S34 HTTP and
+S29 desktop acceptance remain pending. 21/38, delta0; 60 checkpoints unchanged.
+
+## S36 bounded activity evidence
+
+NAMD/mrDNA observations now reuse native interpretation through finite read hooks,
+with one bounded process inventory, explicit unavailable evidence and no lifecycle
+effects. Ordinary defaults stay unchanged. [120 focused passes and resource limits](activity_observation_20261017.md).
+At S36 closeout, S37 remaining-local-engine observational parity was the successor.
+Strict polling, bounded discovery/projection and complete desktop acceptance stay
+open. Counts remain 21/38,17 remaining (8 core/9 parked), delta +0/+0, U1–U60.
+
+## S37 remaining local-engine observations
+
+All four remaining engine adapters preserve native ownership/cache/stage predicates
+without lifecycle effects. [120 focused passes and limits](activity_local_engines_20261017.md).
+At S37 closeout, S38 bounded native catalog/summary projection was the successor.
+Strict polling, source/owner completeness and full desktop acceptance stay open.
+Counts: 21/38,17 remaining (8 core/9 parked), delta +0/+0, U1–U60 unchanged.
+
+## S38 bounded native catalog and summary
+
+The internal six-family catalog shares native normalization, bounds discovery and
+projection, and retains unknown archive/source/ETA/owner evidence explicitly.
+[150 focused passes and limits](activity_catalog_20261017.md).
+At S38 closeout, S39 closed strict active-job HTTP reads was the successor. Restricted
+HTTP admission, remaining metadata/owner completeness and full desktop qualification
+stay open. Counts: 21/38,17 remaining (8 core/9 parked), delta +0/+0, U1–U60 unchanged.
+
+## S39 supported strict activity HTTP
+
+The exact GET adapter returns the existing shape only for complete supported
+catalogs; unknown evidence refuses, with shared admission and identity/resource
+checks. [150 focused passes and limits](strict_activity_reads_20261017.md).
+At S39 closeout, S40 sealed Bend/Twist browser rerun was the successor. General
+activity and full desktop/latency acceptance remain open; all rollout gates stay
+false. Counts: 21/38,17 remaining (8 core/9 parked), delta +0/+0, U1–U60 unchanged.
+
+## S40 sealed browser campaign — lifecycle incomplete
+
+Two invocations produce zero passes/four failures. Readiness progresses; Open
+(or initial design adoption) loses the shared slot to overlapping reads. Exact429
+body and separate403 inventory are in [S40 evidence](sealed_history_contention_20261017.md).
+Both roots/processes/ports cleaned. Only bounded test diagnostics changed, with no
+weakened assertions. At S40 closeout, S41 foreground shared-slot admission was the
+successor. Full lifecycle/console/latency/rollout exits remain open; counts21/38,
+17 remaining (8 core/9 parked), delta+0/+0, U1–U60 unchanged.
+
+## S41 foreground admission behind background reads
+
+The existing shared owner now permits one foreground reservation behind an admitted
+annotation/activity read. Polls cannot overtake it; waiting consumes the original
+deadline and no worker input is allocated until admission. Existing cleanup retains
+worker ownership. [Validation and limits](foreground_work_admission_20261017.md).
+At S41 closeout, S42 sealed preview Apply staging admission was the successor;
+its immediate-refusal seam was confirmed in source. Startup 403s and full
+sealed desktop/console/latency qualification remain open. No frontend behavior,
+rollout or scientific change; counts21/38,17 remaining (8 core/9 parked), delta+0/+0,
+U1–U60 unchanged. This correction does not close a fixed milestone.
+
+## S42 sealed Apply admission
+
+Historical Apply now reserves the existing shared slot behind background reads;
+source/lease checks run before capture, waiting consumes the computation allowance,
+and staging cannot outlive lease expiry. Native one-publication/receipt and stale
+refusal evidence is in [S42 validation](sealed_apply_admission_20261017.md).
+At S42 closeout, S43 was the successor: at most two sealed browser invocations
+with unchanged lifecycle/console assertions. Startup403s and full desktop/latency exits
+remain open; no gates/pruning/scientific changes or milestone credit. Counts21/38,
+17 remaining (8 core/9 parked), delta+0/+0; U1–U60 unchanged.
+
+## S43 sealed browser campaign — late refresh remains unqualified
+
+Two invocations yield zero passes/four failures. Three executions complete Cancel
+preservation and receive Apply200 but miss the fixed popup-close deadline; one
+is blocked by a toast over the Feature Log tab. Diagnostic Twist's final receipt
+check is5.457s after Apply; later revision/history/redo/private-root state shows
+progress, not a latency or final proof/console pass. [Evidence](sealed_postapply_campaign_20261017.md).
+At S43 closeout, S44 coherent receipt-bound sealed refresh latency was the successor.
+No production change/gate/milestone credit;21/38,17 remaining (8 core/9 parked),
+delta+0/+0; U1–U60 unchanged. Startup errors and full desktop exits remain open.
+
+## S44 combined sealed refresh — desktop qualification partial
+
+Opt-in combined design/geometry uses one decode/worker/budget; transport retains
+ordinary fallback and receipt/revision/local-context checks.34 distinct backend
+cases and9287 frontend tests pass (one skipped). Bend adopts in4.636s once, but
+four app executions fail later or before reaching Apply. [Evidence](combined_sealed_refresh_20261017.md).
+At S44 closeout, S45 passive polling versus foreground history admission was the
+successor; exact holder of the Open429 remains unproven. S44 two-family latency,
+final HTTP/proof/console and startup acceptance remain open. No gate/milestone
+credit;21/38,17 remaining (8 core/9 parked), delta+0/+0; U1–U60 unchanged.
+
+## S45 passive readiness admission — polling coordination partial
+
+Readiness now uses the existing passive lane; native and HTTP history commands
+reserve foreground admission and wait for actual cleanup.120 focused backend
+checks pass. Both sealed browser fixtures pass lifecycle, final state/geometry/proof
+and five-second adoption (Bend3.376s /Twist4.407s), but both fail the strict console
+assertion on403/429 responses. [Evidence](passive_readiness_admission_20261018.md).
+At S45 closeout, S46 coordination of supported passive consumers through the
+existing request owner was the successor. Startup403 capability qualification remains
+later work. S44 tiny-fixture two-family timing and later HTTP/proof checks are now
+executed successfully; no full desktop/console or broad resource acceptance is
+claimed. No gate/milestone credit;21/38,17 remaining (8 core/9 parked),delta+0/+0;
+U1–U60 unchanged. Fixed exits remain unchanged; ISSUE-100/MV-48 remain open.
+
+## S46 passive desktop coordination — console acceptance remains open
+
+Supported passive reads now share bounded client admission, foreground priority,
+coalescing and stale/cancel retirement; active transports drain before release.
+The final full frontend run passes9,296 tests/one skipped across773 files. Final
+sealed cases pass lifecycle, final geometry/proof and adoption at3.363s Bend /
+3.292s Twist. Both havezero429 console errors but37 unsupported403s each; strict
+console acceptance still fails. [Evidence](passive_desktop_coordination_20261018.md).
+The final geometry assertion uses the desktop request owner without adopting its
+response or filtering errors; independent proof and all original limits remain.
+Historical S46 sequencing selected S47; superseded by the S47 scope correction and current handoff.
+No gate/milestone credit;21/38,17 remaining (8 core/9 parked),delta+0/+0; U1–U60
+unchanged. ISSUE-100/MV-48 and fixed FH-20/FH-28 exits remain open.
+
+## S47 — Startup inventory and scope correction, October 18
+
+Historical result: S47 inventoried37 HTTP403 responses across15 startup routes per
+sealed fixture. Lifecycle/geometry/proof passed; strict console acceptance failed.
+The user corrected simulation scope and the unvalidated capability runtime draft
+was removed. Only bounded failure aggregation remains. See
+[S47 evidence](sealed_startup_scope_review_20261018.md).
+S48 was selected at that closeout; the current handoff now supersedes that queue.
+
+## S48 — Bend with downstream attached Sweep, October 18
+
+S48 qualifies one tiny ordinary Bend→attached Sweep chain through the existing history owner. Exact Cancel/redo preservation, independent native replay, downstream identity/parameter preservation, changed Sweep geometry and app save/undo/redo/reload pass. Final focused host test:1 passed; harness boundary:10 passed; strengthened browser case:1 passed with clean console. No production behavior changed. Sealed startup and full tool/resource acceptance remain open. S49 Twist→Sweep replay qualification is the sole unstarted successor. No gate or milestone advanced.
+
+See [S48 evidence](bend_sweep_replay_20261018.md). This verifies editing Bend with
+a later Sweep, not the complete Sweep editor or sealed-host acceptance. S49's
+exact bounded contract is in the current handoff. Fixed exits remain unchanged.
+
+## S49 — Twist with downstream attached Sweep, October 18
+
+S49 qualifies the tiny ordinary Twist→attached Sweep chain and preserves Bend coverage. Independent native replay, exact Cancel/source/history/redo, stable downstream inputs/identities, full geometry and desktop Apply/save/undo/redo/reload pass. Twist changes the inherited radial frame while preserving this straight fixture's attachment origin and axial direction. Focused host2 passed, harness11 passed, browser2 passed with clean consoles. No production behavior changed. S50 attached Sweep history-editor desktop qualification is the sole unstarted successor. No gate or milestone advanced.
+
+See [S49 evidence](twist_sweep_replay_20261018.md). Tiny ordinary chains do not
+qualify all controls, sealed-host or resource acceptance. The current handoff
+selects S50 for the Sweep editor itself; fixed exits remain unchanged.
+
+## S50 — Attached Sweep editor desktop workflow, October 18
+
+S50 qualifies one tiny ordinary attached Sweep history-editor workflow through a later Extrude. Numeric path edit/add/remove, automatic/explicit orientation, Previous/Next, preview toggles, exact Cancel, Apply and undo/redo/save/reopen pass with native geometry/proof and clean console. Native oracle1 passed, harness12 passed, focused frontend23 passed, final browser1 passed. Test-only paired gates restore; production behavior is unchanged. S51 Bundle Extrude history editing through Bend→Sweep is the sole unstarted successor. No gate or milestone advanced.
+
+See [S50 evidence](sweep_editor_desktop_20261018.md). MV-51 remains open for
+other source/control variants, canvas gestures, failures and resource acceptance.
+S51 targets the earlier Bundle Extrude row; the handoff owns its exact bound.
+
+## S51 — Bundle history through Bend/Sweep, October 18
+
+S51 qualifies earlier Bundle Extrude history editing through Bend→attached Sweep. Draft controls and exact Cancel, source-bound length/name Save, independent native replay, downstream identity/input preservation and desktop undo/redo/save/reopen pass with clean console. Real-worker oracle1 passed, harness13 passed, focused frontend42 passed, browser1 passed. No production behavior or additional gate changed. S52 remaining six Extrude-family desktop workflows is the sole unstarted successor. No milestone advanced.
+
+See [S51 evidence](bundle_editor_desktop_20261018.md). Bundle's other draft
+options were cancelled; only length/name publication is qualified here. MV-50
+stays open. S52's fixed six-family matrix is defined in the current handoff.
+
+## S52 — Six-family Extrude desktop matrix, October 18
+
+S52 qualifies the initial six-family Extrude desktop matrix: Segment, Continuation, Deformed Continuation, Frame, Circle and Overhang. Real-worker native replay6 passed, harness19 passed, focused frontend42 passed; final browser7 passed including Bundle regression, with clean consoles. An initial Overhang timeout exposed excessive per-field assertion overhead; aggregate presence checking preserves all exact geometry values and the unchanged deadline. No production behavior changed. S53 Sweep source-variant desktop matrix is the sole unstarted successor. No milestone advanced.
+
+See [S52 evidence](extrude_family_matrix_20261018.md) for the exact committed
+control inventory. Initial family lifecycles qualify; alternate modes, failures,
+races and resources remain open. S53 is defined in the current handoff.
+
+## S53 — Sweep source-mode desktop matrix, October 18
+
+S53 qualifies independent, attached-start and sticky-detached Sweep history editing with later Extrude. Native fixture4 and source-contract40 passed, harness22 passed, focused frontend23 passed; final three-case browser matrix passed with clean consoles. Prefix source inventory, ligation draft controls, fixed-origin orientation, saved source/detach identity, exact Cancel, full native geometry, Apply and persistence are covered. Test synchronization corrections required no production change. S54 Sweep downstream-nick success/refusal desktop workflow is the sole unstarted successor. No milestone advanced.
+
+See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane state and ligation toggles are exercised; source switching, alternate planes/strands and canvas picking are not claimed. MV-51 and fixed FH-27 remain open. S54 is defined only in the current handoff and is unstarted.

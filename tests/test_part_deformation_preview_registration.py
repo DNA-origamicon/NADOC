@@ -70,15 +70,22 @@ def test_disabled_gate_refuses_before_body_or_native(boundary, monkeypatch, suff
 
 @pytest.mark.parametrize("suffix,endpoint", ENDPOINTS)
 @pytest.mark.parametrize("binding", ["host", "document"])
-def test_production_strict_refuses_even_with_local_preview_enabled(
+def test_production_strict_preview_requires_immutable_geometry_gate(
     boundary, monkeypatch, suffix, endpoint, binding,
 ):
+    from backend.api import part_immutable_geometry_publication as geometry
+    from backend.api import part_strict_http as strict
+
     http, identity = boundary
     monkeypatch.setattr(preview, "DEFORMATION_PREVIEW_ENABLED", True)
+    monkeypatch.setattr(geometry, "ENABLED", False)
+    monkeypatch.setattr(strict, "_body", lambda *args: pytest.fail("Disabled gate read request body"))
     configuration = (policy.HostPolicyConfiguration(default_mode="registered_only")
                      if binding == "host" else policy.HostPolicyConfiguration(
                          document_modes={identity: "registered_only"}))
     state.configure_part_publication_policy(configuration)
-    response = http.post(PATH + suffix, headers={"X-NADOC-Doc": identity}, content=b"not JSON")
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "construction_policy"
+    response = http.post(PATH + suffix,
+        headers={"X-NADOC-Doc": identity, "Content-Type": "application/json"}, content=b"not JSON")
+    # Historical preview has a closed sealed adapter; creation remains unlisted.
+    expected = (403, "construction_policy") if suffix == "/create" else (409, "immutable_geometry_unavailable")
+    assert (response.status_code, response.json()["detail"]["code"]) == expected

@@ -6,6 +6,13 @@ originSessionId: full-test-2026-08-11
 ---
 # Molecular geometry changes require demonstrated authorization
 
+## Superseding process requirement — November 1, 2026
+
+Every created review/candidate structure must have its complete truthful feature
+log and reproducible process. The full-design snapshot exception below no longer
+authorizes history-free captures. See [structure requires process](feedback_structure_requires_process.md).
+Molecular approval remains separate; neither requirement waives the other.
+
 ## Root-bond priority — explicit user correction, 2026-10-30
 
 Automatic NADOC placement must keep overhang-root bond distances fixed and must

@@ -40,7 +40,11 @@ def append(source, kind, params):
 def poison(design):
     design = Design.model_validate_json(design.model_dump_json())
     for row in design.feature_log:
-        row.design_snapshot_gz_b64 = row.post_state_gz_b64 = 'poisoned recovery'
+        for entry in (row, *getattr(row, 'children', ())):
+            for name in ('design_snapshot_gz_b64', 'pre_state_gz_b64', 'post_state_gz_b64',
+                         'diff_added_b64', 'diff_removed_b64', 'diff_modified_b64'):
+                if name in type(entry).model_fields:
+                    setattr(entry, name, 'poisoned recovery')
     return design
 
 
