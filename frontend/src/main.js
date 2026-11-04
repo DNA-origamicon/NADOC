@@ -6804,6 +6804,11 @@ async function main() {
     showRelaxOrigami({ api })
   })
 
+  document.getElementById('menu-help-scaffold-register')?.addEventListener('click', async () => {
+    const { showScaffoldRegister } = await import('./ui/scaffold_register.js')
+    showScaffoldRegister({ api })
+  })
+
   document.getElementById('menu-help-nanobase-inventory')?.addEventListener('click', async () => {
     const { showNanobaseInventory } = await import('./ui/nanobase_inventory.js')
     showNanobaseInventory()

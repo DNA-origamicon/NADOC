@@ -1676,6 +1676,24 @@ export async function assignScaffoldSequence(scaffoldName = 'M13mp18', opts = {}
   return json  // caller reads json.padded_nt etc. before syncing design state
 }
 
+export async function sweepScaffoldRegister(settings) {
+  const docId = docHeaders()['X-NADOC-Doc']
+  const json = await _request('POST', '/design/scaffold-register/sweep', settings, { docId })
+  return json ? { ...json, doc_id: docId } : null
+}
+
+export async function applyScaffoldRegister(result, cutIndex) {
+  if (docHeaders()['X-NADOC-Doc'] !== result.doc_id) {
+    throw new Error('The active document changed. Run the sweep again.')
+  }
+  const json = await _request('POST', '/design/scaffold-register/apply', {
+    ...result.conditions, cut_index: cutIndex, expected_revision: result.revision,
+    design_id: result.design_id, source_fingerprint: result.source_fingerprint,
+  }, { docId: result.doc_id })
+  if (json && docHeaders()['X-NADOC-Doc'] === result.doc_id) await _syncFromDesignResponse(json)
+  return json
+}
+
 export async function autoScaffoldSeamless(opts = {}) {
   const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
   const json = await _request('POST', '/design/auto-scaffold-seamless', {

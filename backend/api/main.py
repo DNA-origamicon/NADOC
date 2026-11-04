@@ -140,6 +140,7 @@ from backend.api.routes_namd_gold import router as namd_gold_router
 from backend.api.routes_namd_setup_presets import router as namd_setup_presets_router
 from backend.api.routes_peg_qualification import router as peg_qualification_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
+from backend.api.routes_scaffold_register import router as scaffold_register_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
 from backend.core.namd_runner import resume_interrupted_jobs
@@ -493,6 +494,7 @@ app.include_router(export_structure_router, prefix="/api")
 app.include_router(sequences_router, prefix="/api")
 app.include_router(scaffold_routing_router, prefix="/api")
 app.include_router(assign_sequences_router, prefix="/api")
+app.include_router(scaffold_register_router, prefix="/api")
 app.include_router(assembly_router, prefix="/api")
 app.include_router(assembly_animations_router, prefix="/api")
 app.include_router(assembly_belts_router, prefix="/api")
