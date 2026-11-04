@@ -168,7 +168,8 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     const previous = latest
     latest = next
     launcher.hidden = !next.context
-    launcher.textContent = next.summary ? 'Repair · saved proposal' : 'Check / repair recipe'
+    launcher.textContent = 'repair'
+    launcher.title = next.summary ? 'Check and repair recipe · saved proposal' : 'Check and repair recipe'
     if (!modal?.isOpen() || closing) return
     const failed = next.issues.find(issue => issue.feature_id)
     if (failed !== feedbackIssue || getDesign() !== feedbackSource) {
@@ -216,7 +217,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     buttons.resolve.disabled = busy || !next.publication
     for (const button of proposal.querySelectorAll('button')) button.disabled = busy || !editable
   }
-  const launcher = createButton({ label: 'Check / repair recipe', size: 'sm', onClick: () => open() })
+  const launcher = createButton({ label: 'repair', size: 'sm', className: 'fl-log-action', onClick: () => open() })
   const body = el('div', { className: 'part-repair', children: [status,
     el('div', { className: 'part-repair__tools', children: [buttons.check, buttons.inspect] }), error, issues,
     el('label', { children: ['Feature inputs', selector] }), editor.root,

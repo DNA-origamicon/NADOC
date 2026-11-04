@@ -16,10 +16,14 @@ def preserve_document_state(source, candidate):
         for name, role in FIELD_ROLES.items()
         if role in {"presentation", "physical", "document_identity"}
     }
+    # Semantic document intent survives geometry regeneration and history seeks.
+    preserved['document_history'] = source.document_history
+    document_keys = {key for event in source.document_history
+                     if event.kind == 'document-metadata' for key in event.params['changes']}
     # File location/signoff is excluded from recipe proof. Keep the live
     # document's claim when a regenerated empty root supplies fresh metadata.
     preserved['metadata'] = candidate.metadata.model_copy(update={
-        name: getattr(source.metadata, name) for name in IDENTITY_METADATA_FIELDS})
+        name: getattr(source.metadata, name) for name in IDENTITY_METADATA_FIELDS | document_keys})
     removed = {item.id for item in source.protein_attachments} - {
         item.id for item in candidate.protein_attachments
     }

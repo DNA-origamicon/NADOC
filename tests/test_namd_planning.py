@@ -193,11 +193,15 @@ def test_local_timing_is_scoped_to_engine_device_threads_mode_and_size(monkeypat
         "local_identity",
         lambda _: {k: v for k, v in proof.items() if k != "threads"},
     )
+    monkeypatch.setattr(namd_timing, "cpu_model", lambda: proof["cpu_model"])
     assert namd_timing.local_step_ms(472630) == pytest.approx(7.981545)
     assert namd_timing.local_step_ms(1000000) > 7.981545
     assert namd_timing.local_step_ms(1000000, threads=32) is None
     assert namd_timing.local_step_ms(1000000, resident=False) is None
     assert namd_timing.local_step_ms(60000) is None
+    monkeypatch.setattr(namd_timing, "cpu_model", lambda: "different CPU")
+    assert namd_timing.local_step_ms(1000000) is None
+    monkeypatch.setattr(namd_timing, "cpu_model", lambda: proof["cpu_model"])
     monkeypatch.setattr(
         namd_timing, "local_identity", lambda _: {**proof, "engine_sha256": "obsolete"}
     )

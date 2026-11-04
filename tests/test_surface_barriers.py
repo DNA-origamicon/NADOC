@@ -166,7 +166,7 @@ def test_deposition_freezes_offset_plane_before_moving_probe(tmp_path, monkeypat
     from backend.physics import oxdna_interface as interface
     conf = tmp_path / 'conf.dat'
     conf.write_text('t = 0\nb = 20 20 20\nE = 0 0 0\n2 2 5 1 0 0 0 0 1 0 0 0 0 0 0\n')
-    monkeypatch.setattr(interface, 'resolve_anchor_particles', lambda *_: ([0], []))
+    monkeypatch.setattr(interface, 'resolve_configuration_anchor_particles', lambda *_: ([0], []))
     wall = absolute_wall_for_configuration({'dir': [0, 0, 1], 'offset_nm': 1, 'stiff': 5}, conf)
     position = resolved_wall(wall, [])['position']
     interface.place_configuration_against_surface(conf, object(), wall=wall, anchors=[{}])

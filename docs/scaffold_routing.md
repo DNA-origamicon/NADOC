@@ -45,3 +45,12 @@ its existing bow convention and skips crowded sites in the outward search.
 Matched far ends retain a common repeat translation; the translation advances
 when necessary to keep the final left-side sites clear. Existing local extension
 limits and rejection of occupied scaffold extensions still apply.
+
+For continued tracks, automatic seamed routing tries closed local end turns if
+its preferred matched-end candidate exceeds the local extension window. It
+restarts from the structural seed and applies the same continuity, clearance,
+closure and window checks to the fallback. An explicit matched-end request still
+requires matched ends. Repeated routing measures the window from structural
+ends, not previously extended scaffold caps. The Sweep/loadout regression is
+covered by `tests/test_scaffold_continuation_fallback.py` and
+`frontend/e2e/sweep_history.spec.js`.

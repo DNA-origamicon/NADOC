@@ -1635,6 +1635,9 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
     """Update design name, description, author, or tags."""
 
     def _apply(d: Design) -> None:
+        from backend.core.document_operations import METADATA_FIELDS, record
+        original_design = d.model_copy(update={"metadata": d.metadata.model_copy(deep=True)})
+        original = {key: getattr(d.metadata, key) for key in METADATA_FIELDS}
         if body.name is not None:
             d.metadata.name = body.name
         if body.description is not None:
@@ -1654,6 +1657,13 @@ def update_metadata(body: MetadataUpdateRequest) -> dict:
                 from backend.physics.oxdna_peg import PegParameters
                 PegParameters.model_validate(body.peg_surface.get("surface_strands") or {})
             d.metadata.peg_surface = body.peg_surface
+
+        changes = {key: getattr(d.metadata, key) for key in METADATA_FIELDS
+                   if original[key] != getattr(d.metadata, key)}
+        if changes:
+            d.document_history = record(original_design, d, "document-metadata", {
+                "before": {key: original[key] for key in changes}, "changes": changes,
+            }).document_history
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)

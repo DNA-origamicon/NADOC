@@ -30,6 +30,21 @@ ROUTES = Path(__file__).resolve().parents[1] / "backend" / "api" / "routes_md.py
 def _prep_call_kwargs() -> set[str]:
     """Keyword names passed to ``run_in_threadpool(prepare, ...)`` in routes_md."""
     tree = ast.parse(ROUTES.read_text())
+    # Preparation may be wrapped by memory admission. Resolve the argument tuple
+    # and require every branch to dispatch to the protocol's prepare function.
+    def dispatches_prepare(value):
+        if isinstance(value, ast.IfExp):
+            return dispatches_prepare(value.body) and dispatches_prepare(value.orelse)
+        return (isinstance(value, ast.Tuple) and bool(value.elts)
+                and isinstance(value.elts[-1], ast.Name)
+                and value.elts[-1].id == "prepare")
+
+    dispatch_names = {
+        target.id
+        for assignment in ast.walk(tree) if isinstance(assignment, ast.Assign)
+        if dispatches_prepare(assignment.value)
+        for target in assignment.targets if isinstance(target, ast.Name)
+    }
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -38,7 +53,10 @@ def _prep_call_kwargs() -> set[str]:
         if name != "run_in_threadpool":
             continue
         first = node.args[0] if node.args else None
-        if isinstance(first, ast.Name) and first.id == "prepare":
+        direct = isinstance(first, ast.Name) and first.id == "prepare"
+        wrapped = (isinstance(first, ast.Starred) and isinstance(first.value, ast.Name)
+                   and first.value.id in dispatch_names)
+        if direct or wrapped:
             return {kw.arg for kw in node.keywords if kw.arg is not None}
     raise AssertionError(
         "could not find run_in_threadpool(prepare, ...) in routes_md — if that call was "

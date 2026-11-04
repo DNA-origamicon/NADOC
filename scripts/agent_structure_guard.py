@@ -11,7 +11,7 @@ from backend.core.part_history_proof import command_rows
 from experiments.recorded_review_process import ProcessRequired, verify
 
 
-def audit(design):
+def audit(design, *, document=True):
     """Require part authoring operations as well as complete process replay."""
     for feature_id, kind, params in command_rows(design, 2000):
         if kind == 'diagnostic-process' or kind.startswith('assembly-'):
@@ -20,6 +20,12 @@ def audit(design):
                 f'Feature {feature_id} ({action}) is not a user-facing part operation. '
                 'Assembly and internal simulation/diagnostic steps cannot author a .nadoc part.'
             )
+    if document and design.document_history:
+        from scripts.agent_document_audit import audit as audit_document
+        return audit_document(design, audit)
+    if design.document_history:
+        from scripts.agent_document_audit import verify_inputs
+        verify_inputs(design)
     return verify(design)
 
 

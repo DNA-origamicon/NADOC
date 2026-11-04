@@ -584,7 +584,7 @@ class ProjectRevisionStore:
         migrated: list[DesignLoadout] = []
         for loadout in design.loadouts:
             head = self.branch_head(design.id, loadout.id)
-            if loadout.head_revision_id and head == loadout.head_revision_id:
+            if loadout.head_revision_id and head == loadout.head_revision_id and not loadout.snapshot_dirty:
                 migrated.append(loadout)
                 continue
             # Already-materialized branches need no embedded snapshot decode.
@@ -592,7 +592,7 @@ class ProjectRevisionStore:
             # decoding it on every annotation autosave is pure duplicate work.
             snapshot = decode_snapshot(loadout.design_snapshot_gz_b64)
             # Legacy copied snapshots can carry the old project identity.
-            snapshot = snapshot.model_copy(update={"id": design.id, "metadata": design.metadata})
+            snapshot = snapshot.model_copy(update={"id": design.id})
             # A portable .nadoc includes its loadout snapshots, but the local
             # revision sidecar may not have travelled with it. With no local
             # branch, seed it from that embedded snapshot below. Only an
@@ -627,7 +627,8 @@ class ProjectRevisionStore:
                     except (FileNotFoundError, ValueError, OSError):
                         same_snapshot = False
                 if same_snapshot:
-                    migrated.append(loadout.model_copy(update={"head_revision_id": head}))
+                    migrated.append(loadout.model_copy(update={"head_revision_id": head, "snapshot_dirty": False,
+                        "base_revision_id": loadout.base_revision_id or loadout.head_revision_id}))
                     continue
                 raise BranchConflict(loadout.id, loadout.head_revision_id, head)
             revision = self.commit(
@@ -641,23 +642,21 @@ class ProjectRevisionStore:
             migrated.append(loadout.model_copy(update={
                 "head_revision_id": revision.revision_id,
                 "base_revision_id": loadout.base_revision_id or revision.parent_revision_id,
+                "snapshot_dirty": False,
             }))
         return design.model_copy(update={"loadouts": migrated})
 
 
 def refresh_active_revision(workspace: Path, design: Design) -> Design:
+    from backend.core.document_revision_evidence import attach
+    return attach(workspace, _refresh_active_revision(workspace, design))
+
+
+def _refresh_active_revision(workspace: Path, design: Design) -> Design:
     """Persist current editable state as the active loadout's next revision."""
     if not design.loadouts:
-        payload, size = encode_snapshot(design)
-        design = design.model_copy(update={
-            "loadouts": [DesignLoadout(
-                id="main",
-                name="Main",
-                design_snapshot_gz_b64=payload,
-                snapshot_size_bytes=size,
-            )],
-            "active_loadout_id": "main",
-        })
+        from backend.core.document_operations import initialize
+        design = initialize(design, identity="main", name="Main")
     elif not design.active_loadout_id:
         design = design.model_copy(
             update={"active_loadout_id": design.loadouts[0].id}

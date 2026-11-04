@@ -76,7 +76,8 @@ def safe_scaffold_route(result_type):
                     )
                 continued = joined if joined is not None else route_continuations(
                     candidate, lambda d: fn(d, *args, **kwargs),
-                    close_cycle=kwargs.get("close_cycle", True))
+                    close_cycle=kwargs.get("close_cycle", True),
+                    allow_local_seamed_fallback=fn.__name__ == "auto_scaffold_seamed")
                 out, result = continued if continued is not None else fn(candidate, *args, **kwargs)
                 if not result.valid:
                     raise RoutingIntegrityError("; ".join(result.errors))

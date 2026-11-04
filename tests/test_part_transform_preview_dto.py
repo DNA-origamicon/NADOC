@@ -542,3 +542,22 @@ def test_gate_cache_is_lease_owned_and_not_changed_by_failed_packet(monkeypatch)
         dto().evaluate_display(prefix, evaluated, include_geometry=False,
             envelope={"lease_id": "owned"}, display_cache=cache)
     assert cache == expected
+
+
+@pytest.mark.parametrize("flag", [None, 1, "true", {}])
+def test_native_residue_axis_flag_must_be_boolean(monkeypatch, flag):
+    from backend.core import deformation
+    original = deformation.deformed_helix_axes
+
+    def malformed(design):
+        axes = original(design)
+        axes[0]["residue_transformed"] = flag
+        return axes
+
+    monkeypatch.setattr(deformation, "deformed_helix_axes", malformed)
+    source = source_recipe("nucleotide-transform")
+    prepared = previews().prepare_from_capture(owned_capture(source), FEATURE)
+    evaluated = previews().evaluate(prepared, {})
+    with pytest.raises(CommandContractError) as caught:
+        dto().prepare_display(prepared.copy_prefix(), evaluated)
+    assert caught.value.code == "invalid_preview_geometry"

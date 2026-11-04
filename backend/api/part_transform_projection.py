@@ -142,8 +142,10 @@ def _axes(values, expected, design):
     helices = {key for key in expected.indices["helices"] if not key.startswith("__lnk__")}
     seen, covered, count = set(), {}, 0
     for axis in values:
-        if not {"helix_id", "start", "end", "samples", "segments"} <= axis.keys() <= AXIS_FIELDS:
+        if not {"helix_id", "start", "end", "samples", "segments"} <= axis.keys() <= AXIS_FIELDS | {"residue_transformed"}:
             reject("Unreviewed native transform axis")
+        if "residue_transformed" in axis and type(axis["residue_transformed"]) is not bool:
+            reject("Malformed native transform axis flag", "invalid_preview_geometry")
         hid = axis["helix_id"]
         if hid not in helices or hid in seen:
             reject("Native transform axis identity mismatch", "invalid_preview_geometry")
@@ -179,8 +181,8 @@ def _axes(values, expected, design):
         limit(count, MAX_AXIS_POINTS, "axis points")
     if seen != helices:
         reject("Native transform display omitted helix axes", "invalid_preview_geometry")
-    # Use the native range authority: flexible and independently moved sites
-    # intentionally have no domain-axis stick, but other sites must be covered.
+    # Use the native range authority: flexible sites have no axis stick, while
+    # residue poses split/transform segments without dropping their coverage.
     from backend.core.deformation import _segments_for_helix
     required = {}
     for helix in design.helices:

@@ -228,6 +228,12 @@ def verify(design):
         if not process.design.feature_log or process.design.feature_log[-1].id != matching.id:
             process.design.feature_log.append(matching)
         count += 1
+    if design.document_history:
+        from backend.core.document_operations import apply_metadata
+        try:
+            process.design = apply_metadata(design, process.design)
+        except ValueError as exc:
+            raise ProcessRequired(str(exc)) from exc
     expected, actual = structural_value(design), structural_value(process.design)
     if expected != actual:
         fields = sorted(k for k in expected if expected[k] != actual[k])

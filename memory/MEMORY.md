@@ -13,6 +13,7 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 ## Read first when relevant
 
 - **[Structure requires process](feedback_structure_requires_process.md)** — mandatory for every agent-created structure: full truthful feature log and independent replay; no history-free review/candidate/captured-root exception.
+- [Semantic document provenance](feedback_document_operation_provenance.md) — record meaningful document actions; no autosave feature rows; defer the visibility toggle and annotation/view-volume animation.
 - [Polymerization and extension scope](feedback_polymerization_extension_scope.md) — no implicit strand-to-extension conversion; correct Full attachment at ›1; defer long-tail molecular geometry beyond the feature-log/dependency overhaul.
 
 - [Visible helix labels](feedback_helix_labels.md) — use viewer labels in all communication and UI, never internal helix IDs.

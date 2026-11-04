@@ -118,3 +118,140 @@ was not rerun or treated as authorization for CPD development.
 ISSUE-171 remains open for the provenance contract described above. The merge
 resolves conflicts and passes the main feature-history integration checks, but is
 not an unconditional readiness approval. No push or master-branch update was made.
+
+
+### Document-provenance follow-up
+
+The subsequent document-provenance FAST sweep also exposed six unresolved
+residue-axis/history display tests: two in `test_move_history_scrubbing.py` and
+four in `test_transform_unpair_history.py`. They concern split-axis expectations
+and rejection of master's `residue_transformed` axis field by native transform
+projection. These files were unchanged by the provenance task; add them to the
+integration blockers above. The ordinary newly recorded loadout publication
+boundary now has the [semantic document contract](../document_operation_provenance.md);
+legacy missing history and protected simulation loadouts remain refused.
+
+### Sweep edit and continuation end-window follow-up
+
+The user's last-point edit to `(8,38,36)` reproduces a 409 at Auto-scaffold:
+the continued tracks shorten from 232 to 221 bp, while the preferred matched-end
+route extends eight tracks by 22–26 bp beyond their structural far ends. The
+existing honeycomb window permits 21 bp. Automatic seamed routing now retries
+the existing closed local route on fresh input, subject to every original
+continuity/closure/clearance/window check. Explicit matched requests still refuse.
+The window uses structural reset bounds so repeated routing cannot ratchet it.
+No molecular placement formulas or locked constants changed; `main.js` LOC delta 0.
+
+Validation: 87 routing/continuity/integrity tests pass. The browser reproduces
+new loadout → edit endpoint → Apply → closed dialog → save/reopen → independent
+replay; Main remains unchanged. One browser test passes (39.1 seconds including
+the temporary visual-review pause); the rendered reopened result was inspected.
+The test pauses continuous headless rendering during interactions and renders a
+single review image, avoiding setup/rendering timeouts without raising timeouts.
+All five browser scratch roots, including the image and failed attempts, are gone.
+
+The required `test-smart` selected FAST: **20,422 passed, 40 failed, 100 skipped**.
+The explicitly deferred experimental CPD parameter case was deselected. Thirty-nine
+failures match the preceding integration failures. The remaining loadout-audit
+test mocked the obsolete getter; it now uses a real isolated document session and
+the actual branch publisher. Its final source-audit/document-provenance/routing
+follow-up passes **37 tests**. This is not a claim of a clean broad suite: the
+39 prior failures remain unresolved. FULL remains deferred with the exact notice
+above; no test session was opened.
+
+Timing triage: 487 seconds elapsed for the broad wrapper (450.79 seconds pytest),
+no per-test violators, slowest 4.3 seconds. The retained report covers 20,560 test
+timings with 1,683.8 aggregate test seconds across workers; the longer files have
+many native/software cases, not a single over-budget offender. No timing budgets,
+test markers or guards were changed. Compact logs and timing/cleanup summaries
+are under `.development-artifacts/merge-readiness/sweep-routing-*`.
+
+### Feature-log controls follow-up (November 3)
+
+User-authorized filter UI: `repair` now matches feature-row typography with 6px
+spacing before F0; adjacent `filter` opens keyboard-accessible checkboxes for Fine
+routing (on), Document ops (off), and disabled Annotations and visuals. Preferences
+last for the panel session. Document operations display the actual ordered journal
+below the geometry timeline, without autosave rows or geometry seek targets.
+Filtering routing preserves feature indices and canonical recipe/cursor state.
+Saved repair proposals remain indicated in the button tooltip. main.js LOC delta: 0.
+
+Validation: full frontend 857 files / 10,016 passed, one skipped (395.73s);
+actual-app filter/provenance cases 2 passed (19.6s), including computed font/spacing,
+checkboxes, Escape/outside dismissal, unchanged recipe and native history proof;
+smoke 23 passed (2.4m). Initial browser run passed routing but its outside-click
+assertion targeted F0's popup-covered center; corrected to an exposed edge and
+reran both cases successfully. No production change was needed for that test fix.
+Memory lint: zero errors, three existing length warnings. `git diff --check` passed.
+Logs and pre-run artifact inventory: `.development-artifacts/merge-readiness/feature-filters-*`.
+Launcher cleanup verified all three owned roots absent, including the failed run:
+`/tmp/__e2e__history-k0nlpcb8`, `/tmp/__e2e__smoke-k5ha4frx`,
+`/tmp/__e2e__history-fdv1sv63`. Existing running app remains unchanged.
+
+
+### Backend failure resolution (November 3)
+
+All 39 remaining backend failures are resolved in
+`integration/feature-history-master-20261103`:
+
+- 10 native representation checks required the actual viewer validator. Built
+  `native/vr_viewer/build/nadoc-vr-viewer` with the bounded single-job CMake target;
+  all ten now exercise the binary successfully. No tests were skipped to hide it.
+- Two replica-duration failures exposed missing per-segment timestep metadata.
+  The segment now records the resolved production timestep, matching its NAMD
+  configuration. Regression coverage checks 1, 2, and 4 fs; no integrator changed.
+- Five native history previews rejected the existing `residue_transformed` axis
+  flag. The transform-specific validator now admits booleans and rejects other
+  values, preserving domain coverage and unknown-field rejection. One old axis
+  assertion now checks the retained independently posed base and surrounding
+  segments. No molecular placement algorithm or locked constant changed.
+- Seven early-stop fixtures and one preparation-cancellation fixture now supply
+  controlled resource estimates while retaining real memory reservation. Two
+  Slurm fixtures explicitly request a CPU partition within its RAM envelope;
+  oversized-request refusals remain covered. The timing fixture stubs CPU
+  identity and checks mismatch rejection. The wall-plane fixture mocks the
+  current configuration-aware anchor resolver.
+- Four protocol-signature checks resolve the current conditional preparation
+  wrapper while still checking the actual forwarded keyword set.
+- Four sample-audit tests no longer depend on `workspace/2hb_1xT.nadoc`. Their
+  tiny native bundle/crossover/insertion construction has five recorded operations,
+  uses `agent_structure_guard.publish`, then reopens and independently audits the
+  saved file. No unrecorded or private diagnostic authoring was introduced.
+- Regenerated cylinder screening from current sources: all 748 records and 166
+  witnesses are exactly unchanged. Only the seamed-router and constants source
+  hashes changed; no geometry golden or numerical acceptance bound was updated.
+
+Validation: the original failures pass (34 focused cases, four sample-audit cases,
+plus the cylinder check within 120 related regressions). Required `just test-smart`
+selected FAST: **20,468 passed, 100 skipped, zero failures** in 451.86 pytest seconds.
+The experimental CPD parameter remains explicitly deselected as before. A final
+fixture/rejection refinement passes eight targeted checks. Changed-file Ruff and
+`git diff --check` pass; memory lint has zero errors and three existing length warnings.
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Timing triage followed `.claude/skills/triage-slow-tests/SKILL.md`: the wrapper took
+494 seconds and triggered the aggregate backstop, but there were zero per-test
+violators (slowest 4.65 seconds). Aggregate test time was 1,689.3 seconds versus
+1,683.8 previously. The largest files retain essentially the same costs (258
+oxDNA workflow tests: 72.4 versus 72.3 seconds; 45 mocked headless workflow tests:
+71.3 versus 70.4 seconds). The leading routing case performs native construction,
+editing and independent replay; headless timeline cases use controlled mock-engine
+trajectories. This is existing aggregate suite cost, not evidence of a newly leaked
+heavy test. No registry, guard, worker limit or timing budget was changed.
+
+Evidence is under `.development-artifacts/backend-readiness/`. This closes the
+39-failure barrier, not the merge itself: fetched `origin/master` commit `75b7f622`
+remains to be integrated, and the follow-up changes remain uncommitted.
+
+Cleanup: the task-owned pytest roots 0–5 are absent (older roots had already been
+pruned by pytest; the remaining three were removed after checking for live locks).
+This deleted 12,499 disposable files / approximately 2.77 GB; compact logs,
+timing and cleanup summaries remain in the evidence directory. The integration
+checkout’s `workspace/` directory has no tracked or untracked changes, and no
+unresolved index conflicts remain. The running app in the original checkout was not restarted or modified.

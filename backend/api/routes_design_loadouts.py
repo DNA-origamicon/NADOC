@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+from backend.api.document_operation_state import source as operation_source
 from backend.api.crud import _design_response, _design_response_with_geometry
 from backend.core.design_loadouts import (
     decode_snapshot,
@@ -18,6 +19,7 @@ from backend.core.design_loadouts import (
     save_active_snapshot,
 )
 from backend.core.models import DesignLoadout
+from backend.core.document_operations import initialize, record, selection_inputs, deletion_inputs
 from backend.core.validator import validate_design
 from backend.core.part_source_audit import audit_current_sources, audit_loadout_sources, with_source_warnings
 
@@ -43,7 +45,9 @@ def audit_loadout_inputs() -> dict:
 @router.post("/design/loadouts", status_code=200)
 def create_loadout(body: LoadoutCreateBody) -> dict:
     design_state.require_compatibility_write("loadout_create")
-    current = design_state.get_or_404()
+    original, revision = operation_source()
+    current = original
+    current = initialize(current, identity=str(uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     loadouts = save_active_snapshot(current, loadouts, active_id)
     name = (body.name or "").strip() or next_default_name(loadouts)
@@ -58,7 +62,8 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
         )
     )
     updated = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
-    design_state.set_design(updated)
+    updated = record(current, updated, "loadout-create", {"id": new_id, "name": name})
+    design_state.set_design(updated, expected_revision=revision, expected_source=original)
     return _design_response_with_geometry(updated, validate_design(updated))
 
 
@@ -66,7 +71,9 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
 def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
     """Save the current branch, unless requested otherwise, then restore one."""
     design_state.require_compatibility_write("loadout_select")
-    current = design_state.get_or_404()
+    original, revision = operation_source()
+    current = original
+    current = initialize(current, identity=str(uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     if save_current:
         loadouts = save_active_snapshot(current, loadouts, active_id)
@@ -85,7 +92,8 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
         active_loadout_id=loadout_id,
         last_editable_loadout_id=last_editable_id,
     )
-    design_state.set_design_branch(updated)
+    updated = record(current, updated, "loadout-select", selection_inputs(loadout_id, restored, save_current=save_current))
+    design_state.set_design_branch(updated, expected_revision=revision, expected_source=original)
     # Branch switch — the restored design's feature log has no relation to
     # whatever the client currently has cached.
     return with_source_warnings(_design_response_with_geometry(
@@ -96,7 +104,9 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
 @router.post("/design/loadouts/activate-editable", status_code=200)
 def activate_last_editable_loadout() -> dict:
     design_state.require_compatibility_write("loadout_activate")
-    current = design_state.get_or_404()
+    original, revision = operation_source()
+    current = original
+    current = initialize(current, identity=str(uuid.uuid4()), name="Loadout 1")
     loadouts, _active_id = ensure_loadouts(current)
     target = next(
         (
@@ -119,7 +129,8 @@ def activate_last_editable_loadout() -> dict:
         active_loadout_id=target.id,
         last_editable_loadout_id=target.id,
     )
-    design_state.set_design_branch(updated)
+    updated = record(current, updated, "loadout-select", selection_inputs(target.id, restored, save_current=False))
+    design_state.set_design_branch(updated, expected_revision=revision, expected_source=original)
     # Branch switch — the restored design's feature log has no relation to
     # whatever the client currently has cached.
     return with_source_warnings(_design_response_with_geometry(
@@ -130,7 +141,9 @@ def activate_last_editable_loadout() -> dict:
 @router.patch("/design/loadouts/{loadout_id}", status_code=200)
 def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
     design_state.require_compatibility_write("loadout_rename")
-    design = design_state.get_or_404()
+    original, revision = operation_source()
+    design = original
+    design = initialize(design, identity=str(uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(design)
     if loadout_id == "__implicit_loadout_1__":
         loadout_id = active_id
@@ -146,14 +159,18 @@ def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
         for item in loadouts
     ]
     updated = design.copy_with(loadouts=loadouts, active_loadout_id=active_id)
-    design_state.set_design(updated)
+    if any(item.id == loadout_id and item.name != name for item in design.loadouts):
+        updated = record(design, updated, "loadout-rename", {"id": loadout_id, "name": name})
+    design_state.set_design(updated, expected_revision=revision, expected_source=original)
     return _design_response(updated, validate_design(updated))
 
 
 @router.delete("/design/loadouts/{loadout_id}", status_code=200)
 def delete_loadout(loadout_id: str) -> dict:
     design_state.require_compatibility_write("loadout_delete")
-    current = design_state.get_or_404()
+    original, revision = operation_source()
+    current = original
+    current = initialize(current, identity=str(uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     if len(loadouts) <= 1:
         raise HTTPException(400, detail="Cannot delete the only loadout.")
@@ -176,7 +193,10 @@ def delete_loadout(loadout_id: str) -> dict:
         except Exception as exc:
             raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
         updated = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
-    design_state.set_design(updated)
+    updated = updated.model_copy(update={"last_editable_loadout_id":
+        next_id if current.last_editable_loadout_id == loadout_id else current.last_editable_loadout_id})
+    updated = record(current, updated, "loadout-delete", deletion_inputs(loadout_id, current, updated))
+    design_state.set_design(updated, expected_revision=revision, expected_source=original)
     response = _design_response_with_geometry(
         updated, validate_design(updated), full_feature_log=branch_switch,
     )

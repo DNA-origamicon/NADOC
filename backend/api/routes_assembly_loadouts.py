@@ -60,6 +60,7 @@ from backend.core.design_loadouts import (
     save_active_snapshot,
 )
 from backend.core.models import DesignLoadout
+from backend.core.document_operations import initialize, record, selection_inputs, deletion_inputs
 
 router = APIRouter()
 
@@ -79,6 +80,7 @@ def create_instance_loadout(
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    current = initialize(current, identity=str(_uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     loadouts = save_active_snapshot(current, loadouts, active_id)
     name = (body.name or "").strip() or next_default_name(loadouts)
@@ -93,6 +95,7 @@ def create_instance_loadout(
         )
     )
     updated_design = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
+    updated_design = record(current, updated_design, "loadout-create", {"id": new_id, "name": name})
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
     return {
         **_assembly_response(updated_assembly),
@@ -107,6 +110,7 @@ def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    current = initialize(current, identity=str(_uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     loadouts = save_active_snapshot(current, loadouts, active_id)
     selected = next((l for l in loadouts if l.id == loadout_id), None)
@@ -116,7 +120,9 @@ def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
         restored = decode_snapshot(selected.design_snapshot_gz_b64)
     except Exception as exc:
         raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
-    updated_design = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
+    updated_design = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id,
+                                         last_editable_loadout_id=loadout_id)
+    updated_design = record(current, updated_design, "loadout-select", selection_inputs(loadout_id, restored, save_current=True))
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
     return {
         **_assembly_response(updated_assembly),
@@ -133,6 +139,7 @@ def rename_instance_loadout(
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    design = initialize(design, identity=str(_uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(design)
     if loadout_id == "__implicit_loadout_1__":
         loadout_id = active_id
@@ -146,6 +153,8 @@ def rename_instance_loadout(
         for l in loadouts
     ]
     updated_design = design.copy_with(loadouts=loadouts, active_loadout_id=active_id)
+    if any(item.id == loadout_id and item.name != name for item in design.loadouts):
+        updated_design = record(design, updated_design, "loadout-rename", {"id": loadout_id, "name": name})
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
     return {
         **_assembly_response(updated_assembly),
@@ -160,6 +169,7 @@ def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    current = initialize(current, identity=str(_uuid.uuid4()), name="Loadout 1")
     loadouts, active_id = ensure_loadouts(current)
     if len(loadouts) <= 1:
         raise HTTPException(400, detail="Cannot delete the only loadout.")
@@ -182,6 +192,9 @@ def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
         updated_design = restored.copy_with(
             loadouts=remaining, active_loadout_id=next_id
         )
+    updated_design = updated_design.model_copy(update={'last_editable_loadout_id':
+        next_id if current.last_editable_loadout_id == loadout_id else current.last_editable_loadout_id})
+    updated_design = record(current, updated_design, "loadout-delete", deletion_inputs(loadout_id, current, updated_design))
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
     return {
         **_assembly_response(updated_assembly),

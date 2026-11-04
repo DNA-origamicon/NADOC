@@ -53,6 +53,12 @@ def test_stop_during_preflight_never_launches(tmp_path, monkeypatch, delete):
 def test_stop_during_preparation_prevents_autostart(tmp_path, monkeypatch):
     monkeypatch.setattr(routes_md, '_workspace', lambda: tmp_path)
     monkeypatch.setattr(routes_md, '_sequenced_base_count', lambda _design: 1)
+    # This race fixture has no molecular topology; exercise the real reservation
+    # and cancellation path with a controlled preparation-size estimate.
+    from backend.core import md_vram
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR', str(tmp_path / 'memory'))
+    monkeypatch.setattr(md_vram, 'estimate_profile_from_design',
+                        lambda *a, **kw: {'atom_upper_bound': 1000})
     body = routes_md.CreateJobRequest(autostart=True, execution_target='runpod', seed=29)
     job = new_job('cancel-prep', 'equilibrium_aware_namd', '', '')
     job.execution_target = 'runpod'

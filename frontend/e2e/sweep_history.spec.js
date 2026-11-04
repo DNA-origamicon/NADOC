@@ -1,8 +1,59 @@
 import { test, expect } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
 import { withHistoryFixture } from './helpers/deformation_history.js'
 
 test.skip(!process.env.NADOC_HISTORY_E2E_ROOT, 'Requires isolated history launcher')
 const endpoint = '/api/design/features/sweep-preview'
+
+test('Sweep endpoint edit in a new loadout rebuilds local scaffold end turns', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesignToWorkspace(file.split('/').at(-1))) throw new Error('Save failed')
+      if (!await api.createLoadout('Edited sweep')) throw new Error('Loadout creation failed')
+    }, f.file)
+    const before = await f.checkpoint()
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    await page.locator('#fl-list [title^="Edit sweep path"]').click()
+    await expect(page.locator('#sweep-apply')).toBeEnabled()
+    await page.locator('.sweep-point').last().click()
+    for (const [axis, value] of [['X', '8'], ['Y', '38'], ['Z', '36']]) {
+      const evaluated = page.waitForResponse(r => new URL(r.url()).pathname === endpoint + '/evaluate')
+      const field = page.getByLabel(`Point ${axis} (nm)`, { exact: true })
+      await field.fill(value); await field.press('Tab')
+      expect((await evaluated).ok()).toBe(true)
+      await expect(page.locator('#sweep-apply')).toBeEnabled()
+    }
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === endpoint + '/apply')
+    await page.locator('#sweep-apply').click()
+    const response = await applied
+    expect(response.ok(), await response.text()).toBe(true)
+    await expect(page.locator('#sweep-panel')).not.toBeVisible()
+    const after = await f.checkpoint()
+    expect(after.design.active_loadout_id).toBe(before.design.active_loadout_id)
+    expect(after.design.feature_log.map(row => row.id)).toEqual(before.design.feature_log.map(row => row.id))
+    expect(after.design.feature_log[1].params.points_nm.at(-1)).toEqual([8, 38, 36])
+    expect(after.design.loadouts.find(row => row.id === 'main')).toEqual(before.design.loadouts.find(row => row.id === 'main'))
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesignToWorkspace(file.split('/').at(-1))) throw new Error('Save failed')
+      if (!await api.loadDesign(file)) throw new Error('Reopen failed')
+    }, f.file)
+    expect((await f.browser()).design.feature_log[1].params.points_nm.at(-1)).toEqual([8, 38, 36])
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+    if (process.env.NADOC_SWEEP_VISUAL_REVIEW === '1') {
+      const poster = await page.evaluate(async () => {
+        const t = window.__nadocTest
+        const pose = { position: [80, 70, 110], target: [5, 18, 35], up: [0, 1, 0] }
+        return (await t.capturePrimitivePreview({ maxWidth: 900, poses: [pose] })).posterDataUrl
+      })
+      await writeFile(`${f.root}/edited-sweep.png`, Buffer.from(poster.split(',')[1], 'base64'))
+      await page.waitForTimeout(20000)
+    }
+  }, 'sweep-end-window', { pauseRendering: true })
+})
 
 test('Sweep explains separated strand attachment refusal and Cancel is exact', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
@@ -166,6 +217,7 @@ for (const [variant, length, outcome] of [
   ['sweep-nick-batch', 1, 'refuses partial targets'],
 ]) test(`Sweep downstream routing ${outcome}`, async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
+    if (outcome === 'refuses partial targets') await page.clock.install()
     const before = await f.checkpoint(), stored = await f.browser()
     const panel = page.locator('#sweep-panel')
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
@@ -189,7 +241,11 @@ for (const [variant, length, outcome] of [
       await expect(page.locator('[data-history-status="error"]')).toHaveCount(1)
       expect(await f.checkpoint()).toEqual(before)
       expect(await f.browser()).toEqual(stored)
-      await page.locator('#sweep-cancel').click()
+      await page.clock.fastForward(60001)
+      await expect(panel).toContainText('Nick on second Sweep cell cannot regenerate')
+      await expect(panel).toContainText('Reopen this feature to continue')
+      await expect(page.locator('[data-history-status="error"]')).toHaveCount(1)
+      await expect(page.locator('#sweep-apply')).toBeDisabled()
       const cancelled = page.waitForResponse(r => new URL(r.url()).pathname === endpoint + '/cancel')
       await page.locator('#sweep-cancel').click()
       expect((await cancelled).ok()).toBe(true)

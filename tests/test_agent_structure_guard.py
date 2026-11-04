@@ -178,8 +178,8 @@ def test_molecular_history_change_requires_a_complete_render_refresh():
     assert _topology_diff_field(before,after) == 'atomistic_reference'
 
 
-def test_saved_main_loadout_requires_a_recorded_publication_contract(tmp_path):
-    """ISSUE-171: native construction is proven, but Save adds an unlogged branch."""
+def test_saved_main_loadout_has_a_recorded_publication_contract(tmp_path):
+    """ISSUE-171: one semantic Main initialization survives repeated saves."""
     from backend.core.design_loadouts import decode_snapshot
     from backend.core.project_revisions import refresh_active_revision
     from experiments.recorded_review_process import structural_value
@@ -195,7 +195,8 @@ def test_saved_main_loadout_requires_a_recorded_publication_contract(tmp_path):
     assert saved.loadouts[0].name == 'Main'
     assert saved.feature_log == source.feature_log
     branch = decode_snapshot(saved.loadouts[0].design_snapshot_gz_b64)
-    assert audit(branch)['status'] == 'verified'
-    with pytest.raises(ProcessRequired, match='active_loadout_id, loadouts'):
-        publish(saved, tmp_path / 'must-not-publish.nadoc')
-    assert not (tmp_path / 'must-not-publish.nadoc').exists()
+    assert verify(branch)['status'] == 'verified'
+    assert audit(saved)['loadouts_checked'] == 1
+    target = tmp_path / 'recorded.nadoc'
+    publish(saved, target)
+    assert audit(m.Design.model_validate_json(target.read_text()))['document_operations'] == 1

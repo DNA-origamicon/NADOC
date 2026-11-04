@@ -382,3 +382,97 @@ test('Fine Routing large desktop visual review', async ({ page, request }, testI
     await proof(request, f.headers)
   }, 'routing-visual')
 })
+
+
+test('Feature log filters hide fine routing without changing recipe indices', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const before = (await f.checkpoint()).design
+    const clusterIndex = before.feature_log.findIndex(entry => entry.feature_type === 'routing-cluster')
+    expect(clusterIndex).toBeGreaterThanOrEqual(0)
+    const row = page.locator(`[data-fl-row="${clusterIndex + 1}"]`)
+    await expect(row).toBeVisible()
+    await page.getByRole('button', { name: 'filter', exact: true }).click()
+    await page.getByRole('checkbox', { name: 'Fine routing', exact: true }).uncheck()
+    await expect(row).toHaveCount(0)
+    expect((await f.checkpoint()).design.feature_log).toEqual(before.feature_log)
+    await page.getByRole('checkbox', { name: 'Fine routing', exact: true }).check()
+    await expect(row).toBeVisible()
+    expect((await f.checkpoint()).design.feature_log_cursor).toEqual(before.feature_log_cursor)
+    await proof(request, f.headers)
+  }, 'routing', { pauseRendering: true })
+})
+
+
+test('3D and cadnano share feature-log controls, filters, repair and loadouts', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const editor = await page.context().newPage()
+    const errors = []
+    editor.on('pageerror', error => errors.push(error.message))
+    try {
+      await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+      await editor.goto(`/cadnano-editor.html?doc=${f.doc}`)
+      await editor.locator('.cn-tab-btn[data-tab="feature-log"]').click()
+      const popupFits = async p => {
+        const popup = await p.locator('.fl-filter-popup').boundingBox()
+        const panel = await p.locator('#feature-log-panel').boundingBox()
+        expect(popup.x).toBeGreaterThanOrEqual(panel.x)
+        expect(popup.x + popup.width).toBeLessThanOrEqual(panel.x + panel.width)
+      }
+      const rows = p => p.locator('#fl-list [data-fl-row]').allTextContents()
+      await expect.poll(() => rows(editor)).toEqual(await rows(page))
+      for (const p of [page, editor]) {
+        await expect(p.getByRole('button', { name: 'repair', exact: true })).toBeVisible()
+        await expect(p.getByRole('button', { name: 'filter', exact: true })).toBeVisible()
+      }
+      await editor.getByRole('button', { name: 'filter', exact: true }).click()
+      await popupFits(editor)
+      await editor.getByRole('checkbox', { name: 'Fine routing', exact: true }).uncheck()
+      await expect.poll(() => rows(page)).toEqual(await rows(editor))
+      await page.getByRole('button', { name: 'filter', exact: true }).click()
+      await popupFits(page)
+      await expect(page.getByRole('checkbox', { name: 'Fine routing', exact: true })).not.toBeChecked()
+      await page.getByRole('checkbox', { name: 'Document ops', exact: true }).check()
+      await expect(editor.getByRole('checkbox', { name: 'Document ops', exact: true })).toBeChecked()
+      await expect(editor.getByRole('checkbox', { name: 'Annotations and visuals' })).toBeDisabled()
+      await editor.keyboard.press('Escape')
+      const inspected = editor.waitForResponse(r => new URL(r.url()).pathname === '/api/design/features/repair-draft' && r.request().method() === 'GET')
+      await editor.getByRole('button', { name: 'repair', exact: true }).click()
+      expect((await inspected).ok()).toBe(true)
+      await expect(editor.getByRole('dialog').filter({ hasText: 'Check and repair part recipe' })).toBeVisible()
+      await editor.keyboard.press('Escape')
+      const created = editor.waitForResponse(r => new URL(r.url()).pathname === '/api/design/loadouts' && r.request().method() === 'POST')
+      await editor.getByTitle('Create loadout', { exact: true }).click()
+      expect((await created).ok()).toBe(true)
+      await expect.poll(() => page.getByTitle('Select loadout', { exact: true }).inputValue())
+        .toBe(await editor.getByTitle('Select loadout', { exact: true }).inputValue())
+      await expect.poll(() => rows(page)).toEqual(await rows(editor))
+      expect(errors).toEqual([])
+    } finally { await editor.close() }
+  }, 'routing', { pauseRendering: true })
+})
+
+
+test('Cadnano edits native Fine Routing through the shared history transport', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const editor = await page.context().newPage()
+    try {
+      await editor.goto(`/cadnano-editor.html?doc=${f.doc}`)
+      await editor.locator('.cn-tab-btn[data-tab="feature-log"]').click()
+      await editor.getByTitle('Expand Fine Routing', { exact: true }).last().click()
+      await editor.getByRole('button', { name: '✎' }).and(editor.locator('[title$=" inputs"]')).last().click()
+      const modal = editor.getByRole('dialog', { name: 'Edit Resize strand ends', exact: true })
+      await expect(modal).toBeVisible()
+      await modal.getByLabel('Entry 1 Delta (bp)', { exact: true }).fill('-3')
+      const edited = editor.waitForResponse(r => /\/api\/design\/features\/\d+\/edit/.test(new URL(r.url()).pathname))
+      await modal.getByRole('button', { name: 'Apply', exact: true }).click()
+      expect((await edited).ok()).toBe(true)
+      await expect(modal).toBeHidden()
+      await expect.poll(() => page.evaluate(async () => {
+        const { store } = await import('/src/state/store.js')
+        return store.getState().currentDesign.feature_log.at(-1).children.at(-1).params.entries[0].delta_bp
+      })).toBe(-3)
+      await proof(request, f.headers)
+    } finally { await editor.close() }
+  }, 'routing', { pauseRendering: true })
+})

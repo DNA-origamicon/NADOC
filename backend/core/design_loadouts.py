@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import uuid
 
 from backend.core.models import Design, DesignLoadout
@@ -64,11 +65,20 @@ def save_active_snapshot(
     if active is not None and active.protected:
         return loadouts
     payload, size = encode_snapshot(design)
+    # A branch switch can save new content into an inactive branch before the
+    # workspace autosave runs. Retain its expected head for CAS, but mark that
+    # head's receipt stale so persistence cannot skip the changed snapshot.
+    stripped = design.model_copy(update={'loadouts': [], 'active_loadout_id': None,
+                                         'last_editable_loadout_id': None})
+    digest = hashlib.sha256(stripped.model_dump_json().encode()).hexdigest()
+    dirty = bool(active and active.head_revision_id and
+                 active.revision_records.get(active.head_revision_id, {}).get('snapshot_sha256') != digest)
     return [
         loadout.model_copy(
             update={
                 "design_snapshot_gz_b64": payload,
                 "snapshot_size_bytes": size,
+                "snapshot_dirty": dirty,
             }
         )
         if loadout.id == active_id

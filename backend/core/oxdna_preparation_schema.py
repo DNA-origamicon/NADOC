@@ -8,6 +8,7 @@ New fields must be reviewed here rather than inferred from current serializers.
 from types import MappingProxyType
 
 from backend.core import models as m
+from backend.core.document_operation_model import DocumentOperation
 from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
 from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import EmbeddedInput, InputSource
@@ -16,7 +17,8 @@ from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, Up
 
 
 _fields = {
-    m.Design: """recipe_root input_sources repair_draft dimensions id lattice_frames helices strands
+    DocumentOperation: "version kind params source_loadout_id source_recipe",
+    m.Design: """document_history recipe_root input_sources repair_draft dimensions id lattice_frames helices strands
         lattice_type metadata deformations cluster_transforms group_organization nucleotide_transforms cluster_joints
         cluster_join_constraints overhangs overhang_connections overhang_bindings connection_versions
         duplexes flexible_segment_marks flexible_connections protein_assets protein_attachments nanoparticles
@@ -86,7 +88,7 @@ _fields = {
     m.NamdHardwareDefault: "threads devices ns_per_day benchmarked_at proxy_nucleotides",
     m.HardwareBenchmark: "oxdna namd",
     m.DesignLoadout: """id name design_snapshot_gz_b64 snapshot_size_bytes protected simulation_engine
-        simulation_job_id head_revision_id base_revision_id""",
+        simulation_job_id head_revision_id base_revision_id revision_records snapshot_dirty""",
     PartRecipeRoot: "version kind lattice_type initial_name source_json source_sha256",
     InputSource: "version sha256 size_bytes format media_type",
     EmbeddedInput: "data_b64",

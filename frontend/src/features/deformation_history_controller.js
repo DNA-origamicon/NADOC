@@ -57,8 +57,14 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
   function expire(b) {
     if (!current(b) || state.expired || state.committed) return
     stopTimer(); abortRequests(); discardPending()
+    const expiredError = error('The preview expired. Reopen this feature to continue')
+    if (state.error) {
+      expiredError.message = `${state.error.message}. ${expiredError.message}`
+      expiredError.detail = state.error.detail
+      expiredError.code = state.error.code
+    }
     state = { ...state, expired: true, projection: null, busy: null, computation: null,
-      error: error('The preview expired. Reopen this feature to continue') }
+      error: expiredError }
     // An in-flight Apply may have published despite a lost/aborted response.
     if (pendingPublication) state.publicationUnknown = true
     cleanup(b); emit()

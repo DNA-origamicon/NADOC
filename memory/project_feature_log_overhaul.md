@@ -9,6 +9,25 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current state and navigation
 
+November3 Sweep feedback: preview expiry preserves the preceding rebuild error
+and its failing-feature attribution, appending reopen instructions instead of
+erasing the error row. Expiry still disables Apply; Cancel releases the editor.
+The reported `workspace/test.nadoc` source replays successfully. The user's
+`(8,38,36)` endpoint reproduces a matched-end continuation-window refusal;
+see [the routing follow-up](project_autoscaffold_single_strand.md).
+These changes are in the integration worktree.
+Validation: 10,016 frontend tests pass (1 skipped), the browser refusal/expiry/
+Cancel check passes, and all 23 smoke checks pass; both browser scratch roots
+were removed. `main.js` LOC delta 0.
+
+November3 document provenance: meaningful metadata/loadout operations use a
+separate journal; autosaves do not add feature rows. Ordinary newly recorded
+loadouts have independent source/branch and portable revision verification.
+Legacy missing history and protected simulation branches remain fail-closed.
+See [the contract](../docs/document_operation_provenance.md) and
+[user scope](feedback_document_operation_provenance.md). The filter now toggles
+fine routing and document ops; annotations/visuals and animation remain deferred.
+
 November2 scrubber representation fix: design-change notifications stop all
 simulation panels. Idle CanDo/SNUPI controllers now leave the shared renderer
 untouched; only a controller that prepared or hid the scene may restore it.
@@ -99,3 +118,8 @@ ISSUE-143 remains a distinct unequal-direct connection defect.
 The archive retains the earlier Fine Routing, delete/revert, snapshot seek,
 identity lifetime and generated-feature notes. Read the relevant section before
 changing those mechanisms; the current ledger supersedes old completion claims.
+
+
+November 3 live UI: Repair/filter and cadnano adapters now also exist in the served
+/home/joshua/NADOC checkout. Filters persist per document and sync across windows.
+Both editors use feature_log_panel and the shared native history transports.

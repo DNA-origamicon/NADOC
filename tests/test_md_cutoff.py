@@ -25,6 +25,18 @@ from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
 from backend.core.namd_metrics import parse_namd_log_frames
 
 
+@pytest.fixture(autouse=True)
+def measured_fake_resources(monkeypatch, tmp_path):
+    # State-machine packages deliberately have no molecular topology or engine.
+    # Keep real lease handling; test config parsing/admission in test_namd_resources.
+    from backend.core import namd_resources, md_vram
+    monkeypatch.setenv('NADOC_MEMORY_BUDGET_DIR', str(tmp_path / 'memory'))
+    monkeypatch.setattr(namd_resources, 'configuration_memory', lambda *a, **kw:
+                        namd_resources.MemoryEstimate(1000, False, 64, 64, True))
+    monkeypatch.setattr(md_vram, 'detect_gpu_activity', lambda **kw:
+                        {'total_mb': 12000, 'used_mb': 100})
+
+
 # ── pure decision ─────────────────────────────────────────────────────────────
 def _flat_frames(n=20, pot=-98000.0, vol=308000.0):
     return [

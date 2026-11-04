@@ -39,7 +39,7 @@ plate_layout representation_overrides view_volumes annotations annotations_enabl
 visibility_state camera_poses animations
 """.split()
 _PHYSICAL = "chain_sim_projects loadouts atomistic_reference active_loadout_id last_editable_loadout_id".split()
-_HISTORY = "feature_log feature_log_cursor feature_log_sub_cursor recipe_root".split()
+_HISTORY = "document_history feature_log feature_log_cursor feature_log_sub_cursor recipe_root".split()
 FIELD_ROLES = MappingProxyType({
     **dict.fromkeys(_AUTHORING, "authoring"),
     **dict.fromkeys(_PRESENTATION, "presentation"),

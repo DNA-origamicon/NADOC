@@ -74,8 +74,11 @@ def test_first_separation_names_overhang_and_cluster_move_extends_it(constructio
     assert moved.overhangs[0].sub_domains[0].length_bp == 4
     hid = moved.helices[0].id
     axis = next(a for a in deformed_helix_axes(moved) if a['helix_id'] == hid)
-    assert [(s['bp_lo'], s['bp_hi']) for s in axis['segments']] == [(0, 2), (4, 7)]
-    assert axis['segments'][0]['start'][:2] != axis['segments'][1]['start'][:2]
+    # Native residue-axis projection retains the independently posed base 3
+    # between the moved group and the unchanged duplex. It must not disappear.
+    assert axis['residue_transformed'] is True
+    assert [(s['bp_lo'], s['bp_hi']) for s in axis['segments']] == [(0, 2), (3, 3), (4, 7)]
+    assert axis['segments'][0]['start'][:2] != axis['segments'][2]['start'][:2]
     assert not stages[1].overhangs
 
 

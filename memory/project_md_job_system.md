@@ -36,6 +36,13 @@ three-stage orchestration regression (mock engine only) now completes all stages
 
 - [Current state — continued detail](details/project_md_job_system/01-solvent-padding-default-2026-09-30.md)
 
+## Replica duration metadata (2026-11-03)
+
+Production replicas record their resolved timestep on each manifest segment as
+well as on the job. Resource planning sums per-segment timesteps; leaving the
+segment default at 2 fs understated 4 fs production duration by half. The emitted
+NAMD configuration and integrator choice are unchanged.
+
 ## Binding invariants
 
 - `job_is_running` answers whether a job can be stopped; queue occupancy is the narrower,

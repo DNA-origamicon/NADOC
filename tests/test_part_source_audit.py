@@ -107,19 +107,20 @@ def test_nested_legacy_loadouts_warn_without_recursive_decode():
 
 def test_loadout_activation_warns_but_preserves_the_repairable_definition(monkeypatch):
     from backend.api import routes_design_loadouts as routes
+    from backend.api import headless_build as build
     broken, source = branch(missing=True)
     saved = loadout(broken)
     current = Design(loadouts=[saved], active_loadout_id="inactive")
-    published = []
-    monkeypatch.setattr(routes.design_state, "get_or_404", lambda: current)
-    monkeypatch.setattr(routes.design_state, "set_design_branch", published.append)
     monkeypatch.setattr(routes, "validate_design", lambda d: None)
     monkeypatch.setattr(routes, "_design_response_with_geometry", lambda d, r, **kw: {"id": d.id})
-    response = routes.select_loadout("inactive", save_current=False)
-    assert response["source_warnings"][0]["references"][0]["identity"] == source.sha256
-    assert published[0].feature_log[0].id == "import-feature"
-    assert published[0].input_sources == {}
-    assert published[0].loadouts == [saved]
+    with build.scratch_session():
+        routes.design_state.set_design(current)
+        response = routes.select_loadout("inactive", save_current=False)
+        published = routes.design_state.get_or_404()
+        assert response["source_warnings"][0]["references"][0]["identity"] == source.sha256
+        assert published.feature_log[0].id == "import-feature"
+        assert published.input_sources == {}
+        assert published.loadouts == [saved]
 
 
 def test_explicit_audit_endpoint_inspects_branches_without_publishing(monkeypatch):

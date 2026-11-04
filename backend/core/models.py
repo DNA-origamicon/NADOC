@@ -30,6 +30,7 @@ from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import Digest, EmbeddedInput, MAX_SOURCES
 from backend.core.part_repair_draft import RepairDraft
 from backend.core.part_group_model import GroupOrganization
+from backend.core.document_operation_model import DocumentOperation
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -2835,6 +2836,8 @@ class DesignLoadout(BaseModel):
     # unreadable by older NADOC builds.
     head_revision_id: Optional[str] = None
     base_revision_id: Optional[str] = None
+    revision_records: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    snapshot_dirty: bool = False
 
 
 # ── Protein attachment models (display-only; never part of the strand graph) ──
@@ -3248,6 +3251,7 @@ class Design(BaseModel):
     # Chain Simulations projects — named queues of MD chain stages (display/job-request
     # annotation only; launched into MdPipeline chains, never a topology edit).
     chain_sim_projects: List[ChainSimProject] = Field(default_factory=list)
+    document_history: List[DocumentOperation] = Field(default_factory=list)
     loadouts: List[DesignLoadout] = Field(default_factory=list)
     atomistic_reference: Optional[AtomisticReference] = None
     active_loadout_id: Optional[str] = None

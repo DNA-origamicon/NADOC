@@ -201,6 +201,14 @@ def _assess_recipe(design, *, max_entries, execute, dependencies, checkpoint):
                     "structure": after_structure,
                     "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})}
     check()
+    if design.document_history:
+        from backend.core.document_operations import apply_metadata
+        try:
+            rebuilt = apply_metadata(design, rebuilt)
+        except ValueError as exc:
+            result["status"] = "mismatch"
+            issues.append({"code": "document_history_mismatch", "detail": str(exc)})
+            return result
     mismatches = sorted(name for name in AUTHORING_FIELDS
                         if authoring_value(design, name) != authoring_value(rebuilt, name))
     if mismatches:

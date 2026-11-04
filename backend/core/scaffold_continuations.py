@@ -11,7 +11,20 @@ from backend.core.backbone_continuations import backbone_continuation_edges
 from backend.core.models import Direction
 
 
-def route_continuations(design, runner, *, close_cycle=True):
+def _within_end_windows(before, after):
+    from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
+    from backend.core.models import LatticeType
+
+    period = HC_CROSSOVER_PERIOD if before.lattice_type == LatticeType.HONEYCOMB else SQ_CROSSOVER_PERIOD
+    original = {h.id: h for h in before.helices}
+    return all(
+        h.bp_start >= original[h.id].bp_start - period
+        and h.bp_start + h.length_bp <= original[h.id].bp_start + original[h.id].length_bp + period
+        for h in after.helices
+    )
+
+
+def route_continuations(design, runner, *, close_cycle=True, allow_local_seamed_fallback=False):
     """Return a routed design, or None when there are no segment continuations.
 
     Explicit forced-ligation records on these edges are retained verbatim. Their
@@ -127,7 +140,22 @@ def route_continuations(design, runner, *, close_cycle=True):
                              == slot(tid, first, direction)), None)
                 if tail is not None and head is not None and tail.id != head.id:
                     virtual = _ligate(virtual, tail, head)
-    routed, result = runner(virtual)
+    from backend.core.scaffold_reset import reset_scaffold_to_structure
+
+    # A reroute must measure from the authored structural ends, not yesterday's
+    # scaffold caps; otherwise each retry can buy another period of extension.
+    window_source, reset_warnings = reset_scaffold_to_structure(virtual.model_copy(deep=True))
+    routed, result = runner(virtual.model_copy(deep=True))
+    if result.valid and allow_local_seamed_fallback and not _within_end_windows(window_source, routed):
+        # Automatic seamed routing prefers matched ends, but a common repeat
+        # translation can overshoot a continued track's local window. Retry the
+        # existing closed local route from the untouched input, never from the
+        # rejected matched output. Explicit matched-end requests do not opt in.
+        from backend.core.seamed_router import _auto_scaffold_seamed_impl
+
+        routed, result = _auto_scaffold_seamed_impl(window_source.model_copy(deep=True), close_ends=True)
+        result.warnings.extend(reset_warnings)
+        result.warnings.append("Matched ends exceed a continuation end-turn window; used local seamed end turns.")
     if not result.valid:
         return design, result
 
@@ -138,16 +166,8 @@ def route_continuations(design, runner, *, close_cycle=True):
                   and any(dm.helix_id in component for dm in s.domains)]
         if len(routes) != 1:
             raise RoutingIntegrityError("No single scaffold preserving all helix continuations was found.")
-    from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
-    from backend.core.models import LatticeType
-
-    period = HC_CROSSOVER_PERIOD if design.lattice_type == LatticeType.HONEYCOMB else SQ_CROSSOVER_PERIOD
-    before_helices = {h.id: h for h in virtual.helices}
-    for h in routed.helices:
-        before = before_helices[h.id]
-        if (h.bp_start < before.bp_start - period
-                or h.bp_start + h.length_bp > before.bp_start + before.length_bp + period):
-            raise RoutingIntegrityError("Routing would extend a track past its local end-turn window.")
+    if not _within_end_windows(window_source, routed):
+        raise RoutingIntegrityError("Routing would extend a track past its local end-turn window.")
 
     def real_helix(tid, bp):
         members, cuts = tracks[tid]

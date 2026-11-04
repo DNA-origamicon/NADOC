@@ -255,14 +255,15 @@ def test_production_conf_reads_reseed_and_carries_seed(tmp_path):
     assert "binVelocities      output/demo_00_reseed.vel" in prod
 
 
-def test_replica_manifest_total_ns(tmp_path):
-    # A 4 fs replica needs a fast (HMR) parent — else it downgrades to 1 fs (see
-    # test_replica_4fs_without_hmr_parent_downgrades). 500k steps × 4 fs = 2 ns.
+@pytest.mark.parametrize("timestep_fs", [1.0, 2.0, 4.0])
+def test_replica_manifest_total_ns(tmp_path, timestep_fs):
     parent = _make_parent(tmp_path, fast=True)
-    child = _build_replica(tmp_path, parent, fast=True)
+    child = _build_replica(tmp_path, parent, fast=timestep_fs == 4.0,
+                           timestep_fs=timestep_fs, total_steps=500_000)
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     # One production segment at the production timestep → total_ns == length_ns.
-    assert cr.total_ns_from_manifest(manifest) == pytest.approx(2.0)
+    assert manifest["segments"][0]["timestep_fs"] == timestep_fs
+    assert cr.total_ns_from_manifest(manifest) == pytest.approx(0.5 * timestep_fs)
     assert cr.n_atoms_from_manifest(manifest) == 120_000
 
 

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from uuid import UUID
 
 import numpy as np
 from fastapi.testclient import TestClient
@@ -10,7 +11,10 @@ from backend.core.extra_base_sample_audit import (
     build_extra_base_sample_audit,
     build_extra_base_sample_catalog,
 )
+from backend.api import crud
+from experiments.recorded_review_process import Process
 from backend.core.models import Design
+from scripts.agent_structure_guard import audit, publish
 
 
 def _sample(offset: float) -> dict:
@@ -30,9 +34,28 @@ def _sample(offset: float) -> dict:
 
 def _fixture(tmp_path: Path) -> tuple[str, list[str]]:
     source_id = "fixture__trajectory"
-    design = Design.model_validate_json(
-        (Path(__file__).parents[1] / "workspace/2hb_1xT.nadoc").read_text()
-    )
+    # Self-contained native construction, independent of personal workspace files.
+    # Record every operation and verify saved/reopened replay at publication.
+    process = Process("Extra-base sample audit fixture")
+    process.append("bundle-create", {
+        **crud.BundleRequest(cells=[[0, 0], [0, 1]], length_bp=12,
+            ligate_adjacent=False, history_seed=UUID(int=171001)).model_dump(mode="json"),
+        "_proof_version": 1,
+    }, "Create two 12 bp helices")
+    first, second = process.design.helices
+    for index in (7, 6):
+        request = crud.PlaceCrossoverRequest(
+            crossover_id=UUID(int=171010 + index),
+            half_a=dict(helix_id=first.id, index=index, strand="REVERSE"),
+            half_b=dict(helix_id=second.id, index=index, strand="FORWARD"),
+            nick_bp_a=7, nick_bp_b=6,
+        ).model_dump(mode="json")
+        process.append("crossover-place", {**request, "_proof_version": 1},
+                       f"Place reciprocal crossover at bp {index}")
+        process.append("crossover-extra-bases", {
+            "crossover_id": request["crossover_id"], "sequence": "T", "_proof_version": 1,
+        }, f"Insert T at crossover bp {index}")
+    design = process.design
     side_map = reciprocal_crossover_sides(design)
     pairs = {}
     for crossover_id, side in side_map.items():
@@ -40,7 +63,10 @@ def _fixture(tmp_path: Path) -> tuple[str, list[str]]:
     crossover_ids = next(ids for ids in pairs.values() if len(ids) == 2)
     job = tmp_path / "job"
     job.mkdir()
-    (job / "design.json").write_text(design.model_dump_json())
+    publish(design, job / "design.json")
+    reopened = Design.model_validate_json((job / "design.json").read_text())
+    assert len(reopened.feature_log) == 5
+    audit(reopened)  # Independently replay the actual saved file, not a snapshot.
     crossovers = {crossover.id: crossover for crossover in design.crossovers}
     inserts = []
     for number, crossover_id in enumerate(crossover_ids):

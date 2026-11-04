@@ -17,6 +17,18 @@ or authorization; current user instructions and `CLAUDE.md` take precedence.
 
 ## End-turn staple clearance — 2026-11-03
 
+Continuation follow-up: editing `test.nadoc`'s last Sweep point to `(8,38,36)`
+shortens its tracks from 232 to 221 bp. Automatic matched ends demanded 22–26 bp
+of far extension on eight tracks, exceeding the existing 21-bp honeycomb window.
+Automatic seamed routing now retries the existing closed local end-turn route
+from fresh input when its first candidate exceeds that window. Explicit matched
+requests still refuse; all continuity, single-scaffold, junction, seam, clearance
+and window checks remain. Windows are measured against the existing structural
+reset, so prior route caps cannot ratchet the allowance on repeated routing.
+Regression: `tests/test_scaffold_continuation_fallback.py` includes new-loadout
+history edit, unchanged Main, guarded publication/reopen/replay, explicit matched
+refusal and idempotence. Implementation is in the November3 integration worktree.
+
 Seamed/matched candidate selection checks the final normalized crossover site on
 both helices against `MIN_SSDNA_MARGIN`. A near candidate that moves too close
 when normalized to bow-right is skipped for the next outward legal site. Far-end

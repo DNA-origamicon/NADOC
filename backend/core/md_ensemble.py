@@ -471,6 +471,7 @@ def build_replica_package(
         stage=f"{length_ns:g} ns production replica (seed {seed})",
         percent=100.0,
         steps=steps,
+        timestep_fs=eff_timestep_fs,
         temp=float((manifest.get("two_electrodes") or graphene_nanopore or {}).get("temperature_K", 300.0)),
         damping=damping,
         scale=None,
@@ -622,8 +623,8 @@ def build_replica_package(
             stage_overrides=stage_overrides,
         ),
         "segments": [asdict(prod)],
-        # total_ns_from_manifest = Σ(segment steps) × relax ts.  One production segment
-        # at the production timestep → total_ns == length_ns (no production_extension,
+        # Record the resolved timestep on the segment as well as the job.
+        # total_ns == length_ns (no production_extension,
         # which would double-count).
         "relax_protocol_settings": {"timestep_fs": eff_timestep_fs},
         "fast_relaxation": {"enabled": use_fast, "structure_psf": structure_psf},

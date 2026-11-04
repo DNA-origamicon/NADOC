@@ -491,7 +491,7 @@ for (const [name, seed, field, collection] of [
     const original = await f.browser(), feature = original.design.feature_log[1]
     const replacement = original.design[collection][0].id
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
-    await page.getByRole('button', { name: /^(?:Check \/ repair recipe|Repair · saved proposal)$/ }).click()
+    await page.getByRole('button', { name: 'repair', exact: true }).click()
     const panel = page.getByRole('dialog').filter({ hasText: 'Check and repair part recipe' })
     await panel.getByLabel('Feature to repair').selectOption(JSON.stringify([feature.id, null]))
     await panel.locator(`[data-repair-path='["${field}"]']`).getByRole('button', { name: 'Find replacements', exact: true }).click()

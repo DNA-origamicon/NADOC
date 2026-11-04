@@ -25,6 +25,28 @@ function fixture() {
     session: () => view.open.mock.lastCall[1] }
 }
 afterEach(() => { for (const owner of owned.splice(0)) owner.dispose() })
+it('retains the failed downstream feature and recovery instructions after expiry', async () => {
+  vi.useFakeTimers()
+  try {
+    const f = fixture()
+    f.source.feature_log.push({ id: 'scaffold', feature_type: 'snapshot', label: 'Auto-scaffold' })
+    await f.owner.open(f.source.feature_log[0])
+    f.previewAPI.apply.mockRejectedValue(Object.assign(new Error('Routing target is missing'), {
+      status: 409, detail: { feature_id: 'scaffold' },
+    }))
+    expect(await f.session().onApply()).toBe(false)
+    await vi.advanceTimersByTimeAsync(60001)
+    const status = f.view.setStatus.mock.lastCall[0]
+    expect(status.expired).toBe(true)
+    expect(status.error.message).toContain('Auto-scaffold cannot regenerate')
+    expect(status.error.message).toContain('Routing target is missing')
+    expect(status.error.message).toContain('Reopen this feature to continue')
+    expect(f.store.getState().featureHistoryFailure.featureId).toBe('scaffold')
+    expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+    expect(await f.session().onCancel()).toBe(true)
+    expect(f.store.getState().featureHistoryFailure).toBeNull()
+  } finally { vi.useRealTimers() }
+})
 it('names the earliest failing routing child and keeps the source unchanged', async () => {
   const f = fixture()
   f.source.feature_log.push({ id: 'routing', feature_type: 'routing-cluster', children: [

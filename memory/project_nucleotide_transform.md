@@ -37,3 +37,11 @@ Checkpoint before this work: `7621cf02` (`Decouple transform activation from clu
 - Moving one atom independently of its nucleotide.
 - Rewriting lattice or crossover topology to match the manually posed residue.
 - Applying nucleotide poses to a running trajectory; they define a new starting design.
+
+## Native history preview contract (2026-11-03)
+
+The transform preview accepts the native boolean `residue_transformed` axis flag
+already emitted by deformation and consumed by the frontend. It retains strict
+axis/domain coverage and rejects nonboolean flags. Residue-projected segments
+remain visible when reopening a recorded Move; this validation fix does not alter
+molecular placement or topology.

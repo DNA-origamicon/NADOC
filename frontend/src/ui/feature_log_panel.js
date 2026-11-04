@@ -39,6 +39,7 @@ import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover
 import { generatedFeatureSchema, canReplayGenerated } from './generated_feature_fields.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 import { initPartRepairPanel, focusPartRepairRow } from './part_repair_panel.js'
+import { createFeatureLogFilters, renderDocumentOperations } from './feature_log_filters.js'
 
 const FEATURE_LOG_BOTTOM_TOLERANCE_PX = 8
 
@@ -197,6 +198,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
   const toolbar = document.createElement('div')
   toolbar.style.cssText = 'display:none;margin-bottom:8px'
   const repairHost = document.createElement('div')
+  const logTools = document.createElement('div')
+  logTools.className = 'fl-log-tools'
+  const filters = createFeatureLogFilters({ onChange: () => _renderCurrentView() })
+  logTools.append(repairHost, filters.root)
+  const documentOps = document.createElement('div')
+  documentOps.className = 'fl-document-ops'
+  documentOps.hidden = true
   const captureCfgBtn = document.createElement('button')
   captureCfgBtn.className = 'panel-action-btn'
   captureCfgBtn.style.cssText = 'width:100%'
@@ -265,7 +273,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
   wrap.append(rail, list)
   panelBody.innerHTML = ''
-  panelBody.append(assemblyTargetBar, loadoutBar, toolbar, repairHost, wrap)
+  panelBody.append(assemblyTargetBar, loadoutBar, toolbar, logTools, wrap, documentOps)
 
   function _isAssemblyConfigMode() {
     const s = store.getState()
@@ -305,6 +313,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     assemblyTargetBar.style.display = (store.getState().assemblyActive && store.getState().currentAssembly) ? 'flex' : 'none'
     // "+ Capture Configuration" lives in the toolbar — show only in config mode.
     toolbar.style.display = _isAssemblyConfigMode() ? '' : 'none'
+    logTools.hidden = _isAssemblyConfigMode()
+    renderDocumentOperations(documentOps, _latestDesign, filters.values.documentOps
+      && !_isAssemblyConfigMode() && !_isAssemblyFeatureMode()
+      && !(!_partInstanceId && store.getState().assemblyActive && !_assemblyPartInstanceId))
     // Loadouts are a design-mode concept; hide while showing configurations.
     loadoutBar.style.display = (_latestDesign && !_isAssemblyConfigMode()) ? 'flex' : 'none'
     rail.style.display = ''
@@ -743,7 +755,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         notchIdx = _notchKeys.findIndex(k => k && k.position === cursor && k.sub_position == null)
       }
       if (notchIdx < 0) {
-        notchIdx = Math.min(cursor + 1, _notchYs.length - 1)
+        notchIdx = _notchKeys.findLastIndex(k => k.position <= cursor)
       }
     }
     const y = _notchYs[notchIdx] ?? 0
@@ -975,6 +987,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     log.forEach((entry, i) => {
       // Skip any legacy checkpoint entries (stripped by backend validator but guard here too).
       if (entry.feature_type === 'checkpoint') return
+      if (entry.feature_type === 'routing-cluster' && !filters.values.fineRouting) return
 
       const suppressed = cursor >= 0 && i > cursor
       const brokenReason = _brokenReason(entry)
@@ -2231,5 +2244,5 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     }, seek: _seek, seekConfig: _seekAssemblyConfig,
   })
   return { setPartContext, clearPartContext, enterPickMode, exitPickMode, vr, repair,
-    dispose: () => repair?.dispose() }
+    dispose: () => { repair?.dispose(); filters.dispose() } }
 }

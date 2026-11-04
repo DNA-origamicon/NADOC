@@ -12,6 +12,11 @@ import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection
 import { docHeaders, docHeadersFor, getDocId } from '../shared/doc_id.js'
 import { createExtensionEndpoints } from '../api/extension_endpoints.js'
 import { createDocumentRequestScope } from '../api/document_request_scope.js'
+import { createDesignRevisionTracker } from '../api/design_revisions.js'
+import { createFeatureLogStore } from './feature_log_store.js'
+import { createFeatureLogAPI } from './feature_log_api.js'
+
+const _historyRevisions = createDesignRevisionTracker()
 
 const _extensionDocuments = createDocumentRequestScope()
 if (import.meta.hot) import.meta.hot.dispose(() => _extensionDocuments.dispose())
@@ -53,7 +58,8 @@ function _applyDesignResponse(json, { emit = false, source = '', crossTabMetadat
     return json   // superseded by a newer response — skip so we don't clobber it
   }
   if (rev !== null) _lastAppliedRev = rev
-  editorStore.setState({ design: json.design })
+  _historyRevisions.acceptDesign(json)
+  editorStore.setState({ design: json.design, ...featureLogAPI.summaryPatch(json) })
   if (emit) {
     nadocBroadcast.emit('design-changed', {
       geometry_unchanged: json.geometry_unchanged === true,
@@ -72,6 +78,7 @@ function _applyDesignResponse(json, { emit = false, source = '', crossTabMetadat
 export function resetRevisionWatermark() {
   _extensionEndpoints.invalidate()
   _lastAppliedRev = -1
+  _historyRevisions.reset()
   _pushSyncLog({ decision: 'RESET', source: 'restart', rev: null, lastRev: -1 })
 }
 
@@ -91,11 +98,11 @@ export function getSyncDebugState() {
 /** Subscribe to every sync decision (APPLY/DROP/RESET) — for a live overlay. */
 export function onSyncEvent(fn) { _syncListeners.add(fn); return () => _syncListeners.delete(fn) }
 
-async function _request(method, path, body, { docId } = {}) {
+async function _request(method, path, body, { docId, signal, onError, skipGeometry = true } = {}) {
   editorStore.setState({ loading: true })
   _inFlight++
   const opts = {
-    method,
+    method, signal,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(docId === undefined ? docHeaders() : docHeadersFor(docId)),
@@ -104,7 +111,7 @@ async function _request(method, path, body, { docId } = {}) {
       // geometry recompute (hundreds of ms on large designs) and a multi-MB
       // JSON.parse of a payload we'd discard. The 3D view re-fetches its own
       // geometry on the design-changed broadcast, so it's unaffected.
-      'X-NADOC-Skip-Geometry': '1',
+      ...(skipGeometry ? { 'X-NADOC-Skip-Geometry': '1' } : {}),
     },
     body:    body !== undefined ? JSON.stringify(body) : undefined,
   }
@@ -113,12 +120,14 @@ async function _request(method, path, body, { docId } = {}) {
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     const json = await r.json().catch(() => null)
     if (!r.ok) {
+      onError?.(r.status, json?.detail ?? r.statusText)
       editorStore.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText }, loading: false })
       return null
     }
     editorStore.setState({ lastError: null, loading: false })
     return json
   } catch (err) {
+    onError?.(0, err.message)
     notifyRequestFailure()   // network-level failure → flag the connection as down
     editorStore.setState({ lastError: { status: 0, message: err.message }, loading: false })
     return null
@@ -794,3 +803,10 @@ export async function redoDesign() {
     return null
   }
 }
+
+export const featureLogAPI = createFeatureLogAPI({ store: createFeatureLogStore(editorStore),
+  request: (method, path, body, options) => _request(method, path, body, { ...options, skipGeometry: false }),
+  revisions: _historyRevisions, getDocId, headersFor: docHeadersFor,
+  documentRequests: _extensionDocuments, mutate,
+  syncDesign: json => { const result = _applyDesignResponse(json, { emit: true, source: 'feature-log' }); _absorbAuxFields(json); return result },
+})

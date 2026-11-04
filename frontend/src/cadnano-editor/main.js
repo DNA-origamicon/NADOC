@@ -51,6 +51,8 @@ import { initZoomScope }  from './zoom_scope.js'
 import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
+import { createFeatureLogStore } from './feature_log_store.js'
+import { featureLogAPI } from './api.js'
 import { initPlateView } from '../ui/plate_view.js'
 import { initHairpinDimerChecker } from '../ui/hairpin_dimer_checker.js'
 import { createHairpinDimerIndexCache, hairpinDimerMarkers, hairpinDimerStrandWarnings } from '../ui/hairpin_dimer_report.js'
@@ -2222,37 +2224,7 @@ initLigationDebug()
 // shared feature_log_panel module expects a store with `currentDesign`. We
 // shim the API surface so the panel can mount unchanged.
 {
-  // Adapt editorStore → { currentDesign, currentAssembly, lastError } shape.
-  const _flStore = {
-    getState() {
-      const s = editorStore.getState()
-      return {
-        currentDesign:    s.design,
-        currentAssembly:  null,
-        assemblyActive:   false,
-        lastError:        s.lastError,
-      }
-    },
-    setState(_partial) { /* feature_log_panel never calls this */ },
-    subscribe(fn) {
-      return editorStore.subscribe((next, prev) => {
-        fn(
-          { currentDesign: next.design, currentAssembly: null, assemblyActive: false, lastError: next.lastError },
-          { currentDesign: prev.design, currentAssembly: null, assemblyActive: false, lastError: prev.lastError },
-        )
-      })
-    },
-    subscribeSlice(slice, fn) {
-      // The panel only uses 'design' and 'assembly' slices. Map 'design' to
-      // editorStore subscription; 'assembly' is a no-op (not applicable here).
-      if (slice === 'design') {
-        return editorStore.subscribe((next, prev) => {
-          fn({ currentDesign: next.design }, { currentDesign: prev.design })
-        })
-      }
-      return () => {}
-    },
-  }
+  const _flStore = createFeatureLogStore(editorStore)
 
   // Feature-log ops use the editor's api functions (NOT a bare fetch): they
   // carry docHeaders() so they hit THIS editor's document — the previous inline
@@ -2260,6 +2232,7 @@ initLigationDebug()
   // index N out of range (log has 1 entries)". They also forward subIndex for
   // per-sub-step revert/delete and ride the stale-response guard.
   const _flApi = {
+    ...featureLogAPI,
     seekFeatures,
     deleteFeature,          // (index, subIndex)
     revertToBeforeFeature,  // (index, subIndex)

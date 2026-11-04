@@ -21,11 +21,19 @@ CORE_REPAIR_FIXTURES = {'repair-core-bend', 'repair-core-twist', 'repair-core-cl
                        'repair-core-cluster_op', 'repair-core-nucleotide-transform', 'repair-core-routing',
                        'repair-core-cascade'}
 FIXTURES.update(CORE_REPAIR_FIXTURES)
+FIXTURES.add('sweep-end-window')
 FIXTURES.update({"connection-np-small", "connection-np-large"})
 FIXTURES.update({'asset-fit', 'asset-empty', 'asset-generated'})
 
 
 def fixture(kind):
+    if kind == 'sweep-end-window':
+        from backend.api import headless_build as build
+        from tests.test_scaffold_continuation_fallback import author_sweep, ORIGINAL_END
+
+        with build.scratch_session():
+            author_sweep(ORIGINAL_END)
+            return build.auto_scaffold()
     if kind == 'asset-generated':
         from tests.test_generated_asset_recipe import native_source
         return native_source('__e2e__generated-assets')

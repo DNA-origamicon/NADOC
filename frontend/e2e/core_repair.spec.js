@@ -23,7 +23,7 @@ for (const family of Object.keys(paths)) test(`core repair ${family}: private re
     const replacement = family === 'cluster_op' ? original.design.cluster_transforms[0].id : original.design.helices[0].id
     await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
     const open = async () => {
-      await page.getByRole('button', { name: /^(?:Check \/ repair recipe|Repair · saved proposal)$/ }).first().click()
+      await page.getByRole('button', { name: 'repair', exact: true }).first().click()
       const panel = page.getByRole('dialog').filter({ hasText: 'Check and repair part recipe' })
       await expect(panel.getByRole('button', { name: 'Reload saved proposal', exact: true })).toBeEnabled()
       return panel

@@ -527,8 +527,13 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
         if saved_current_revision:
             s.design = saved
         else:
-            heads = {item.id: item.head_revision_id for item in saved.loadouts}
-            loadouts = [item.model_copy(update={"head_revision_id": heads[item.id]})
+            if not s.design.loadouts and saved.document_history and saved.loadouts:
+                from backend.core.document_operations import initialize
+                first = next(item for item in saved.loadouts if item.id == saved.active_loadout_id)
+                s.design = initialize(s.design, identity=first.id, name=first.name)
+            heads = {item.id: item for item in saved.loadouts}
+            loadouts = [item.model_copy(update={"head_revision_id": heads[item.id].head_revision_id,
+                                               "revision_records": heads[item.id].revision_records})
                         if item.id in heads else item for item in s.design.loadouts]
             updates = {"loadouts": loadouts or saved.loadouts}
             if not s.design.active_loadout_id:
@@ -664,7 +669,8 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
                                    atom_copies=atom_copies, model_copies=model_copies)
 
 
-def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:
+def set_design_branch(d: Design, *, expected_revision: int | None = None,
+                      expected_source: Design | None = None) -> None:
     """Navigate to a branch without undoing back into a different branch."""
     with _lock:
         _require_compatibility_write("set_design_branch")
@@ -672,6 +678,8 @@ def set_design_branch(d: Design, *, expected_revision: int | None = None) -> Non
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
+        if expected_source is not None and s.design is not expected_source:
+            raise HTTPException(409, detail="Document changed while the branch operation was being prepared.")
         _assert_photoproduct_dependencies(d)
         _assert_occupancy(d, s.design)
         if s.design is None or s.design.id != d.id:

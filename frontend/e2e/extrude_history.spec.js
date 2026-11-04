@@ -694,3 +694,69 @@ for (const finish of ['Cancel', 'Apply']) test(`Extrude workspace edit remains o
     expect((await proof.json()).status).toBe('verified')
   }, 'extrude-chain')
 })
+
+test('Document provenance records semantic operations without autosave feature rows', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const result = await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      const { store } = await import('/src/state/store.js')
+      const current = () => store.getState().currentDesign
+      const requireResult = value => { if (!value) throw new Error('Document operation failed') }
+      requireResult(await api.createDesign('__e2e__document-provenance', 'HONEYCOMB'))
+      requireResult(await api.createBundle({ cells: [[0, 0]], lengthBp: 12, name: '__e2e__document-provenance' }))
+      requireResult(await api.saveDesignToWorkspace(file.split('/').at(-1)))
+      const features = JSON.stringify(current().feature_log)
+      const initial = current().document_history.length
+      for (let i = 0; i < 3; i++) requireResult(await api.saveDesignToWorkspace(file.split('/').at(-1)))
+      const afterSaves = current().document_history.length
+      const main = current().active_loadout_id
+      requireResult(await api.updateMetadata({ name: '__e2e__renamed-document' }))
+      requireResult(await api.createLoadout('Alternative'))
+      const other = current().active_loadout_id
+      requireResult(await api.renameLoadout(other, 'Renamed alternative'))
+      requireResult(await api.selectLoadout(main))
+      requireResult(await api.deleteLoadout(other))
+      requireResult(await api.saveDesignToWorkspace(file.split('/').at(-1)))
+      requireResult(await api.loadDesign(file))
+      return { initial, afterSaves, featuresUnchanged: features === JSON.stringify(current().feature_log),
+        name: current().metadata.name, kinds: current().document_history.map(row => row.kind) }
+    }, f.file)
+    expect(result.initial).toBe(1)
+    expect(result.afterSaves).toBe(1)
+    expect(result.featuresUnchanged).toBe(true)
+    expect(result.name).toBe('__e2e__renamed-document')
+    expect(result.kinds).toEqual(['loadout-initialize', 'document-metadata', 'loadout-create',
+      'loadout-rename', 'loadout-select', 'loadout-delete'])
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const repair = page.getByRole('button', { name: 'repair', exact: true })
+    await expect(repair).toBeVisible()
+    const typography = await page.evaluate(() => {
+      const button = document.querySelector('.fl-log-tools .fl-log-action')
+      const row = document.querySelector('[data-fl-row="0"]')
+      const font = el => { const s = getComputedStyle(el); return [s.fontFamily, s.fontSize, s.fontWeight] }
+      return { button: font(button), row: font(row), gap: row.getBoundingClientRect().top - button.getBoundingClientRect().bottom }
+    })
+    expect(typography.button).toEqual(typography.row)
+    expect(typography.gap).toBeGreaterThanOrEqual(5)
+    const filter = page.getByRole('button', { name: 'filter', exact: true })
+    await filter.click()
+    await expect(page.getByRole('checkbox', { name: 'Fine routing', exact: true })).toBeChecked()
+    await expect(page.getByRole('checkbox', { name: 'Annotations and visuals' })).toBeDisabled()
+    await page.getByRole('checkbox', { name: 'Document ops', exact: true }).check()
+    await expect(page.locator('.fl-document-row')).toHaveCount(6)
+    await expect(page.locator('.fl-document-ops')).toContainText('Create loadout: Alternative')
+    await expect(page.locator('.fl-document-ops')).toContainText('Rename loadout: Alternative → Renamed alternative')
+    await expect(page.locator('.fl-document-ops')).toContainText('Delete loadout: Renamed alternative')
+    await page.keyboard.press('Escape')
+    await expect(filter).toBeFocused()
+    await expect(page.getByRole('group', { name: 'Feature log filters' })).toBeHidden()
+    await filter.click()
+    await page.getByRole('checkbox', { name: 'Document ops', exact: true }).uncheck()
+    await page.locator('[data-fl-row="0"]').click({ position: { x: 2, y: 2 } })
+    await expect(page.locator('.fl-document-ops')).toBeHidden()
+    await expect(filter).toHaveAttribute('aria-expanded', 'false')
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers: f.headers })
+    expect(proof.ok()).toBe(true)
+    expect((await proof.json()).status).toBe('verified')
+  }, 'extrude-blocked')
+})

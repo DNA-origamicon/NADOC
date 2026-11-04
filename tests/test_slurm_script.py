@@ -250,7 +250,8 @@ def test_untyped_gres_when_partition_has_no_gres_type(alpine):
 def test_cpu_partition_uses_mpirun(alpine):
     res = cr.recommend(
         alpine,
-        n_atoms=cr.gpu_atom_ceiling("ah200") + 1,
+        n_atoms=100_000,
+        partition="acpu",
         total_ns=4.0,
         measured_ns_per_day=5.0,
     )
@@ -350,7 +351,7 @@ def test_gpu_job_omits_infiniband_constraint(alpine, gpu_resources):
 def test_cpu_job_keeps_infiniband_constraint(alpine):
     # CPU/MPI runs still want InfiniBand.
     res = cr.recommend(
-        alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0
+        alpine, n_atoms=100_000, partition="acpu", total_ns=2.0, measured_ns_per_day=50.0
     )
     assert res["kind"] == "cpu"
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")

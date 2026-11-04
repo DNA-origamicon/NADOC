@@ -67,7 +67,7 @@ test('saved native repair selects an exact reference and applies only its regene
   const particles = () => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.nanoparticles)
   await expect.poll(particles).toEqual(fixture.published)
   const open = async () => {
-    await page.getByRole('button', { name: /^(?:Check \/ repair recipe|Repair · saved proposal)$/ }).click()
+    await page.getByRole('button', { name: 'repair', exact: true }).click()
     const panel = page.getByRole('dialog').filter({ hasText: 'Check and repair part recipe' })
     await expect(panel.getByRole('button', { name: 'Reload saved proposal', exact: true })).toBeEnabled()
     return panel
