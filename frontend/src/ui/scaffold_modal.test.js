@@ -10,7 +10,8 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 const modalOpen = vi.fn()
 const modalClose = vi.fn()
 vi.mock('./primitives/modal.js', () => ({
-  createModal: vi.fn(() => ({ open: modalOpen, close: modalClose })),
+  createModal: vi.fn(() => ({ open: modalOpen, close: modalClose, isOpen: () => false,
+    overlay: document.createElement('div'), root: document.createElement('div'), actions: document.createElement('div') })),
 }))
 // createButton returns an object whose .click() invokes the wired onClick (mirrors
 // the real button) so the Apply path and the Enter-to-commit path both work.
@@ -37,6 +38,7 @@ function mountModalDom() {
   els['assign-scaffold-modal-body'].innerHTML = `
     <input type="radio" name="asc-scaffold" value="M13mp18" checked>
     <input type="radio" name="asc-scaffold" value="p8064">
+    <input type="radio" name="asc-scaffold" value="custom">
     <div id="asc-length-line"></div>
     <textarea id="asc-custom-seq"></textarea>
     <span id="asc-custom-char-count"></span>
@@ -121,9 +123,10 @@ describe('initScaffoldModal (factory)', () => {
     const deps = makeDeps()
     const api = initScaffoldModal(deps)
     api.openModal()
+    document.querySelector('input[value=custom]').checked = true
     document.getElementById('asc-custom-seq').value = ' acgt acgt '
     await applyButton().__onClick()
-    expect(deps.api.assignScaffoldSequence).toHaveBeenCalledWith('M13mp18', {
+    expect(deps.api.assignScaffoldSequence).toHaveBeenCalledWith('custom', {
       customSequence: 'ACGTACGT',
       strandId: null,
     })
@@ -133,6 +136,7 @@ describe('initScaffoldModal (factory)', () => {
     const deps = makeDeps()
     const api = initScaffoldModal(deps)
     api.openModal()
+    document.querySelector('input[value=custom]').checked = true
     const seq = document.getElementById('asc-custom-seq')
     seq.value = 'ACXZ'
     seq.dispatchEvent(new Event('input')) // populates #asc-custom-error

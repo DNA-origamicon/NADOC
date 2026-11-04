@@ -31,6 +31,7 @@ test('scadnano pinned import: menu, downstream edit, undo and saved cold replay'
     await page.locator('#menu-file-import-scadnano').click()
     const imported = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/import/scadnano')
     await (await picker).setFiles({ name: `${name}.sc`, mimeType: 'application/json', buffer: Buffer.from(content) })
+    await page.locator('.origami-import-options').getByRole('button', { name: 'Import design', exact: true }).click()
     const response = await imported
     expect(response.ok(), await response.text()).toBe(true)
     expect((await response.json()).import_history.status).toBe('reproduced_import')
@@ -85,5 +86,60 @@ test('scadnano pinned import: menu, downstream edit, undo and saved cold replay'
     await page.close()
     const response = await request.delete(`http://127.0.0.1:8004/api/documents/${doc}`)
     if (!response.ok() && !primary) throw new Error(`Cleanup HTTP ${response.status()}`)
+  }
+})
+
+
+test('scadnano optional relaxation retains recorded poses and cold replay', async ({ page, request }) => {
+  const root = process.env.NADOC_HISTORY_E2E_ROOT
+  if (!root) throw new Error('Use the isolated history launcher')
+  const doc = '__e2e__history-bend'
+  const name = '__e2e__relaxed-import'
+  const file = path.join(root, 'workspace', `${name}.nadoc`)
+  const headers = { 'X-NADOC-Doc': doc }
+  const errors = trackConsoleErrors(page)
+  const content = JSON.stringify({ version: '0.19.0', grid: 'square', name,
+    helices: [{ grid_position: [0, 0], max_offset: 32 }, { grid_position: [9, 0], max_offset: 32 }],
+    strands: [{ is_scaffold: true, domains: [
+      { helix: 0, forward: true, start: 0, end: 32 },
+      { helix: 1, forward: false, start: 0, end: 32 },
+    ] }] })
+  try {
+    await page.goto(`/?doc=${doc}`)
+    await page.waitForFunction(() => Boolean(window.__nadocTest?.store))
+    await page.locator('#menu-item-import > button').click()
+    const picker = page.waitForEvent('filechooser')
+    await page.locator('#menu-file-import-scadnano').click()
+    await (await picker).setFiles({ name: `${name}.sc`, mimeType: 'application/json', buffer: Buffer.from(content) })
+    const options = page.locator('.origami-import-options')
+    await expect(options.locator('input')).not.toBeChecked()
+    await options.locator('input').check()
+    const imported = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/import/scadnano')
+    await options.getByRole('button', { name: 'Import design', exact: true }).click()
+    const response = await imported
+    expect(response.ok(), await response.text()).toBe(true)
+    const result = await response.json()
+    expect(result.relaxation.status).toBe('applied')
+    expect(result.import_history.status).toBe('reproduced_import')
+    expect(result.design.feature_log.length).toBeGreaterThan(1)
+    await expect(page.getByText('Save Part As', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('Save Part As', { exact: true })).not.toBeVisible()
+    await page.evaluate(async file => {
+      const api = await import('/src/api/client.js')
+      if (!await api.saveDesignAs(file, true)) throw new Error('Save failed')
+      if (!await api.loadDesign(file)) throw new Error('Reopen failed')
+    }, file)
+    const saved = JSON.parse(await fs.readFile(file, 'utf8'))
+    expect(saved.feature_log).toEqual(result.design.feature_log)
+    const proof = await request.get('http://127.0.0.1:8004/api/__e2e__/history/proof', { headers })
+    expect(proof.ok(), await proof.text()).toBe(true)
+    expect((await proof.json()).status).toBe('reproduced_import')
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    if (process.env.NADOC_FINAL_REVIEW_IMAGE) await page.screenshot({ path: process.env.NADOC_FINAL_REVIEW_IMAGE })
+    expect(errors, errors.join('\n')).toEqual([])
+  } finally {
+    await page.close()
+    await request.delete(`http://127.0.0.1:8004/api/documents/${doc}`)
   }
 })

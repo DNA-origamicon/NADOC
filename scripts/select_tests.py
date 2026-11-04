@@ -168,6 +168,7 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("pdb_export", ("atomistic",)),
     # per-frame / trajectory / health MD leaves (md_executor is a full-trigger above)
     ("md_", ("md",)),
+    ("alpine_worker", ("md",)),
     ("dcd_", ("md",)),
     ("trajectory", ("md",)),
     # headless routing / build pipeline

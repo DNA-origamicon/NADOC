@@ -1,4 +1,5 @@
 import { registerRecordingSource } from '../record/source.js'
+import { scaffoldSequenceChoice, updateScaffoldCustomInput, wireScaffoldCustomInput, validateScaffoldSequenceChoice } from '../ui/scaffold_custom_input.js'
 import { dispatchKeyEvent } from '../input/shortcuts.js'
 import { registerWorkflowShortcuts } from '../input/workflow_shortcuts.js'
 /**
@@ -536,19 +537,9 @@ function _openScaffoldModal(targetStrandId = null) {
   // listeners (they would each close over a stale nt count).
   if (!_ascListenersWired) {
     _ascListenersWired = true
-    modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _ascUpdateWarning))
-    customSeqEl?.addEventListener('input', () => {
-      const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
-      if (charCountEl) charCountEl.textContent = `${raw.length} nt`
-      const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
-      if (bad.length > 0) {
-        if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
-      } else {
-        if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
-      }
-      _ascUpdateWarning()
-    })
+    wireScaffoldCustomInput(modal, _ascUpdateWarning)
   }
+  updateScaffoldCustomInput(modal)
   _ascUpdateWarning()
 }
 
@@ -556,9 +547,8 @@ function _ascUpdateWarning() {
   const modal  = document.getElementById('assign-scaffold-modal')
   const warnEl = document.getElementById('asc-warning')
   if (!modal || !warnEl) return
-  const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
-  const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-  const text = ascWarningText({
+  const { scaffoldName, customRaw } = scaffoldSequenceChoice(modal)
+  const text = scaffoldName === 'custom' && !customRaw ? null : ascWarningText({
     customRaw,
     totalNt: _ascTotalNt,
     scaffoldName,
@@ -1101,14 +1091,13 @@ document.getElementById('assign-scaffold-modal')?.addEventListener('keydown', e 
     document.getElementById('assign-scaffold-modal').style.display = 'none'
     _ascTargetStrandId = null
   }
-  if (e.key === 'Enter')  document.getElementById('asc-apply')?.click()
+  if (e.key === 'Enter' && e.target?.tagName !== 'TEXTAREA') document.getElementById('asc-apply')?.click()
 })
 document.getElementById('asc-apply')?.addEventListener('click', async () => {
   const modal        = document.getElementById('assign-scaffold-modal')
-  const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-  const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
-  const customErrEl  = document.getElementById('asc-custom-error')
-  if (customRaw && customErrEl?.textContent) return
+  const choice = validateScaffoldSequenceChoice(modal)
+  if (!choice) return
+  const { scaffoldName, customRaw } = choice
   const targetStrandId = _ascTargetStrandId
   modal.style.display = 'none'
   _ascTargetStrandId = null   // clear targeting after use

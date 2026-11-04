@@ -120,6 +120,7 @@ async function importViaUI(page, file = CADNANO_FILE_6HB) {
     page.locator('#menu-file-import-cadnano').click(),
   ])
   await fileChooser.setFiles(file)
+  await page.locator('.origami-import-options').getByRole('button', { name: 'Import design', exact: true }).click()
 
   // Wait for the API response to be processed (welcome screen hides)
   await page.waitForFunction(

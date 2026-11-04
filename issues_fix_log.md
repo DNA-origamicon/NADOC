@@ -1267,3 +1267,21 @@ sessions were not restarted; the factory activates on the next normal start.
 100 focused checks and 16 targeted rechecks pass. FAST suite retains documented
 chemistry/provenance debt; no guards or fidelity were weakened. Evidence and
 cleanup: `docs/audits/vr_publication_20261021.json`. Main.js task delta: zero.
+
+
+## ISSUE-172 — Preserve native history across master relaxation (2026-11-03)
+
+Root cause: independently developed import paths diverged—native preparation
+returned before the new option, while the new manual action assumed snapshot-only
+history. Unioning the text conflicts preserved both implementations but did not
+compose their recording contracts. Two imported-option regressions exposed the
+missing path before the fix; no geometry-algorithm hypothesis was pursued.
+
+The integration adapter composes existing recorded group operations and verifies
+replay before publication; manual use retains one undo step and checks source
+currency. The old import-menu tests now accept the added options step, retaining
+all downstream omission/save assertions. Integration correction `main.js` LOC
+delta: 0. Backend FAST: 20,507 passed / 100 skipped; frontend: 863 files,
+10,041 passed / one skipped; four browser checks pass. Full-suite debt remains
+explicitly deferred. Final smoke and cleanup results live in the
+[merge audit](docs/audits/feature_history_merge_20261103.md).

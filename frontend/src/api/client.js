@@ -2147,16 +2147,16 @@ export async function importDesign(content) {
   return _syncFromDesignResponse(json)
 }
 
-export async function importCadnanoDesign(content) {
-  const json = await _request('POST', '/design/import/cadnano', { content })
+export async function importCadnanoDesign(content, { relaxOrigami = false } = {}) {
+  const json = await _request('POST', '/design/import/cadnano', { content, relax_origami: relaxOrigami }, { timeoutMs: 180000 })
   const result = await _syncFromDesignResponse(json)
   if (result) store.setState({ isCadnanoImport: true })
   return result
 }
 
-export async function importScadnanoDesign(content, name) {
-  const body = name ? { content, name } : { content }
-  const json = await _request('POST', '/design/import/scadnano', body)
+export async function importScadnanoDesign(content, name, { relaxOrigami = false } = {}) {
+  const body = { content, ...(name ? { name } : {}), relax_origami: relaxOrigami }
+  const json = await _request('POST', '/design/import/scadnano', body, { timeoutMs: 180000 })
   return _syncFromDesignResponse(json)
 }
 
@@ -2615,6 +2615,13 @@ export async function relaxFlexibleSegments(transforms, label) {
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
+}
+
+export async function relaxOrigami() {
+  const json = await _request('POST', '/design/relax-origami', {}, { timeoutMs: 180000 })
+  if (!json) return null
+  await _syncFromDesignResponse(json)
+  return json.relaxation
 }
 
 export async function patchStrand(strandId, { name, notes, color, sequence } = {}) {

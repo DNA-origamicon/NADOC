@@ -9,6 +9,15 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current state and navigation
 
+November3 master integration: ordinary replayable scadnano import now honors the
+optional rigid relaxation choice. Fitted cluster poses are applied in a private
+session through the existing recorded Make Cluster and Move/Rotate operations,
+then independently replayed before replacing the active document. The original
+pinned import remains F1; replay uses explicit poses, not a rerun of the solver.
+Unsupported fits retain the unrelaxed import and a visible skipped explanation.
+Manual Relax Origami on a native recipe uses the same recorded operations, with
+one atomic publication/undo and a current-source check after fitting.
+
 November3 Sweep feedback: preview expiry preserves the preceding rebuild error
 and its failing-feature attribution, appending reopen instructions instead of
 erasing the error row. Expiry still disables Apply; Cancel releases the editor.

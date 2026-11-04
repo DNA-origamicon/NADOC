@@ -255,3 +255,67 @@ This deleted 12,499 disposable files / approximately 2.77 GB; compact logs,
 timing and cleanup summaries remain in the evidence directory. The integration
 checkout’s `workspace/` directory has no tracked or untracked changes, and no
 unresolved index conflicts remain. The running app in the original checkout was not restarted or modified.
+
+
+### Final master integration (November 3)
+
+Committed the prior validated changes as `df1ac44b`. Fetch confirmed the remaining
+master advance was `75b7f622` (rigid relaxation, import options and custom scaffold
+sequences). Merged it into the integration branch. Three textual conflicts were
+resolved additively: scadnano import history plus relaxation response fields, both
+cadnano entry-point imports, and both sets of slow-test registry entries.
+
+Focused integration checks exposed a semantic overlap: the replayable scadnano
+import returned before master's optional relaxation ran. `part_import_relaxation`
+now fits privately, then executes the existing user-facing Make Cluster and
+Move/Rotate recording paths. It independently verifies the resulting recipe before
+publication. The original pinned import remains intact; explicit fitted poses are
+replayed without rerunning the optimizer. The manual Relax Origami action on native
+recipes uses the same path with one undoable publication and a source/policy check
+after fitting. Legacy relaxation and the solver itself are unchanged. Tests compare
+recorded geometry to the fit, verify replay, preserve the current document on a
+recording failure, and exercise undo/redo.
+
+The new import-options dialog also exposed old frontend fixtures that never
+answered it. Updated their controlled boundary to accept the default option;
+retained all group-dissolution, cancellation and save-order assertions. The real
+options UI remains covered by its own unit tests and the browser import checks.
+
+Backend final: `just test-smart` selected FAST, **20,507 passed, 100 skipped,
+zero failures**, 422.46 pytest seconds / 461 wrapper seconds. The existing CPD
+parameter exclusion remains in place. FULL remains deferred:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Timing triage: no per-test violators; slowest 3.89 seconds. Aggregate test time
+fell to 1,579.1 seconds from 1,689.3 in the preceding check. The same workflow and
+native replay files dominate the aggregate, with lower measured costs. No new
+heavy-test leak was found, and no budget/guard changes were made. The incoming
+master's existing Alpine worker classification was retained in the conflict union.
+
+Four isolated browser checks pass (35.1 seconds): shared 3D/cadnano controls and
+native routing editing, ordinary pinned scadnano import with downstream edit and
+undo, and optional relaxation with saved/reopened independent replay. Inspected
+the rendered relaxed import with its F1 import and subsequent Move/Rotate entries;
+the review image was deleted. The launcher verified
+`/tmp/__e2e__history-iie8a6nt` absent after server/session cleanup.
+
+The first frontend run had 862 passing files and 16 failures confined to the old
+import fixture, all fixed by accepting the new options step. The clean frontend rerun passes **863 files / 10,041 tests, one skipped**
+(385.95 seconds). All **23 smoke tests pass** (2.3 minutes), including the real-design zero-console-error and clean session teardown gates. Changed Python lint, JavaScript
+entry-point syntax and whitespace checks pass. Memory lint: zero errors, three
+pre-existing length warnings. Evidence and the pre-run browser artifact inventory
+are under `.development-artifacts/final-merge/`.
+
+Final cleanup verified both isolated browser roots and the review image absent.
+Task-owned pytest roots 0–3 were removed after checking for live locks (or were
+already pruned); file counts and sizes are in `final-merge/cleanup.json`. Compact
+evidence is retained. A final fetch confirms `origin/master` still points to
+`75b7f622`, matching the integrated merge parent. No unresolved conflicts remain.
+The integration is prepared locally; no push or update of the master branch was
+performed. The broad FULL suite remains explicitly deferred as stated above.

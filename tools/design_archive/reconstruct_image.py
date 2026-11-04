@@ -15,6 +15,7 @@ def main():
     compile_parser = commands.add_parser('compile')
     compile_parser.add_argument('review', type=Path)
     compile_parser.add_argument('output', type=Path)
+    compile_parser.add_argument('--relax', action='store_true', help='Also import and fit rigid bodies with clash prevention')
     compare_parser = commands.add_parser('compare')
     compare_parser.add_argument('draft', type=Path)
     compare_parser.add_argument('reference', type=Path)
@@ -32,8 +33,13 @@ def main():
         for name in ('draft.json', 'provenance.json'):
             if (args.output/name).exists():
                 raise FileExistsError(f'Refusing to replace {args.output/name}')
-        (args.output/'draft.json').write_text(json.dumps(result.pop('cadnano'), indent=2))
+        cadnano = result.pop('cadnano')
+        (args.output/'draft.json').write_text(json.dumps(cadnano, indent=2))
         (args.output/'provenance.json').write_text(json.dumps(result, indent=2))
+        if args.relax:
+            from tools.design_archive.relax_image_import import write_relaxed_image_import
+            report = write_relaxed_image_import(cadnano, args.output)
+            print(json.dumps(report, indent=2))
     else:
         if args.output.exists():
             raise FileExistsError(f'Refusing to replace {args.output}')

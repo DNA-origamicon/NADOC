@@ -551,6 +551,8 @@ app.include_router(history_conversion_router, prefix="/api")
 app.include_router(project_collaboration_router, prefix="/api")
 from backend.api.routes_image_evaluation import router as image_evaluation_router
 app.include_router(image_evaluation_router, prefix="/api")
+from backend.api.routes_origami_relax import router as origami_relax_router
+app.include_router(origami_relax_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
 
 
@@ -574,6 +576,18 @@ def cadnano_editor():
     # Dev mode — Vite serves multi-page entries by filename
     return RedirectResponse("http://localhost:5173/cadnano-editor.html")
 
+
+# Serve the existing publication catalog in both Vite development and production.
+# Its archived assets live behind a symlink; mount that resolved directory separately
+# so StaticFiles can keep its normal path-containment checks for both roots.
+_origami_repo = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "experiments", "origami_publication_catalog",
+))
+if os.path.isdir(_origami_repo):
+    _origami_assets = os.path.realpath(os.path.join(_origami_repo, "assets"))
+    if os.path.isdir(_origami_assets):
+        app.mount("/api/all-origami-repo/assets", StaticFiles(directory=_origami_assets), name="all-origami-assets")
+    app.mount("/api/all-origami-repo", StaticFiles(directory=_origami_repo, html=True), name="all-origami-repo")
 
 # Serve the built Vite frontend if present (production mode).
 _frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")

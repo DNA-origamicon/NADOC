@@ -20,6 +20,8 @@ vi.mock('./toast.js', () => ({
 }))
 vi.mock('./import_pdb_modal.js', () => ({ openImportPdbModal: vi.fn() }))
 vi.mock('./file_browser.js', () => ({ openFileBrowser: vi.fn() }))
+// Group-omission tests accept the new options step; its UI is covered separately.
+vi.mock('./import_origami_options.js', () => ({ chooseOrigamiImportOptions: vi.fn(async () => ({ relaxOrigami: false })), importRelaxationMessage: () => null }))
 
 import { showToast } from './toast.js'
 import { openImportPdbModal } from './import_pdb_modal.js'

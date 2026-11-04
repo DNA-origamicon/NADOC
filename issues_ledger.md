@@ -3625,3 +3625,18 @@ Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta:
   buffered 24, received 72, with limited=true and complete=false.
 - Found during YggDNAsil validation; no trajectory code changed. Root cause and
   intended fill behavior require investigation. Existing test is the repro.
+
+
+## ISSUE-172 — Master relaxation bypasses replayable import history (2026-11-03, FIXED)
+
+- [x] Merge integration reproduced two missing scadnano relaxation responses: the
+  replayable import returned before the newly added option ran. The new manual
+  action also used an unregistered snapshot operation on native recipes.
+- Preserve the pinned import and execute fitted poses through recorded Make Cluster
+  and Move/Rotate commands in a private session, then independently verify before
+  publication. Native manual relaxation commits once with undo/redo and rejects a
+  changed source; unsupported import fits keep the original import and explanation.
+- Geometry equality against the fit, independent replay, failure atomicity and
+  native undo/redo are covered. Real-browser optional import/save/reopen replay
+  passes. The optimizer and molecular placement constants are unchanged.
+- Validation and cleanup: [final master integration audit](docs/audits/feature_history_merge_20261103.md).

@@ -616,6 +616,8 @@ _SLOW_TESTS = {
     "test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",  # 5.90 s, three workers
     "test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",  # 5.36 s, four workers
     "test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery",  # coating set/repack + three independent proofs
+    # Two cold Python processes and detached-worker survival (5.36 s); no live Alpine.
+    "test_transfer_keeps_running_after_api_process_is_killed",
     # Actual pinned CPD conversion/relaxation and independent spawned replay.
     "test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
     # Native routing + Join search / independent cold replay are intentional
@@ -1110,7 +1112,7 @@ def _slow_area_for(module: str) -> str:
         or "measured_positioning" in module
     ):
         return "atomistic"
-    if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
+    if module.startswith("test_md") or "openmm" in module or "benchmark" in module or module == "test_alpine_worker":
         return "md"
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",

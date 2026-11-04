@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from backend.api import state as design_state
 
@@ -56,6 +56,27 @@ class _ScaffoldSeqBody(BaseModel):
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None  # if set, overrides scaffold_name
     strand_id: Optional[str] = None  # target strand (multi-scaffold support)
+
+    # Validate new submissions here; historical replay and N padding keep their
+    # existing internal sequence contracts.
+    @field_validator("custom_sequence")
+    @classmethod
+    def validate_custom_bases(cls, value):
+        if value is None:
+            return None
+        cleaned = "".join(value.split()).upper()
+        if not cleaned:
+            raise ValueError("Custom scaffold sequence is empty. Paste A, T, G, C bases.")
+        bad = sorted(set(cleaned) - set("ATGC"))
+        if bad:
+            raise ValueError(f"Only A, T, G, C bases are allowed in a custom scaffold sequence. Invalid characters: {bad[:12]!r}")
+        return cleaned
+
+    @model_validator(mode="after")
+    def require_custom_sequence(self):
+        if self.scaffold_name == "custom" and self.custom_sequence is None:
+            raise ValueError("Paste a custom scaffold sequence before applying.")
+        return self
 
 
 class _RegionInterval(BaseModel):
@@ -92,8 +113,8 @@ def assign_scaffold_sequence_endpoint(
     """Assign a scaffold sequence to a scaffold strand.
 
     Body fields:
-    - ``scaffold_name``: one of "M13mp18", "p7560", "p8064" (default: M13mp18).
-    - ``custom_sequence``: raw ATGCN string; when non-empty overrides scaffold_name.
+    - ``scaffold_name``: one of "M13mp18", "p7560", "p8064", "custom" (default: M13mp18).
+    - ``custom_sequence``: ATGC bases (case-insensitive, whitespace ignored); overrides scaffold_name.
     - ``strand_id``: target a specific scaffold strand (for multi-scaffold designs).
 
     The response includes ``total_nt``, ``scaffold_len``, and ``padded_nt``.

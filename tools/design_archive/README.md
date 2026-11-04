@@ -140,3 +140,24 @@ are in workspace `Nanobase Imports`. Scientific audit: Archive
 `nanobase-imports-20261027/triangle`. This is an imported part through normal user routes,
 not a generative-history reconstruction. Native references are post-inference checks;
 24extra reference staple bases on helices27/29 are unresolved and were not copied.
+
+### Optional relaxation after image import
+
+Add `--relax` to `reconstruct_image compile`, `import_d003_figure.py`, or
+`import_triangle_figure.py` to fit the reviewed/registered draft after conversion.
+For an existing reviewed draft:
+
+```
+.venv/bin/python -m tools.design_archive.relax_image_import registered.cadnano.json NEW_OUTPUT_DIRECTORY
+```
+
+The step preserves the source draft and writes `image_imported.nadoc`, a separate
+`image_relaxed.nadoc` when fitting succeeds, and `image_relaxation.json`. It refuses
+to overwrite those files. Unsupported layouts still produce the imported design
+and a report explaining the skipped fit. Relaxation preserves rigid bodies and
+routing, uses planar clash prevention, and may increase bond stretch. It does not
+validate or infer image routing, correct polarity, or run a simulation engine.
+
+Browser caDNAno/scadnano imports from the import menu, Library, and Recent Files expose the
+same opt-in **Relax after import** checkbox. It defaults off. The upload API accepts `relax_origami: true`; its
+response includes `relaxation.status` (`applied` or `skipped`) when requested.

@@ -52,6 +52,11 @@ def test_inapplicability_is_cached_but_source_changes_invalidate_it(tmp_path):
 @pytest.mark.parametrize('engine', ['md', 'oxdna'])
 @pytest.mark.parametrize('case', ['mixed', 'all_unavailable', 'error'])
 def test_metric_chain_skips_only_expected_inapplicability(monkeypatch, engine, case):
+    from contextlib import nullcontext
+    from backend.core import memory_budget
+
+    # All measurements are stubbed; do not wait for real host analysis jobs.
+    monkeypatch.setattr(memory_budget, 'exclusive_analysis', lambda **_kw: nullcontext())
     from backend.api import routes_md_metrics as md, routes_oxdna_metrics as ox
     from backend.core import md_trajectory, oxdna_health
     module = md if engine == 'md' else ox
