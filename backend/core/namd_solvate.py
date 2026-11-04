@@ -2816,6 +2816,8 @@ def build_namd_solvated_package(
             "PSF exporter is intentionally unavailable for product designs."
         )
     photoproduct_assets = photoproduct_package_assets(design)
+    from backend.core.cpd_integrator import assets_hmr_qualified
+    product_hmr_qualified = has_photoproducts and assets_hmr_qualified(photoproduct_assets)
     design = design.without_reference_geometry()
     from backend.core.streptavidin import require_coating_simulation_support
     require_coating_simulation_support(design, 'NAMD solvated package')
@@ -3035,7 +3037,7 @@ def build_namd_solvated_package(
     hmr_receipt = None
     fast_conf = None
     n_hmr = 0
-    if not has_photoproducts:
+    if not has_photoproducts or product_hmr_qualified:
         with tempfile.TemporaryDirectory(prefix="nadoc_hmr_") as _hmr_tmp:
             hmr_tmp = Path(_hmr_tmp)
             psf_path = hmr_tmp / f"{name}.psf"
@@ -3061,6 +3063,11 @@ def build_namd_solvated_package(
             nvt_only=False,
             temperature_K=float((graphene_nanopore or {}).get("temperature_K", 300.0)),
         )
+        fast_conf = inject_photoproduct_parameters(fast_conf, design)
+        if product_hmr_qualified:
+            # The CPD panel used PME every 4 fs, matching managed production.
+            # Do not inherit this legacy standalone template's 8 fs PME interval.
+            fast_conf = fast_conf.replace('fullElectFrequency 2', 'fullElectFrequency 1')
 
     if graphene_nanopore:
         from backend.core.namd_graphene import configure_graphene_equilibration, graphene_pressure_conf
@@ -3070,7 +3077,7 @@ def build_namd_solvated_package(
             fast_conf = graphene_pressure_conf(fast_conf, enabled=True, wall=graphene_nanopore)
 
     readme = _README.format(name=name)
-    if has_photoproducts:
+    if has_photoproducts and not product_hmr_qualified:
         readme = readme.replace(
             f"{name}_hmr.psf      HMR topology for fast dynamics (non-water H mass x3)\n",
             "",
@@ -3102,6 +3109,13 @@ def build_namd_solvated_package(
             "use NADOC's managed ordinary-mass pathway at no more than 2 fs until "
             "product-specific HMR validation is released.\n"
         )
+    elif product_hmr_qualified:
+        readme += (
+            "\nTT-CPD fast integrator: these exact provisional parameter assets passed "
+            "paired native 2/4 fs numerical validation. HMR factor 3, rigidBonds all, "
+            "4 fs are supported. This is not equilibrium or kinetic equivalence, nor "
+            "scientific release of the provisional force field.\n"
+        )
     prompt = _AI_PROMPT.replace("{name}", name)
     launch = _LAUNCH_SH.format(name=name)
     audit_json = {
@@ -3113,8 +3127,8 @@ def build_namd_solvated_package(
         "requirements": {
             "full_dna_topology_required": require_full_topology and not graphene_only,
             "neutral_final_psf_required": require_full_topology,
-            "photoproduct_timestep_fs": 2.0 if has_photoproducts else None,
-            "photoproduct_hmr_4fs_validated": False if has_photoproducts else None,
+            "photoproduct_timestep_fs": (4.0 if product_hmr_qualified else 2.0) if has_photoproducts else None,
+            "photoproduct_hmr_4fs_validated": product_hmr_qualified if has_photoproducts else None,
         },
         "graphene_only": graphene_only,
         "dry_dna": dry_audit.to_dict(),
@@ -3182,7 +3196,7 @@ def build_namd_solvated_package(
                 zf.writestr(prefix + "EXPERIMENTAL_CPD_README.txt",
                     "Provisional CPD MVP force field for the reviewed six-residue 1xT starting geometry.\n"
                     "Not a physically validated or generally released parameter set.\n"
-                    "One isomer parameter set per system. Use ordinary masses and at most 2 fs.\n"
+                    "One isomer parameter set per system. Follow the packaged integrator qualification.\n"
                     "Monitor CPD stereochemistry, attachments and local geometry during relaxation and dynamics.\n")
             if any(record["kind"] == "preliminary_review" for record in photoproduct_assets):
                 from backend.core.cpd_preliminary import PACKAGE_NOTICE
@@ -3190,8 +3204,8 @@ def build_namd_solvated_package(
             packaged_manifest = {
                 "schema": "nadoc.packaged-photoproduct-forcefield.v1",
                 "qualification": "experimental-mvp" if experimental_mvp else "registry-qualified",
-                "timestep_fs": 2.0,
-                "hmr_4fs_enabled": False,
+                "timestep_fs": 4.0 if product_hmr_qualified else 2.0,
+                "hmr_4fs_enabled": product_hmr_qualified,
                 "lesions": [
                     {
                         "lesion_id": lesion.id,

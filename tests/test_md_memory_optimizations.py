@@ -62,6 +62,23 @@ def test_hmr_rejects_bad_bond_without_overwriting_output(tmp_path):
     assert dst.read_text() == 'previous result'
 
 
+def test_hmr_accepts_mixed_width_legacy_solvated_psf(tmp_path):
+    src, dst = tmp_path/'mixed.psf', tmp_path/'hmr.psf'
+    original = psf_fixture(10)
+    rows = original.splitlines()
+    start = next(i for i, line in enumerate(rows) if '!NBOND' in line) + 1
+    for i in (start + 1, start + 2):
+        rows[i] = ''.join(f'{int(value):8d}' for value in rows[i].split())
+    src.write_text('\n'.join(rows)+'\n')
+    reference = tmp_path/'uniform.psf'
+    reference.write_text(original)
+    expected = tmp_path/'uniform_hmr.psf'
+    assert write_hmr_psf(src, dst) == write_hmr_psf(reference, expected)
+    # The mixed-width source must produce exactly the same atom masses.
+    assert dst.read_text().split('!NBOND')[0] == expected.read_text().split('!NBOND')[0]
+    assert dst.read_text().split('!NBOND')[1] == src.read_text().split('!NBOND')[1]
+
+
 def test_hmr_receipt_rejects_changed_inputs_and_outputs(tmp_path):
     src, dst = tmp_path/'system.psf', tmp_path/'system_hmr.psf'
     src.write_text(psf_fixture()); count = write_hmr_psf(src, dst)

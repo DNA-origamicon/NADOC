@@ -1,0 +1,1242 @@
+{
+  "date": "2026-11-04",
+  "native_simulations": 38,
+  "native_simulated_ps": 770,
+  "raw_evidence_roots": [
+    ".development-artifacts/cpd-hmr-20261104-v2",
+    ".development-artifacts/cpd-hmr-20261104-confirmation",
+    ".development-artifacts/cpd-hmr-20261104-launch"
+  ],
+  "pilot_verdict": {
+    "passed": false,
+    "pairs": [
+      {
+        "job": "edb512c46112",
+        "start": "reseed",
+        "passed": true,
+        "drift_excess": -0.0001381975633211682
+      },
+      {
+        "job": "edb512c46112",
+        "start": "production_endpoint",
+        "passed": true,
+        "drift_excess": 0.0042665517006645745
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "reseed",
+        "passed": true,
+        "drift_excess": 0.004486373252776169
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "production_endpoint",
+        "passed": false,
+        "drift_excess": 0.006824343339400012
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "reseed",
+        "passed": true,
+        "drift_excess": -1.555405167221846e-05
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "production_endpoint",
+        "passed": true,
+        "drift_excess": 4.0116923658646076e-05
+      },
+      {
+        "job": "395337bdb061",
+        "start": "reseed",
+        "passed": true,
+        "drift_excess": 0.002294443804532037
+      },
+      {
+        "job": "395337bdb061",
+        "start": "production_endpoint",
+        "passed": true,
+        "drift_excess": 0.0004758601279686899
+      }
+    ]
+  },
+  "confirmation_plan": {
+    "date": "2026-11-04",
+    "rule": "For each isomer failing a 10 ps paired NVE drift criterion, run exactly one 50 ps NVE confirmation for both starts and both timesteps, from the identical NPT endpoints. No further extension. Structural/native failures are not eligible. Preserve all short-window failures.",
+    "nve_ps": 50,
+    "maximum_abs_drift_kcal_mol_ns_atom": 0.01,
+    "maximum_paired_abs_drift_excess": 0.005,
+    "maximum_additional_native_arms": 16,
+    "worker_sha256": "a67fda9f3e243b0928fb163a034b54062df8ba99da14a02fb79f2d55581b4b72",
+    "exposed_observation": "cis-anti-I production_endpoint 4fs drift +0.007401263735628481 vs 2fs -0.0005769203962284695; paired threshold failed"
+  },
+  "final_verdict": {
+    "passed": true,
+    "pairs": [
+      {
+        "job": "edb512c46112",
+        "start": "reseed",
+        "drift_excess": -0.0001381975633211682,
+        "nve_ps": 10,
+        "passed": true
+      },
+      {
+        "job": "edb512c46112",
+        "start": "production_endpoint",
+        "drift_excess": 0.0042665517006645745,
+        "nve_ps": 10,
+        "passed": true
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "reseed",
+        "drift_excess": -7.295282732219608e-05,
+        "nve_ps": 50,
+        "passed": true
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "production_endpoint",
+        "drift_excess": 0.0005840821249573379,
+        "nve_ps": 50,
+        "passed": true
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "reseed",
+        "drift_excess": -1.555405167221846e-05,
+        "nve_ps": 10,
+        "passed": true
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "production_endpoint",
+        "drift_excess": 4.0116923658646076e-05,
+        "nve_ps": 10,
+        "passed": true
+      },
+      {
+        "job": "395337bdb061",
+        "start": "reseed",
+        "drift_excess": 0.002294443804532037,
+        "nve_ps": 10,
+        "passed": true
+      },
+      {
+        "job": "395337bdb061",
+        "start": "production_endpoint",
+        "drift_excess": 0.0004758601279686899,
+        "nve_ps": 10,
+        "passed": true
+      }
+    ]
+  },
+  "independent_audit": {
+    "passed": true,
+    "worker_sha256": "f2d4706471b0f710975c46fbb7c5a4d511ac0b1e07836b2c87eb2c38889d3ccf",
+    "protocol_sha256": "57ccb6a5e271ef541d39fa6f96e64e0b78ea52b5661025bcf073afd4cada00d9",
+    "arms": [
+      {
+        "job": "edb512c46112",
+        "start": "reseed",
+        "dt_fs": 4,
+        "atom_count": 472624,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "950915d8d7eb910277b67c1519ded4ec0d6ebec6b186b4c0b978a88199835ff2",
+            "conf_sha256": "45ace712653c25dd33d54079cbb05213ba6ca93b05170a79effd8f937bb70155",
+            "endpoint_sha256": "1ad165f1c5c4e8715d9a3306477567d8ad11427168bf6365e2e831a4a74c63f8",
+            "crosslinks_A": [
+              1.5555267828533066,
+              1.523507353727994
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2132322661110075,
+              1.575869003501326
+            ],
+            "stereocenter_determinants_A3": [
+              2.374297837630776,
+              -1.8315445804639459,
+              -2.602304528340226,
+              1.9317564891954448
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "4be66ab461c729df6fa9864203dd39e083c45f9a0e7b0876a2643aeb7ce0c870",
+            "conf_sha256": "09f5e16889cd94b05c033b81cb225871cb65e38895580edccc46e1543339f9be",
+            "endpoint_sha256": "9e2db4d05ceb98148a83113793f9b34c7f04f5b74eba2d39c6a5caef47ec8ef0",
+            "crosslinks_A": [
+              1.5427726152909682,
+              1.5375485365894233
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1841611684288305,
+              1.5913990296899927
+            ],
+            "stereocenter_determinants_A3": [
+              2.917017440074609,
+              -1.520535636256899,
+              -2.8457150157943745,
+              1.945689903284238
+            ],
+            "drift_kcal_mol_ns_atom": 0.0010259484564063737
+          }
+        }
+      },
+      {
+        "job": "edb512c46112",
+        "start": "reseed",
+        "dt_fs": 2,
+        "atom_count": 472624,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "bc75a8471824cdac6aadd095795c942f30d2b9c8ea35622508301f1a003bf6b1",
+            "conf_sha256": "702712d4cf8b60d2d09cd4d0cb46f125f5f03929905b4a6e7be9c73a0d9b4c0f",
+            "endpoint_sha256": "a1f4daf6d0a25a56a8a89ab892cf5d868287cd2ed397d1d439b2729f1397b326",
+            "crosslinks_A": [
+              1.57655518632682,
+              1.5083248735772978
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1868640982939809,
+              1.5910148614415502
+            ],
+            "stereocenter_determinants_A3": [
+              2.6927470370206885,
+              -1.9229726570113594,
+              -2.708977282017012,
+              2.221528821425676
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "ff60bb4994e12b79787a7b40c046df15509de248dbd9ef454de34fe9a549f0d7",
+            "conf_sha256": "42efd330dad6c25d199589c0a8cfc53c80b00f3c1dd9a180fe023a25e8968916",
+            "endpoint_sha256": "ad05175bc0e8f9aa1af03fefe07bbfe0aa79686972dfb6b192d6c0357e79aef3",
+            "crosslinks_A": [
+              1.5628235792317582,
+              1.5791619130374392
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2238837586846183,
+              1.623388697825477
+            ],
+            "stereocenter_determinants_A3": [
+              2.9722773112376193,
+              -1.4488748268938938,
+              -2.5009932023447754,
+              1.7072258891836347
+            ],
+            "drift_kcal_mol_ns_atom": 0.0011641460197072079
+          }
+        }
+      },
+      {
+        "job": "edb512c46112",
+        "start": "production_endpoint",
+        "dt_fs": 4,
+        "atom_count": 472624,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "8d3d201188eab75b513d2bbf8e940b1f259894fe84c857762ac28adb68b72607",
+            "conf_sha256": "0d64cce3924e2236314c69bb580927a50f746ea3242a04ec37b54743d1a17de7",
+            "endpoint_sha256": "87040eb37ae901522d075736b1b5d428e56c4dd651560ac778c4ab7222aa2e46",
+            "crosslinks_A": [
+              1.5414393273406617,
+              1.4991964940894351
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2081291819989657,
+              1.652303561372805
+            ],
+            "stereocenter_determinants_A3": [
+              2.578129220005179,
+              -1.9220784139172977,
+              -2.3103021087799043,
+              2.014015807100365
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "fe69b68879d4a13dda0075d7ed7eaf78e1d26205fc6740136281574dd49a59c2",
+            "conf_sha256": "62ac66964660e5eb2db8ff4f05cbc2634d55a42d4745d1a4262aff011f194dea",
+            "endpoint_sha256": "6774baa9660c8bd913bcf147f8a64290c9326392e336d1ef4ed3ddc3fac6cba5",
+            "crosslinks_A": [
+              1.532952792912017,
+              1.5461090869653025
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1811529160825767,
+              1.6229006297442206
+            ],
+            "stereocenter_determinants_A3": [
+              2.810923215912746,
+              -1.6433386855203016,
+              -2.913013899924646,
+              1.7621189507080122
+            ],
+            "drift_kcal_mol_ns_atom": -0.005827459597812697
+          }
+        }
+      },
+      {
+        "job": "edb512c46112",
+        "start": "production_endpoint",
+        "dt_fs": 2,
+        "atom_count": 472624,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "18eaf48cf5c36124ab3646e7d97ae4dbac8d92964ea7ff4c55f539784decf922",
+            "conf_sha256": "295cbade65dd413ee32181333b9b2fa2999c5125a52b558ded245a8cc6fdd2bb",
+            "endpoint_sha256": "f580245a692db167fac4c6924fb05dd9ae9854744dd7ea82117d9ccf375a7a77",
+            "crosslinks_A": [
+              1.5507424598797284,
+              1.5460746605135505
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.226158377374502,
+              1.6178164349475637
+            ],
+            "stereocenter_determinants_A3": [
+              2.88334012532719,
+              -2.004237577251082,
+              -2.634738305726877,
+              2.010478283359903
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "3cf0f4c431600c0edd8b9cc04097a54fdb678b772f8e30f4b5d5454fff7a767e",
+            "conf_sha256": "85d0dac1d77a5af93cbbc90c3958036c105fc07ec5575b5a0fda2f5e5741e3ad",
+            "endpoint_sha256": "a2f78ff7bbf0460a887ac6c54edd82faf6305e826c39e60e2a70deb9d8f2f57e",
+            "crosslinks_A": [
+              1.53228053416505,
+              1.5444060098837715
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1972233637227032,
+              1.5774710419479683
+            ],
+            "stereocenter_determinants_A3": [
+              2.6926372917367525,
+              -1.8052670340406887,
+              -2.740521861007073,
+              2.087597262920839
+            ],
+            "drift_kcal_mol_ns_atom": 0.0015609078970384301
+          }
+        }
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "reseed",
+        "dt_fs": 4,
+        "atom_count": 472624,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "9d1e331729f6031cf2516d2f12b0a77d43e53db263ea1738e040f414af1738bb",
+            "conf_sha256": "ef4609bcf0b7a38597273c0a0fabac83357be460e8f8449d9f1a9b4ce69e15bf",
+            "endpoint_sha256": "f978fe0938b2eba5659642c31c1179dd6b4d9672aff09d03c702be7754c0c5eb",
+            "crosslinks_A": [
+              1.6178798841632913,
+              1.593341291630317
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2032773784642443,
+              1.6178798841632913
+            ],
+            "stereocenter_determinants_A3": [
+              2.822414127615511,
+              -2.0897376894666766,
+              2.587225332709872,
+              -1.5719739274979094
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "2afef4a07b47f64f33c175fcfdd3388c7d5da5162a109e75d2f3d9a1064f54c9",
+            "conf_sha256": "fc93f76590e58e47de2cc3001e295690195fc9d062ef20d5e7b1bf71b8832443",
+            "endpoint_sha256": "25e0df2e80c341f3b0e54c9cda32a0bad98229ccc93a306e42e0ea491cb95547",
+            "crosslinks_A": [
+              1.5495901766358857,
+              1.5476019204044857
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1995834461224915,
+              1.617993292361561
+            ],
+            "stereocenter_determinants_A3": [
+              2.565422599303331,
+              -1.8807916260530826,
+              2.785151187662437,
+              -1.6218486228440478
+            ],
+            "drift_kcal_mol_ns_atom": 5.324061547502322e-05
+          }
+        }
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "reseed",
+        "dt_fs": 2,
+        "atom_count": 472624,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "9e90ac2a6e1c0d3bd6b3b8b05ff6355e54f3cac22be02f243530c461e5bf480a",
+            "conf_sha256": "bb202f634c07e382e08e8b800d97954f4166b8977d73448c7367c086753ebd8e",
+            "endpoint_sha256": "f7e2a15dfef7ba0900b31145413681424cff290b063141f8dbec346e0e9e8e13",
+            "crosslinks_A": [
+              1.5815440856683314,
+              1.566725264775856
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.199282013402386,
+              1.6231945339579774
+            ],
+            "stereocenter_determinants_A3": [
+              2.7291248445424188,
+              -1.790316291921005,
+              2.7085362457529483,
+              -1.7571690891242464
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "0216584c9ce8264940ae67ced41da4fc12812d5cd918f12ebf8d826bc22ed583",
+            "conf_sha256": "de0c3850a6a8032faf16f7f6677eb4cec8f654cef49507d81db228fa54c9a9c1",
+            "endpoint_sha256": "dc77de31d7f493789d7693a7a5773bbe89b0899e108ab3cea3af746109060788",
+            "crosslinks_A": [
+              1.55760939116126,
+              1.5464766263623644
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2257159660325299,
+              1.635142341823597
+            ],
+            "stereocenter_determinants_A3": [
+              2.552396702120765,
+              -1.8076582428305632,
+              2.6728105689428934,
+              -1.8267937039420812
+            ],
+            "drift_kcal_mol_ns_atom": -0.00012619344279166304
+          }
+        }
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "production_endpoint",
+        "dt_fs": 4,
+        "atom_count": 472624,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "1e6372901266aa94ed1a257600950c1d8e815a807ecd11e9bacb88b2f7be3c7a",
+            "conf_sha256": "e4000e9d3361a5d3c6d5406a7678cdb90541741c09b51572adb837d26bd32278",
+            "endpoint_sha256": "8d2e2a39eaade98c57c6dfd26149e2d934f92c3f79f7e39c87f58634cb71fd6c",
+            "crosslinks_A": [
+              1.5616706839643864,
+              1.4770524428922829
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1850610789673064,
+              1.6122271762141636
+            ],
+            "stereocenter_determinants_A3": [
+              2.3651009822887263,
+              -2.0362982279599895,
+              3.0188223191074925,
+              -1.8725159603172605
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "4954c4eebb3425fa02ccd8ff807dd59c4da568ad7e78aae0d3fc21e9594d0b8b",
+            "conf_sha256": "b3b19586217c3aebfa258caf69826722e93fab35113af4f1bf54a66c896b5811",
+            "endpoint_sha256": "739640ed023bfc228685a96f548af494270a45d3ff2ea378e1b2459beebc71ab",
+            "crosslinks_A": [
+              1.5684756611395707,
+              1.5373188958465291
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2136606925917894,
+              1.6226291078051467
+            ],
+            "stereocenter_determinants_A3": [
+              2.7888608569150115,
+              -1.930300803914925,
+              3.0318112113380415,
+              -1.6377659058849545
+            ],
+            "drift_kcal_mol_ns_atom": -0.0006692867403630906
+          }
+        }
+      },
+      {
+        "job": "e345c67349bf",
+        "start": "production_endpoint",
+        "dt_fs": 2,
+        "atom_count": 472624,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "7a389d1f5e1baef0e6c5e5dd61e3364db3acc463dfbd2dc817c7d4a081640023",
+            "conf_sha256": "9de160e2c7455b4fa07da30b7d3fd10972d6b777ba76e50187bf2f0d49e8f754",
+            "endpoint_sha256": "78f942d48fb70f67884ef65f87bb52195d3ea7b0bbe948fc4d4b9a040c4c4e6c",
+            "crosslinks_A": [
+              1.537833927571162,
+              1.4931027676180124
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2291432332302394,
+              1.610382142292727
+            ],
+            "stereocenter_determinants_A3": [
+              2.8606475241918505,
+              -1.955126674033857,
+              2.9750892276261243,
+              -1.9271465273575963
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "ae82c4876253585b46d5b05182f8b1e1d19a87cfd4f02b83e1a4cfc58de6f55e",
+            "conf_sha256": "20a136ef7d6ef06c0633704c65bbc3771d8e3c1cb50b19d377ec5a51e898230e",
+            "endpoint_sha256": "6a879cddcf10d87914a1b202d4aa7b11f65b5231acf1d559b017a755037224c4",
+            "crosslinks_A": [
+              1.5361661420658232,
+              1.5963903317645747
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1982618036390214,
+              1.6162939293201328
+            ],
+            "stereocenter_determinants_A3": [
+              2.5021248066806168,
+              -1.2396100178910856,
+              2.5811322393335354,
+              -1.719895446176765
+            ],
+            "drift_kcal_mol_ns_atom": -8.520461542176992e-05
+          }
+        }
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "reseed",
+        "dt_fs": 4,
+        "atom_count": 472621,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "bc36b3b2768a50d8ccace0a271f867de191461d067310a4e9b55660aabc481d8",
+            "conf_sha256": "895a3dc187c6794ab2c06804f0f24941f35360951e28a5b2f68df3b6f0867703",
+            "endpoint_sha256": "28ea43e377355d09bc51e6b14e2a4f31b91612c4de36662fdc356f8dc3ab366d",
+            "crosslinks_A": [
+              1.523580236913945,
+              1.549337615696073
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2056040336675569,
+              1.631018922211039
+            ],
+            "stereocenter_determinants_A3": [
+              -2.6830235845458117,
+              1.6746086263647413,
+              -2.7091017000161464,
+              1.7392909082384782
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "49d79d86a833b9be93c4b568939cb9e6d0a9b5f547401280c77f5c62e3530c62",
+            "conf_sha256": "e42d8d0af200ac92c2bef5abc238760b4e2a34b7f9ba72e48b68c36f581eff32",
+            "endpoint_sha256": "dcf1770b64a9a307a20c8cee89bbd6187d9fac01ef51b4138e11789b0bcaa16b",
+            "crosslinks_A": [
+              1.5284266920675758,
+              1.4844503707593895
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2265687500993039,
+              1.6171277547740561
+            ],
+            "stereocenter_determinants_A3": [
+              -2.7896572658942365,
+              1.7091395279941284,
+              -2.664148950116972,
+              1.625205352785168
+            ],
+            "drift_kcal_mol_ns_atom": 0.0005215121774625491
+          }
+        }
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "reseed",
+        "dt_fs": 2,
+        "atom_count": 472621,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "5199388eb0442bb173cd35b7f73c56b4c247be2582e21b4218fb962798b1b1a0",
+            "conf_sha256": "9ab5c291e79775cccb079d5df00496bf6c918aa02398e86d51e75ab6ecf1ac3e",
+            "endpoint_sha256": "8af06ffa25caeef2bffa463697e891ff6cd3ca9016fe105a12e7687453c7bfae",
+            "crosslinks_A": [
+              1.5863548088577246,
+              1.5042500107677865
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2149391191294814,
+              1.6001608469771047
+            ],
+            "stereocenter_determinants_A3": [
+              -2.837985977738349,
+              1.7469756863257286,
+              -2.45011061355339,
+              1.747820750984027
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "a89714abe928b50ed54cf23e464a8efe5883e0aa0c1cfde979ba0079e71d1399",
+            "conf_sha256": "05005f8d45bfb90286f212a8eab6ca3c9af222f0ae6be65a4b5032467f32ac3a",
+            "endpoint_sha256": "9b28dbbf8dec1f4769cb076a73a2f31407ed80a041e1be2e02eabb86f66f80d3",
+            "crosslinks_A": [
+              1.5627363627199804,
+              1.5836843862678922
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1976290130117122,
+              1.6325772335016633
+            ],
+            "stereocenter_determinants_A3": [
+              -2.628377665462659,
+              1.7656994358095257,
+              -2.468943056608983,
+              1.6628333021487443
+            ],
+            "drift_kcal_mol_ns_atom": -0.000537066229138834
+          }
+        }
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "production_endpoint",
+        "dt_fs": 4,
+        "atom_count": 472621,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "ddef04e91a13b4592f9c2dc43e3707e804db12794d2eac471d2af907b77812aa",
+            "conf_sha256": "7bebe81ac0f1c4b19402e5d42c30b2917e946c57bc7a6e5e328fe1f38305b00f",
+            "endpoint_sha256": "f3dde02bf9ed7e04a3e7e588517c390794472d102352afa3936ea17a366ab115",
+            "crosslinks_A": [
+              1.590602678189328,
+              1.5453282772490138
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2227558874422135,
+              1.6149395920914353
+            ],
+            "stereocenter_determinants_A3": [
+              -2.607321859038069,
+              1.6632990549310642,
+              -2.5618654211779135,
+              1.8013211941128155
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "2fc6c27fcc2f07a92aacb7e9d5d50f399d55cea838ae9fe16895bf1cc3509fb3",
+            "conf_sha256": "0806b7f2333efabf61f7b9e086e6cdb37256536e038d8c7a38814c21a24371c6",
+            "endpoint_sha256": "ba49db60d72895847c8d5fe06dac4013fd5b6f15ea47629c134e3ae7b2fe0aef",
+            "crosslinks_A": [
+              1.5505880571554969,
+              1.5514180366105321
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2162351821885116,
+              1.6115891930645354
+            ],
+            "stereocenter_determinants_A3": [
+              -2.871130415816849,
+              1.8933248529448123,
+              -2.4316015853710993,
+              1.9368914472604628
+            ],
+            "drift_kcal_mol_ns_atom": 0.0013254200882253204
+          }
+        }
+      },
+      {
+        "job": "35254aa13b01",
+        "start": "production_endpoint",
+        "dt_fs": 2,
+        "atom_count": 472621,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "38f2c102ffe48cf596c1d328439d21e25a21e4d8e8dc3ddc15ce4e6ae5c6ad4f",
+            "conf_sha256": "8a54ad51c8abe29b7ee87959fba6c50819289cbfbc9420027cece26dbf394d25",
+            "endpoint_sha256": "559676e1b00b4118d38bb15d7a933dbbe0efcc6a722170fc11157d2489eba0a4",
+            "crosslinks_A": [
+              1.581998048176026,
+              1.5708827998440544
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2209332814844545,
+              1.6454420673519825
+            ],
+            "stereocenter_determinants_A3": [
+              -2.841703701845053,
+              1.5111478768651594,
+              -2.5717464950504216,
+              2.005720188476232
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "307f0c146a2349175a9525585964975d88f4f35e4b86e33c7e183dc0cda6680c",
+            "conf_sha256": "30907decf0bc89fd8bd0ad657d4219f6672548ab6813005b22b4fb71a4aea11f",
+            "endpoint_sha256": "2ac5d8d1f64a14cb1577c312cd8fcd4c0250c09013c2cc1ad528df91f8e099c2",
+            "crosslinks_A": [
+              1.6042089230887855,
+              1.5223059035791373
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2104785671728822,
+              1.6042089230887855
+            ],
+            "stereocenter_determinants_A3": [
+              -2.5760757899094138,
+              1.951060217863578,
+              -2.4582679850921703,
+              2.1125176313751357
+            ],
+            "drift_kcal_mol_ns_atom": 0.001285303164631738
+          }
+        }
+      },
+      {
+        "job": "395337bdb061",
+        "start": "reseed",
+        "dt_fs": 4,
+        "atom_count": 472636,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "f407b32f82e7ac20be2d536a3273b3e15ed6112a35769d3584ac319af5f0804e",
+            "conf_sha256": "26538d1096fba3d64626d02f0f7b912e5aed40f5f5c01a20bb6cdee8bcbcb394",
+            "endpoint_sha256": "191751d7de0f89ce52d0a1e2390821c51a7b6f2c51134028c6a5994163af2539",
+            "crosslinks_A": [
+              1.5654143294581244,
+              1.5057214708781446
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1915237813473816,
+              1.6380035148567411
+            ],
+            "stereocenter_determinants_A3": [
+              2.697003193974766,
+              -1.8236526175516183,
+              2.8028865859579746,
+              -2.161144287633552
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "89c0514419259bb1101015e8d819c9e61d929abbb1799c726c7ed0d9087b9970",
+            "conf_sha256": "549f726264953399376a3a823d24e24d14721993fa6730a3593931b20f49bd53",
+            "endpoint_sha256": "e7d878f971ef905d0147a10200f5138bb5e3ab7ead78bd1aac3f3fad938259a2",
+            "crosslinks_A": [
+              1.5771157451003637,
+              1.5102931268974091
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1946520266695388,
+              1.603695689153971
+            ],
+            "stereocenter_determinants_A3": [
+              2.479897525301297,
+              -1.7594540546286195,
+              2.7073385686906493,
+              -2.104774905908534
+            ],
+            "drift_kcal_mol_ns_atom": -0.00229971088500214
+          }
+        }
+      },
+      {
+        "job": "395337bdb061",
+        "start": "reseed",
+        "dt_fs": 2,
+        "atom_count": 472636,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "d2ea3ec7369716823c9c005b5ee424dc286f3ff302434be7f2a5513851bc9b00",
+            "conf_sha256": "5f6e05985a2adccf50c7d2030bb64efcb6b986e4d6ee2b50d2101e65c7dc88cd",
+            "endpoint_sha256": "abc1a23d214d71ab28a0093f8df3a5ec6ecfa92e184f628e86808b9d753f2e00",
+            "crosslinks_A": [
+              1.521101385647954,
+              1.5543912288163269
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1820305585468065,
+              1.6213194332765626
+            ],
+            "stereocenter_determinants_A3": [
+              2.4201145638125747,
+              -1.855929835077657,
+              2.801971151302809,
+              -1.8779293383144307
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "31e62767a264a953b65e9d8abcbebc7f70e640d0d76f83db231ddd34bd325022",
+            "conf_sha256": "18df2e3d07217ea9a548eea69f59409f63fa30dce037a043da09662aa3507a89",
+            "endpoint_sha256": "88352a1d7ecf8d1dd139a178586cad15e14711dda9c6d73d9fab738c41297492",
+            "crosslinks_A": [
+              1.5819505790809008,
+              1.5675678364017958
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1878255356843117,
+              1.617835407774491
+            ],
+            "stereocenter_determinants_A3": [
+              2.876123354671458,
+              -1.8211001344995927,
+              2.7370114203845937,
+              -1.823300367466582
+            ],
+            "drift_kcal_mol_ns_atom": 5.267080300146759e-06
+          }
+        }
+      },
+      {
+        "job": "395337bdb061",
+        "start": "production_endpoint",
+        "dt_fs": 4,
+        "atom_count": 472636,
+        "mass_delta_Da": 1.865174681370263e-13,
+        "stages": {
+          "npt": {
+            "log_sha256": "8bfc19bae51401a773581d8d5c4db9a4df5c0b6816eb6d4a31f00125a543b6e4",
+            "conf_sha256": "14c825bb9d390bc823df0795827c44a69990239232d6df75e3b72b5c376c926f",
+            "endpoint_sha256": "2334bc800ab1f93da223a1da6f07d2a883cc4bb4d84dc93ffb7e116b89e14fef",
+            "crosslinks_A": [
+              1.5548367497663034,
+              1.5765009488452144
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2054036111881934,
+              1.6184498370618008
+            ],
+            "stereocenter_determinants_A3": [
+              2.880128143973323,
+              -2.1677605043976627,
+              2.7268041100920026,
+              -1.8912107783508436
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "fdd2f058a399ca7779a41ef54a7f901971003ad88fee99ee8904f845e0f10591",
+            "conf_sha256": "912bd75a97e79c29570525d341c15cde1585e021364fcc68dcc55b2ebac1bf0f",
+            "endpoint_sha256": "1ede254dd6f5dbe74bb953733a50bfc990b1525d385aa8e8bd26335b01f56eb2",
+            "crosslinks_A": [
+              1.5199651273871624,
+              1.5137718844227381
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2367593812958981,
+              1.6113204174780025
+            ],
+            "stereocenter_determinants_A3": [
+              2.815228537297397,
+              -1.8551828913767927,
+              2.602570741967606,
+              -1.6507680925614607
+            ],
+            "drift_kcal_mol_ns_atom": 0.0009122931052609556
+          }
+        }
+      },
+      {
+        "job": "395337bdb061",
+        "start": "production_endpoint",
+        "dt_fs": 2,
+        "atom_count": 472636,
+        "mass_delta_Da": 0.0,
+        "stages": {
+          "npt": {
+            "log_sha256": "2659d707d6165dc1aef3b98ddd6c8460b4534b1679b8fd5e2ad45cd47bf89a87",
+            "conf_sha256": "57cbd68cbcf9a402040a6d23dfd1ea674ca6404236bc36c3cb6c69e28d3fe471",
+            "endpoint_sha256": "32749601b0bb0223182ec3cd42ccb978874ca80966c59f80ac573db8edec8026",
+            "crosslinks_A": [
+              1.5974396750826658,
+              1.5550381036109393
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.2072353345578897,
+              1.5974396750826658
+            ],
+            "stereocenter_determinants_A3": [
+              2.5631030535752197,
+              -1.8198211640368298,
+              2.6847272129638653,
+              -1.8839990376148539
+            ],
+            "drift_kcal_mol_ns_atom": null
+          },
+          "nve": {
+            "log_sha256": "3d4b811250d05d1c71820d1a020b5a6b9d0ae9523b279610ddd05b76b9b59b34",
+            "conf_sha256": "e087206603fa2651078c0072b64451ff732b37ad38b46120223004b3091fa6a9",
+            "endpoint_sha256": "fe01bcfb504f5a493c559aa571b17dd4479a11e7fafcf087bc967a0090bd1fe1",
+            "crosslinks_A": [
+              1.5735932224131741,
+              1.5409745913954174
+            ],
+            "lesion_heavy_bond_range_A": [
+              1.1976909371795679,
+              1.6483698584580588
+            ],
+            "stereocenter_determinants_A3": [
+              2.7040466827143943,
+              -1.8806009091721687,
+              2.6539376102603964,
+              -1.7301134022145475
+            ],
+            "drift_kcal_mol_ns_atom": 0.0004364329772937815
+          }
+        }
+      }
+    ]
+  },
+  "summary": [
+    {
+      "job": "edb512c46112",
+      "isomer": "cis-syn",
+      "start": "reseed",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.98333650793654,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0010259484563975654,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "edb512c46112",
+      "isomer": "cis-syn",
+      "start": "reseed",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.0656833333335,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0011641460197187336,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "edb512c46112",
+      "isomer": "cis-syn",
+      "start": "production_endpoint",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.8555126984128,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": -0.005827459597798117,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "edb512c46112",
+      "isomer": "cis-syn",
+      "start": "production_endpoint",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.37597222222223,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.001560907897133542,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "e345c67349bf",
+      "isomer": "cis-anti-I",
+      "start": "reseed",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.73557936507933,
+      "nve_ps": 50,
+      "nve_drift_kcal_mol_ns_atom": 5.3240615467114514e-05,
+      "saved_frames_checked": 75
+    },
+    {
+      "job": "e345c67349bf",
+      "isomer": "cis-anti-I",
+      "start": "reseed",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.14169206349203,
+      "nve_ps": 50,
+      "nve_drift_kcal_mol_ns_atom": -0.0001261934427893106,
+      "saved_frames_checked": 75
+    },
+    {
+      "job": "e345c67349bf",
+      "isomer": "cis-anti-I",
+      "start": "production_endpoint",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.80421587301583,
+      "nve_ps": 50,
+      "nve_drift_kcal_mol_ns_atom": -0.0006692867403651693,
+      "saved_frames_checked": 75
+    },
+    {
+      "job": "e345c67349bf",
+      "isomer": "cis-anti-I",
+      "start": "production_endpoint",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.17563253968257,
+      "nve_ps": 50,
+      "nve_drift_kcal_mol_ns_atom": -8.520461540783146e-05,
+      "saved_frames_checked": 75
+    },
+    {
+      "job": "35254aa13b01",
+      "isomer": "trans-syn-I",
+      "start": "reseed",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.9047809523809,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.000521512177500523,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "35254aa13b01",
+      "isomer": "trans-syn-I",
+      "start": "reseed",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.13417142857145,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": -0.0005370662291727414,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "35254aa13b01",
+      "isomer": "trans-syn-I",
+      "start": "production_endpoint",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.73110952380955,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0013254200882513226,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "35254aa13b01",
+      "isomer": "trans-syn-I",
+      "start": "production_endpoint",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.23324841269846,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0012853031645926765,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "395337bdb061",
+      "isomer": "trans-syn-II",
+      "start": "reseed",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.6619634920635,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": -0.002299710884876613,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "395337bdb061",
+      "isomer": "trans-syn-II",
+      "start": "reseed",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 299.18253174603177,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 5.267080344575876e-06,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "395337bdb061",
+      "isomer": "trans-syn-II",
+      "start": "production_endpoint",
+      "dt_fs": 4,
+      "passed": true,
+      "npt_temperature_K": 296.83596507936505,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0009122931052508466,
+      "saved_frames_checked": 35
+    },
+    {
+      "job": "395337bdb061",
+      "isomer": "trans-syn-II",
+      "start": "production_endpoint",
+      "dt_fs": 2,
+      "passed": true,
+      "npt_temperature_K": 298.9326642857142,
+      "nve_ps": 10,
+      "nve_drift_kcal_mol_ns_atom": 0.0004364329772821567,
+      "saved_frames_checked": 35
+    }
+  ],
+  "qualification_receipt": {
+    "path": "backend/data/forcefield/cpd_hmr_validation.json",
+    "sha256": "d574d7c029a63af1ef9f11e15b11fa1b65b2b1367c8ca872dfb7a71e9e7ddb96"
+  },
+  "software_validation": {
+    "focused_cpd": {
+      "passed": 52,
+      "warnings": 13,
+      "duration_s": 5.5
+    },
+    "test_smart": {
+      "decision": "FAST",
+      "passed": 20532,
+      "failed": 1,
+      "skipped": 90,
+      "duration_s": 186.25,
+      "deferred_verbatim": "  DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "failure": "tests/test_part_transform_frontend_contract.py::test_actual_complete_native_packet_is_accepted_by_frontend[cpd]",
+      "failure_analysis": "Unchanged CPD display schema rejects fields emitted by unchanged cpd_representation.py; unrelated to integrator. Logged in issues_ledger.md.",
+      "runtime_triage": "Mock oxDNA lifecycle took 5.66s under parallel contention, but 0.81s setup + 0.64s call serially (1 passed in 2.02s). Matches known ISSUE-20. No test marker or guard changes retained."
+    },
+    "triage_repeat": {
+      "passed": 20531,
+      "failed": 1,
+      "skipped": 90,
+      "duration_s": 185.43,
+      "note": "Same unchanged CPD display-schema failure. The timing candidate was temporarily classified slow during collection, then restored after serial timing established it is healthy. No individual over-budget tests in this sweep; aggregate guard flagged 192s across >20,000 tests. No additional broad sweep or budget changes."
+    },
+    "serial_timing": {
+      "passed": 1,
+      "setup_s": 0.81,
+      "call_s": 0.64,
+      "duration_s": 2.02,
+      "log": ".development-artifacts/cpd-hmr-20261104-launch/serial-timing.log"
+    }
+  },
+  "native_managed_launch": {
+    "passed": true,
+    "source_inputs": [
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/job.json",
+        "sha256": "61e09bf814e7116317a458ffbd1486b5ac4ac602fd40da1c2a909f8837e50545"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/manifest.json",
+        "sha256": "f9c6aaf619290e2c977e0d1bcfc32229dbca582cbfe1ae42b3b11e52ab659989"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I.psf",
+        "sha256": "edb4b4208182a173c07b0f2dbb6c786f17f53c6014cfcc94f2844cb996452986"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.conf",
+        "sha256": "a98993bf5527d16257319f865a6bacd7b3b785bb1b3b1c85ed9364ed8648c34d"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.restart.coor",
+        "sha256": "f14a4beef41c35a1d677f8a81650d1bb79df87a21f7db2b7469f9cf9d4d7ed09"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.restart.vel",
+        "sha256": "03d348712fea46cde8d82706bead25fb858480a3086f2bf72e16875e25e02b9e"
+      },
+      {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/workspace/md_jobs/edb512c46112/package/2hb_1xT_CPD_cis-syn-I_namd_solvated/output/2hb_1xT_CPD_cis-syn-I_01_production_20ns_k0.restart.xsc",
+        "sha256": "fb7a29a3827f70aaf94104ee9c2906515bfd633fee8a1d9eeb7d9595cc749948"
+      }
+    ],
+    "worker": {
+      "path": "/home/jojo/Work/NADOC/scripts/check_cpd_hmr_launch.py",
+      "sha256": "aa6a2d6887ed1a574209c471cde6167ae50bcaa3b5e551604057d449636c7930"
+    },
+    "engine": {
+      "path": "/home/jojo/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3",
+      "sha256": "2fda225c5f8838e5dbcb6a4e6a3e7e337f498df61cae2e6e320f994cb7c8b9bf"
+    },
+    "temporary_files_removed": true,
+    "source_inputs_unchanged": true,
+    "receipt": ".development-artifacts/cpd-hmr-20261104-launch/receipt.json",
+    "production_steps": 2500,
+    "timestep_fs": 4,
+    "hmr": true,
+    "geometry_passed": true
+  },
+  "native_invocation_note": "Includes one zero-step reseed invocation in the managed launch smoke test.",
+  "live_application_plan_checks": [
+    {
+      "job": "edb512c46112",
+      "status": 200,
+      "timestep_plan": {
+        "timestep_fs": 4.0,
+        "total_steps": 2500,
+        "length_ns": 0.01,
+        "fast": true,
+        "warning": ""
+      },
+      "cpd_mass_change_reseed": true
+    },
+    {
+      "job": "e345c67349bf",
+      "status": 200,
+      "timestep_plan": {
+        "timestep_fs": 4.0,
+        "total_steps": 2500,
+        "length_ns": 0.01,
+        "fast": true,
+        "warning": ""
+      },
+      "cpd_mass_change_reseed": true
+    },
+    {
+      "job": "35254aa13b01",
+      "status": 200,
+      "timestep_plan": {
+        "timestep_fs": 4.0,
+        "total_steps": 2500,
+        "length_ns": 0.01,
+        "fast": true,
+        "warning": ""
+      },
+      "cpd_mass_change_reseed": true
+    },
+    {
+      "job": "395337bdb061",
+      "status": 200,
+      "timestep_plan": {
+        "timestep_fs": 4.0,
+        "total_steps": 2500,
+        "length_ns": 0.01,
+        "fast": true,
+        "warning": ""
+      },
+      "cpd_mass_change_reseed": true
+    }
+  ],
+  "managed_start_followup": {
+    "report": "docs/audits/cpd_managed_start_20261104.json",
+    "correction": "The earlier native_managed_launch exercised the builder and direct NAMD only, bypassing memory admission. The subsequent real create/start handler panel found and fixed the reinitvels admission refusal; all four managed 10 ps production jobs completed."
+  }
+}

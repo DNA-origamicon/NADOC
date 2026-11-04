@@ -207,7 +207,7 @@ def configuration_memory(path, *, threads=16, fallback_box=None, resident_overri
         gpuresident pme pmegridspacing pairlistdist margin twoawayx twoawayy twoawayz
         cutoff switchdist switching exclude onefourscaling
         extrabonds extrabondsfile constraints conskcol conskfile consref constraintscaling
-        temperature langevin langevintemp langevindamping langevinhydrogen
+        temperature reinitvels langevin langevintemp langevindamping langevinhydrogen
         langevinpiston langevinpistondecay langevinpistonperiod langevinpistontarget
         langevinpistontemp useconstantarea useflexiblecell usegrouppressure
         timestep rigidbonds rigidtolerance nonbondedfreq fullelectfrequency

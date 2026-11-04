@@ -1,4 +1,32 @@
-# Current CPD priority — 2026-10-17
+# Current CPD priority — 2026-11-04
+
+Managed-start follow-up: the first builder/direct-engine smoke missed memory
+admission's refusal of `reinitvels`. The user's cis-anti child failed before
+native execution. That directive is now admitted; real production-create/start
+HTTP handlers and the full runner completed 10 ps at 4 fs/HMR for all four
+isomers. Resource-contention retries retained the admission guard. Temporary
+jobs were removed and source job metadata stayed unchanged. See
+`docs/audits/cpd_managed_start_20261104.json`.
+
+The four exact provisional MVP asset sets (cis-syn-I, cis-anti-I, trans-syn-I/II)
+now pass numerical 4 fs/HMR qualification with the current 8/10/12 Å nonbonded
+settings, PME grid 1.5 Å and PME every step. Two existing starts/seeds per isomer
+were compared against ordinary-mass 2 fs: 25 ps NPT + 10 ps NVE each. One cis-anti
+short-window paired drift criterion failed; its retained, bounded 50 ps NVE
+confirmation (both starts, both timesteps, unchanged limits) passed. Independent
+saved-input/log/mass/endpoint audit passed. This qualifies numerical integration
+only, not equilibrium/kinetic equivalence or force-field scientific release.
+
+`backend/core/cpd_integrator.py` admits only exact tested parameter/topology/
+chemical-definition hashes from `backend/data/forcefield/cpd_hmr_validation.json`.
+Legacy preliminary-v6 and untested models retain the <=2 fs ordinary-mass block.
+Mass-changing production starts redraw velocities and record that choice; same-mass
+continuations preserve velocities. The HMR reader now handles historical mixed
+I10-solute/I8-solvent PSF bond rows. Native managed-child launch and live app plan
+checks passed; original designs/jobs were unchanged. Evidence and limitations:
+`docs/audits/cpd_hmr_validation_20261104.json`.
+
+## Earlier campaign state
 
 2026-10-17 finite MVP campaign CLOSED: fouradmitted externalCGenFF models (cis-syn-I,cis-anti-I,trans-syn-I/II) separately pass canonical numericaladmission in internal six-T scope. Cis-syn return blocker resolved. Archive cpd-provisional-mvp-models-v4.zip; docs/audits/cpd_mvp_final_scope_audit_20261017.json. Physicalvalidation/equivalence/parameter-sensitivity remain explicitly insufficient under existing finitepolicy. No activejob, native3131.489166s/48h, no automaticrefit/extension orproductionpromotion. Earlier pending/blocker entries historical.
 

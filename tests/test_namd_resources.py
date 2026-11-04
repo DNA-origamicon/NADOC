@@ -20,6 +20,23 @@ def test_unknown_configuration_is_not_certified():
     assert not estimate_memory(300_000,pme_spacing=1).supported
 
 
+def test_velocity_reseed_has_same_memory_budget_as_temperature_start(tmp_path):
+    # Production children emit this before run 0. It reuses the velocity array;
+    # accepting it must not admit arbitrary Tcl or post-initialization changes.
+    import pytest
+    (tmp_path/'model.psf').write_text('PSF\n\n 313861 !NATOM\n')
+    conf = tmp_path/'reseed.conf'
+    base = 'structure model.psf\ntemperature 300\n'
+    conf.write_text(base + 'run 0\n')
+    original = configuration_memory(conf, fallback_box=[150]*3)
+    conf.write_text(base + 'reinitvels 300\nrun 0\n')
+    assert configuration_memory(conf, fallback_box=[150]*3) == original
+    for invalid in ('reinitvels [exec bad]\nrun 0\n', 'run 0\nreinitvels 300\n'):
+        conf.write_text(base + invalid)
+        with pytest.raises(ValueError):
+            configuration_memory(conf, fallback_box=[150]*3)
+
+
 def test_configuration_reads_topology_and_actual_mode(tmp_path):
     (tmp_path/'model.psf').write_text('PSF\n\n 313861 !NATOM\n')
     conf=tmp_path/'run.conf'

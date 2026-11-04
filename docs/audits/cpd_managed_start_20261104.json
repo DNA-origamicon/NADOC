@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-04",
+  "failed_user_job": "949886d10003",
+  "root_cause": "Managed workflow memory admission did not recognize the existing reinitvels directive; NAMD never launched. Prior builder-only smoke bypassed this layer.",
+  "fix": "Characterize reinitvels as velocity-array reuse; retain static-order and dynamic-Tcl checks.",
+  "focused_tests": {
+    "passed": 7,
+    "duration_s": 1.63
+  },
+  "evidence": ".development-artifacts/cpd-managed-start-20261104-sbnolpej/receipt.json",
+  "passed": true,
+  "temporary_files_removed": true,
+  "source_jobs_unchanged": true,
+  "runs": [
+    {
+      "isomer": "2hb_1xT_CPD_cis-anti-I",
+      "parent": "935bbecba8cf",
+      "job": "5e7d611ad156",
+      "create_http_status": 200,
+      "start_http_status": 200,
+      "status": "completed",
+      "steps": 2500,
+      "timestep_fs": 4,
+      "hmr": true,
+      "busy_admission_retries": 3
+    },
+    {
+      "isomer": "2hb_1xT_CPD_cis-syn-I",
+      "parent": "6d6c46163a00",
+      "job": "252acf8e9101",
+      "create_http_status": 200,
+      "start_http_status": 200,
+      "status": "completed",
+      "steps": 2500,
+      "timestep_fs": 4,
+      "hmr": true,
+      "busy_admission_retries": 0
+    },
+    {
+      "isomer": "2hb_1xT_CPD_trans-syn-I",
+      "parent": "b2b43076da96",
+      "job": "64f9dab3b546",
+      "create_http_status": 200,
+      "start_http_status": 200,
+      "status": "completed",
+      "steps": 2500,
+      "timestep_fs": 4,
+      "hmr": true,
+      "busy_admission_retries": 2
+    },
+    {
+      "isomer": "2hb_1xT_CPD_trans-syn-II",
+      "parent": "974191dc2e63",
+      "job": "020a5ec3ccad",
+      "create_http_status": 200,
+      "start_http_status": 200,
+      "status": "completed",
+      "steps": 2500,
+      "timestep_fs": 4,
+      "hmr": true,
+      "busy_admission_retries": 0
+    }
+  ],
+  "software_regression": {
+    "decision": "FAST",
+    "passed": 20533,
+    "failed": 1,
+    "skipped": 90,
+    "duration_s": 182.56,
+    "failure": "Existing CPD frontend display schema mismatch; tests/test_part_transform_frontend_contract.py::test_actual_complete_native_packet_is_accepted_by_frontend[cpd]",
+    "deferred_verbatim": "  DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "runtime_triage": "185s aggregate across 20,622 timed tests; no individual over-budget tests. Consistent with prior suite size, no slow reclassification or budget changes."
+  },
+  "user_job_retry": {
+    "job_id": "949886d10003",
+    "status": "running",
+    "error": null,
+    "namd_pid": 627917,
+    "reseed_status": "done",
+    "production_status": "running",
+    "production_steps": 25000000,
+    "latest_energy": "ENERGY:       0       925.1864      2386.3498      3354.5541        50.7746       -1777876.4275    172531.1878         0.0000         0.0000    283127.9997       -1315500.3750       300.6290  -1598628.3747  -1315500.3750       300.6290            -54.7668       -43.7377   4681209.6334       -54.7668       -43.7377",
+    "saved_request_unchanged": true,
+    "config_hashes_unchanged": true
+  }
+}

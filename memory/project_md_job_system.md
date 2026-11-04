@@ -43,6 +43,35 @@ well as on the job. Resource planning sums per-segment timesteps; leaving the
 segment default at 2 fs understated 4 fs production duration by half. The emitted
 NAMD configuration and integrator choice are unchanged.
 
+## CPD fast-integrator qualification (2026-11-04)
+
+Startup follow-up: the initial direct-NAMD smoke bypassed managed memory
+admission. The user's cis-anti production child `949886d10003` failed before
+NAMD because `namd_resources.configuration_memory` did not recognize the
+builder's `reinitvels` directive. It now accepts this existing velocity-array
+operation while retaining the static-order and dynamic-Tcl refusals. Actual
+create/start HTTP handler validation is in `scripts/check_cpd_managed_start.py`;
+the earlier builder-only smoke is not evidence for job-manager admission.
+
+The four provisional MVP CPD models can use 4 fs/HMR with rigidBonds all, gated
+by exact native-tested asset hashes. Untested/changed force fields retain their
+ordinary-mass <=2 fs policy. Preparation, export, production children, appended
+production and wizard plans share the qualification. A CPD mass switch redraws
+velocities and is recorded/shown explicitly; equal-mass continuations preserve
+them. Failed CPD HMR preparation refuses the requested launch without a timestep
+downgrade. Historical mixed I10/I8 PSFs now repartition correctly. See
+`docs/audits/cpd_hmr_validation_20261104.json` for the paired numerical panel,
+retained short-window failure, bounded confirmation and independent audit.
+
+## External restart display reconciliation (2026-11-04)
+
+A selected terminal job must refresh its detail panel when a list update observes
+its status change. Otherwise an API/other-tab restart updates the list and Pause
+control but leaves a failed timeline and no status subscription. `_fetchJobs`
+now reopens the selected detail on status transitions; a request version prevents
+an older terminal REST response from repainting over the new run. The regression
+checks failed → running timeline recovery and exactly one socket across refreshes.
+
 ## Binding invariants
 
 - `job_is_running` answers whether a job can be stopped; queue occupancy is the narrower,

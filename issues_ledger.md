@@ -85,6 +85,36 @@ commit leaves its LOC flat or lower). Rules:
 
 ## Intake — where issues come from
 
+### Selected NAMD details remain terminal after an external restart (2026-11-04)
+
+Fixed, visually reproduced in the user's Firefox tab for cis-anti production
+`949886d10003`. The live job row/header and Pause run control showed running at
+172,500 steps, while the selected timeline retained a failed reseed and 0/100 ns.
+Native PID 627917, the API and growing restart output all confirmed running.
+Deselecting/reselecting the same row refreshed the timeline to a completed
+reseed and running production at 0.72/100 ns, without a page reload or any
+simulation restart. `_fetchJobs` in `frontend/src/ui/md_jobs_panel.js` replaces
+the list and repaints controls but does not apply the new selected job to its
+detail panel. A terminal selection also disarms `mdWatchdogDecision`. An external
+start therefore needs to refresh the selected detail and reopen its live status
+socket when list reconciliation observes terminal-to-active. The panel now
+reopens the selected detail on list-observed status changes and rejects stale
+terminal REST responses after a newer detail request. A DOM regression reproduces
+the original failure and checks timeline recovery plus one status socket.
+Warning-only policy work remains in
+the isolated copy recorded by `.development-artifacts/md-warning-policy-location.json`.
+
+### CPD display-contract regression found during HMR validation (2026-11-04)
+
+Open, outside the integrator change: `tests/test_part_transform_frontend_contract.py::test_actual_complete_native_packet_is_accepted_by_frontend[cpd]`
+fails with `Comparison unavailable: incomplete or unsupported display fields`.
+The unchanged frontend `transform_preview_display.js` photoproduct schema rejects
+the current native CPD payload: `cpd_representation.py` emits `display_crosslinks`
+and `representation_geometry.bond_sites`, which that strict schema does not list.
+Reproduced by the required FAST sweep (20,532 passed, one failure). These display
+files were not modified by the HMR work. Evidence:
+`.development-artifacts/cpd-hmr-20261104-launch/test-smart.log`.
+
 Two sources feed this ledger:
 1. **Direct triage** — the user reports a UX bug / tech-debt smell; it gets a dossier here.
 2. **Push from the sibling loops (the carve-up + manual-validation loops).** When a carve-up extraction

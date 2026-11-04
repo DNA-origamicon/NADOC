@@ -1890,6 +1890,7 @@ def _append_production_segments(
         package_dir,
         timestep_fs=float(plan.get("timestep_fs") or 1.0),
         hmr=bool(plan.get("hmr")),
+        rigid_bonds=plan.get("rigid_bonds"),
         path="NAMD production continuation",
     )
     manifest_path = package_dir / "manifest.json"
@@ -1961,6 +1962,7 @@ def _append_production_segments(
     length_ns = md_plan.production_length_ns(total_steps, timestep_fs)
     previous = "" if from_seed else checkpoint.name
     segments: list[SegmentSpec] = []
+    cpd_mass_reseed = False
     # Built by md_plan so the Job Wizard's preview and the run that actually happens come
     # from ONE function.  Two independent constructions is the shape of LESSONS H16: a fix
     # lands on one and the other keeps the old behaviour, and both still look correct.
@@ -2010,6 +2012,10 @@ def _append_production_segments(
                 force_resident=plan.get("force_resident"),
                 package_dir=package_dir,
             )
+        if not segments and not from_seed:
+            from backend.core.cpd_integrator import reseed_mass_changed_config
+            conf, cpd_mass_reseed = reseed_mass_changed_config(
+                conf, package_dir, previous, structure_psf or f'{name_stem}.psf', spec.temp)
         (package_dir / f"{spec.name}.conf").write_text(
             inject_packaged_photoproduct_parameters(conf, package_dir)
         )
@@ -2037,6 +2043,7 @@ def _append_production_segments(
         # to be recorded to stay reproducible.
         "seed": seed,
         "continue_from_production": continue_from_production,
+        "cpd_mass_change_reseed": cpd_mass_reseed,
         "first_new_segment": segments[0].name,
         "last_new_segment": segments[-1].name,
         "timestep_fs": timestep_fs,
@@ -2193,6 +2200,15 @@ def _apply_photoproduct_integrator_policy(design, body: CreateJobRequest) -> Cre
             "Formed photoproducts are supported only by the full-topology "
             "explicit-solvent NAMD workflow; GBIS is intentionally unavailable."
         )
+    from backend.core.cpd_integrator import design_hmr_qualified, validate_design_integrators
+    if design_hmr_qualified(design):
+        validate_design_integrators(
+            design, relax_dt=body.relax_timestep_fs or (4.0 if body.fast else 2.0),
+            relax_hmr=body.relax_hmr, relax_rigid=body.relax_rigid_bonds,
+            production_dt=body.production_timestep_fs,
+            production_hmr=body.production_hmr, production_rigid=body.production_rigid_bonds,
+        )
+        return body
     explicit = set(body.model_fields_set)
     conflicts: list[str] = []
     if "fast" in explicit and body.fast:
@@ -3229,6 +3245,7 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
             timestep_fs=plan["timestep_fs"],
             hmr=plan["hmr"],
             path="NAMD production disk estimate",
+            rigid_bonds=plan.get("rigid_bonds"),
         )
     except CpdCapabilityError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -5308,6 +5325,7 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
             timestep_fs=plan["timestep_fs"],
             hmr=plan["hmr"],
             path="NAMD production continuation",
+            rigid_bonds=plan.get("rigid_bonds"),
         )
     except CpdCapabilityError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -5896,6 +5914,7 @@ async def _spawn_md_production_impl(
             timestep_fs=plan["timestep_fs"],
             hmr=plan["hmr"],
             path="NAMD child production package",
+            rigid_bonds=plan.get("rigid_bonds"),
         )
     except CpdCapabilityError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -6784,6 +6803,7 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
                 timestep_fs=plan["timestep_fs"],
                 hmr=plan["hmr"],
                 path="NAMD ensemble production package",
+                rigid_bonds=plan.get("rigid_bonds"),
             )
         except CpdCapabilityError as exc:
             raise HTTPException(400, str(exc)) from exc

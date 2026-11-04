@@ -209,12 +209,15 @@ def build_replica_package(
     )
 
     product_package = package_has_photoproducts(parent_pkg)
+    from backend.core.cpd_integrator import package_hmr_qualified
+    product_hmr_qualified = product_package and package_hmr_qualified(parent_pkg)
     requested_hmr = bool(fast) if hmr is None else bool(hmr)
     assert_packaged_photoproduct_integrator(
         parent_pkg,
         timestep_fs=timestep_fs,
         hmr=requested_hmr,
         path="NAMD production replica",
+        rigid_bonds=rigid_bonds,
     )
     name_stem = manifest["name_stem"]
     box = tuple(float(x) for x in manifest["box_ang"])
@@ -268,6 +271,12 @@ def build_replica_package(
                 write_hmr_psf(child_pkg / f"{name_stem}.psf", child_pkg / hmr_name)
             except (OSError, RuntimeError, ValueError, IndexError) as exc:
                 (child_pkg / hmr_name).unlink(missing_ok=True)
+                if product_package:
+                    from backend.core.cpd_forcefield import CpdCapabilityError
+                    raise CpdCapabilityError(
+                        f'CPD HMR preparation failed; the requested timestep was not '
+                        f'downgraded: {exc}'
+                    ) from exc
                 use_fast = False
                 hmr_build_failed = True
                 # LOUD.  A downgrade the user cannot see is the bug this whole area keeps
@@ -326,6 +335,13 @@ def build_replica_package(
     # at step 0 (validated: the reseed also read the clashed final .coor; the paired
     # .restart.coor is clean). A relaxation parent stays a replica SPAWN (coords+box only).
     continuation = getattr(parent, "run_kind", "") == "production"
+    cpd_mass_reseed = False
+    if continuation and product_package:
+        from backend.core.cpd_integrator import checkpoint_mass_changed
+        # A mass switch is a new velocity ensemble, not a velocity-preserving restart.
+        cpd_mass_reseed = checkpoint_mass_changed(
+            parent_pkg, ready_checkpoint,
+            (child_pkg / (structure_psf or f'{name_stem}.psf')).resolve())
     if continuation:
         stage = (
             ("restart.coor", "equilibrated.coor"),
@@ -396,7 +412,7 @@ def build_replica_package(
         seed=seed,
         equil_base="equilibrated",
         structure_psf=structure_psf,
-        preserve_velocities=continuation,
+        preserve_velocities=continuation and not cpd_mass_reseed,
         npt=npt_allowed,
         temperature_K=float((manifest.get("two_electrodes") or graphene_nanopore or {}).get("temperature_K", 300.0)),
     )
@@ -637,9 +653,9 @@ def build_replica_package(
         "photoproduct_integrator_policy": (
             {
                 "active": True,
-                "ordinary_mass_psf_required": True,
-                "maximum_timestep_fs": 2.0,
-                "hmr_4fs_validated": False,
+                "ordinary_mass_psf_required": not product_hmr_qualified,
+                "maximum_timestep_fs": 4.0 if product_hmr_qualified else 2.0,
+                "hmr_4fs_validated": product_hmr_qualified,
             }
             if product_package
             else None
@@ -648,7 +664,8 @@ def build_replica_package(
             "parent_job_id": parent.job_id,
             "seed": int(seed),
             "index": int(index),
-            "reinit_velocities": True,
+            "reinit_velocities": not continuation or cpd_mass_reseed,
+            "cpd_mass_change_reseed": cpd_mass_reseed,
             "equilibrated_from": ready_checkpoint,
             "length_ns": length_ns,
             "steps": steps,

@@ -116,8 +116,8 @@ def test_namd_job_creation_accepts_variants_without_scheduling(stereo, target, m
     assert len(seen) == 1
     assert seen[0].execution_target == target
     assert not seen[0].autostart and not seen[0].draft
-    assert not seen[0].fast and not seen[0].relax_hmr
-    assert seen[0].relax_timestep_fs == 2.0
+    assert seen[0].fast
+    assert seen[0].production_timestep_fs == 4.0
 
 
 def test_cpd_wizard_plan_exposes_supported_integrator():
@@ -133,11 +133,48 @@ def test_cpd_wizard_plan_exposes_supported_integrator():
     })
     assert response.status_code == 200, response.text
     plan = response.json()
-    for key, value in {"fast": False, "relax_timestep_fs": 2.0, "relax_hmr": False,
-                       "production_timestep_fs": 2.0, "production_hmr": False}.items():
+    for key, value in {"fast": True, "relax_timestep_fs": 4.0, "relax_hmr": True,
+                       "production_timestep_fs": 4.0}.items():
         assert plan["request"][key]["value"] == value
-        assert plan["request"][key]["provenance"] == "forced"
-    # Explicit unsafe API choices still fail; this is not a removed safety gate.
-    response = client.post("/api/md/jobs", json={"draft": True, "fast": True})
-    assert response.status_code == 400
-    assert "conflicting explicit request" in response.text
+        assert plan["request"][key]["provenance"] != "forced"
+
+
+def test_unqualified_cpd_retains_integrator_block(monkeypatch):
+    from backend.core import cpd_integrator
+    from backend.api.routes_md import _apply_photoproduct_integrator_policy
+    from backend.api.md_request_models import CreateJobRequest
+
+    monkeypatch.setattr(cpd_integrator, 'design_hmr_qualified', lambda d: False)
+    with pytest.raises(CpdCapabilityError, match='conflicting explicit request'):
+        _apply_photoproduct_integrator_policy(fixture(), CreateJobRequest(fast=True))
+    resolved = _apply_photoproduct_integrator_policy(fixture(), CreateJobRequest())
+    assert resolved.fast is False and resolved.production_timestep_fs == 2.0
+
+
+@pytest.mark.parametrize('qualified', [False, True])
+def test_exported_cpd_fast_assets_follow_numerical_qualification(monkeypatch, qualified):
+    import io
+    import json
+    import zipfile
+    from backend.core import cpd_integrator, namd_solvate
+    from tests.test_md_prep_wiring import _fake_solvate
+
+    monkeypatch.setattr(namd_solvate, '_gmx_solvate', _fake_solvate)
+    if not qualified:
+        monkeypatch.setattr(cpd_integrator, 'assets_hmr_qualified', lambda a: False)
+    blob = namd_solvate.build_namd_solvated_package(
+        fixture(), require_full_topology=True, ion_conc_mM=0, mg_conc_mM=0,
+    )
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        manifest_name = next(n for n in archive.namelist() if n.endswith('/photoproduct_forcefield_manifest.json'))
+        prefix = manifest_name.rsplit('/', 1)[0]+'/'
+        manifest = json.loads(archive.read(manifest_name))
+        assert manifest['hmr_4fs_enabled'] is qualified
+        assert manifest['timestep_fs'] == (4 if qualified else 2)
+        assert (prefix+'namd_fast.conf' in archive.namelist()) is qualified
+        if qualified:
+            conf = archive.read(prefix+'namd_fast.conf').decode()
+            assert 'fullElectFrequency 1' in conf
+            assert 'mvp_cpds/00_par_all36_cgenff.prm' in conf
+            assert 'mvp_cpds/tt-cpd-cis-syn/overlay.prm' in conf
+            assert any(n.endswith('_hmr.psf') for n in archive.namelist())

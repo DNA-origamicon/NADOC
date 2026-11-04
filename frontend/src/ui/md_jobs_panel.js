@@ -1446,6 +1446,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _draftSettingsVersion = 0
   let _jobs         = []     // cached list from API
   let _selectedId   = null   // currently displayed job_id
+  let _detailRequestVersion = 0
   // The user clicked the selected row to DESELECT it. `_selectBestJob` runs on every poll
   // and would otherwise re-select a job a beat later, so the deselection has to be sticky
   // until something explicit happens (a row click, a launch, an empty list, a design switch).
@@ -1912,6 +1913,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const jobs = await api.listMdJobs()
       if(settingsVersion!==_draftSettingsVersion)return
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
+      const previousSelected = _jobs.find(j => j.job_id === _selectedId)
       _jobs = mergeCreatingJobs(jobs, 'namd')
       notifyBoxSizeFailures(_visibleJobs(), store.getState()?.currentDesign?.id)
       _jobs.sort((a, b) => b.created_at - a.created_at)
@@ -1920,6 +1922,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _renderList()
       _selectBestJob()
       const selected = _jobs.find(j => j.job_id === _selectedId)
+      // Starts from another tab/API bypass this panel's _reselectJob. Reconcile
+      // the details too, including the socket/watchdog stopped by a terminal state.
+      if (selected && previousSelected?.job_id === selected.job_id
+          && previousSelected.status !== selected.status) {
+        _openDetailForJob(selected.job_id)
+      }
       _updateVizToggles(selected)
       // Submission phases can change without a selection change or queue refresh.
       _paintRunControl()
@@ -4991,6 +4999,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _openDetailForJob(jobId) {
+    const requestVersion = ++_detailRequestVersion
     const job = _jobs.find(j => j.job_id === jobId)
     if (job) _applyJobState(job)
     if (detailEl) detailEl.style.display = ''
@@ -5012,7 +5021,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _stopWsWatchdog()    // terminal/remote jobs have no local WS to watch
       api.getMdJob(jobId)
         .then(j => {
-          if (!j) return
+          if (!j || _selectedId !== jobId || requestVersion !== _detailRequestVersion) return
           _mdDebug(`[${_ts()}] md-jobs: REST refresh (terminal/remote)`, j.status)
           _applyJobState(j)
         })

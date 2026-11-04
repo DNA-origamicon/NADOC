@@ -338,12 +338,24 @@ def assert_packaged_photoproduct_integrator(
     timestep_fs: float,
     hmr: bool,
     path: str,
+    rigid_bonds: str | None = None,
 ) -> None:
-    """Fail closed unless a product package uses the validated interim integrator."""
+    """Admit fast integration only for independently audited, exact CPD assets."""
 
     if not package_has_photoproducts(Path(package_dir)):
         return
+    from backend.core.cpd_integrator import package_hmr_qualified
+
+    qualified = package_hmr_qualified(package_dir)
+    if (float(timestep_fs) == 4.0 and hmr
+            and (rigid_bonds is None or rigid_bonds.lower() == 'all') and qualified):
+        return
     if float(timestep_fs) > 2.0 or bool(hmr):
+        if qualified:
+            raise CpdCapabilityError(
+                f'{path}: qualified CPD fast integration requires 4 fs, HMR and '
+                'rigidBonds all; ordinary-mass <=2 fs remains available.'
+            )
         raise CpdCapabilityError(
             f"{path} cannot run a formed photoproduct at {float(timestep_fs):g} fs "
             f"with HMR={'on' if hmr else 'off'}. Product-specific HMR/4 fs behavior "

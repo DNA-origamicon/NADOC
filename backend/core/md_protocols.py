@@ -2870,8 +2870,22 @@ def _iter_packed_psf_pairs(lines, start_i: int, n_pairs: int, width: int):
         if read >= n_pairs:
             return
         row = row.rstrip()
-        nums = [int(row[c:c + width]) for c in range(0, len(row), width)
-                if row[c:c + width].strip()]
+        if not row:
+            continue
+        # Historical solvated EXT packages retain psfgen's I10 solute rows
+        # followed by the solvent merger's I8 rows. Detect each row without
+        # whitespace splitting, which corrupts fully occupied index columns.
+        nums = None
+        for row_width in dict.fromkeys((width, 8, 10)):
+            if len(row) % (2 * row_width):
+                continue
+            fields = [row[c:c + row_width].strip()
+                      for c in range(0, len(row), row_width)]
+            if all(field.isdigit() for field in fields):
+                nums = [int(field) for field in fields]
+                break
+        if nums is None:
+            raise ValueError('Malformed packed PSF bond row')
         for j in range(0, len(nums) - 1, 2):
             yield nums[j], nums[j + 1]
             read += 1
@@ -3723,14 +3737,23 @@ def prepare_mgh_slow_release(
 
     assert_cpd_simulation_supported(design, path="shared NAMD relaxation/package workflow")
     has_photoproducts = design_has_photoproducts(design)
+    from backend.core.cpd_integrator import design_hmr_qualified
+    product_hmr_qualified = has_photoproducts and design_hmr_qualified(design)
+    if product_hmr_qualified:
+        from backend.core.cpd_integrator import validate_design_integrators
+        validate_design_integrators(
+            design, relax_dt=relax_timestep_fs or (4.0 if fast else 2.0),
+            relax_hmr=relax_hmr, relax_rigid=relax_rigid_bonds,
+            production_dt=production_timestep_fs,
+            production_hmr=production_hmr, production_rigid=production_rigid_bonds,
+        )
     product_policy_adjustments: list[str] = []
     if has_photoproducts:
-        # Product chemistry is supported only by the authoritative psfgen path.  The
-        # interim integrator contract is ordinary masses and at most 2 fs; 4 fs/HMR
-        # stays disabled until it has its own lesion-specific validation campaign.
+        # Product chemistry always requires the authoritative psfgen path.
         if not require_full_topology:
             product_policy_adjustments.append("require_full_topology enabled")
         require_full_topology = True
+    if has_photoproducts and not product_hmr_qualified:
         if fast:
             product_policy_adjustments.append("fast relaxation disabled")
         fast = False
@@ -4413,9 +4436,9 @@ def prepare_mgh_slow_release(
         "photoproduct_integrator_policy": (
             {
                 "active": True,
-                "ordinary_mass_psf_required": True,
-                "maximum_timestep_fs": 2.0,
-                "hmr_4fs_validated": False,
+                "ordinary_mass_psf_required": not product_hmr_qualified,
+                "maximum_timestep_fs": 4.0 if product_hmr_qualified else 2.0,
+                "hmr_4fs_validated": product_hmr_qualified,
                 "adjustments": product_policy_adjustments,
             }
             if has_photoproducts

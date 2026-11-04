@@ -2384,6 +2384,40 @@ describe('initMdJobsPanel — minimisation timeline row', () => {
     expect(labels[1]).toBe('300K NPT settle (DNA fixed)')
   })
 
+  it('refreshes selected terminal details and reconnects when restarted elsewhere', async () => {
+    const sockets = []
+    class Socket {
+      static OPEN = 1
+      constructor(url) { this.url = url; this.readyState = 1; sockets.push(this) }
+      close() { this.readyState = 3 }
+    }
+    vi.stubGlobal('WebSocket', Socket)
+    try {
+      mdApi.getMdTrajectoryMeta.mockResolvedValue({ ready: false })
+      const failed = jobWith({ design_source_path: '/w/d.nadoc', status: 'failed', minimization: { ...MIN, status: 'failed' } })
+      mdApi.listMdJobs.mockResolvedValue([failed])
+      mdApi.getMdJob.mockResolvedValue(failed)
+      const panel = initMdJobsPanel({ getMdViz: () => null, getWorkspacePath: () => '/w/d.nadoc' })
+      await flushMicro()
+      await panel.selectJob('J1')
+      await flushMicro()
+      expect($('md-jobs-timeline').textContent).toContain('✗')
+      const running = jobWith({ design_source_path: '/w/d.nadoc', minimization: { ...MIN, status: 'done' },
+        segments: [{ ...LADDER[0], status: 'running' }] })
+      mdApi.listMdJobs.mockResolvedValue([running])
+      mdApi.getMdJob.mockResolvedValue(running)
+      await panel.refresh()
+      await flushMicro()
+      expect($('md-jobs-timeline').textContent).not.toContain('✗')
+      expect($('md-jobs-timeline').textContent).toContain('✓')
+      expect(sockets).toHaveLength(1)
+      expect(sockets[0].url).toContain('/ws/md-jobs/J1')
+      await panel.refresh()
+      await flushMicro()
+      expect(sockets).toHaveLength(1)
+    } finally { vi.unstubAllGlobals() }
+  })
+
   it('spins while it runs and shows ✓ once done', async () => {
     const running = await openWith(jobWith({ minimization: MIN }))
     // A running stage gets a spinner instead of the ✓/✗ glyph span.

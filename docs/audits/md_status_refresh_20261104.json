@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "before": "Velocity reseed\n\u2717\n\u2717\n0/100 ns production run\n\u00b7",
+  "after": "Velocity reseed\n\u25cf\n\u2713\n0.72/100 ns production run\n\u25cb",
+  "connections": [
+    "ws://localhost:5173/ws/md-jobs/__e2e__status_only"
+  ],
+  "workspace_mutations": 0,
+  "date": "2026-11-04",
+  "problem": "Selected terminal NAMD details stayed stale after an external restart.",
+  "fix": "Reopen selected details on list-observed status changes, restore live socket/watchdog, ignore older terminal REST responses.",
+  "frontend_suite": {
+    "files_passed": 864,
+    "tests_passed": 10045,
+    "tests_skipped": 1,
+    "duration_seconds": 211.61
+  },
+  "regression_reproduced_before_fix": true,
+  "browser": "Live Vite-served component in Chromium with in-memory API responses; no native job restart.",
+  "cleanup": "Browser closed; no test-created workspace files, screenshots, traces or downloads retained."
+}

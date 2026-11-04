@@ -41,3 +41,12 @@ def test_ext_width_10_columns():
     line = f"{a1:10d}{a2:10d}"
     assert " " not in line
     assert list(_iter_packed_psf_pairs([line], 0, 1, width=10)) == [(a1, a2)]
+
+
+def test_historical_solvated_ext_mixes_solute_i10_and_water_i8():
+    rows = [''.join(f'{i:10d}' for i in range(1, 9)),
+            ''.join(f'{i:8d}' for i in range(3044, 3052)),
+            f'{3052:8d}{3053:8d}']
+    assert list(_iter_packed_psf_pairs(rows, 0, 9, width=10)) == [
+        (1, 2), (3, 4), (5, 6), (7, 8), (3044, 3045),
+        (3046, 3047), (3048, 3049), (3050, 3051), (3052, 3053)]

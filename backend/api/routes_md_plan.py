@@ -580,6 +580,13 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     except (OSError, ValueError):
         manifest = {}
     name_stem = manifest.get("name_stem") or "design"
+    from backend.core.cpd_integrator import mass_switch_requested, describe_mass_switch
+    from backend.core.cpd_forcefield import CpdCapabilityError
+    try:
+        cpd_mass_reseed = chained and mass_switch_requested(
+            package_dir, spec.name, name_stem, bool(plan.get('hmr')))
+    except CpdCapabilityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     carved = bool((manifest.get("solvation") or {}).get("carved"))
     # A pore lives on the relaxation the chain descends from; a chained parent's own
     # manifest is production-only and never carries it.
@@ -648,7 +655,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         damping=restraints["damping"],
         enm_file=enm_file,
         dcd_freq=plan.get("dcd_freq"),
-        continuation=chained,
+        continuation=chained and not cpd_mass_reseed,
         stage_overrides=body.stage_overrides or None,
     )
 
@@ -930,7 +937,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         float(plan.get("timestep_fs") or 4.0), plan.get("rigid_bonds"), plan.get("hmr")
     )
 
-    return {
+    result = {
         "stages": stages,
         "run_stage_index": run_stage["index"],
         # Whether this run EXTENDS its parent (velocities carry) or samples independently
@@ -991,6 +998,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         "deferred": _production_deferred(body, chained=chained),
         "warnings": [w for w in (seed_warning, plan.get("timestep_warning")) if w],
     }
+    return describe_mass_switch(result, cpd_mass_reseed)
 
 
 def _inherited_from_parent(
@@ -1386,7 +1394,15 @@ async def protocol_plan(body: ProtocolPlanRequest, include_box_preview: bool = T
             current_design = design_state.get_or_404()
         except HTTPException:
             current_design = None
-        if current_design is not None and design_has_photoproducts(current_design):
+        from backend.core.cpd_integrator import design_hmr_qualified
+        try:
+            qualified_cpd = (current_design is not None
+                             and design_has_photoproducts(current_design)
+                             and design_hmr_qualified(current_design))
+        except CpdCapabilityError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if (current_design is not None and design_has_photoproducts(current_design)
+                and not qualified_cpd):
             # Preview the supported integrator even when a previous wizard state
             # still carries the ordinary 4 fs defaults. Creation rejects unsafe API
             # requests; these controls are visibly forced and omitted on submission.
