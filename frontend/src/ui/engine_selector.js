@@ -1,3 +1,4 @@
+import { initEngineTabLayout } from './engine_tab_layout.js'
 import { sidebarPanelVisible } from './display_tab_policy.js'
 /**
  * engine_selector.js — U4, "unified panel" track. Collapse the five stacked
@@ -117,6 +118,8 @@ export function initEngineSelector({
     btn.className = 'engine-selector-btn'
     btn.dataset.engine = key
     btn.setAttribute('role', 'tab')
+    btn.setAttribute('aria-label', labels[key] ?? key)
+    btn.title = labels[key] ?? key
     const lbl = document.createElement('span')
     lbl.className = 'engine-selector-label'
     lbl.textContent = labels[key] ?? key
@@ -190,12 +193,15 @@ export function initEngineSelector({
     if (onSelect) onSelect(engineKey)
   }
 
+  const layout = initEngineTabLayout(selectorMount)
+
   select(isEngine(initial) ? initial : ENGINE_KEYS[0])
 
   return {
     select,
     getSelected: () => _selected,
     setEngineStatus,
+    layout,
     el: selectorMount,
   }
 }
