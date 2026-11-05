@@ -56,19 +56,19 @@ def _scaffold(kind, design):
     return updated, result
 
 
-def crossovers(design, *, history_seed=None):
+def crossovers(design, *, history_seed=None, frame_scoped=True):
     from backend.core.routing_identity import identity_scope
 
     with identity_scope(history_seed):
-        return _crossovers(design)
+        return _crossovers(design, frame_scoped=frame_scoped)
 
 
-def _crossovers(design):
+def _crossovers(design, *, frame_scoped=True):
     from backend.api.crud import _place_auto_crossovers
 
     total = sites = 0
     for _ in range(12):
-        design, stats = _place_auto_crossovers(design)
+        design, stats = _place_auto_crossovers(design, frame_scoped=frame_scoped)
         sites = sites or stats["sites_considered"]
         total += stats["placed"]
         if stats["placed"] == 0:
@@ -80,13 +80,14 @@ def build(kind, design, params):
     if kind in SCAFFOLD_KINDS:
         return scaffold(kind, design, history_seed=params.get("history_seed"))[0]
     if kind == "auto-crossover":
-        return crossovers(design, history_seed=params.get("history_seed"))[0]
+        return crossovers(design, history_seed=params.get("history_seed"),
+                          frame_scoped=params.get("frame_scoped_crossovers", False))[0]
     if kind == "full-autostaple":
         from backend.api.part_autostaple_command import build_full_autostaple
         from backend.api.routes_assign_sequences import _FullAutostapleBody
 
         return build_full_autostaple(
-            design, _FullAutostapleBody.model_validate(params)
+            design, _FullAutostapleBody.model_validate({"frame_scoped_crossovers": False, **params})
         )[0]
     from backend.core.lattice import make_autobreak, make_merge_short_staples
 

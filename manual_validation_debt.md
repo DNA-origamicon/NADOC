@@ -1467,3 +1467,13 @@ calibration and legibility at desktop size. These are hypothesis coordinates;
 markers do not recalibrate the PDF or change design topology. Automated DOM/API
 checks cover selections, numeric helix labels and four marker targets. Full
 scientific alignment remains conditional on the editable row/BP calibration.
+
+### MV-57 — Spreadsheet sectional selection (PENDING, 2026-11-04)
+
+In a sequenced design with overhangs and crossover insertions, select a base,
+domain, overhang, and crossover in 3D and in the cadnano editor. Verify the exact
+letters are highlighted, changing sections on the same strand replaces marks,
+and deselection clears them. Check multi-selection, reverse domains with loops,
+overhang editing, and sequence search while marked. Unit coverage exercises both
+spreadsheet hosts; a read-only browser check verifies domain/base marks and clearing
+through canonical selection. Live picking gestures and appearance remain pending.

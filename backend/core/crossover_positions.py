@@ -107,21 +107,29 @@ def all_valid_crossover_sites(
     design: Design,
     *,
     filter_by_strand_coverage: bool = True,
+    frame_scoped: bool = True,
 ) -> list[dict]:
     """Return all valid crossover sites for helices currently in the design.
 
-    A site is included only when both helices exist in the design (by grid_pos).
+    A site is included only when both helices exist in the same lattice frame.
     Returns a list of dicts: {helix_a_id, helix_b_id, index}.
 
     Vectorizable: iterates all helices × all bp indices once.
     Both directions (A→B and B→A) are included so callers can filter by either
     helix without needing to check both orderings.
     """
-    cell_to_helix = {
-        (h.grid_pos[0], h.grid_pos[1]): h
-        for h in design.helices
-        if h.grid_pos is not None
-    }
+    # A sweep/extrusion may reuse every source cell in a distinct frame.
+    # Retain all segments of a cell; coverage selects the segment at each bp.
+    # The unscoped branch is solely for replay of pre-fix routing commands.
+    cell_to_helices = {}
+    for h in design.helices:
+        if h.grid_pos is None:
+            continue
+        address = (h.lattice_frame_id if frame_scoped else None, *h.grid_pos)
+        if frame_scoped:
+            cell_to_helices.setdefault(address, []).append(h)
+        else:
+            cell_to_helices[address] = [h]
     # Compute per-helix minimum bp from strand domains (may be < bp_start for ss loops).
     min_domain_bp: dict[str, int] = {}
     for strand in design.strands:
@@ -143,8 +151,10 @@ def all_valid_crossover_sites(
         hi = h.bp_start + h.length_bp
         for index in range(lo, hi):
             nb = crossover_neighbor(design.lattice_type, row, col, index)
-            if nb is not None and nb in cell_to_helix:
-                hb = cell_to_helix[nb]
+            address = (h.lattice_frame_id if frame_scoped else None, *nb) if nb is not None else None
+            for hb in cell_to_helices.get(address, ()):
+                if frame_scoped and not (min_domain_bp.get(hb.id, hb.bp_start) <= index < hb.bp_start + hb.length_bp):
+                    continue
                 if not crossover_allowed(design, h.id, hb.id, index):
                     continue
                 # Gate on strand occupancy: both helices must have a strand

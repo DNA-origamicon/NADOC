@@ -1,3 +1,4 @@
+import { selectedSequenceKeys, highlightOverhangCell } from '../ui/sequence_selection.js'
 import { strandSequenceDisplay, renderStrandSequence, strandLength } from '../ui/strand_sequence_display.js'
 /**
  * strands_spreadsheet.js — Strand Spreadsheet Panel (cadnano editor)
@@ -126,6 +127,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
   // ── Track selected strand IDs (from pathview) ──────────────────
   let _selectedStrandIds = new Set()
+  let _selectionRefs = []
   let _design = null
   const hairpinDimerIndex = createHairpinDimerIndexCache()
 
@@ -255,6 +257,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   // ── Build table body ──────────────────────────────────────────────
   function _rebuildTable() {
     if (!isOpen) return
+    const selectedBases = selectedSequenceKeys(_design, _selectionRefs)
     _rebuildHeader()
 
     const design = _design
@@ -326,15 +329,16 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             const d5 = strand.domains[0]
             if (ovhg5p?.sequence) td.dataset.searchSequence = ovhg5p.sequence
             td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
+            highlightOverhangCell(td, d5, design, selectedBases.get(strand.id))
             break
           }
           case 'sequence': {
-            const display = strandSequenceDisplay(strand, design)
+            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id))
             const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq sheet-search-text'
-              renderStrandSequence(span, display)
+              renderStrandSequence(span, display, selectedBases.get(strand.id))
               span.title = displaySeq
               td.dataset.searchSequence = displaySeq
               td.appendChild(span)
@@ -369,6 +373,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             const d3 = strand.domains[strand.domains.length - 1]
             if (ovhg3p?.sequence) td.dataset.searchSequence = ovhg3p.sequence
             td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
+            highlightOverhangCell(td, d3, design, selectedBases.get(strand.id))
             break
           }
           case 'group': {
@@ -623,13 +628,16 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     },
 
     /** Set which strand IDs are highlighted (from pathview selection). */
-    setSelectedStrands(strandIds) {
+    setSelectedStrands(strandIds, refs = []) {
+      const sectionsChanged = _selectionRefs.length || refs.length
+      _selectionRefs = refs
       const activeName = document.activeElement?.matches?.('[data-strand-name-input="true"]')
         ? document.activeElement : null
       const activeStrandId = activeName?.closest('tr')?.dataset.strandId
       if (activeName && activeStrandId && !strandIds.includes(activeStrandId)) activeName.blur()
       _selectedStrandIds = new Set(strandIds)
       if (!isOpen) return
+      if (sectionsChanged) _rebuildTable()
       _applyHighlights()
       // Scroll the first selected row into view
       if (strandIds.length > 0) {

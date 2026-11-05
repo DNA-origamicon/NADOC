@@ -145,3 +145,14 @@ dismiss only on an outside press. See LESSONS for why jsdom can't catch this.
   Playwright spec were **deleted after verification** per the E2E policy.
 
 Related: [[overhang-sequence-display]], [[overhang_connections]], [[oh_binder]].
+
+## Spreadsheet sectional selection (2026-11-04)
+
+Both spreadsheets now project base/end, domain, overhang, and crossover selections
+through `ui/sequence_selection.js`. Junction highlights include their endpoints and
+extra bases (including forced ligations); loop copies and skips use the existing
+sequence identity projection. Cadnano's element-key adapter supplies exact refs
+alongside its existing row-selection IDs. Terminal overhang columns show a marked
+readout above the existing editable field. Unassigned selected sequence positions
+show `N`; clearing selection removes marks. Cross-window selection transport still
+uses the existing whole-strand protocol; section refs are local to each editor.

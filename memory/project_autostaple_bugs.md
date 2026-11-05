@@ -94,3 +94,21 @@ v2 → +1 crossover, 0 validation errors. Pin:
 (headless extrude → asserts no same-bp overhang attachment left bare). The earlier
 load-path `_backfill_dropped_junctions` (models.from_json) already healed this on SAVE+LOAD;
 this closes the IN-MEMORY gap so it's correct without a round-trip.
+
+## 2026-11-04 — Sweep frames shadowed their source bundle (ISSUE-178)
+
+`all_valid_crossover_sites` indexed only `(row, col)`, so later sweep/extrusion
+helices replaced an earlier frame's cells. In `workspace/test.nadoc`, full-autostaple
+placed 193 staple crossovers on the sweep and none on the original bundle. Lookup
+now uses `(lattice_frame_id, row, col)`, retains multiple segments, and checks
+neighbor bp coverage. The ordinary crossover-site query, auto-crossover and
+full-autostaple share this fix. New routing records include
+`frame_scoped_crossovers: true`; replay of records lacking that parameter uses the
+old lookup, preserving historical construction rather than silently rewriting it.
+Apply a new routing command to use the correction on an existing design.
+
+`tests/test_autostaple_frames.py` composes bundle → sweep → scaffold → autostaple
+through recorded user commands and checks both frames, independent ordering,
+standalone crossover recording, legacy replay and guarded save/reopen/replay.
+The original `test.nadoc` was read only; its independent agent audit also identifies
+unrecorded loadout fields, so no corrected derivative of that file was published.

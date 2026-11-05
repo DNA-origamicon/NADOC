@@ -173,7 +173,8 @@ def test_native_fixed_point_seed_stats_record_and_replay_are_preserved(document,
     updated = state.get_or_404()
     row = updated.feature_log[-1]
     assert row.op_kind == "auto-crossover" and row.label == "Auto-crossover"
-    assert row.params == {"history_seed": seed, **stats, "_proof_version": 1}
+    assert row.params == {"history_seed": seed, **stats, "_proof_version": 1,
+                          "frame_scoped_crossovers": True}
     assert f"[AUTO XOVER] placed {stats['placed']} crossovers" in capsys.readouterr().out
     expected = execute("auto-crossover", source, row.params)
     assert _authoring(updated) == _authoring(expected)

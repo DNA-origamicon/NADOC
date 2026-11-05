@@ -131,7 +131,7 @@ def _build(design, body):
         locked_i, overhang_i = _locked_and_overhang_staple_ids(crossed)
         crossed, crossover_report = _place_auto_crossovers(
             crossed, protected_strand_ids=locked_i - outside, tip_only_strand_ids=overhang_i,
-            kept_strand_ids=outside,
+            kept_strand_ids=outside, frame_scoped=body.frame_scoped_crossovers,
         )
         total_placed += crossover_report["placed"]
         if crossover_report["placed"] == 0:

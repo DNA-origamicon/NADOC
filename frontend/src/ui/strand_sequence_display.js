@@ -2,7 +2,7 @@ import { baseKey, xbKey, parseBaseKey } from '../scene/base_ref.js'
 import { junctionIndex, strandJunctions, domainJunctions } from '../design/strand_junctions.js'
 
 /** Sequence positions in 5′→3′ order, including loop copies and excluding skips. */
-function domainKeys(domain, design) {
+export function domainKeys(domain, design) {
   const helix = design?.helices?.find(h => h.id === domain.helix_id)
   const deltas = new Map((helix?.loop_skips ?? []).map(ls => [ls.bp_index, ls.delta]))
   const keys = []
@@ -48,7 +48,7 @@ function extensionText(ext) {
  * change copied/searchable sequence or shift the downstream base highlights.
  * Terminal overhang columns and terminal extension notation retain their roles.
  */
-export function strandSequenceDisplay(strand, design) {
+export function strandSequenceDisplay(strand, design, selectedKeys = new Set()) {
   const domains = strand.domains ?? []
   const index = junctionIndex(design)
   const junctions = strandJunctions(strand, index)
@@ -67,7 +67,7 @@ export function strandSequenceDisplay(strand, design) {
   let offset = 0
   domains.forEach((d, i) => {
     const keys = domainKeys(d, design)
-    const text = seq ? seq.slice(offset, offset + keys.length) : (hasInsert ? 'N'.repeat(keys.length) : '')
+    const text = seq ? seq.slice(offset, offset + keys.length) : (hasInsert || selectedKeys.size ? 'N'.repeat(keys.length) : '')
     offset += keys.length
     const terminalOverhang = d.overhang_id != null && (i === 0 || i === domains.length - 1)
     if (!terminalOverhang) {

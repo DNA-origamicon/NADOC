@@ -32,6 +32,18 @@ beforeEach(() => {
 })
 
 describe('cadnano spreadsheet hairpin/dimer warnings', () => {
+  it('updates sections within the same strand and clears them for whole-strand selection', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    sheet.update(junctionFixture().design)
+    sheet.setSelectedStrands(['s'], [{ kind: 'domain', strandId: 's', domainIndex: 1 }])
+    const marked = () => [...document.querySelectorAll('.sheet-seq-selected-base')].map(el => el.textContent).join('')
+    expect(marked()).toBe('GCA')
+    sheet.setSelectedStrands(['s'], [{ kind: 'crossover', id: 'xo' }])
+    expect(marked()).toBe('GATTTTTG')
+    sheet.setSelectedStrands(['s'])
+    expect(marked()).toBe('')
+  })
+
   it('shares continuous extra-base sequence and arc decoration with the 3D sheet', () => {
     sheet.update(junctionFixture(true).design)
     const cell = document.querySelector('td[data-col="sequence"]')

@@ -1820,9 +1820,9 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     await patchStrandsColor(strandIds, _getActivePaintColor())
   },
 
-  onSelectionChange: (strandIds) => {
+  onSelectionChange: (strandIds, refs) => {
     _lastSelectedStrandIds = strandIds ?? []
-    _spreadsheet?.setSelectedStrands(strandIds)
+    _spreadsheet?.setSelectedStrands(strandIds, refs)
     if (_syncingFromBroadcast) return
     if (!strandIds?.length) return
     nadocBroadcast.emit('selection-changed', { strandIds })

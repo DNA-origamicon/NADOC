@@ -1,3 +1,4 @@
+import { sequenceSelectionRefs } from './sequence_selection.js'
 import { quadruplexMarkers } from '../shared/aptamer.js'
 import { crossoverDragEndpoints, crossoverDragFits } from './pathview/crossover_drag.js'
 import { crossoverCellKey } from './pathview/crossover_cells.js'
@@ -472,7 +473,7 @@ export function initPathview(canvasEl, containerEl, {
     for (const sid of strandIds) {
       for (const memberId of _components.membersOf(sid)) expanded.add(memberId)
     }
-    onSelectionChange([...expanded])
+    onSelectionChange([...expanded], sequenceSelectionRefs(_design, _selectedElements))
   }
 
   // ── Crossover sprite hit areas (rebuilt each frame in _drawCrossoverIndicators) ──

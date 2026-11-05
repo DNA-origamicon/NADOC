@@ -88,6 +88,8 @@ class _RegionInterval(BaseModel):
 
 
 class _FullAutostapleBody(BaseModel):
+    # Recorded routing semantics; missing historical params replay as False.
+    frame_scoped_crossovers: bool = True
     history_seed: str | None = None
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None
@@ -99,7 +101,7 @@ class _FullAutostapleBody(BaseModel):
 
 
 def autostaple_params(body: "_FullAutostapleBody") -> dict:
-    """Recorded params; whole-structure records keep their historical shape."""
+    """Record routing semantics; omit the region for whole-structure runs."""
     params = body.model_dump()
     if body.region is None:
         params.pop("region")

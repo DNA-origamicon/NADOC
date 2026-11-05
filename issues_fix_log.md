@@ -1305,3 +1305,29 @@ delta: 0. Backend FAST: 20,507 passed / 100 skipped; frontend: 863 files,
 10,041 passed / one skipped; four browser checks pass. Full-suite debt remains
 explicitly deferred. Final smoke and cleanup results live in the
 [merge audit](docs/audits/feature_history_merge_20261103.md).
+
+## ISSUE-178 — Frame-aware crossover lookup for swept parts (2026-11-04)
+
+The source bundle and continuation reused lattice cells, and a global cell map
+silently retained only the last helix. Candidates now resolve within each frame,
+including multiple segments with bp coverage. Both routing commands record the
+new lookup semantics; historical commands explicitly retain legacy semantics on
+replay. The new recorded regression failed before the fix and passes afterward,
+including publication-guard verification of the saved/reopened process. The user's
+`test.nadoc` remains unchanged; its separate loadout-history audit failure prevents
+agent publication of a derivative. `main.js` LOC delta: 0.
+
+Validation: 18 focused tests pass, including repair of an already legacy-routed
+part by a new recorded operation. The guarded four-command review reproducing
+`test.nadoc`'s bundle/sweep parameters has 59 source-bundle and 193 sweep staple
+crossovers; independent saved-file replay and a browser render check pass. Visual
+review inspected the screenshot; all 9,234,271 bytes of isolated review data were
+removed. Cylinder graph screening was recomputed; all records remain identical,
+with only the changed crossover source checksum updated. Lint passes.
+
+`test-smart` decision FAST: 20,620 passed, 8 failed, 19 skipped. Three change-related
+failures were corrected and rerun successfully. Remaining failures concern the
+CPD comparison packet and four unavailable-`/mnt/f` filesystem checks. FULL remains
+DEFERRED in `.nadoc-slow-pending`. The aggregate runtime gate fired at 485 seconds;
+triage found zero per-test budget violators, so no unrelated tests were reclassified
+and no limits changed. Compact evidence: `.development-artifacts/autostaple-frames-20261104/validation.json`.

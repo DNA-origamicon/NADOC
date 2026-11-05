@@ -170,7 +170,8 @@ def record_auto_crossover():
 
         current, report, _entry = record_feature(
             session, "auto-crossover", "Auto-crossover",
-            {"history_seed": history_seed, "sites_considered": stats["sites_considered"],
+            {"history_seed": history_seed, "frame_scoped_crossovers": True,
+             "sites_considered": stats["sites_considered"],
              "placed": stats["placed"]}, native,
         )
         return current, report, stats

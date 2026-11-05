@@ -95,6 +95,20 @@ function sequenceCellOf(rowIndex) {
 }
 
 describe('Base-selection synchronization', () => {
+  it('updates exact sections when selection changes from domain to crossover to clear', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    openSheet()
+    store.setState({ currentDesign: junctionFixture().design })
+    store.setState({ selection: { items: [{ kind: 'domain', strandId: 's', domainIndex: 1 }] } })
+    const marked = () => [...sequenceCellOf(0).querySelectorAll('.sheet-seq-selected-base')].map(el => el.textContent).join('')
+    expect(marked()).toBe('GCA')
+    expect(document.querySelector('.sheet-overhang-selection')).toBeNull()
+    store.setState({ selection: { items: [{ kind: 'crossover', id: 'xo' }] } })
+    expect(marked()).toBe('GATTTTTG')
+    store.setState({ selection: { items: [] } })
+    expect(marked()).toBe('')
+  })
+
   it('includes forced-ligation sequence, preserves arcs through search, and highlights inserted bases', () => {
     Element.prototype.scrollIntoView = vi.fn()
     openSheet()

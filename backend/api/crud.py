@@ -3356,6 +3356,7 @@ def _place_auto_crossovers(
     *,
     tip_only_strand_ids: frozenset[str] = frozenset(),
     kept_strand_ids: frozenset[str] = frozenset(),
+    frame_scoped: bool = True,
 ) -> tuple[Design, dict]:
     """Place all possible staple crossovers, skipping a margin around scaffold seams.
 
@@ -3454,7 +3455,7 @@ def _place_auto_crossovers(
     seams = scaffold_seam_positions(design)
     seam_margin = 7 if is_hc else 8
 
-    sites = all_valid_crossover_sites(design)
+    sites = all_valid_crossover_sites(design, frame_scoped=frame_scoped)
     min_autocrossover_segment_nt = 7 if is_hc else 8
     seen_pairs: set[tuple[str, str, int]] = set()
     current = design

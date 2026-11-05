@@ -1,3 +1,4 @@
+import { selectedSequenceKeys, highlightOverhangCell } from './sequence_selection.js'
 /**
  * spreadsheet.js — Strand Spreadsheet Panel
  *
@@ -136,17 +137,8 @@ function groupName(strand, strandGroups) {
 }
 
 /** Selected base keys grouped by the same strand projection used for display. */
-function _selectedBasePositions(state) {
-  const out = new Map()
-  const design = state?.currentDesign
-  const keys = new Set(canonicalSelection(state).items.filter(ref => ref.kind === 'base').map(ref => ref.key))
-  if (!design || !keys.size) return out
-  for (const strand of design.strands ?? []) {
-    const selected = strandSequenceDisplay(strand, design).runs
-      .flatMap(run => run.keys).filter(key => keys.has(key))
-    if (selected.length) out.set(strand.id, new Set(selected))
-  }
-  return out
+function _selectedSequenceKeys(state) {
+  return selectedSequenceKeys(state?.currentDesign, canonicalSelection(state).items)
 }
 
 function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, pins = null) {
@@ -529,7 +521,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const strandColors = state.strandColors ?? {}
     const strandGroups = state.strandGroups ?? []
     const highlightedIds = new Set(selectedStrandIds(state))
-    const selectedBases = _selectedBasePositions(state)
+    const selectedBases = _selectedSequenceKeys(state)
     for (const strandId of selectedBases.keys()) highlightedIds.add(strandId)
 
     _updateDatalist(strandGroups)
@@ -624,6 +616,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             const d5 = strand.domains[0]
             if (ovhg5p?.sequence) td.dataset.searchSequence = ovhg5p.sequence
             td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
+            highlightOverhangCell(td, d5, design, selectedBases.get(strand.id))
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
               const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
@@ -636,7 +629,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'sequence': {
-            const display = strandSequenceDisplay(strand, design)
+            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id))
             const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
@@ -699,6 +692,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             const d3 = strand.domains[strand.domains.length - 1]
             if (ovhg3p?.sequence) td.dataset.searchSequence = ovhg3p.sequence
             td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
+            highlightOverhangCell(td, d3, design, selectedBases.get(strand.id))
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
               const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
@@ -1233,7 +1227,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design = store.getState().currentDesign
     if (!design) return
     const state = store.getState()
-    const selectedBases = _selectedBasePositions(state)
+    const selectedBases = _selectedSequenceKeys(state)
     for (const strandId of selectedBases.keys()) selectedIds.add(strandId)
     // Must pass the same pins as the render pass — colour is a sort key, so a
     // different palette assignment here would reorder rows and misalign highlights.
@@ -1280,13 +1274,13 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return
     }
 
-    // Base highlighting changes sequence-cell DOM, while strand selection only needs
+    // Section highlighting changes sequence-cell DOM, while strand selection only needs
     // the cheaper row-class update.
-    const hasSelectedBases = canonicalSelection(newState).items.some(ref => ref.kind === 'base')
-    const hadSelectedBases = canonicalSelection(prevState).items.some(ref => ref.kind === 'base')
-    if (selChanged && (hasSelectedBases || hadSelectedBases)) {
+    const hasSelectedSections = canonicalSelection(newState).items.some(ref => ['base', 'end', 'bond', 'domain', 'overhang', 'crossover'].includes(ref.kind))
+    const hadSelectedSections = canonicalSelection(prevState).items.some(ref => ['base', 'end', 'bond', 'domain', 'overhang', 'crossover'].includes(ref.kind))
+    if (selChanged && (hasSelectedSections || hadSelectedSections)) {
       _rebuildTable(newState)
-      if (hasSelectedBases) {
+      if (hasSelectedSections) {
         const row = tbody.querySelector('tr.sheet-selected')
         row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
       }

@@ -3688,3 +3688,18 @@ Evidence: `docs/audits/vr_gpu_iterations_20261021.json`. Main.js task LOC delta:
   native undo/redo are covered. Real-browser optional import/save/reopen replay
   passes. The optimizer and molecular placement constants are unchanged.
 - Validation and cleanup: [final master integration audit](docs/audits/feature_history_merge_20261103.md).
+
+## ISSUE-178 — Autostaple shadows source cells after sweep continuation (2026-11-04, FIXED)
+
+`workspace/test.nadoc` has two lattice frames with the same ten cells. The saved
+full-autostaple placed 193 staple crossovers in the sweep and zero in the source
+bundle, leaving its ten staples as straight 56-nt strands. `all_valid_crossover_sites`
+used a global `(row, col) → helix` dictionary; later sweep helices replaced source
+helices. Frame-qualified lookup now retains all segments and respects their bp
+coverage. Both full-autostaple and standalone auto-crossover record the new
+`frame_scoped_crossovers` semantics; missing historical parameters retain legacy
+lookup for independent replay. Recorded sweep regression: both frames routed,
+order-independent candidates, no cross-frame candidates, guarded save/reopen/replay.
+The user's original file is unchanged. Its independent publication audit separately
+fails on unreplayed loadout fields (`AGENT_PROCESS_REQUIRED`); no derived copy of
+that file was published.

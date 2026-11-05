@@ -324,7 +324,7 @@
 }
 
 .sheet-seq-selected-base {
-  padding: 0 1px;
+  padding: 0;
   border-radius: 2px;
   background: #f2cc60;
   color: #111820;
@@ -387,4 +387,9 @@
 .sheet-color-input::-moz-color-swatch {
   border: none;
   border-radius: 2px;
+}
+
+.sheet-overhang-selection {
+  display: block;
+  margin-bottom: 3px;
 }
