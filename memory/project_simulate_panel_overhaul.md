@@ -11,6 +11,14 @@ metadata:
 
 ## Topic navigation and current boundaries
 
+November 4, 2026: desktop engine tabs use the VR-style curved shoulders and
+raised selection, retaining desktop colors and typography. The selector measures
+label/badge widths on resize: narrow rails clip and fade inactive labels beneath overlapping shoulders and expand the
+selected, hovered or keyboard-focused tab; wider rails restore all labels.
+Inactive faces have a subtle blue-gray gradient and a brighter curved outline.
+`engine_tab_layout.js` owns measurement; `engine_tabs_responsive.spec.js` covers
+resize, selection, hover and focus without creating molecular documents.
+
 Reorganized October 17, 2026. Read the retained contracts here, then only the
 matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.

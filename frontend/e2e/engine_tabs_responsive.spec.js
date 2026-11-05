@@ -1,0 +1,48 @@
+import { test, expect } from '@playwright/test'
+
+// No design writes: exercise the live selector in a visible, resizable review
+// mount. The app's empty-document sidebar otherwise disables these controls.
+test('engine tabs collapse only when needed and reveal selected, hovered and focused labels', async ({ page }) => {
+  await page.goto('/?doc=__e2e__responsive-engine-tabs')
+  await page.waitForSelector('.engine-selector-btn', { state: 'attached' })
+  await page.evaluate(() => {
+    const mount = document.querySelector('#engine-selector-mount')
+    document.body.append(mount)
+    Object.assign(mount.style, { position: 'fixed', top: '100px', left: '100px', width: '600px', zIndex: '99999', background: '#161b22' })
+  })
+  const mount = page.locator('#engine-selector-mount')
+  const buttons = mount.getByRole('tab')
+  await expect(mount).not.toHaveClass(/is-compact/)
+  await mount.evaluate(el => { el.style.width = '220px' })
+  await expect(mount).toHaveClass(/is-compact/)
+  await page.mouse.move(800, 500)
+  const labelWidth = button => button.locator('.engine-selector-label').evaluate(el => el.getBoundingClientRect().width)
+  for (let i = 0; i < await buttons.count(); i++) {
+    const button = buttons.nth(i)
+    await button.click()
+    await page.mouse.move(800, 500)
+    await expect(button).toHaveAttribute('aria-selected', 'true')
+    expect(await labelWidth(button)).toBeGreaterThan(0)
+    const other = buttons.nth((i + 1) % await buttons.count())
+    const partial = await other.locator('.engine-selector-label').evaluate(el => ({ width: el.clientWidth, full: el.scrollWidth, mask: getComputedStyle(el).maskImage }))
+    expect(partial.width).toBeGreaterThan(0)
+    expect(partial.width).toBeLessThanOrEqual(partial.full)
+    expect(await mount.locator('.engine-selector-btn:not(.is-active) .engine-selector-label').evaluateAll(labels => labels.some(el => el.clientWidth < el.scrollWidth))).toBe(true)
+    expect(partial.mask).toContain('linear-gradient')
+    await other.hover()
+    const revealed = await other.locator('.engine-selector-label').evaluate(el => ({ width: el.clientWidth, full: el.scrollWidth, mask: getComputedStyle(el).maskImage, overflow: getComputedStyle(el).overflow }))
+    expect(revealed.mask).toBe('none')
+    expect(revealed.overflow).toBe('visible')
+    expect(revealed.width).toBeGreaterThanOrEqual(revealed.full - 1)
+    await page.mouse.move(800, 500)
+  }
+  await buttons.first().click()
+  await page.mouse.move(800, 500)
+  await page.keyboard.press('Tab')
+  const focused = mount.locator(':focus-visible')
+  await expect(focused).toHaveCount(1)
+  expect(await labelWidth(focused)).toBeGreaterThan(0)
+  await mount.evaluate(el => { el.style.width = '600px' })
+  await expect(mount).not.toHaveClass(/is-compact/)
+  for (const button of await buttons.all()) expect(await labelWidth(button)).toBeGreaterThan(0)
+})
