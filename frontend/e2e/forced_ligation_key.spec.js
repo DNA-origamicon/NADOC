@@ -4,7 +4,7 @@
  *
  * What the vitest unit tests + smoke gate CANNOT cover: the REAL user gestures —
  * engage the End selection level, multi-select a 5′ end and a 3′ end (via a
- * ctrl-drag LASSO, or a plain-click then Ctrl-click — all feed canonical End refs),
+ * plain-drag LASSO, or a plain-click then Ctrl-click — all feed canonical End refs),
  * press 'i' or right-click an endpoint → the strands merge via /design/forced-ligation,
  * driven end-to-end through selection_manager + the main.js shortcut wiring.
  *

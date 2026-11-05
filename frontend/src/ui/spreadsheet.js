@@ -19,7 +19,7 @@ import { pushGroupUndo } from '../state/store.js'
 import { showToast } from './toast.js'
 import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/palette.js'
 import { canonicalSelection, selectedStrandIds } from '../scene/selection_model.js'
-import { parseBaseKey } from '../scene/base_ref.js'
+import { strandSequenceDisplay, renderStrandSequence, strandLength } from './strand_sequence_display.js'
 import { buildStrandDisplayIdMap } from './design_display_labels.js'
 import { recordNameEdit } from './name_edit_audit.js'
 
@@ -107,19 +107,6 @@ function domainLength(domain) {
   return Math.abs(domain.end_bp - domain.start_bp) + 1
 }
 
-function strandLength(strand, design) {
-  const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
-  return strand.domains.reduce((sum, d) => {
-    const helix = helixById[d.helix_id]
-    const lo = Math.min(d.start_bp, d.end_bp)
-    const hi = Math.max(d.start_bp, d.end_bp)
-    const skipDelta = helix?.loop_skips
-      ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
-      ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
-    return sum + domainLength(d) + skipDelta
-  }, 0)
-}
-
 function terminalOverhang(strand, design, which) {
   // which: '5p' | '3p'
   const domain = which === '5p' ? strand.domains[0] : strand.domains[strand.domains.length - 1]
@@ -148,208 +135,18 @@ function groupName(strand, strandGroups) {
   return group?.name ?? ''
 }
 
-/**
- * Build a display sequence string for a strand, including terminal extension
- * bracket notation at each end where a StrandExtension is attached.
- *
- * Example: "[TT]ACGTGCTA[CY3]" — [TT] is a 5′ extension; [CY3] is a 3′ modification.
- *
- * Returns null if the strand has no sequence and no extensions.
- *
- * @param {object} strand
- * @param {object} design
- * @returns {string|null}
- */
-const _RC = { A: 'T', T: 'A', G: 'C', C: 'G', N: 'N' }
-function _revComp(s) {
-  let out = ''
-  for (let i = s.length - 1; i >= 0; i--) out += _RC[s[i].toUpperCase()] ?? 'N'
-  return out
-}
-
-/** Live reverse-complement sequence for an OH-binder strand from the overhang(s)
- *  it binds. Pad-then-RC per LESSONS F3 (an overhang's stored sequence can be
- *  shorter than the backing domain → trailing N's). Returns null when no bound
- *  overhang has a sequence yet. */
-function _liveBinderSequence(strand, design) {
-  const overhangs = design?.overhangs ?? []
-  let live = '', any = false
-  for (const d of (strand.domains ?? [])) {
-    const len = domainLength(d)
-    const spec = d.binds_overhang_id
-      ? overhangs.find(o => o.id === d.binds_overhang_id)
-      : null
-    if (spec?.sequence) {
-      live += _revComp(spec.sequence.slice(0, len).padEnd(len, 'N'))
-      any = true
-    } else {
-      live += 'N'.repeat(len)
-    }
-  }
-  return any ? live : null
-}
-
-function _strandDisplaySequence(strand, design) {
-  const extensions = design?.extensions ?? []
-  const domains    = strand.domains ?? []
-  const lastIdx    = domains.length - 1
-
-  // Identify terminal overhang domains so we can strip them from the displayed
-  // sequence — the dedicated ovhg_5p / ovhg_3p columns show those separately.
-  const has5pOvhg = lastIdx >= 0 && domains[0].overhang_id != null
-  const has3pOvhg = lastIdx >= 0 && domains[lastIdx].overhang_id != null
-
-  const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
-  const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
-  const hasExtensions = !!(ext5 || ext3)
-
-  // OH-binder strands derive their sequence live from the bound overhang(s) so
-  // generating an overhang sequence shows the reverse complement here at once,
-  // even before "Assign staple sequences" materialises strand.sequence.
-  let assembledSeq = strand.sequence
-  if (!assembledSeq && domains.some(d => d.binds_overhang_id)) {
-    assembledSeq = _liveBinderSequence(strand, design)
-  }
-
-  if (!assembledSeq && !hasExtensions) return null
-
-  // Strip overhang bases from both ends of the assembled sequence.
-  let seq = assembledSeq ?? ''
-  if (seq && domains.length > 0) {
-    const trim5 = has5pOvhg ? domainLength(domains[0])       : 0
-    const trim3 = has3pOvhg ? domainLength(domains[lastIdx]) : 0
-    seq = seq.slice(trim5, trim3 > 0 ? seq.length - trim3 : undefined)
-  }
-  let result = seq
-
-  // Prepend/append terminal extension bracket notation.
-  // Format: [SEQ], [/MOD], or [SEQ/MOD]
-  function _extBracket(ext) {
-    const s = (ext.sequence ?? '').toUpperCase()
-    const m = (ext.modification ?? '').toUpperCase()
-    if (s && m) return `[${s}/${m}]`
-    if (s)      return `[${s}]`
-    return              `[/${m}]`
-  }
-  const prefixLen = ext5 ? _extBracket(ext5).length : 0
-  if (ext5) result = _extBracket(ext5) + result
-  if (ext3) result = result + _extBracket(ext3)
-
-  // Inject crossover extra-base brackets at each inter-domain junction.
-  // strand.domains is ordered 5'→3'; for each adjacent pair find the matching
-  // crossover and insert [XB] at the cumulative character offset.
-  // Overhang domains are skipped — they are ssDNA and cannot have crossovers,
-  // and their characters are not present in the (trimmed) result string.
-  const crossovers = design?.crossovers ?? []
-  if (crossovers.length && domains.length > 1) {
-    let charOffset = 0   // chars consumed by non-ovhg domains so far
-    let insertions = 0   // chars already inserted by prior brackets
-
-    for (let i = 0; i < domains.length - 1; i++) {
-      const d = domains[i]
-      // Overhang domains are not in the displayed sequence — skip offset accumulation.
-      if (d.overhang_id != null) continue
-
-      const domLen = Math.abs(d.end_bp - d.start_bp) + 1
-      charOffset  += domLen
-
-      const nextD = domains[i + 1]
-      // No crossover can connect to a ssDNA overhang domain.
-      if (nextD.overhang_id != null) continue
-
-      // 3' end of domain[i] in bp-index space.
-      // For both FORWARD and REVERSE, domain_bp_range ends at end_bp (inclusive),
-      // so end_bp is always the 3' junction regardless of direction.
-      const junctionBp = d.end_bp
-
-      const xo = crossovers.find(x => {
-        const matchA = x.half_a.helix_id === d.helix_id &&
-                       x.half_a.index    === junctionBp &&
-                       x.half_a.strand   === d.direction &&
-                       x.half_b.helix_id === nextD.helix_id &&
-                       x.half_b.strand   === nextD.direction
-        const matchB = x.half_b.helix_id === d.helix_id &&
-                       x.half_b.index    === junctionBp &&
-                       x.half_b.strand   === d.direction &&
-                       x.half_a.helix_id === nextD.helix_id &&
-                       x.half_a.strand   === nextD.direction
-        return matchA || matchB
-      })
-
-      if (xo?.extra_bases) {
-        const bracket = `[${xo.extra_bases}]`
-        const pos     = prefixLen + charOffset + insertions
-        result        = result.slice(0, pos) + bracket + result.slice(pos)
-        insertions   += bracket.length
-      }
-    }
-  }
-
-  return result || null
-}
-
-/** Selected ordinary bases grouped by owning strand and 0-based strand position. */
+/** Selected base keys grouped by the same strand projection used for display. */
 function _selectedBasePositions(state) {
   const out = new Map()
   const design = state?.currentDesign
-  const geometry = state?.currentGeometry ?? []
-  if (!design) return out
-  const helixById = new Map((design.helices ?? []).map(h => [h.id, h]))
-  for (const ref of canonicalSelection(state).items) {
-    if (ref.kind !== 'base') continue
-    const p = parseBaseKey(ref.key)
-    if (!p || p.helix_id.startsWith('__')) continue
-    const nuc = geometry.find(n => n.helix_id === p.helix_id && n.bp_index === p.bp_index
-      && String(n.direction).toUpperCase() === String(p.direction).toUpperCase()
-      && Number(n.copy_k ?? n.copy ?? 0) === Number(p.copy ?? 0))
-    const strand = design.strands?.find(s => s.id === nuc?.strand_id)
-    if (!strand) continue
-    const di = strand.domains.findIndex(d => d.helix_id === p.helix_id
-      && String(d.direction).toUpperCase() === String(p.direction).toUpperCase()
-      && p.bp_index >= Math.min(d.start_bp, d.end_bp) && p.bp_index <= Math.max(d.start_bp, d.end_bp))
-    if (di < 0) continue
-    let pos = 0
-    for (let i = 0; i < di; i++) {
-      const d = strand.domains[i], lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
-      const delta = helixById.get(d.helix_id)?.loop_skips
-        ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi).reduce((s, ls) => s + ls.delta, 0) ?? 0
-      pos += domainLength(d) + delta
-    }
-    pos += Math.abs(p.bp_index - strand.domains[di].start_bp) + Number(p.copy ?? 0)
-    if (!out.has(strand.id)) out.set(strand.id, new Set())
-    out.get(strand.id).add(pos)
+  const keys = new Set(canonicalSelection(state).items.filter(ref => ref.kind === 'base').map(ref => ref.key))
+  if (!design || !keys.size) return out
+  for (const strand of design.strands ?? []) {
+    const selected = strandSequenceDisplay(strand, design).runs
+      .flatMap(run => run.keys).filter(key => keys.has(key))
+    if (selected.length) out.set(strand.id, new Set(selected))
   }
   return out
-}
-
-function _renderHighlightedSequence(container, displaySeq, strand, design, selectedPositions) {
-  const domains = strand.domains ?? []
-  const trim5 = domains[0]?.overhang_id != null ? domainLength(domains[0]) : 0
-  const ext5 = (design.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'five_prime')
-  const extPrefix = ext5
-    ? `[${(ext5.sequence ?? '').toUpperCase()}${ext5.modification ? `/${String(ext5.modification).toUpperCase()}` : ''}]`.length
-    : 0
-  const displayIndices = new Set()
-  for (const pos of selectedPositions ?? []) {
-    if (pos < trim5) continue // terminal overhang lives in its dedicated column
-    let index = extPrefix + pos - trim5
-    let consumed = 0
-    for (let i = 0; i < domains.length - 1; i++) {
-      const d = domains[i]
-      if (d.overhang_id == null) consumed += domainLength(d)
-      const xo = (design.crossovers ?? []).find(x => x.extra_bases && (
-        (x.half_a.helix_id === d.helix_id && x.half_a.index === d.end_bp && x.half_a.strand === d.direction)
-        || (x.half_b.helix_id === d.helix_id && x.half_b.index === d.end_bp && x.half_b.strand === d.direction)))
-      if (xo && pos - trim5 >= consumed) index += xo.extra_bases.length + 2
-    }
-    if (index >= 0 && index < displaySeq.length) displayIndices.add(index)
-  }
-  for (let i = 0; i < displaySeq.length; i++) {
-    const char = document.createElement(displayIndices.has(i) ? 'mark' : 'span')
-    if (displayIndices.has(i)) char.className = 'sheet-seq-selected-base'
-    char.textContent = displaySeq[i]
-    container.appendChild(char)
-  }
 }
 
 function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, pins = null) {
@@ -839,12 +636,13 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'sequence': {
-            const displaySeq = _strandDisplaySequence(strand, design)
+            const display = strandSequenceDisplay(strand, design)
+            const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq sheet-search-text'
               td.dataset.searchSequence = displaySeq
-              _renderHighlightedSequence(span, displaySeq, strand, design, selectedBases.get(strand.id))
+              renderStrandSequence(span, display, selectedBases.get(strand.id))
               span.title = displaySeq
               td.appendChild(span)
             } else {

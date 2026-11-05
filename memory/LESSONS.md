@@ -85,6 +85,7 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **E8** — Co-motion keyed on the record only ONE fork produces — rotate a DIFFERENT-length overhang connection and the driven overhang stays behind (equal-length works fine). [detail](LESSONS_archive.md#e8)
 
 ## F. Length / index conventions
+- **F8** — Crossover inserts live outside `strand.sequence` and backbone bead entries. Include forced ligations, match both strand-path endpoints, and preserve `__xb__` simulation indices in sequence display and selection. [detail](LESSONS_archive.md#f8)
 - **F1** — caDNAno `length_bp` is NOT physical extent — dividing/indexing by `length_bp` overshoots the axis end hundreds of bp. **Recurred 2026-07-13** in the FEM display: `rise_geom = |axis_end−axis_start| / length_bp` collapsed to ~½ on ssDNA-tail helices (axis_end = paired end, length_bp counts the tail) → 20 nm stretched overhang↔staple bonds. Fix = the true bead rise `BDNA_RISE_PER_BP`, not any ratio over `length_bp`. See [[project_snupi_gaps]]. [detail](LESSONS_archive.md#f1)
 - **F2** — bp_start has three conventions — inline conversion math is error-prone; use `bp_indexing.py`. [detail](LESSONS_archive.md#f2)
 - **F3** — `OverhangSpec.sequence` shorter than the strand domain — linker complement rendered all-N despite a bound sequence. [detail](LESSONS_archive.md#f3)

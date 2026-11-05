@@ -137,7 +137,8 @@ export function isSelectionRefLive(input, design) {
     case 'end': {
       const key = parseBaseKey(ref.key)
       if (!key) return false
-      if (key.helix_id === '__xb__') return !!design.crossovers?.some(item => item.id === key.crossover_id)
+      if (key.helix_id === '__xb__') return [design.crossovers, design.forced_ligations]
+        .some(items => items?.some(item => item.id === key.crossover_id))
       if (key.helix_id.startsWith('__ext_')) {
         return !!design.extensions?.some(item => item.id === key.helix_id.slice('__ext_'.length))
       }

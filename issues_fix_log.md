@@ -1,5 +1,24 @@
 # Issues fix log
 
+## ISSUE-177 — Complete junction sequence display and default picking (2026-11-04)
+
+Root cause: separate consumers treated domain sequences and backbone meshes as
+complete inventories, omitted forced ligations, and used independent display
+offset arithmetic. Shared topology ownership now supplies copyable sequence runs
+and synthetic-base pick entries. The pure projection also preserves loop/skip
+offsets and the renderer's 5′→3′ insert indexing.
+
+The broad frontend run passed 10,049 tests and exposed one missing `scrollIntoView`
+mock in the new test; corrected focused coverage passes all 73 checks. Browser
+fixture corrections account for occlusion, selection-dependent display radii,
+Escape preserving selection, and the sidebar's existing expanded state. Production
+selection rules and assertions were retained. The overhang gate now uses recorded
+authoring instead of an unavailable workstation-specific file. The old lasso tests
+now use the existing unmodified-drag gesture; the base lasso uses a side view to
+avoid an axial view's overlapping glow spheres. Native ligation's merged-domain
+case has separate sequence and ownership regressions. Final checks and
+cleanup: [audit](docs/audits/extra_base_ui_20261104.json). `main.js` LOC delta: 0.
+
 Tracks the "fix next issue" loop (backlog + protocol in `issues_ledger.md`). One row per phase shipped,
 one commit per phase. Mirrors `main_js_extraction_log.md` for the carve-up.
 
@@ -202,6 +221,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-177 | Domain text / backbone mesh inventories omit junction-owned residues → forced-ligation sequences, default picks and live references diverged → share exact path ownership and retain simulation-index keys. | Projected bead centers can be occluded; the browser fixture now verifies the exposed rendered target before clicking. | [F8](memory/LESSONS_archive.md#f8) |
 | ISSUE-162 | Full treated anchor-outward extension indices as helix-axis bp indices → helix polarity selected the wrong chemical traversal → the host attached to the far tip. Use extension terminal-domain ordering for both cones and attachment arcs. | No alternative molecular-placement fix was tried; initial fixture identity/disposal errors were corrected before the genuine red regression. | `helix_renderer.extensions.test.js`; all12 roots checked in the isolated app |
 | ISSUE-160 | Generic allocation and a self-referencing recursive closure retained copied graphs until collection; repeated header factory introspection then consumed the remaining capture deadline. Empty destinations, exact fixed-shape copying, acyclic recursion and equivalent fresh header defaults remove that work without changing authority or budgets. | General leaf seeding and prefilled dictionaries added overhead. Crossover profiling and a failing weak-reference lifetime regression identified the narrower fixes. | `test_part_model_copy.py`, capture admission/copy regressions; qualification in feature-history handoff |
 | ISSUE-159 | Rebuild starts at the recipe root → host save identity was absent; asynchronous autosave also replaced the captured frontend object → valid private jobs became stale or saved under a new path. Preserve host identity and coordinate saves with revision-bound asset publication. | Ignoring object identity alone did not prevent in-flight save acknowledgements or preserve the publication's original path. Both boundaries needed correction. | `asset_operation_requests.test.js`, `asset_save_coordination.test.js`, `test_part_asset_routes.py` and the asset browser flow |

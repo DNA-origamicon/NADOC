@@ -303,6 +303,26 @@
   letter-spacing: 0.02em;
 }
 
+/* Decoration only: copied and searched sequence contains just the bases. */
+.sheet-seq-extra {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.25em;
+  white-space: nowrap;
+}
+
+.sheet-seq-extra::before {
+  content: '';
+  position: absolute;
+  top: 0.05em;
+  left: 0;
+  right: 0;
+  height: 0.3em;
+  border-top: 1px solid currentColor;
+  border-radius: 50% 50% 0 0;
+  pointer-events: none;
+}
+
 .sheet-seq-selected-base {
   padding: 0 1px;
   border-radius: 2px;

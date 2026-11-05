@@ -22,6 +22,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mountIds } from '../test-helpers/factory_dom.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
+import { junctionFixture } from '../test-helpers/strand_junction_fixture.js'
 
 vi.mock('../api/client.js', () => new Proxy({}, {
   get: () => vi.fn(async () => ({})),
@@ -94,6 +95,28 @@ function sequenceCellOf(rowIndex) {
 }
 
 describe('Base-selection synchronization', () => {
+  it('includes forced-ligation sequence, preserves arcs through search, and highlights inserted bases', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    openSheet()
+    const { design } = junctionFixture(true)
+    store.setState({ currentDesign: design })
+    vi.runOnlyPendingTimers()
+    const cell = sequenceCellOf(0)
+    expect(cell.dataset.searchSequence).toBe('ACGATTTTTGCA')
+    expect(cell.querySelector('.sheet-seq').textContent).toBe('ACGATTTTTGCA')
+    const search = document.getElementById('spreadsheet-sequence-search')
+    search.value = 'GATT'
+    search.dispatchEvent(new Event('input'))
+    vi.runOnlyPendingTimers()
+    expect(cell.querySelector('.sheet-seq-extra').textContent).toBe('ATTTTT')
+    expect([...cell.querySelectorAll('.sheet-search-highlight')].map(el => el.textContent).join('')).toBe('GATT')
+    store.setState({ selection: { items: [{ kind: 'base', key: '__xb__:fl:1:0' }] } })
+    const row = document.querySelector('tr[data-strand-id="s"]')
+    expect(row.classList.contains('sheet-selected')).toBe(true)
+    expect(row.querySelector('.sheet-seq-extra .sheet-seq-selected-base').textContent).toBe('A')
+    expect(row.querySelector('td[data-col="length"]').textContent).toBe('12')
+  })
+
   it('scrolls to the owning strand and highlights selected letters while open', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView

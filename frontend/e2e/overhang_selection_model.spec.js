@@ -1,16 +1,20 @@
 import { test, expect } from '@playwright/test'
-
-const FIXTURE = '/home/jojo/Work/NADOC/workspace/Untitled.nadoc'
+import { loadScaffoldedPart } from './helpers/scene_harness.js'
 
 test('3D and sidebar overhang selection converge on one canonical ref', async ({ page }) => {
-  await page.goto('/')
-  await page.waitForSelector('#canvas')
-  await page.evaluate(async (path) => {
+  await loadScaffoldedPart(page, { doc: 'e2e-overhang-selection-model', name: 'overhang-selection-model' })
+  await page.evaluate(async () => {
     const api = await import('/src/api/client.js')
-    await api.loadDesign(path)
-    await api.getGeometry()
-    document.getElementById('welcome-screen')?.classList.add('hidden')
-  }, FIXTURE)
+    const testApi = window.__nadocTest
+    const helix = testApi.store.getState().currentDesign.helices[0]
+    const domain = { helix_id: helix.id, start_bp: 99, end_bp: 90, direction: 'REVERSE' }
+    await api.addStrand({ domains: [domain] })
+    await api.extrudeOverhang({ helixId: domain.helix_id, bpIndex: domain.end_bp,
+      direction: domain.direction, isFivePrime: false, neighborRow: 0, neighborCol: 1, lengthBp: 8 })
+    const nuc = testApi.store.getState().currentGeometry.find(n => n.overhang_id)
+    const [x, y, z] = nuc.backbone_position
+    testApi.applyCameraPoseForTest({ target: [x, y, z], position: [x + 15, y - 15, z + 5], up: [0, 0, 1] })
+  })
   await page.waitForFunction(() => window.__nadocTest?.getOverhangBeadScreenPositions?.().length > 0)
 
   await page.evaluate(() => {
@@ -46,10 +50,8 @@ test('3D and sidebar overhang selection converge on one canonical ref', async ({
   ).toBe(0)
 
   // The sidebar is the other entry path; it must produce the identical snapshot.
-  await page.evaluate(() => {
-    document.querySelector('.right-tab-btn[data-tab="overhangs"]')?.click()
-    document.getElementById('overhang-panel-heading')?.click()
-  })
+  await page.locator('.right-tab-btn[data-tab="overhangs"]').click()
+  if (!await page.locator('#overhang-list').isVisible()) await page.locator('#overhang-panel-heading').click()
   const row = page.locator(`#overhang-list [data-overhang-id="${picked.point.id}"]`)
   await expect(row).toBeVisible()
   await page.evaluate((id) => {
