@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-04",
+  "issue": "ISSUE-177",
+  "scope": "Strand spreadsheet junction sequences and default strand/base picking",
+  "behavior": [
+    "Both ordinary crossovers and forced ligations contribute contiguous copyable sequence, with CSS-only arcs over inserts.",
+    "Lengths and selected-letter highlighting use the same ordered strand path, including loop/skip offsets and merged internal ligation edges.",
+    "Default drill and Strand picking include extra-base beads with their actual owner and simulation-index key; atomistic drill preserves that identity.",
+    "Forced-ligation base references survive reconciliation after refresh."
+  ],
+  "d003_read_only_source_table_check": {
+    "path": "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc",
+    "sha256": "8f72138fa477bb40fd015316840999aa3148a8429c1ed2cd6ec54cf5f24a8e0e",
+    "sourceRows": 210,
+    "sourceEvidence": ".development-artifacts/all-origami/runs/D003/recovered-20261104/evidence/image-sequences.json",
+    "sourceEvidenceSha256": "5eae4ab7c6e235ce6e2d1150fc5ecfbfad791b43e4a8906fba6efb7938f48ee7",
+    "allPublishedStaplesMatch": true,
+    "mismatches": [],
+    "insertRuns": 40,
+    "insertedBases": 226,
+    "ownedConnections": 40,
+    "projectionAndLengthMs": 541,
+    "example": "TGGATAGCAAGCCCGATTTTTAATCGTAAACGCCAT"
+  },
+  "validation": {
+    "frontend_broad_initial": {
+      "filesPassed": 864,
+      "testsPassed": 10049,
+      "testsSkipped": 1,
+      "failed": 1,
+      "failure": "The new spreadsheet regression lacked a jsdom scrollIntoView stub; corrected and rerun in the focused suite."
+    },
+    "frontend_final_focused": {
+      "filesPassed": 6,
+      "testsPassed": 73,
+      "includes": "Spreadsheet factories, both connection types, both internal-edge directions, base ownership, reference liveness and selection architecture."
+    },
+    "merged_domain_regressions": "Both sequence and selection-ownership regressions failed before the internal-edge fix and pass afterward.",
+    "production_build": "passed",
+    "required_selection_browser_cases": {
+      "passedAcrossRuns": 14,
+      "files": [
+        "base_select.spec.js",
+        "drill_v2_select.spec.js",
+        "forced_ligation_key.spec.js",
+        "cluster_selection_model.spec.js",
+        "overhang_selection_model.spec.js"
+      ]
+    },
+    "new_extra_base_browser_case": "passed on final implementation: default strand→base, explicit Base parity, refresh, arc style, selected letter and exact clipboard text",
+    "smoke": {
+      "passed": 23,
+      "command": "just smoke"
+    },
+    "ruff": "passed",
+    "memory_lint": "0 errors; 3 existing size warnings in unrelated memory files",
+    "diff_check": "passed"
+  },
+  "test_harness_corrections": [
+    "Use recorded native construction instead of a missing workstation-specific overhang file.",
+    "Use the existing unmodified-drag lasso gesture; Ctrl-drag is already a no-op in HEAD.",
+    "Frame the lasso from the side and use four pointer-move steps, avoiding an axial close-up that exceeded the unchanged 30-second deadline while rendering selected glow.",
+    "Resolve exposed extra-base targets from actual rendered meshes; account for selection radii and existing Escape/sidebar semantics."
+  ],
+  "isolation": "Heavy checks serialized through validation_guard. Browser runs use dedicated servers and TemporaryDirectory workspaces; global teardown and the cleanup reporter also run on failures. The initial shared-workspace run encountered existing missing /mnt/f job records; later runs used empty workspaces.",
+  "cleanup": {
+    "remainingSharedTestArtifacts": [],
+    "remainingBrowserOutputs": [],
+    "remainingTestCredentials": [],
+    "remainingTemporaryWorkspaces": [],
+    "newSharedProjectStores": [],
+    "smokeExampleUnchanged": true
+  },
+  "main_js_loc_delta": 0,
+  "native_changes": "D003 was read only; no native authoring or molecular-placement changes were made for this UI fix."
+}

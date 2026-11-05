@@ -30,6 +30,24 @@ files carry all the state a cold session needs.
 
 ---
 
+## ISSUE-177 — Junction bases missing from spreadsheet and default drill (2026-11-04)
+
+- [x] D003's forced-ligation inserts were absent from both strand spreadsheets;
+  ordinary crossover inserts used brackets that polluted copied sequences.
+  Default picking omitted the separate insert mesh, and selection reconciliation
+  recognized only ordinary crossovers as owners of `__xb__` base references.
+- A shared projection matches both endpoints along the ordered strand path,
+  includes both connection types and loop/skip offsets, and uses CSS arcs without
+  clipboard characters. Length and selected-letter highlighting include inserts.
+- Default and Strand picking include the insert mesh with its actual strand owner
+  and simulation-index base key. Atomistic drill uses the same identity; forced
+  ligation references survive refresh. No molecular sequence or geometry changed.
+- D003 read-only check: 40 inserted runs / 226 bases, with all sequence lengths
+  agreeing. The real browser verifies strand→base, explicit Base parity, refresh,
+  arc decoration, selected letters and exact clipboard text. Tests construct
+  temporary parts through recorded editor commands and remove their artifacts.
+- Validation: [audit](docs/audits/extra_base_ui_20261104.json). `main.js` LOC delta: 0.
+
 ## Session kickoff prompt (paste at the start of a fix session)
 
 ```

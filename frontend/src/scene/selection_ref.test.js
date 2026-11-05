@@ -153,6 +153,7 @@ describe('selection ref design liveness', () => {
     for (const ref of [
       { kind: 'strand', id: 's1' }, { kind: 'domain', strandId: 's1', domainIndex: 0 },
       { kind: 'base', key: 'h1:4:FORWARD' }, { kind: 'base', key: '__xb__:x1:0' },
+      { kind: 'base', key: '__xb__:f1:0' },
       { kind: 'base', key: '__ext_e1:0:FORWARD' }, { kind: 'base', key: '__lnk__l1:0:FORWARD' },
       { kind: 'crossover', id: 'f1', subtype: 'forced_ligation' },
       { kind: 'bond', fromKey: 'h1:3:FORWARD', toKey: 'h1:4:FORWARD', strandId: 's1' },

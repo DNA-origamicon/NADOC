@@ -624,6 +624,19 @@ Symptom: "Relax" on a direct (root-to-root / end-to-root) overhang connection ro
 
 ## F. Length / index conventions
 
+<a id="f8"></a>
+### F8. Domain sequences and backbone meshes omit junction-owned residues (2026-11-04, ISSUE-177)
+
+D003 exposed two incomplete inventories: the spreadsheet added ordinary crossover
+inserts but omitted forced-ligation inserts, while default picking searched only
+backbone meshes. Base-reference reconciliation also omitted forced ligations.
+Resolve junction ownership from both endpoints along the ordered strand path,
+including internal edges after native ligation merges adjacent domains. Use
+the same sequence projection for text and highlighting, and preserve renderer
+`simK` as the `__xb__` index. CSS decorations must add no clipboard characters.
+Test actual raycast gestures and clipboard text; projected centers can be occluded
+by neighboring beads, particularly after selection changes display radii.
+
 <a id="f1"></a>
 ### F1. caDNAno `length_bp` is NOT physical extent
 `length_bp` is the FULL caDNAno array length. `bp_start + length_bp - 1` lies hundreds of bp past the actual axis end. Code that divides or indexes into the active helix using `length_bp` is wrong.

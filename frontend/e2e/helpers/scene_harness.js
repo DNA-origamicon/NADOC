@@ -152,14 +152,14 @@ export async function altPickBeads(page, n = 2) {
 /**
  * Engage the End selection level (real filter button), then multi-select a valid
  * forced-ligation pair — one 5′ end + one 3′ end on DIFFERENT strands — with the
- * NORMAL selection gesture the user named first: a Ctrl-drag LASSO over the ends
+ * NORMAL selection gesture the user named first: an unmodified drag LASSO over the ends
  * (same end-bead set that Shift-click / Ctrl-click feed). A lasso is a single,
  * pixel-precision-free gesture, so it's far more reliable than clicking a small
  * WebGL bead.
  *
  * `getEndBeadScreenPositions()` gives on-screen end beads with polarity + strand
  * id, so we choose the CLOSEST valid pair whose tight bounding box contains no
- * OTHER end (→ the lasso captures exactly those two), then Ctrl-drag that box.
+ * OTHER end (→ the lasso captures exactly those two), then drag that box.
  * Returns { count, five, three } — the identities selected (for assertion).
  */
 export async function selectEndsForLigation(page) {
@@ -200,12 +200,10 @@ export async function selectEndsForLigation(page) {
     if (boxes.some(box => covered({ x: box.x1, y: box.y1 }) || covered({ x: box.x2, y: box.y2 }) ||
       ends.some(e => e !== box.target && e.x >= box.x1 && e.x <= box.x2 && e.y >= box.y1 && e.y <= box.y2))) continue
     for (const box of boxes) {
-      await page.keyboard.down('Control')
       await page.mouse.move(box.x1, box.y1)
       await page.mouse.down()
       await page.mouse.move(box.x2, box.y2, { steps: 4 })
       await page.mouse.up()
-      await page.keyboard.up('Control')
       await page.waitForTimeout(80)
     }
     await page.waitForTimeout(200)

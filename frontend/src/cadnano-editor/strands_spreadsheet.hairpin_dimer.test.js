@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mountIds } from '../test-helpers/factory_dom.js'
 import { makeDesign, makeReport } from '../test-helpers/hairpin_dimer_fixture.js'
+import { junctionFixture } from '../test-helpers/strand_junction_fixture.js'
 
 vi.mock('./api.js', () => ({
   patchStrand: vi.fn(), patchOverhang: vi.fn(), generateOverhangRandomSequence: vi.fn(),
@@ -31,6 +32,14 @@ beforeEach(() => {
 })
 
 describe('cadnano spreadsheet hairpin/dimer warnings', () => {
+  it('shares continuous extra-base sequence and arc decoration with the 3D sheet', () => {
+    sheet.update(junctionFixture(true).design)
+    const cell = document.querySelector('td[data-col="sequence"]')
+    expect(cell.dataset.searchSequence).toBe('ACGATTTTTGCA')
+    expect(cell.querySelector('.sheet-seq').textContent).toBe('ACGATTTTTGCA')
+    expect(cell.querySelector('.sheet-seq-extra').textContent).toBe('ATTTTT')
+  })
+
   it('marks flagged strands on the next update after a report arrives', () => {
     expect(document.querySelector('.hd-warn-icon')).toBeNull()
     report = makeReport()

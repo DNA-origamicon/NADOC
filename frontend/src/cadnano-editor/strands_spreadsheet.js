@@ -1,3 +1,4 @@
+import { strandSequenceDisplay, renderStrandSequence, strandLength } from '../ui/strand_sequence_display.js'
 /**
  * strands_spreadsheet.js — Strand Spreadsheet Panel (cadnano editor)
  *
@@ -51,19 +52,6 @@ function domainLength(domain) {
   return Math.abs(domain.end_bp - domain.start_bp) + 1
 }
 
-function strandLength(strand, design) {
-  const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
-  return strand.domains.reduce((sum, d) => {
-    const helix = helixById[d.helix_id]
-    const lo = Math.min(d.start_bp, d.end_bp)
-    const hi = Math.max(d.start_bp, d.end_bp)
-    const skipDelta = helix?.loop_skips
-      ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
-      ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
-    return sum + domainLength(d) + skipDelta
-  }, 0)
-}
-
 function terminalOverhang(strand, design, which) {
   const domain = which === '5p' ? strand.domains[0] : strand.domains[strand.domains.length - 1]
   if (!domain?.overhang_id) return null
@@ -75,92 +63,6 @@ function effectiveColor(strand) {
   // palette in one place, so pathview / sliceview / spreadsheet all agree.
   // Caller must have run ensureStapleColors(design) first (done in sortedStrands).
   return stapleColorOf(strand)
-}
-
-function _strandDisplaySequence(strand, design) {
-  const extensions = design?.extensions ?? []
-  const domains    = strand.domains ?? []
-  const lastIdx    = domains.length - 1
-
-  // Identify terminal overhang domains so we can strip them from the displayed
-  // sequence — the dedicated ovhg_5p / ovhg_3p columns show those separately.
-  const has5pOvhg = lastIdx >= 0 && domains[0].overhang_id != null
-  const has3pOvhg = lastIdx >= 0 && domains[lastIdx].overhang_id != null
-
-  const ext5 = extensions.find(e => e.strand_id === strand.id && e.end === 'five_prime')
-  const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
-  const hasExtensions = !!(ext5 || ext3)
-
-  if (!strand.sequence && !hasExtensions) return null
-
-  // Strip overhang bases from both ends of the assembled sequence.
-  let seq = strand.sequence ?? ''
-  if (seq && domains.length > 0) {
-    const trim5 = has5pOvhg ? domainLength(domains[0])       : 0
-    const trim3 = has3pOvhg ? domainLength(domains[lastIdx]) : 0
-    seq = seq.slice(trim5, trim3 > 0 ? seq.length - trim3 : undefined)
-  }
-  let result = seq
-
-  function _extBracket(ext) {
-    const s = (ext.sequence ?? '').toUpperCase()
-    const m = (ext.modification ?? '').toUpperCase()
-    if (s && m) return `[${s}/${m}]`
-    if (s)      return `[${s}]`
-    return              `[/${m}]`
-  }
-  const prefixLen = ext5 ? _extBracket(ext5).length : 0
-  if (ext5) result = _extBracket(ext5) + result
-  if (ext3) result = result + _extBracket(ext3)
-
-  // Inject crossover extra-base brackets at each inter-domain junction.
-  // Overhang domains are skipped — they are ssDNA and cannot have crossovers,
-  // and their characters are not present in the (trimmed) result string.
-  const crossovers = design?.crossovers ?? []
-  if (crossovers.length && domains.length > 1) {
-    let charOffset = 0
-    let insertions = 0
-
-    for (let i = 0; i < domains.length - 1; i++) {
-      const d = domains[i]
-      // Overhang domains are not in the displayed sequence — skip offset accumulation.
-      if (d.overhang_id != null) continue
-
-      const domLen = Math.abs(d.end_bp - d.start_bp) + 1
-      charOffset  += domLen
-
-      const nextD = domains[i + 1]
-      // No crossover can connect to a ssDNA overhang domain.
-      if (nextD.overhang_id != null) continue
-
-      // 3' end of domain[i] in bp-index space — end_bp is the 3' junction
-      // for both FORWARD and REVERSE since domain_bp_range ends at end_bp.
-      const junctionBp = d.end_bp
-
-      const xo = crossovers.find(x => {
-        const matchA = x.half_a.helix_id === d.helix_id &&
-                       x.half_a.index    === junctionBp &&
-                       x.half_a.strand   === d.direction &&
-                       x.half_b.helix_id === nextD.helix_id &&
-                       x.half_b.strand   === nextD.direction
-        const matchB = x.half_b.helix_id === d.helix_id &&
-                       x.half_b.index    === junctionBp &&
-                       x.half_b.strand   === d.direction &&
-                       x.half_a.helix_id === nextD.helix_id &&
-                       x.half_a.strand   === nextD.direction
-        return matchA || matchB
-      })
-
-      if (xo?.extra_bases) {
-        const bracket = `[${xo.extra_bases}]`
-        const pos     = prefixLen + charOffset + insertions
-        result        = result.slice(0, pos) + bracket + result.slice(pos)
-        insertions   += bracket.length
-      }
-    }
-  }
-
-  return result || null
 }
 
 function sortedStrands(design, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER) {
@@ -427,11 +329,12 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             break
           }
           case 'sequence': {
-            const displaySeq = _strandDisplaySequence(strand, design)
+            const display = strandSequenceDisplay(strand, design)
+            const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq sheet-search-text'
-              span.textContent = displaySeq
+              renderStrandSequence(span, display)
               span.title = displaySeq
               td.dataset.searchSequence = displaySeq
               td.appendChild(span)

@@ -156,8 +156,24 @@ test.describe('Base-level selection', () => {
     expect(await poolOf(page), 'toggling the same base clears it').toHaveLength(0)
   })
 
-  test('a Ctrl-drag lasso captures many bases at once', async ({ page }) => {
-    await loadFramedPart(page, { doc: 'e2e-base-lasso', name: 'base-lasso' })
+  test('an unmodified drag lasso captures many bases at once', async ({ page }) => {
+    await loadScaffoldedPart(page, { doc: 'e2e-base-lasso', name: 'base-lasso' })
+    // View the helix from its side. The axial zoom used for single-bead tests
+    // stacks hundreds of bases in projection and makes a large selection fill
+    // the viewport with overlapping glow spheres.
+    await page.evaluate(async () => {
+      const THREE = await import('/node_modules/three/build/three.module.js')
+      const api = window.__nadocTest
+      const box = new THREE.Box3(), matrix = new THREE.Matrix4(), point = new THREE.Vector3()
+      for (const entry of api.getDesignRenderer().getBackboneEntries()) {
+        entry.instMesh.getMatrixAt(entry.id, matrix)
+        box.expandByPoint(point.setFromMatrixPosition(matrix))
+      }
+      const center = box.getCenter(new THREE.Vector3())
+      const distance = box.getSize(new THREE.Vector3()).length() * 1.2
+      api.applyCameraPoseForTest({ target: center.toArray(),
+        position: center.clone().add(new THREE.Vector3(distance, 0, 0)).toArray(), up: [0, 0, 1] })
+    })
     await engageBaseLevel(page)
 
     const cands = await spreadBeads(page)
@@ -165,13 +181,11 @@ test.describe('Base-level selection', () => {
     const x1 = Math.min(...xs), x2 = Math.max(...xs)
     const y1 = Math.min(...ys), y2 = Math.max(...ys)
 
-    await page.keyboard.down('Control')
     await page.mouse.move(x1 - 5, y1 - 5)
     await page.mouse.down()
-    await page.mouse.move((x1 + x2) / 2, (y1 + y2) / 2, { steps: 8 })
-    await page.mouse.move(x2 + 5, y2 + 5, { steps: 8 })
+    await page.mouse.move((x1 + x2) / 2, (y1 + y2) / 2, { steps: 2 })
+    await page.mouse.move(x2 + 5, y2 + 5, { steps: 2 })
     await page.mouse.up()
-    await page.keyboard.up('Control')
     await page.waitForTimeout(200)
 
     const pool = await poolOf(page)

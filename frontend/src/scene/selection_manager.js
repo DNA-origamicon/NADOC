@@ -1,3 +1,4 @@
+import { extraBasePickEntries, extraBaseAtomEntry, pickEntryKey } from './extra_base_pick.js'
 import { createSelectionDragGuard } from './selection_drag_guard.js'
 import { vrDeformationSelection, resolveVRDeformationSelection, vrDeformationRefForOwner } from './vr_deformation_selection.js'
 /**
@@ -46,7 +47,7 @@ import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectio
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
 import {
-  backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
+  backboneCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, makeProjector, worldPosOf, isVisibleInstance,
   resolveIndividualBaseElements,
 } from './base_pick.js'
@@ -1705,7 +1706,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // Fixed level: one bead. The click is normally committed earlier, off the hover
       // magnet (which spans all five bead families, not just backboneEntries) — this
       // branch only catches a raw raycast hit that bypassed the magnet.
-      _selectBaseKey(baseKey(hitEntry.nuc, hitEntry._copy))
+      _selectBaseKey(pickEntryKey(hitEntry))
       _emitDrillLevel('base'); return
     }
     // default: strand-first, then the leaf under the cursor. A bead leaf commits
@@ -1715,11 +1716,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!onSameStrand) {
       _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
     } else {
-      const rep = designRenderer.columnRepAt?.(hitEntry.nuc.helix_id, hitEntry.nuc.bp_index)
+      const rep = !hitEntry.baseKey && designRenderer.columnRepAt?.(hitEntry.nuc.helix_id, hitEntry.nuc.bp_index)
       if (rep === 'cylinders' || rep === 'surface') {
         _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries)   // rep caveat: no bead
       } else {
-        _selectBaseKey(baseKey(hitEntry.nuc, hitEntry._copy))
+        _selectBaseKey(pickEntryKey(hitEntry))
       }
     }
     _emitDrillLevel('default')
@@ -1846,10 +1847,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return best
   }
 
+  function _extraBaseEntries() {
+    return extraBasePickEntries(designRenderer.getXoverBeadEntries?.() ?? [], store.getState().currentDesign)
+  }
+
+  function _drillBeadEntries() {
+    const backbone = designRenderer.getBackboneEntries()
+    return ['default', 'strand', 'base'].includes(_selLevel) ? [...backbone, ..._extraBaseEntries()] : backbone
+  }
+
   function _pickNearestBeadCone(clientX, clientY) {
     _setNdc(clientX, clientY)
     raycaster.setFromCamera(_ndc, _cam())
-    const backboneEntries = designRenderer.getBackboneEntries()
+    const backboneEntries = _drillBeadEntries()
     const coneEntries     = designRenderer.getConeEntries()
     const beadMeshes = [...new Set(backboneEntries.map(e => e.instMesh))].filter(m => m.visible)
     const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))].filter(m => m.visible)
@@ -1857,7 +1867,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cHits = coneMeshes.length ? raycaster.intersectObjects(coneMeshes) : []
     const b0 = bHits.find(hit => {
       const entry = backboneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
-      return entry && !_isHiddenEntry(entry)
+      return entry && !_isHiddenEntry(entry) && (entry.nuc.overhang_id ||
+        store.getState().selectableTypes[entry.nuc.strand_type === 'scaffold' ? 'scaffold' : 'staples'])
     })
     const c0 = cHits.find(hit => {
       const cone = coneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
@@ -1917,7 +1928,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const rect = canvas.getBoundingClientRect()
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
-    for (const e of designRenderer.getBackboneEntries()) {
+    for (const e of _drillBeadEntries()) {
       if (!e.instMesh.visible || _isHiddenEntry(e)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       if (!e.nuc.overhang_id) {
@@ -2006,7 +2017,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // The bead set + a dedup key for what a click WOULD select at strand/domain/cluster
   // level, given the bead under the cursor — drives the generic red hover preview.
   function _previewSetForLevel(entry) {
-    const bb  = designRenderer.getBackboneEntries().filter(e => !_isHiddenEntry(e))
+    const bb  = _drillBeadEntries().filter(e => !_isHiddenEntry(e))
     const sid = entry.nuc.strand_id
     if (_selLevel === 'strand') {
       return { key: `strand:${sid}`, beads: bb.filter(e => e.nuc.strand_id === sid) }
@@ -3047,17 +3058,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         designRenderer.getFluoroEntries?.() ?? [],
         st.selectableTypes,
       ),
-      ...xoverCandidates(designRenderer.getXoverBeadEntries?.() ?? []),
+      ..._extraBaseEntries().filter(e => st.selectableTypes[e.nuc.strand_type === 'scaffold' ? 'scaffold' : 'staples'])
+        .map(e => ({ ...e, key: e.baseKey, family: 'xover' })),
       ...flexCandidates(flex?.group ?? null, design, design ? flexAnchorKey(design) : null),
       ...ssLinkCandidates(getOverhangLinkArcs?.()?.group ?? null),
     ].filter(candidate => {
       if (!isVisibleInstance(candidate.instMesh, candidate.id)) return false
       if (candidate.nuc) return !_isHiddenReferenceNuc(candidate.nuc)
-      if (candidate.family !== 'xover') return true
-      const xo = design?.crossovers?.find(item => item.id === candidate.xoId)
-      if (!xo) return true
-      return !(_isHiddenReferenceStrand(xo.strand_id) ||
-        (_isHiddenReferenceNuc(xo.from_nucleotide) && _isHiddenReferenceNuc(xo.to_nucleotide)))
+      return true
     })
   }
 
@@ -3172,7 +3180,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const candidates = _baseCandidates()
     const hit = _pickNearestBeadCone(clientX, clientY)
     if (hit?.kind === 'bead') {
-      const key = baseKey(hit.entry.nuc, hit.entry._copy)
+      const key = pickEntryKey(hit.entry)
       const exact = candidates.find(c => c.key === key && c.instMesh === hit.entry.instMesh && c.id === hit.entry.id)
       if (exact) return exact
     }
@@ -4091,7 +4099,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const hit = globalAtoms.raycastPick(raycaster)
       if (!hit?.atom || _isHiddenReferenceNuc(hit.atom)) { _clearAll(); return }
       const a = hit.atom
-      const entry = backboneEntries.find(e => e.nuc.helix_id === a.helix_id &&
+      const entry = (['default', 'strand', 'base'].includes(_selLevel) && extraBaseAtomEntry(a, store.getState().currentDesign))
+        || backboneEntries.find(e => e.nuc.helix_id === a.helix_id &&
         e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
       if (selectableTypes.overhangs) {
         if (entry?.nuc.overhang_id) _selectOverhangDomain(entry.nuc.overhang_id, { toggleSole: true })
@@ -4198,7 +4207,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     // Respect selection filter
-    const selBackbone = backboneEntries.filter(e => {
+    const drillEntries = _drillBeadEntries()
+    const selBackbone = drillEntries.filter(e => {
       if (_isHiddenEntry(e)) return false
       if (selectableTypes.overhangs && e.nuc.overhang_id) return true
       const isScaffold = e.nuc.strand_type === 'scaffold'
@@ -4225,7 +4235,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // mixed-representation work: in true cylinder LOD the bead meshes are hidden →
     // filtered out → cylinder-hit fallback below; at full LOD (incl. mixed-rep,
     // where iHelixCylinders is visible too) beads stay selectable.
-    const beadMeshes = [...new Set(backboneEntries.map(e => e.instMesh))].filter(m => m.visible)
+    const beadMeshes = [...new Set(drillEntries.map(e => e.instMesh))].filter(m => m.visible)
     const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))].filter(m => m.visible)
 
     const allBeadHits = beadMeshes.length ? raycaster.intersectObjects(beadMeshes) : []
@@ -4302,7 +4312,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         const key = atomBaseKey(a)
         if (key) { _setBaseKeys([key]); return }
       }
-      const hitEntry = backboneEntries.find(e =>
+      const hitEntry = (['default', 'strand', 'base'].includes(_selLevel) && extraBaseAtomEntry(a, store.getState().currentDesign))
+        || backboneEntries.find(e =>
         e.nuc.helix_id === a.helix_id && e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
       if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries); return }
       if (a.strand_id) {
