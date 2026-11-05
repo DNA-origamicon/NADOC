@@ -1,0 +1,112 @@
+[
+  {
+    "doi": "10.1021/nn506014s",
+    "publication": "Optimized assembly and covalent coupling of single-molecule DNA origami nanoarrays.",
+    "archive": "sources/acs-expansion-20261104/3617409-nn506014s_si_006.zip",
+    "archive_sha256": "39512a16a8fa5d16dd60af8990b4a13109df953dc6befe715db10ca1ee2e525c",
+    "member": "triangle-design-files/Sameside-sharp-triangle-bridged.json",
+    "member_sha256": "225bd95acd13b6383c40180211c822c5369277f2beacc47bf9c694f20d0493bf",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 27,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "publication": "Design and Synthesis of Triangulated DNA Origami Trusses.",
+    "archive": "sources/acs-expansion-20261104/4339651-nl6b00381_si_004.zip",
+    "archive_sha256": "027108865ba988e7995ad400bd5c8ac0db2515860a36630d641f4604814d9453",
+    "member": "dodecahedral truss.json",
+    "member_sha256": "80177bb9f166560bc00f3695a109b8fb4f47f8053173c6933efddcae9ee942eb",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 179,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "publication": "Design and Synthesis of Triangulated DNA Origami Trusses.",
+    "archive": "sources/acs-expansion-20261104/4339651-nl6b00381_si_004.zip",
+    "archive_sha256": "027108865ba988e7995ad400bd5c8ac0db2515860a36630d641f4604814d9453",
+    "member": "flat truss.json",
+    "member_sha256": "71f61f9e9d2f9372c8f04467841268e939519ec577d59c63236e77b9c3d57658",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 179,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "publication": "Design and Synthesis of Triangulated DNA Origami Trusses.",
+    "archive": "sources/acs-expansion-20261104/4339651-nl6b00381_si_004.zip",
+    "archive_sha256": "027108865ba988e7995ad400bd5c8ac0db2515860a36630d641f4604814d9453",
+    "member": "octahedral truss.json",
+    "member_sha256": "8a5864536bf3e9fa4a8c33773cf698fbbc810537e01fe1e449bdf9c67b527f7a",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 179,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acs.nanolett.6b00381",
+    "publication": "Design and Synthesis of Triangulated DNA Origami Trusses.",
+    "archive": "sources/acs-expansion-20261104/4339651-nl6b00381_si_004.zip",
+    "archive_sha256": "027108865ba988e7995ad400bd5c8ac0db2515860a36630d641f4604814d9453",
+    "member": "tetrahedral truss.json",
+    "member_sha256": "70dd4ce3eaa8e7313e154d1633cefba01f69df7d057782fd9d19e8f8d3b2ded1",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 179,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acsnano.7b06699",
+    "publication": "Localized DNA Hybridization Chain Reactions on DNA Origami.",
+    "archive": "sources/acs-expansion-20261104/10302255-nn7b06699_si_002.zip",
+    "archive_sha256": "253a09ea1645336449538da5a54d6e2cb6bb80eb2b5672b6917dcce3039e9125",
+    "member": "ACSNano_Reif2017_SI_P2/Tall_rectangle.json",
+    "member_sha256": "eb925ecd4010348c4e3169ee6e541f264f45292e5c841394f46d7f7290a4cb94",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 32,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acsnano.7b08345",
+    "publication": "Structural Transformation of Wireframe DNA Origami via DNA Polymerase Assisted Gap-Filling.",
+    "archive": "sources/acs-expansion-20261104/10560103-nn7b08345_si_001.zip",
+    "archive_sha256": "0d40929ce9717f92d94ef01b09c27b0935e24436475a95f20cb273c105bf6333",
+    "member": "Flat Large.json",
+    "member_sha256": "a3c952ebcb915146f70fa344046f902fa1fbe91b06b3d903879113752a1a2d3b",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 64,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acsnano.7b08345",
+    "publication": "Structural Transformation of Wireframe DNA Origami via DNA Polymerase Assisted Gap-Filling.",
+    "archive": "sources/acs-expansion-20261104/10560103-nn7b08345_si_001.zip",
+    "archive_sha256": "0d40929ce9717f92d94ef01b09c27b0935e24436475a95f20cb273c105bf6333",
+    "member": "Flat Small.json",
+    "member_sha256": "e469ea1062747f3bf1ee4d9e3d2b745c81b3e40c0b2d4e1ad98d48edadea1958",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 111,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acsnano.7b08345",
+    "publication": "Structural Transformation of Wireframe DNA Origami via DNA Polymerase Assisted Gap-Filling.",
+    "archive": "sources/acs-expansion-20261104/10560103-nn7b08345_si_001.zip",
+    "archive_sha256": "0d40929ce9717f92d94ef01b09c27b0935e24436475a95f20cb273c105bf6333",
+    "member": "Tube Large Filled.json",
+    "member_sha256": "43e0f3f853e021ee09c5fd936ba3cb7e5902aa7b22ee9eb456127c1349c08d93",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 64,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  },
+  {
+    "doi": "10.1021/acsnano.7b08345",
+    "publication": "Structural Transformation of Wireframe DNA Origami via DNA Polymerase Assisted Gap-Filling.",
+    "archive": "sources/acs-expansion-20261104/10560103-nn7b08345_si_001.zip",
+    "archive_sha256": "0d40929ce9717f92d94ef01b09c27b0935e24436475a95f20cb273c105bf6333",
+    "member": "Tube Small Filled.json",
+    "member_sha256": "1d337fcd3c488f922eb75b392549ecb9500d90dbd90d0c43040857bc33b86aef",
+    "format": "caDNAno vstrands JSON",
+    "helix_records": 111,
+    "qualification": "Original archive member decoded in memory; no topology/sequence/eligibility validation and no native NADOC publication."
+  }
+]

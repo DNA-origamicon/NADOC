@@ -1,0 +1,444 @@
+[
+  {
+    "id": "S042",
+    "doi": "10.1021/ja906381y",
+    "design": "2\u00d721, 3\u00d714, 6\u00d712 and 8\u00d78 square-lattice blocks",
+    "family": "2\u00d721, 3\u00d714, 6\u00d712 and 8\u00d78 square-lattice blocks",
+    "lattice": "square",
+    "sequence_location": "SI Tables S1\u2013S4, PDF pages 10\u201326; design schematics S3\u2013S6, pages 6\u20139",
+    "lattice_evidence": "Publisher abstract explicitly identifies square packing; SI Fig. S1 lists 2/3/6/8-layer designs.",
+    "notes": "Retrieved 41,132,035-byte supplement; inspected table headings and design references. Core lists located; 3-layer deletion variants require separate reconciliation. No synthesis-completeness claim.",
+    "characterization": [
+      "TEM",
+      "cryo-EM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "2-layer",
+      "3-layer",
+      "6-layer",
+      "8-layer",
+      "3-layer deletion variants"
+    ]
+  },
+  {
+    "id": "S047",
+    "doi": "10.1021/nn800215j",
+    "design": "Dolphin origami: flexible-tail, stable-tail and dimer variants",
+    "family": "Dolphin origami: flexible-tail, stable-tail and dimer variants",
+    "lattice": "square / single-layer parallel-helix domains",
+    "sequence_location": "SI pages 2\u20137: left/right, body seam, tail seam and interaction staple sets; assembly recipes on pages 6\u20137",
+    "lattice_evidence": "SI describes planar Rothemund crossover construction and explicit helix spacing.",
+    "notes": "Sequence sets and replacement rules inspected; dimer interaction colors must be preserved when extracting sequences. Author design-file URL is reported, not retrieved.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "flexible tail",
+      "stable tail",
+      "dimer dolphin 1",
+      "dimer dolphin 2"
+    ]
+  },
+  {
+    "id": "S048",
+    "doi": "10.1021/nl902535q",
+    "design": "756-nt PCR-scaffold rectangle: M13 and lambda variants",
+    "family": "756-nt PCR-scaffold rectangle: M13 and lambda variants",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI pages 3\u20134: named scaffold, primers and staple list",
+    "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+    "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S049",
+    "doi": "10.1021/nl902535q",
+    "design": "Thin branched T origami, 2958-nt M13 scaffold",
+    "family": "Thin branched T origami, 2958-nt M13 scaffold",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI pages 5\u20137: named scaffold, primers and staple list",
+    "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+    "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S050",
+    "doi": "10.1021/nl902535q",
+    "design": "Thin branched U origami, 3840-nt lambda scaffold",
+    "family": "Thin branched U origami, 3840-nt lambda scaffold",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI pages 8\u201310: named scaffold, primers and staple list",
+    "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+    "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S051",
+    "doi": "10.1021/nl902535q",
+    "design": "Thin branched B origami",
+    "family": "Thin branched B origami",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI pages 11\u201314: named scaffold, primers and staple list",
+    "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+    "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S052",
+    "doi": "10.1021/ja106292x",
+    "design": "24-helix planar zigzag origami tile",
+    "family": "24-helix planar zigzag origami tile",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Fig. S1 and core list, SI pages 3\u20136; linkers pages 7 and 11\u201312",
+    "lattice_evidence": "Published planar zigzag routing diagrams and helix-numbered staple lists; 24-helix Fig. S1 visually inspected.",
+    "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "id": "S053",
+    "doi": "10.1021/ja106292x",
+    "design": "12-helix planar zigzag origami tile",
+    "family": "12-helix planar zigzag origami tile",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Core list begins SI page 12 and continues through 15; linker Fig. S9 page 16",
+    "lattice_evidence": "Visually inspected the filled planar parallel-helix routing diagram: Fig. S8, SI page 12.",
+    "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "id": "S054",
+    "doi": "10.1021/ja106292x",
+    "design": "40-helix planar zigzag origami tile",
+    "family": "40-helix planar zigzag origami tile",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "Fig. S11 and core list, SI pages 17\u201320; linker Fig. S12 page 21",
+    "lattice_evidence": "Visually inspected the filled planar parallel-helix routing diagram: Fig. S11, SI page 17.",
+    "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "id": "S055",
+    "doi": "10.1021/nn1031627",
+    "design": "Nine planar jigsaw-piece monomers JP-1 through JP-9",
+    "family": "Nine planar jigsaw-piece monomers JP-1 through JP-9",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "SI pages 3\u201311: sequence-labeled JP-1\u2026JP-9 maps; pages 12\u201322: tile staple tables and hairpin additions",
+    "lattice_evidence": "Planar filled parallel-helix domain maps; JP-1 page 3 visually inspected; separate JP labels verified on all nine map pages.",
+    "notes": "Nine monomers retained as explicit variants in one family. Hairpin letters and assembled arrays are not new geometries. Per-tile sequence completeness is not certified.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "JP-1",
+      "JP-2",
+      "JP-3",
+      "JP-4",
+      "JP-5",
+      "JP-6",
+      "JP-7",
+      "JP-8",
+      "JP-9"
+    ]
+  },
+  {
+    "id": "S056",
+    "doi": "10.1021/nl101079u",
+    "design": "6HB quantum-dot nanotube with periodic sticky-end sites",
+    "family": "6HB quantum-dot nanotube with periodic sticky-end sites",
+    "lattice": "honeycomb",
+    "sequence_location": "SI Table S1, pages 6\u20139; design methods page 2 and Fig. S1",
+    "lattice_evidence": "SI defines six parallel helices in a tube with a three-column, 14-nt-domain staple motif.",
+    "notes": "170-staple list located; sticky-end spacing/quantum-dot occupancy variants require exact matching.",
+    "characterization": [
+      "AFM",
+      "fluorescence"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "id": "S057",
+    "doi": "10.1021/nl1033073",
+    "design": "Thiol-functionalized 6HB for interconnecting gold islands",
+    "family": "Thiol-functionalized 6HB for interconnecting gold islands",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI Table S1 pages 3\u20136; Table S2 page 7; Fig. S6 pages 15\u201316",
+    "lattice_evidence": "SI explicitly identifies a six-helix bundle; cross-sectional packing still needs inspection.",
+    "notes": "Unmodified core and thiolated replacement staples located; paper identifies the Stearns template, so family deduplication remains.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S058",
+    "doi": "10.1021/nl203217m",
+    "design": "Revertible planar DNA-origami nanoactuator",
+    "family": "Revertible planar DNA-origami nanoactuator",
+    "lattice": "square / single-layer parallel helices",
+    "sequence_location": "SI Fig. S1 page 3; Table S1 pages 8\u201313",
+    "lattice_evidence": "Visually inspected Fig. S1: filled planar parallel-helix origami with central actuation region.",
+    "notes": "Sequence table is present but PDF text extraction is garbled; requires visual/OCR reconciliation before sequence import. Closed and actuated states are one design family.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed"
+  },
+  {
+    "id": "S059",
+    "doi": "10.1021/nl203503s",
+    "design": "Magnetic-tweezers 4HB and 6HB mechanical probes",
+    "family": "Magnetic-tweezers 4HB and 6HB mechanical probes",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI Fig. S9, page 10: sequence-labeled caDNAno templates and attachment modifications",
+    "lattice_evidence": "Caption explicitly distinguishes 4HB and 6HB, including imaginary gaps in the 4HB diagram; lattice assignment needs detailed review.",
+    "notes": "Published design image inspected. Flexible/rigid 6HB attachments and rigid 4HB retained as variants; no image score or sequence-completeness certification.",
+    "characterization": [
+      "magnetic tweezers"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_CAD_image",
+    "review_status": "scope_verification_pending",
+    "variants": [
+      "6HB flexible attachment",
+      "6HB rigid attachment",
+      "4HB rigid attachment"
+    ],
+    "staple_status": "published_design_image_located_full_staple_list_unverified"
+  },
+  {
+    "id": "S060",
+    "doi": "10.1021/nn303767b",
+    "design": "Switchable 3.9-zL DNA box",
+    "family": "Switchable 3.9-zL DNA box",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI staple list pages 27\u201328; design discussion pages 2\u20136",
+    "lattice_evidence": "Methods combine 32-base planar crossovers with a hexagonal edge-connection scheme.",
+    "notes": "Actual source inspected; hybrid edge geometry requires a scope decision. Do not classify the entire object as standard square packing from its planar faces.",
+    "characterization": [
+      "AFM",
+      "TEM",
+      "DLS",
+      "FRET"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending"
+  },
+  {
+    "id": "S061",
+    "doi": "10.1021/nl502626s",
+    "design": "7k notched rectangle, three helical-pitch variants",
+    "family": "7k notched rectangle, three helical-pitch variants",
+    "lattice": "square",
+    "sequence_location": "SI Note 4 and Table S2, pages 6\u20137; Note 6 page 12; 7k-NR staple workbook, three sheets",
+    "lattice_evidence": "SI page 7 explicitly states square-lattice caDNAno design; workbook sheet names verified.",
+    "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "10.33 bp/turn",
+      "10.50 bp/turn",
+      "10.67 bp/turn"
+    ]
+  },
+  {
+    "id": "S062",
+    "doi": "10.1021/nl502626s",
+    "design": "51k notched rectangle, three helical-pitch variants",
+    "family": "51k notched rectangle, three helical-pitch variants",
+    "lattice": "square",
+    "sequence_location": "SI Note 4 and Table S2, pages 6\u20137; Note 6 page 12; 51k-NR staple workbook, three sheets",
+    "lattice_evidence": "SI page 7 explicitly states square-lattice caDNAno design; workbook sheet names verified.",
+    "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "10.33 bp/turn",
+      "10.50 bp/turn",
+      "10.67 bp/turn"
+    ]
+  },
+  {
+    "id": "S063",
+    "doi": "10.1021/nn405045x",
+    "design": "Ionic-permeability nanoplates: HC, RR, 2LL and 3LL",
+    "family": "Ionic-permeability nanoplates: HC, RR, 2LL and 3LL",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI design section pages 23\u201329; staple lists HC p30, RR p32, 2LL p36, 3LL p40",
+    "lattice_evidence": "HC identified as honeycomb in SI section 3; other plate-specific packing and template reuse need checking.",
+    "notes": "All four named lists and design-map captions located; remain candidates until individual lattice assignments and prior-template relationships are resolved.",
+    "characterization": [
+      "ionic-current recordings"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending",
+    "variants": [
+      "HC",
+      "RR",
+      "2LL",
+      "3LL"
+    ]
+  },
+  {
+    "id": "S064",
+    "doi": "10.1021/nl503441v",
+    "design": "Square-lattice DNA mold for gold growth, monomer and dimer variants",
+    "family": "Square-lattice DNA mold for gold growth, monomer and dimer variants",
+    "lattice": "square",
+    "sequence_location": "SI Fig. S6 page 7; Fig. S7 page 8; dimer connector Table S1 page 9",
+    "lattice_evidence": "Fig. S6 cross-section visually inspected; caption explicitly specifies square lattice.",
+    "notes": "Sequence-labeled core design image and connector table located. Dimer changes and capture overhangs need full reconciliation; no complete sequence-list claim.",
+    "characterization": [
+      "TEM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_CAD_image",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "monomer",
+      "side-by-side dimer",
+      "head-to-tail dimer"
+    ],
+    "staple_status": "published_design_image_located_full_staple_list_unverified"
+  },
+  {
+    "id": "S065",
+    "doi": "10.1021/nl5009635",
+    "design": "Square-lattice block for SERS gold-particle nanoantenna",
+    "family": "Square-lattice block for SERS gold-particle nanoantenna",
+    "lattice": "square",
+    "sequence_location": "SI Fig. S1, page 4: caDNAno routing and attachment sites",
+    "lattice_evidence": "SI caption explicitly identifies square-lattice block, 58\u00d730\u00d78 nm; diagram visually inspected.",
+    "notes": "Six poly-A capture extensions identified. Core staple list not established by this supplement; prior Stein template must be reconciled.",
+    "characterization": [
+      "SERS",
+      "TEM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_CAD_image",
+    "review_status": "primary_source_reviewed",
+    "variants": [],
+    "staple_status": "published_design_image_located_full_staple_list_unverified"
+  },
+  {
+    "id": "S066",
+    "doi": "10.1021/acsnano.5b00161",
+    "design": "Membrane-binding square-lattice block and assembly connectors",
+    "family": "Membrane-binding square-lattice block and assembly connectors",
+    "lattice": "square",
+    "sequence_location": "SI Fig. S1 page 2; Table S1 pages 12\u201318",
+    "lattice_evidence": "Block map visually inspected; Figs. S3\u2013S4 identify square-lattice helix positions.",
+    "notes": "Unmodified, cholesterol, dye and assembly connector sets listed separately. Dimer/polymer variants are retained under one base block.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "unmodified block",
+      "cholesterol/dye variants",
+      "dimers",
+      "1D/2D assembly connectors"
+    ]
+  },
+  {
+    "id": "S067",
+    "doi": "10.1021/acsnano.5b00161",
+    "design": "Membrane-binding triskelion and trimer connectors",
+    "family": "Membrane-binding triskelion and trimer connectors",
+    "lattice": "requires_design_specific_review",
+    "sequence_location": "SI Fig. S2 page 3; Table S2 pages 19\u201323",
+    "lattice_evidence": "Named staple tables found; component packing and assembly eligibility need diagram review.",
+    "notes": "Do not infer eligibility from coexistence with an accepted square-lattice block.",
+    "characterization": [
+      "AFM"
+    ],
+    "map_status": "candidate",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "scope_verification_pending",
+    "variants": []
+  },
+  {
+    "id": "S068",
+    "doi": "10.1021/nn405408g",
+    "design": "Compliant origami joint, five ssDNA-spring variants",
+    "family": "Compliant origami joint, five ssDNA-spring variants",
+    "lattice": "honeycomb",
+    "sequence_location": "SI Figs. S7\u2013S11 pages 19\u201320; common staples pages 21\u201323; replacements pages 24\u201327",
+    "lattice_evidence": "SI describes honeycomb organization and 18-helix rigid ends; three caDNAno variant maps on page 19 visually inspected.",
+    "notes": "Shared core plus version-specific staple replacements must be combined. No completeness or mechanical validation performed.",
+    "characterization": [
+      "TEM"
+    ],
+    "map_status": "reviewed_in_scope",
+    "inclusion_basis": "published_staple_list",
+    "review_status": "primary_source_reviewed",
+    "variants": [
+      "version 1: 0 bases",
+      "version 2: 11 bases",
+      "version 3: 32 bases",
+      "version 4: 53 bases",
+      "version 5: 74 bases"
+    ]
+  }
+]

@@ -1,10 +1,18 @@
 # Expanded pre-2020 structure search
 
-Research side project; not a production feature. Search snapshot: November 2, 2026. **Image recovery is paused pending the full feature-log revamp.**
+Research side project; not a production feature. Discovery baseline: November 2, 2026; ACS acquisition and design reviews expanded November 4. Recovery status is tracked separately in [README](README.md).
 
 [Structure map](structure_map.html) · [Publication registry](publication_registry.html) · [Priority review gaps](priority_review_gaps.csv) · [Machine-readable coverage](search_coverage.json)
 
-## Result and interpretation
+## November 4 update
+
+The current map contains **75 reviewed groups from 47 publications and 25 candidate groups**. Initial ACS review added 22 groups and promoted one existing candidate. Acquisition now retains **269 files from 244 publications**, including 151 files recovered when retrying the initial 145 HTTP 403 lookup failures. The broader 2,210-record discovery census was not rerun. [Access recovery](acs_access_resolution.json), [acquisition totals](acs_expansion_summary.json), [request history](acs_acquisition.json), [source-page index](acs_source_index.json), and [review decisions](expansion/acs_reviews.json) retain the evidence.
+
+All 145 failed lookups completed: 135 matched deposits and 10 returned no matching deposit. Across the 272 selected ACS leads, 245 have matching deposits and 27 have no match; one matching deposit contains only deferred media. There are zero remaining lookup or document-download failures. Ninety-one media attachments remain deferred. Empty results do not demonstrate absent supplements. All 269 downloaded files passed publisher size/MD5 and retained SHA-256 verification.
+
+No additional credentials or cookies were needed for recovery through the public supplement API. Direct journal pages still present a separate browser challenge. The new downloader uses sequential two-second request spacing, bounded retry/backoff, atomic checkpoints, and a 100 MiB per-file bound. The recovered 41 MB square-lattice supplement exceeds the older 35 MiB bound. Historical counts below describe the November 2 pass, not locally verified availability today. Newly retrieved files await design-specific review; acquisition does not change eligibility or sequence-completeness claims.
+
+## November 2 result and interpretation
 
 - 61 reviewed design groups from 36 publications: the original 32 image groups plus 29 sequence-based groups. Three original groups are conceptual images, not complete-structure specifications.
 - 17 additional named design candidates from 17 publications, kept separate until scope or list verification is resolved.

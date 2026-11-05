@@ -4,18 +4,18 @@
     "europe_pmc_records": 1849,
     "accessible_fulltexts": 672,
     "papers_with_sequence_related_contexts": 230,
-    "reviewed_design_groups": 61,
-    "candidate_design_groups": 17,
-    "reviewed_publications": 36,
-    "mapped_publications": 53,
-    "new_sequence_only_reviewed_groups": 29,
-    "downloaded_supplement_files": 180,
+    "reviewed_design_groups": 75,
+    "candidate_design_groups": 25,
+    "reviewed_publications": 47,
+    "mapped_publications": 68,
+    "new_sequence_only_reviewed_groups": 41,
+    "downloaded_supplement_files": 449,
     "new_repository_files": 8,
     "registry_review_states": {
-      "unresolved: discovery record, not a verified structure": 1734,
-      "contains_reviewed_structure_groups": 36,
+      "unresolved: discovery record, not a verified structure": 1719,
+      "contains_reviewed_structure_groups": 47,
       "background_or_secondary_source: metadata triage, no design decision": 369,
-      "named_structure_candidate: scope/list verification pending": 17,
+      "named_structure_candidate: scope/list verification pending": 21,
       "likely_out_of_scope: title triage, mixed-design paper not ruled out": 19,
       "preprint: publication/version reconciliation needed": 35
     },
@@ -63,5 +63,44 @@
     "Complete per-variant staple sets have not been validated.",
     "Raw imaging data search has not established absence.",
     "Backward citations scanned only in accessible origami-related references; citation closure is incomplete."
-  ]
+  ],
+  "acs_expansion_20261104": {
+    "date": "2026-11-04",
+    "attempted_publications": 272,
+    "repository_matched_publications": 245,
+    "publications_with_downloads": 244,
+    "downloaded_files": 269,
+    "downloaded_bytes": 1756000898,
+    "file_states": {
+      "downloaded": 269,
+      "deferred_media_format": 91
+    },
+    "publication_states": {
+      "no_matching_deposit": 27,
+      "repository_matched": 245
+    },
+    "review_decisions": 23,
+    "credentials_stored": false,
+    "limitations": [
+      "ACS acquisition is not a complete literature search.",
+      "Publisher deposits are accessible; VPN necessity was not established by an off-VPN comparison.",
+      "Downloaded files do not establish design eligibility or sequence completeness.",
+      "Historical download counts include files not present on this checkout.",
+      "No new native molecular structures were authored."
+    ],
+    "retried_lookup_records": 145,
+    "retry_dispositions": {
+      "repository_matched": 135,
+      "no_matching_deposit": 10
+    },
+    "request_policy": {
+      "minimum_interval_seconds": 2,
+      "maximum_attempts_per_request": 3,
+      "backoff_seconds": [
+        30,
+        60
+      ],
+      "authentication": "none"
+    }
+  }
 }

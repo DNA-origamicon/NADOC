@@ -8,7 +8,7 @@ def write(name,obj): (H/name).write_text(json.dumps(obj,indent=2,ensure_ascii=Fa
 def csvout(name,rows):
  keys=list(dict.fromkeys(k for r in rows for k in r))
  with (H/name).open('w',newline='')as f:
-  w=csv.DictWriter(f,keys);w.writeheader();w.writerows({k:json.dumps(v,ensure_ascii=False)if isinstance(v,(dict,list))else v for k,v in r.items()}for r in rows)
+  w=csv.DictWriter(f,keys,lineterminator='\n');w.writeheader();w.writerows({k:json.dumps(v,ensure_ascii=False)if isinstance(v,(dict,list))else v for k,v in r.items()}for r in rows)
 def clean(t):return html.unescape(re.sub('<[^>]+>','',t or ''))
 def doi(t):return (t or '').lower().strip().removeprefix('https://doi.org/')
 scan=read(O/'screening.json');cross=read(O/'crossref.json');chase=read(O/'citation_chase.json');cur=read(H/'expansion/curation.json');old=read(H/'catalog.json')['rows'];inv=read(O/'supplement_inventory.json');repos=read(O/'repository_audit.json')
@@ -59,7 +59,7 @@ imaging=[
  dict(doi='10.1126/sciadv.aau1157',accession='EMD-4354',kind='processed_cryo_em_map',url='https://www.ebi.ac.uk/emdb/EMD-4354',scope='excluded brick-named objects',notes='Retained as scope boundary evidence, not included as an eligible design.')]
 rows=[]
 for x in old:
- r=dict(x);r['inclusion_basis']='published_CAD_image';r['map_status']='reviewed_in_scope';r['family']=r['design'];r['publication_supplements']=sources.get(doi(r['doi']),[]);r['complete_staple_set_validated']=False;rows.append(r)
+ r=dict(x);r['inclusion_basis']='published_CAD_image';r['map_status']='reviewed_in_scope';r['family']=r['design'];r['publication_supplements']=sources.get(doi(r['doi']),[]);r['complete_staple_set_validated']=r['id']=='D003';rows.append(r)
 for i,x in enumerate(cur,1):
  d=x['doi'];meta=registry.get(d)
  if not meta:raise ValueError('Missing metadata for '+d)
@@ -80,28 +80,14 @@ for r in registry.values():
 regs=sorted(registry.values(),key=lambda r:(r['first_publication_date'],r['key']))
 for i,r in enumerate(regs,1):r['id']=f'P{i:04}'
 counts=dict(publication_discovery_records=len(regs),europe_pmc_records=len(scan),accessible_fulltexts=sum(r['status']=='fulltext_evidence_triaged'for r in scan),papers_with_sequence_related_contexts=sum(bool(r.get('sequence_evidence'))for r in scan),reviewed_design_groups=sum(r['map_status']=='reviewed_in_scope'for r in rows),candidate_design_groups=sum(r['map_status']=='candidate'for r in rows),reviewed_publications=len({r['doi']for r in rows if r['map_status']=='reviewed_in_scope'}),mapped_publications=len({r['doi']for r in rows}),new_sequence_only_reviewed_groups=sum(r['id'].startswith('S')and r['map_status']=='reviewed_in_scope'for r in rows),downloaded_supplement_files=len({s['local_file']for ss in sources.values()for s in ss}),new_repository_files=sum(len(r.get('files',[]))for r in repos),registry_review_states=dict(Counter(r['review_status']for r in regs)),fulltext_states=dict(Counter(r['status']for r in scan)))
-write('structure_map.json',dict(schema_version=1,status='research_side_project',production_feature=False,recovery_status='paused_pending_full_feature_log_revamp',cutoff_exclusive='2020-01-01',reviewed='2026-11-02',coverage='expanded_search_pass_with_explicit_unresolved_records_not_exhaustive_verified_map',counts=counts,rows=rows))
+write('structure_map.json',dict(schema_version=1,status='research_side_project',production_feature=False,recovery_status='D003_native_replay_verified_rigid_geometry_approximate',cutoff_exclusive='2020-01-01',reviewed='2026-11-02',coverage='expanded_search_pass_with_explicit_unresolved_records_not_exhaustive_verified_map',counts=counts,rows=rows))
 write('publication_registry.json',regs);csvout('publication_registry.csv',regs);csvout('structure_map.csv',rows);write('imaging_resources.json',imaging);csvout('imaging_resources.csv',imaging)
 write('search_coverage.json',dict(counts=counts,europe_pmc_queries=read(O/'queries.json'),crossref_queries=read(O/'crossref_queries.json'),citation_candidates=len(chase),citation_metadata_resolved=sum(bool(x.get('metadata'))for x in chase),limitations=['Crossref queries relevance-capped, not exhaustive.','Full-text access failures and non-PMC articles remain unresolved.','Automated sequence/lattice mentions are not inclusion decisions.','Grouped variants are not counts of unique structures.','Complete per-variant staple sets have not been validated.','Raw imaging data search has not established absence.','Backward citations scanned only in accessible origami-related references; citation closure is incomplete.']))
-def esc(s):return html.escape(str(s or ''))
-def link(url,label):return '<a href="'+esc(url)+'">'+esc(label)+'</a>'if url else esc(label)
-def files(fs):
- fs=[dict(local_file=f)if isinstance(f,str)else f for f in fs]
- return '<br>'.join(link('assets/'+f['local_file'],Path(f['local_file']).name)+(' · '+link(f.get('url'), 'source')if f.get('url')else '')for f in fs if f.get('local_file'))
-def page(title,body,headers,trs):
- return '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>'''+esc(title)+'''</title><style>body{font:15px system-ui;margin:24px;color:#203040}a{color:#1260a0}table{border-collapse:collapse;width:100%}td,th{padding:10px;border:1px solid #cbd5df;text-align:left;vertical-align:top}th{background:#e8eef3;position:sticky;top:0}td{min-width:150px;max-width:420px;overflow-wrap:anywhere}img{width:230px;max-height:260px;object-fit:contain}input,select{padding:10px;margin:12px 8px 12px 0}small{color:#52616f}.candidate{background:#fff9e9}</style><h1>'''+esc(title)+'''</h1>'''+body+'''<p><a href="structure_map.html">Structure map</a> · <a href="publication_registry.html">Publication search registry</a> · <a href="catalog.html">Image-scored subset</a> · <a href="SEARCH_COVERAGE.md">Coverage and gaps</a></p><input id="q" aria-label="Search" placeholder="Search all columns"><select id="status" aria-label="Review status"><option value="">All statuses</option><option value="reviewed_in_scope">Reviewed in scope</option><option value="candidate">Candidates</option></select><span id="count"></span><table><thead><tr>'''+''.join('<th>'+esc(h)+'</th>'for h in headers)+'''</tr></thead><tbody>'''+''.join(trs)+'''</tbody></table><script>const q=document.querySelector('#q'),s=document.querySelector('#status'),rows=[...document.querySelectorAll('tbody tr')];function filter(){let n=0;for(const r of rows){const ok=r.textContent.toLowerCase().includes(q.value.toLowerCase())&&(!s.value||r.dataset.status===s.value);r.hidden=!ok;if(ok)n++}document.querySelector('#count').textContent=n+' rows shown'}q.oninput=filter;s.onchange=filter;filter()</script></html>'''
-trs=[]
-for r in rows:
- st=r['staple_list'];ch=r['structural_characterization'];im=r['imaging_datasets'];image=link('assets/'+r['image_file'],'<image>')if r.get('image_file')else 'No reviewed CAD image; score unassigned'
- if r.get('image_file'):image='<a href="assets/'+esc(r['image_file'])+'"><img loading="lazy" alt="Published design image '+esc(r['id'])+'" src="assets/'+esc(r['image_file'])+'"></a><br>Image-only score: '+str(r['quality_score'])+'<br>'+link(r.get('image_source_url'),'image source')
- resources=im.get('resources',[])
- cells=[esc(r['id'])+'<br>'+esc(r['map_status']),link(r['publication_url'],r['publication'])+'<br>'+esc(r['doi'])+'<br>'+esc(r['first_publication_date']),esc(r['design'])+'<br><small>Family: '+esc(r['family'])+'</small>',esc(r['lattice'])+'<br>'+esc(r.get('lattice_evidence','')),image,esc(st['status'])+'<br>'+esc(st.get('location'))+'<br>'+esc(st.get('notes'))+'<details><summary>Sources and downloaded supplements</summary>'+files(st.get('sources',[]))+files(r.get('publication_supplements',[]))+'</details>',esc('; '.join(ch.get('modalities',[])))+'<br>'+esc(ch.get('simulation_comparison_notes',''))+'<br>'+link(ch.get('source_url'),'characterization source'),esc(im.get('public_raw_dataset_status'))+'<br>'+'<br>'.join(link(f.get('url'),f.get('accession')or f.get('label')or f.get('kind'))+' '+esc(f.get('kind'))for f in resources),files(r.get('design_files',[]))or 'No matching original verified',esc(r.get('notes',r.get('quality_rationale',''))) ]
- trs.append('<tr class="'+r['map_status']+'" data-status="'+r['map_status']+'">'+''.join('<td>'+c+'</td>'for c in cells)+'</tr>')
-body=f'<p><strong>Research side project — recovery paused pending feature-log revamp.</strong></p><p>{counts["reviewed_design_groups"]} reviewed design groups across {counts["reviewed_publications"]} publications; {counts["candidate_design_groups"]} candidate groups. These are grouped variants, not unique-architecture counts. Staple-list availability does not certify completeness. Missing image scores remain unassigned.</p><p><a href="structure_map.csv">CSV</a> · <a href="structure_map.json">JSON</a> · <a href="imaging_resources.csv">Imaging resources</a> · <a href="expansion_repository_files.csv">Additional original files</a> · <a href="priority_review_gaps.csv">Priority review gaps</a></p>'
-(H/'structure_map.html').write_text(page('Pre-2020 DNA origami structure map',body,['ID / status','Publication','Design / family','Lattice','Image / score','Staple lists','Characterization','Imaging data','Original files','Qualifications'],trs))
-trs=[]
-for r in regs:
- cells=[esc(r['id'])+'<br>'+esc(r['review_status']),link(r['publication_url'],r['publication'])+'<br>'+esc(r['doi'])+'<br>'+esc(r['first_publication_date']),esc(', '.join(r['structure_ids'])),esc(r['fulltext_status'])+'<br>'+esc('; '.join(r['discovery'])),esc(r['priority'])+'<details><summary>Primary-text evidence snippets (unverified matches)</summary>'+esc(json.dumps(r.get('sequence_evidence',[]),ensure_ascii=False))+'</details>',files(r['downloaded_supplements']),esc('; '.join(r.get('repository_links',[])))]
- trs.append('<tr data-status="'+('reviewed_in_scope'if r['review_status']=='contains_reviewed_structure_groups'else 'candidate')+'">'+''.join('<td>'+c+'</td>'for c in cells)+'</tr>')
-(H/'publication_registry.html').write_text(page('Pre-2020 publication search registry',f'<p>{len(regs)} discovery records. This includes reviews, methods, preprints, out-of-scope papers and unresolved sources. It is not a count of eligible publications. Search snippets are automated evidence leads.</p><p><a href="publication_registry.csv">CSV</a> · <a href="publication_registry.json">JSON</a></p>',['Status','Publication','Structure IDs','Coverage','Evidence leads','Downloaded sources','Named repositories'],trs))
+from render_map import render
+render(rows, regs, counts)
 print(json.dumps(counts,indent=2))
+
+# Preserve later audited evidence when rebuilding the historical acquisition pass.
+if (H / "acs_acquisition.json").exists() and (H / "expansion/acs_reviews.json").exists():
+ from integrate_acs import main as integrate_acs
+ integrate_acs()

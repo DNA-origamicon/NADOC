@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "date": "2026-11-04",
+  "verified_downloads": 269,
+  "lookup_failures": 0,
+  "download_failures": 0,
+  "complete_acquisition_required": true,
+  "legacy_ids_preserved": 78,
+  "review_decisions_checked": 23,
+  "saved_structure_rows": 100,
+  "original_image_scores_and_paths_preserved": true,
+  "D003_qualification_preserved": true,
+  "integration_idempotent": true,
+  "new_native_structures_authored": 0,
+  "qualification": "Catalog/data checks; not molecular topology, synthesis completeness, or an application UI test."
+}

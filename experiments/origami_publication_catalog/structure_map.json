@@ -4,25 +4,25 @@
   "production_feature": false,
   "recovery_status": "paused_pending_full_feature_log_revamp",
   "cutoff_exclusive": "2020-01-01",
-  "reviewed": "2026-11-02",
+  "reviewed": "2026-11-04",
   "coverage": "expanded_search_pass_with_explicit_unresolved_records_not_exhaustive_verified_map",
   "counts": {
     "publication_discovery_records": 2210,
     "europe_pmc_records": 1849,
     "accessible_fulltexts": 672,
     "papers_with_sequence_related_contexts": 230,
-    "reviewed_design_groups": 61,
-    "candidate_design_groups": 17,
-    "reviewed_publications": 36,
-    "mapped_publications": 53,
-    "new_sequence_only_reviewed_groups": 29,
-    "downloaded_supplement_files": 180,
+    "reviewed_design_groups": 75,
+    "candidate_design_groups": 25,
+    "reviewed_publications": 47,
+    "mapped_publications": 68,
+    "new_sequence_only_reviewed_groups": 41,
+    "downloaded_supplement_files": 449,
     "new_repository_files": 8,
     "registry_review_states": {
-      "unresolved: discovery record, not a verified structure": 1734,
-      "contains_reviewed_structure_groups": 36,
+      "unresolved: discovery record, not a verified structure": 1719,
+      "contains_reviewed_structure_groups": 47,
       "background_or_secondary_source: metadata triage, no design decision": 369,
-      "named_structure_candidate: scope/list verification pending": 17,
+      "named_structure_candidate: scope/list verification pending": 21,
       "likely_out_of_scope: title triage, mixed-design paper not ruled out": 19,
       "preprint: publication/version reconciliation needed": 35
     },
@@ -7189,7 +7189,19 @@
       "quality_score": null,
       "image_kind": "not_reviewed",
       "rating_status": "not_scored_no_reviewed_CAD_image",
-      "publication_supplements": [],
+      "publication_supplements": [
+        {
+          "name": "nn6b03759_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/5844894",
+          "publisher_bytes": 3340153,
+          "article_id": 3750387,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/5844894-nn6b03759_si_001.pdf",
+          "bytes": 3340153,
+          "sha256": "4ce345aa9a0616116552c0776c7c7144485204e0a3dfb8ce45d527982633d4e9",
+          "publisher_md5_verified": true
+        }
+      ],
       "design_files": [],
       "complete_staple_set_validated": false,
       "staple_list": {
@@ -7367,7 +7379,19 @@
       "quality_score": null,
       "image_kind": "not_reviewed",
       "rating_status": "not_scored_no_reviewed_CAD_image",
-      "publication_supplements": [],
+      "publication_supplements": [
+        {
+          "name": "nn5011914_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3604944",
+          "publisher_bytes": 2991054,
+          "article_id": 2033631,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3604944-nn5011914_si_001.pdf",
+          "bytes": 2991054,
+          "sha256": "baadbd744aa4459dff356d5639f375f99b791d7bd7ab190425112fb952dd3e24",
+          "publisher_md5_verified": true
+        }
+      ],
       "design_files": [],
       "complete_staple_set_validated": false,
       "staple_list": {
@@ -7394,46 +7418,79 @@
       "doi": "10.1021/ja906381y",
       "design": "2×21, 3×14, 6×12 and 8×8 square-lattice blocks",
       "lattice": "square",
-      "sequence_location": "Supporting Information; sequence list retrieval unresolved",
+      "sequence_location": "SI Tables S1–S4, PDF pages 10–26; design schematics S3–S6, pages 6–9",
       "characterization": [
-        "negative-stain TEM",
+        "TEM",
         "cryo-EM"
       ],
       "family": "2×21, 3×14, 6×12 and 8×8 square-lattice blocks",
-      "notes": "Named structure and sequence source identified; not yet counted as a verified in-scope sequence-complete design. Preserve this gap rather than infer topology from a paper title.",
-      "review_status": "candidate_scope_or_list_verification_needed",
+      "notes": "Retrieved 41,132,035-byte supplement; inspected table headings and design references. Core lists located; 3-layer deletion variants require separate reconciliation. No synthesis-completeness claim.",
+      "review_status": "primary_source_reviewed",
       "id": "S042",
       "publication": "Multilayer DNA origami packed on a square lattice.",
       "first_publication_date": "2009-11-01",
       "publication_url": "https://doi.org/10.1021/ja906381y",
       "inclusion_basis": "published_staple_list",
-      "map_status": "candidate",
+      "map_status": "reviewed_in_scope",
       "image_file": null,
       "quality_score": null,
       "image_kind": "not_reviewed",
       "rating_status": "not_scored_no_reviewed_CAD_image",
-      "publication_supplements": [],
+      "publication_supplements": [
+        {
+          "name": "ja906381y_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4514002",
+          "publisher_bytes": 41132035,
+          "article_id": 2816488,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4514002-ja906381y_si_001.pdf",
+          "bytes": 41132035,
+          "sha256": "59512b4172f29322c7e17dd2334e28d6c555e601ae4c005067856c18ff651407",
+          "publisher_md5_verified": true
+        }
+      ],
       "design_files": [],
       "complete_staple_set_validated": false,
       "staple_list": {
-        "status": "reported_in_primary_publication",
-        "location": "Supporting Information; sequence list retrieval unresolved",
-        "sources": [],
-        "notes": "Source availability is not proof of complete core + variant + modified staple coverage. See design-specific notes; sequence-like string counts are retrieval aids only."
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Tables S1–S4, PDF pages 10–26; design schematics S3–S6, pages 6–9",
+        "sources": [
+          {
+            "name": "ja906381y_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4514002",
+            "publisher_bytes": 41132035,
+            "article_id": 2816488,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4514002-ja906381y_si_001.pdf",
+            "bytes": 41132035,
+            "sha256": "59512b4172f29322c7e17dd2334e28d6c555e601ae4c005067856c18ff651407",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Retrieved 41,132,035-byte supplement; inspected table headings and design references. Core lists located; 3-layer deletion variants require separate reconciliation. No synthesis-completeness claim."
       },
       "structural_characterization": {
         "modalities": [
-          "negative-stain TEM",
+          "TEM",
           "cryo-EM"
         ],
         "source_url": "https://doi.org/10.1021/ja906381y",
-        "scope": "named structure or variant family; confirm experiment-specific variant"
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
       },
       "imaging_datasets": {
         "public_raw_dataset_status": "not_verified",
         "resources": [],
         "notes": "Linked maps/models are distinct from raw imaging datasets; no raw-data absence claim."
-      }
+      },
+      "lattice_evidence": "Publisher abstract explicitly identifies square packing; SI Fig. S1 lists 2/3/6/8-layer designs.",
+      "variants": [
+        "2-layer",
+        "3-layer",
+        "6-layer",
+        "8-layer",
+        "3-layer deletion variants"
+      ],
+      "review_date": "2026-11-04"
     },
     {
       "doi": "10.1073/pnas.1215713109",
@@ -7664,6 +7721,1772 @@
         "resources": [],
         "notes": "Linked maps/models are distinct from raw imaging datasets; no raw-data absence claim."
       }
+    },
+    {
+      "id": "S047",
+      "doi": "10.1021/nn800215j",
+      "design": "Dolphin origami: flexible-tail, stable-tail and dimer variants",
+      "family": "Dolphin origami: flexible-tail, stable-tail and dimer variants",
+      "lattice": "square / single-layer parallel-helix domains",
+      "sequence_location": "SI pages 2–7: left/right, body seam, tail seam and interaction staple sets; assembly recipes on pages 6–7",
+      "lattice_evidence": "SI describes planar Rothemund crossover construction and explicit helix spacing.",
+      "notes": "Sequence sets and replacement rules inspected; dimer interaction colors must be preserved when extracting sequences. Author design-file URL is reported, not retrieved.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "flexible tail",
+        "stable tail",
+        "dimer dolphin 1",
+        "dimer dolphin 2"
+      ],
+      "publication": "DNA origami design of dolphin-shaped structures with flexible tails.",
+      "first_publication_date": "2008-06-01",
+      "publication_url": "https://doi.org/10.1021/nn800215j",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn800215j_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4630879",
+          "publisher_bytes": 211973,
+          "article_id": 2932309,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4630879-nn800215j_si_001.pdf",
+          "bytes": 211973,
+          "sha256": "de71223cca0ce5101a29cd07efbf7ce186068bbe5e32ad16102ccc6f04aefd2f",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 2–7: left/right, body seam, tail seam and interaction staple sets; assembly recipes on pages 6–7",
+        "sources": [
+          {
+            "name": "nn800215j_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4630879",
+            "publisher_bytes": 211973,
+            "article_id": 2932309,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4630879-nn800215j_si_001.pdf",
+            "bytes": 211973,
+            "sha256": "de71223cca0ce5101a29cd07efbf7ce186068bbe5e32ad16102ccc6f04aefd2f",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Sequence sets and replacement rules inspected; dimer interaction colors must be preserved when extracting sequences. Author design-file URL is reported, not retrieved."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nn800215j",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S048",
+      "doi": "10.1021/nl902535q",
+      "design": "756-nt PCR-scaffold rectangle: M13 and lambda variants",
+      "family": "756-nt PCR-scaffold rectangle: M13 and lambda variants",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI pages 3–4: named scaffold, primers and staple list",
+      "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+      "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Polymerase chain reaction based scaffold preparation for the production of thin, branched DNA origami nanostructures of arbitrary sizes.",
+      "first_publication_date": "2009-12-01",
+      "publication_url": "https://doi.org/10.1021/nl902535q",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl902535q_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4502020",
+          "publisher_bytes": 2746295,
+          "article_id": 2807488,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+          "bytes": 2746295,
+          "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 3–4: named scaffold, primers and staple list",
+        "sources": [
+          {
+            "name": "nl902535q_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4502020",
+            "publisher_bytes": 2746295,
+            "article_id": 2807488,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+            "bytes": 2746295,
+            "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl902535q",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S049",
+      "doi": "10.1021/nl902535q",
+      "design": "Thin branched T origami, 2958-nt M13 scaffold",
+      "family": "Thin branched T origami, 2958-nt M13 scaffold",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI pages 5–7: named scaffold, primers and staple list",
+      "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+      "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Polymerase chain reaction based scaffold preparation for the production of thin, branched DNA origami nanostructures of arbitrary sizes.",
+      "first_publication_date": "2009-12-01",
+      "publication_url": "https://doi.org/10.1021/nl902535q",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl902535q_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4502020",
+          "publisher_bytes": 2746295,
+          "article_id": 2807488,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+          "bytes": 2746295,
+          "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 5–7: named scaffold, primers and staple list",
+        "sources": [
+          {
+            "name": "nl902535q_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4502020",
+            "publisher_bytes": 2746295,
+            "article_id": 2807488,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+            "bytes": 2746295,
+            "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl902535q",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S050",
+      "doi": "10.1021/nl902535q",
+      "design": "Thin branched U origami, 3840-nt lambda scaffold",
+      "family": "Thin branched U origami, 3840-nt lambda scaffold",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI pages 8–10: named scaffold, primers and staple list",
+      "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+      "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Polymerase chain reaction based scaffold preparation for the production of thin, branched DNA origami nanostructures of arbitrary sizes.",
+      "first_publication_date": "2009-12-01",
+      "publication_url": "https://doi.org/10.1021/nl902535q",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl902535q_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4502020",
+          "publisher_bytes": 2746295,
+          "article_id": 2807488,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+          "bytes": 2746295,
+          "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 8–10: named scaffold, primers and staple list",
+        "sources": [
+          {
+            "name": "nl902535q_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4502020",
+            "publisher_bytes": 2746295,
+            "article_id": 2807488,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+            "bytes": 2746295,
+            "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl902535q",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S051",
+      "doi": "10.1021/nl902535q",
+      "design": "Thin branched B origami",
+      "family": "Thin branched B origami",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI pages 11–14: named scaffold, primers and staple list",
+      "lattice_evidence": "Staple lists inspected; full lattice/routing eligibility remains to be checked against the primary design figures.",
+      "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Polymerase chain reaction based scaffold preparation for the production of thin, branched DNA origami nanostructures of arbitrary sizes.",
+      "first_publication_date": "2009-12-01",
+      "publication_url": "https://doi.org/10.1021/nl902535q",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl902535q_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4502020",
+          "publisher_bytes": 2746295,
+          "article_id": 2807488,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+          "bytes": 2746295,
+          "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 11–14: named scaffold, primers and staple list",
+        "sources": [
+          {
+            "name": "nl902535q_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4502020",
+            "publisher_bytes": 2746295,
+            "article_id": 2807488,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4502020-nl902535q_si_001.pdf",
+            "bytes": 2746295,
+            "sha256": "2674605303cd96c878d907bc55d13d0dd85846806f47c09a4b74ec564fc767c8",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Retained as a named sequence-supported candidate, not accepted solely from the shape name."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl902535q",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S052",
+      "doi": "10.1021/ja106292x",
+      "design": "24-helix planar zigzag origami tile",
+      "family": "24-helix planar zigzag origami tile",
+      "lattice": "square / single-layer parallel helices",
+      "sequence_location": "Fig. S1 and core list, SI pages 3–6; linkers pages 7 and 11–12",
+      "lattice_evidence": "Published planar zigzag routing diagrams and helix-numbered staple lists; 24-helix Fig. S1 visually inspected.",
+      "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "publication": "Molecular behavior of DNA origami in higher-order self-assembly.",
+      "first_publication_date": "2010-09-01",
+      "publication_url": "https://doi.org/10.1021/ja106292x",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "ja106292x_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4402789",
+          "publisher_bytes": 24326221,
+          "article_id": 2726794,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+          "bytes": 24326221,
+          "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "Fig. S1 and core list, SI pages 3–6; linkers pages 7 and 11–12",
+        "sources": [
+          {
+            "name": "ja106292x_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4402789",
+            "publisher_bytes": 24326221,
+            "article_id": 2726794,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+            "bytes": 24326221,
+            "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/ja106292x",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S053",
+      "doi": "10.1021/ja106292x",
+      "design": "12-helix planar zigzag origami tile",
+      "family": "12-helix planar zigzag origami tile",
+      "lattice": "square / single-layer parallel helices",
+      "sequence_location": "Core list begins SI page 12 and continues through 15; linker Fig. S9 page 16",
+      "lattice_evidence": "Visually inspected the filled planar parallel-helix routing diagram: Fig. S8, SI page 12.",
+      "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "publication": "Molecular behavior of DNA origami in higher-order self-assembly.",
+      "first_publication_date": "2010-09-01",
+      "publication_url": "https://doi.org/10.1021/ja106292x",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "ja106292x_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4402789",
+          "publisher_bytes": 24326221,
+          "article_id": 2726794,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+          "bytes": 24326221,
+          "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "Core list begins SI page 12 and continues through 15; linker Fig. S9 page 16",
+        "sources": [
+          {
+            "name": "ja106292x_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4402789",
+            "publisher_bytes": 24326221,
+            "article_id": 2726794,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+            "bytes": 24326221,
+            "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/ja106292x",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S054",
+      "doi": "10.1021/ja106292x",
+      "design": "40-helix planar zigzag origami tile",
+      "family": "40-helix planar zigzag origami tile",
+      "lattice": "square / single-layer parallel helices",
+      "sequence_location": "Fig. S11 and core list, SI pages 17–20; linker Fig. S12 page 21",
+      "lattice_evidence": "Visually inspected the filled planar parallel-helix routing diagram: Fig. S11, SI page 17.",
+      "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "publication": "Molecular behavior of DNA origami in higher-order self-assembly.",
+      "first_publication_date": "2010-09-01",
+      "publication_url": "https://doi.org/10.1021/ja106292x",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "ja106292x_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4402789",
+          "publisher_bytes": 24326221,
+          "article_id": 2726794,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+          "bytes": 24326221,
+          "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "Fig. S11 and core list, SI pages 17–20; linker Fig. S12 page 21",
+        "sources": [
+          {
+            "name": "ja106292x_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4402789",
+            "publisher_bytes": 24326221,
+            "article_id": 2726794,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4402789-ja106292x_si_001.pdf",
+            "bytes": 24326221,
+            "sha256": "0151829c3aafe9d3137d52cae814fbd44692b0b3b7e6eb7280268ade16f2a5bf",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Core tile and intertile linkers remain separate evidence. Assemblies and linker-number variants are not extra base geometries. Full list-to-routing reconciliation pending."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/ja106292x",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S055",
+      "doi": "10.1021/nn1031627",
+      "design": "Nine planar jigsaw-piece monomers JP-1 through JP-9",
+      "family": "Nine planar jigsaw-piece monomers JP-1 through JP-9",
+      "lattice": "square / single-layer parallel helices",
+      "sequence_location": "SI pages 3–11: sequence-labeled JP-1…JP-9 maps; pages 12–22: tile staple tables and hairpin additions",
+      "lattice_evidence": "Planar filled parallel-helix domain maps; JP-1 page 3 visually inspected; separate JP labels verified on all nine map pages.",
+      "notes": "Nine monomers retained as explicit variants in one family. Hairpin letters and assembled arrays are not new geometries. Per-tile sequence completeness is not certified.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "JP-1",
+        "JP-2",
+        "JP-3",
+        "JP-4",
+        "JP-5",
+        "JP-6",
+        "JP-7",
+        "JP-8",
+        "JP-9"
+      ],
+      "publication": "Programmed two-dimensional self-assembly of multiple DNA origami jigsaw pieces.",
+      "first_publication_date": "2010-12-28",
+      "publication_url": "https://doi.org/10.1021/nn1031627",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn1031627_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4372801",
+          "publisher_bytes": 564358,
+          "article_id": 2696854,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4372801-nn1031627_si_001.pdf",
+          "bytes": 564358,
+          "sha256": "bc30de98943ad1f98142b7180627f275923d32e2236d08602358d111316c46b4",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI pages 3–11: sequence-labeled JP-1…JP-9 maps; pages 12–22: tile staple tables and hairpin additions",
+        "sources": [
+          {
+            "name": "nn1031627_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4372801",
+            "publisher_bytes": 564358,
+            "article_id": 2696854,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4372801-nn1031627_si_001.pdf",
+            "bytes": 564358,
+            "sha256": "bc30de98943ad1f98142b7180627f275923d32e2236d08602358d111316c46b4",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Nine monomers retained as explicit variants in one family. Hairpin letters and assembled arrays are not new geometries. Per-tile sequence completeness is not certified."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nn1031627",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S056",
+      "doi": "10.1021/nl101079u",
+      "design": "6HB quantum-dot nanotube with periodic sticky-end sites",
+      "family": "6HB quantum-dot nanotube with periodic sticky-end sites",
+      "lattice": "honeycomb",
+      "sequence_location": "SI Table S1, pages 6–9; design methods page 2 and Fig. S1",
+      "lattice_evidence": "SI defines six parallel helices in a tube with a three-column, 14-nt-domain staple motif.",
+      "notes": "170-staple list located; sticky-end spacing/quantum-dot occupancy variants require exact matching.",
+      "characterization": [
+        "AFM",
+        "fluorescence"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "publication": "Programmable periodicity of quantum dot arrays with DNA origami nanotubes.",
+      "first_publication_date": "2010-09-01",
+      "publication_url": "https://doi.org/10.1021/nl101079u",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl101079u_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3584865",
+          "publisher_bytes": 13051353,
+          "article_id": 2013963,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3584865-nl101079u_si_001.pdf",
+          "bytes": 13051353,
+          "sha256": "72dae3f044ce5927dcb6a46e536d019ec690fd5fff2c19ca7867fc660afef8d6",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Table S1, pages 6–9; design methods page 2 and Fig. S1",
+        "sources": [
+          {
+            "name": "nl101079u_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3584865",
+            "publisher_bytes": 13051353,
+            "article_id": 2013963,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3584865-nl101079u_si_001.pdf",
+            "bytes": 13051353,
+            "sha256": "72dae3f044ce5927dcb6a46e536d019ec690fd5fff2c19ca7867fc660afef8d6",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "170-staple list located; sticky-end spacing/quantum-dot occupancy variants require exact matching."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM",
+          "fluorescence"
+        ],
+        "source_url": "https://doi.org/10.1021/nl101079u",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S057",
+      "doi": "10.1021/nl1033073",
+      "design": "Thiol-functionalized 6HB for interconnecting gold islands",
+      "family": "Thiol-functionalized 6HB for interconnecting gold islands",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI Table S1 pages 3–6; Table S2 page 7; Fig. S6 pages 15–16",
+      "lattice_evidence": "SI explicitly identifies a six-helix bundle; cross-sectional packing still needs inspection.",
+      "notes": "Unmodified core and thiolated replacement staples located; paper identifies the Stearns template, so family deduplication remains.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Interconnecting gold islands with DNA origami nanotubes.",
+      "first_publication_date": "2010-11-11",
+      "publication_url": "https://doi.org/10.1021/nl1033073",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl1033073_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4382755",
+          "publisher_bytes": 28271837,
+          "article_id": 2706808,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4382755-nl1033073_si_001.pdf",
+          "bytes": 28271837,
+          "sha256": "67b8692301d1c73d1c0c2f332cb2ca1805ed87ba0afd395f553bc38dbc3082c1",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Table S1 pages 3–6; Table S2 page 7; Fig. S6 pages 15–16",
+        "sources": [
+          {
+            "name": "nl1033073_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4382755",
+            "publisher_bytes": 28271837,
+            "article_id": 2706808,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4382755-nl1033073_si_001.pdf",
+            "bytes": 28271837,
+            "sha256": "67b8692301d1c73d1c0c2f332cb2ca1805ed87ba0afd395f553bc38dbc3082c1",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Unmodified core and thiolated replacement staples located; paper identifies the Stearns template, so family deduplication remains."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl1033073",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S058",
+      "doi": "10.1021/nl203217m",
+      "design": "Revertible planar DNA-origami nanoactuator",
+      "family": "Revertible planar DNA-origami nanoactuator",
+      "lattice": "square / single-layer parallel helices",
+      "sequence_location": "SI Fig. S1 page 3; Table S1 pages 8–13",
+      "lattice_evidence": "Visually inspected Fig. S1: filled planar parallel-helix origami with central actuation region.",
+      "notes": "Sequence table is present but PDF text extraction is garbled; requires visual/OCR reconciliation before sequence import. Closed and actuated states are one design family.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "publication": "A revertible, autonomous, self-assembled DNA-origami nanoactuator.",
+      "first_publication_date": "2011-11-04",
+      "publication_url": "https://doi.org/10.1021/nl203217m",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl203217m_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4215802",
+          "publisher_bytes": 2242368,
+          "article_id": 2572597,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4215802-nl203217m_si_001.pdf",
+          "bytes": 2242368,
+          "sha256": "b32bb00f1ce3d7e1e100dc87c76034a375919b8f03ad7262ed05a024a36ae4c4",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Fig. S1 page 3; Table S1 pages 8–13",
+        "sources": [
+          {
+            "name": "nl203217m_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4215802",
+            "publisher_bytes": 2242368,
+            "article_id": 2572597,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4215802-nl203217m_si_001.pdf",
+            "bytes": 2242368,
+            "sha256": "b32bb00f1ce3d7e1e100dc87c76034a375919b8f03ad7262ed05a024a36ae4c4",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Sequence table is present but PDF text extraction is garbled; requires visual/OCR reconciliation before sequence import. Closed and actuated states are one design family."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl203217m",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S059",
+      "doi": "10.1021/nl203503s",
+      "design": "Magnetic-tweezers 4HB and 6HB mechanical probes",
+      "family": "Magnetic-tweezers 4HB and 6HB mechanical probes",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI Fig. S9, page 10: sequence-labeled caDNAno templates and attachment modifications",
+      "lattice_evidence": "Caption explicitly distinguishes 4HB and 6HB, including imaginary gaps in the 4HB diagram; lattice assignment needs detailed review.",
+      "notes": "Published design image inspected. Flexible/rigid 6HB attachments and rigid 4HB retained as variants; no image score or sequence-completeness certification.",
+      "characterization": [
+        "magnetic tweezers"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_CAD_image",
+      "review_status": "scope_verification_pending",
+      "variants": [
+        "6HB flexible attachment",
+        "6HB rigid attachment",
+        "4HB rigid attachment"
+      ],
+      "staple_status": "published_design_image_located_full_staple_list_unverified",
+      "publication": "Direct mechanical measurements reveal the material properties of three-dimensional DNA origami.",
+      "first_publication_date": "2011-11-08",
+      "publication_url": "https://doi.org/10.1021/nl203503s",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl203503s_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4215919",
+          "publisher_bytes": 3661712,
+          "article_id": 2572702,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4215919-nl203503s_si_001.pdf",
+          "bytes": 3661712,
+          "sha256": "7cf17bdfade4d30b63d0be2014ad37c25aa7851f20bd23bedc1688d02f91e9f5",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_design_image_located_full_staple_list_unverified",
+        "location": "SI Fig. S9, page 10: sequence-labeled caDNAno templates and attachment modifications",
+        "sources": [
+          {
+            "name": "nl203503s_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4215919",
+            "publisher_bytes": 3661712,
+            "article_id": 2572702,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4215919-nl203503s_si_001.pdf",
+            "bytes": 3661712,
+            "sha256": "7cf17bdfade4d30b63d0be2014ad37c25aa7851f20bd23bedc1688d02f91e9f5",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Published design image inspected. Flexible/rigid 6HB attachments and rigid 4HB retained as variants; no image score or sequence-completeness certification."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "magnetic tweezers"
+        ],
+        "source_url": "https://doi.org/10.1021/nl203503s",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S060",
+      "doi": "10.1021/nn303767b",
+      "design": "Switchable 3.9-zL DNA box",
+      "family": "Switchable 3.9-zL DNA box",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI staple list pages 27–28; design discussion pages 2–6",
+      "lattice_evidence": "Methods combine 32-base planar crossovers with a hexagonal edge-connection scheme.",
+      "notes": "Actual source inspected; hybrid edge geometry requires a scope decision. Do not classify the entire object as standard square packing from its planar faces.",
+      "characterization": [
+        "AFM",
+        "TEM",
+        "DLS",
+        "FRET"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "publication": "Construction of a 4 zeptoliters switchable 3D DNA box origami.",
+      "first_publication_date": "2012-10-08",
+      "publication_url": "https://doi.org/10.1021/nn303767b",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn303767b_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/4108384",
+          "publisher_bytes": 12351946,
+          "article_id": 2465692,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/4108384-nn303767b_si_001.pdf",
+          "bytes": 12351946,
+          "sha256": "55976b7db02ebff9018c3d6e20258560bdcbeea0671e4f15f0ec7bc39051e33d",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI staple list pages 27–28; design discussion pages 2–6",
+        "sources": [
+          {
+            "name": "nn303767b_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/4108384",
+            "publisher_bytes": 12351946,
+            "article_id": 2465692,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/4108384-nn303767b_si_001.pdf",
+            "bytes": 12351946,
+            "sha256": "55976b7db02ebff9018c3d6e20258560bdcbeea0671e4f15f0ec7bc39051e33d",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Actual source inspected; hybrid edge geometry requires a scope decision. Do not classify the entire object as standard square packing from its planar faces."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM",
+          "TEM",
+          "DLS",
+          "FRET"
+        ],
+        "source_url": "https://doi.org/10.1021/nn303767b",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S061",
+      "doi": "10.1021/nl502626s",
+      "design": "7k notched rectangle, three helical-pitch variants",
+      "family": "7k notched rectangle, three helical-pitch variants",
+      "lattice": "square",
+      "sequence_location": "SI Note 4 and Table S2, pages 6–7; Note 6 page 12; 7k-NR staple workbook, three sheets",
+      "lattice_evidence": "SI page 7 explicitly states square-lattice caDNAno design; workbook sheet names verified.",
+      "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "10.33 bp/turn",
+        "10.50 bp/turn",
+        "10.67 bp/turn"
+      ],
+      "publication": "Toward larger DNA origami.",
+      "first_publication_date": "2014-09-08",
+      "publication_url": "https://doi.org/10.1021/nl502626s",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl502626s_si_004.txt",
+          "url": "https://ndownloader.figshare.com/files/3883837",
+          "publisher_bytes": 51466,
+          "article_id": 2247868,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883837-nl502626s_si_004.txt",
+          "bytes": 51466,
+          "sha256": "09a8a8885418af5c8acb1e9c03a55630b94c8865b51b1a7e42852bf25288ee6f",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3883834",
+          "publisher_bytes": 14525767,
+          "article_id": 2247865,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883834-nl502626s_si_001.pdf",
+          "bytes": 14525767,
+          "sha256": "2dd6dfbf7a153465a6d2e8ee5980ec283bc3b99f0e6ccf88a2c5c370cb9545dc",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_005.txt",
+          "url": "https://ndownloader.figshare.com/files/3883831",
+          "publisher_bytes": 9718,
+          "article_id": 2247862,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883831-nl502626s_si_005.txt",
+          "bytes": 9718,
+          "sha256": "7e0a0a12f790b2144d5babb4fe8fe5da788eed9b3c9010d0612c80dfd43f7e8a",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_003.xlsx",
+          "url": "https://ndownloader.figshare.com/files/3883828",
+          "publisher_bytes": 222768,
+          "article_id": 2247859,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883828-nl502626s_si_003.xlsx",
+          "bytes": 222768,
+          "sha256": "442c75e5cb40f4c8f3b36d0f98c2bbbf042bda40672c973d7c5cf888219b012f",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_002.xlsx",
+          "url": "https://ndownloader.figshare.com/files/3883825",
+          "publisher_bytes": 75456,
+          "article_id": 2247856,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883825-nl502626s_si_002.xlsx",
+          "bytes": 75456,
+          "sha256": "23aa0f0e8b9378749d20f7600f420f2ac1f6c8b6b8e88e0c2ea065325f37908f",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Note 4 and Table S2, pages 6–7; Note 6 page 12; 7k-NR staple workbook, three sheets",
+        "sources": [
+          {
+            "name": "nl502626s_si_004.txt",
+            "url": "https://ndownloader.figshare.com/files/3883837",
+            "publisher_bytes": 51466,
+            "article_id": 2247868,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883837-nl502626s_si_004.txt",
+            "bytes": 51466,
+            "sha256": "09a8a8885418af5c8acb1e9c03a55630b94c8865b51b1a7e42852bf25288ee6f",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3883834",
+            "publisher_bytes": 14525767,
+            "article_id": 2247865,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883834-nl502626s_si_001.pdf",
+            "bytes": 14525767,
+            "sha256": "2dd6dfbf7a153465a6d2e8ee5980ec283bc3b99f0e6ccf88a2c5c370cb9545dc",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_005.txt",
+            "url": "https://ndownloader.figshare.com/files/3883831",
+            "publisher_bytes": 9718,
+            "article_id": 2247862,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883831-nl502626s_si_005.txt",
+            "bytes": 9718,
+            "sha256": "7e0a0a12f790b2144d5babb4fe8fe5da788eed9b3c9010d0612c80dfd43f7e8a",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_003.xlsx",
+            "url": "https://ndownloader.figshare.com/files/3883828",
+            "publisher_bytes": 222768,
+            "article_id": 2247859,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883828-nl502626s_si_003.xlsx",
+            "bytes": 222768,
+            "sha256": "442c75e5cb40f4c8f3b36d0f98c2bbbf042bda40672c973d7c5cf888219b012f",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_002.xlsx",
+            "url": "https://ndownloader.figshare.com/files/3883825",
+            "publisher_bytes": 75456,
+            "article_id": 2247856,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883825-nl502626s_si_002.xlsx",
+            "bytes": 75456,
+            "sha256": "23aa0f0e8b9378749d20f7600f420f2ac1f6c8b6b8e88e0c2ea065325f37908f",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl502626s",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S062",
+      "doi": "10.1021/nl502626s",
+      "design": "51k notched rectangle, three helical-pitch variants",
+      "family": "51k notched rectangle, three helical-pitch variants",
+      "lattice": "square",
+      "sequence_location": "SI Note 4 and Table S2, pages 6–7; Note 6 page 12; 51k-NR staple workbook, three sheets",
+      "lattice_evidence": "SI page 7 explicitly states square-lattice caDNAno design; workbook sheet names verified.",
+      "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "10.33 bp/turn",
+        "10.50 bp/turn",
+        "10.67 bp/turn"
+      ],
+      "publication": "Toward larger DNA origami.",
+      "first_publication_date": "2014-09-08",
+      "publication_url": "https://doi.org/10.1021/nl502626s",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl502626s_si_004.txt",
+          "url": "https://ndownloader.figshare.com/files/3883837",
+          "publisher_bytes": 51466,
+          "article_id": 2247868,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883837-nl502626s_si_004.txt",
+          "bytes": 51466,
+          "sha256": "09a8a8885418af5c8acb1e9c03a55630b94c8865b51b1a7e42852bf25288ee6f",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3883834",
+          "publisher_bytes": 14525767,
+          "article_id": 2247865,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883834-nl502626s_si_001.pdf",
+          "bytes": 14525767,
+          "sha256": "2dd6dfbf7a153465a6d2e8ee5980ec283bc3b99f0e6ccf88a2c5c370cb9545dc",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_005.txt",
+          "url": "https://ndownloader.figshare.com/files/3883831",
+          "publisher_bytes": 9718,
+          "article_id": 2247862,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883831-nl502626s_si_005.txt",
+          "bytes": 9718,
+          "sha256": "7e0a0a12f790b2144d5babb4fe8fe5da788eed9b3c9010d0612c80dfd43f7e8a",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_003.xlsx",
+          "url": "https://ndownloader.figshare.com/files/3883828",
+          "publisher_bytes": 222768,
+          "article_id": 2247859,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883828-nl502626s_si_003.xlsx",
+          "bytes": 222768,
+          "sha256": "442c75e5cb40f4c8f3b36d0f98c2bbbf042bda40672c973d7c5cf888219b012f",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nl502626s_si_002.xlsx",
+          "url": "https://ndownloader.figshare.com/files/3883825",
+          "publisher_bytes": 75456,
+          "article_id": 2247856,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3883825-nl502626s_si_002.xlsx",
+          "bytes": 75456,
+          "sha256": "23aa0f0e8b9378749d20f7600f420f2ac1f6c8b6b8e88e0c2ea065325f37908f",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Note 4 and Table S2, pages 6–7; Note 6 page 12; 51k-NR staple workbook, three sheets",
+        "sources": [
+          {
+            "name": "nl502626s_si_004.txt",
+            "url": "https://ndownloader.figshare.com/files/3883837",
+            "publisher_bytes": 51466,
+            "article_id": 2247868,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883837-nl502626s_si_004.txt",
+            "bytes": 51466,
+            "sha256": "09a8a8885418af5c8acb1e9c03a55630b94c8865b51b1a7e42852bf25288ee6f",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3883834",
+            "publisher_bytes": 14525767,
+            "article_id": 2247865,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883834-nl502626s_si_001.pdf",
+            "bytes": 14525767,
+            "sha256": "2dd6dfbf7a153465a6d2e8ee5980ec283bc3b99f0e6ccf88a2c5c370cb9545dc",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_005.txt",
+            "url": "https://ndownloader.figshare.com/files/3883831",
+            "publisher_bytes": 9718,
+            "article_id": 2247862,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883831-nl502626s_si_005.txt",
+            "bytes": 9718,
+            "sha256": "7e0a0a12f790b2144d5babb4fe8fe5da788eed9b3c9010d0612c80dfd43f7e8a",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_003.xlsx",
+            "url": "https://ndownloader.figshare.com/files/3883828",
+            "publisher_bytes": 222768,
+            "article_id": 2247859,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883828-nl502626s_si_003.xlsx",
+            "bytes": 222768,
+            "sha256": "442c75e5cb40f4c8f3b36d0f98c2bbbf042bda40672c973d7c5cf888219b012f",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nl502626s_si_002.xlsx",
+            "url": "https://ndownloader.figshare.com/files/3883825",
+            "publisher_bytes": 75456,
+            "article_id": 2247856,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3883825-nl502626s_si_002.xlsx",
+            "bytes": 75456,
+            "sha256": "23aa0f0e8b9378749d20f7600f420f2ac1f6c8b6b8e88e0c2ea065325f37908f",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Three pitch variants per scaffold size. Workbooks retain original sheet labels (1.33/1.5/1.67bppt); physical pitches in SI are 10.33/10.50/10.67 bp/turn. JSON designs are mentioned but not located among acquired deposits."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl502626s",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S063",
+      "doi": "10.1021/nn405045x",
+      "design": "Ionic-permeability nanoplates: HC, RR, 2LL and 3LL",
+      "family": "Ionic-permeability nanoplates: HC, RR, 2LL and 3LL",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI design section pages 23–29; staple lists HC p30, RR p32, 2LL p36, 3LL p40",
+      "lattice_evidence": "HC identified as honeycomb in SI section 3; other plate-specific packing and template reuse need checking.",
+      "notes": "All four named lists and design-map captions located; remain candidates until individual lattice assignments and prior-template relationships are resolved.",
+      "characterization": [
+        "ionic-current recordings"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "variants": [
+        "HC",
+        "RR",
+        "2LL",
+        "3LL"
+      ],
+      "publication": "Ionic permeability and mechanical properties of DNA origami nanoplates on solid-state nanopores.",
+      "first_publication_date": "2013-12-05",
+      "publication_url": "https://doi.org/10.1021/nn405045x",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn405045x_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3966595",
+          "publisher_bytes": 8538616,
+          "article_id": 2328970,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3966595-nn405045x_si_001.pdf",
+          "bytes": 8538616,
+          "sha256": "a0f79ae1c45ad577f5bca149f7e96373f039ddda8d596dc8b126dc347f82fcfd",
+          "publisher_md5_verified": true
+        },
+        {
+          "name": "nn405045x_si_002.txt",
+          "url": "https://ndownloader.figshare.com/files/3966592",
+          "publisher_bytes": 48769,
+          "article_id": 2328964,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3966592-nn405045x_si_002.txt",
+          "bytes": 48769,
+          "sha256": "bfcd2adc91f0904f1b635935203463942fb3970df0a456cf7606a225adeb3590",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI design section pages 23–29; staple lists HC p30, RR p32, 2LL p36, 3LL p40",
+        "sources": [
+          {
+            "name": "nn405045x_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3966595",
+            "publisher_bytes": 8538616,
+            "article_id": 2328970,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3966595-nn405045x_si_001.pdf",
+            "bytes": 8538616,
+            "sha256": "a0f79ae1c45ad577f5bca149f7e96373f039ddda8d596dc8b126dc347f82fcfd",
+            "publisher_md5_verified": true
+          },
+          {
+            "name": "nn405045x_si_002.txt",
+            "url": "https://ndownloader.figshare.com/files/3966592",
+            "publisher_bytes": 48769,
+            "article_id": 2328964,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3966592-nn405045x_si_002.txt",
+            "bytes": 48769,
+            "sha256": "bfcd2adc91f0904f1b635935203463942fb3970df0a456cf7606a225adeb3590",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "All four named lists and design-map captions located; remain candidates until individual lattice assignments and prior-template relationships are resolved."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "ionic-current recordings"
+        ],
+        "source_url": "https://doi.org/10.1021/nn405045x",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S064",
+      "doi": "10.1021/nl503441v",
+      "design": "Square-lattice DNA mold for gold growth, monomer and dimer variants",
+      "family": "Square-lattice DNA mold for gold growth, monomer and dimer variants",
+      "lattice": "square",
+      "sequence_location": "SI Fig. S6 page 7; Fig. S7 page 8; dimer connector Table S1 page 9",
+      "lattice_evidence": "Fig. S6 cross-section visually inspected; caption explicitly specifies square lattice.",
+      "notes": "Sequence-labeled core design image and connector table located. Dimer changes and capture overhangs need full reconciliation; no complete sequence-list claim.",
+      "characterization": [
+        "TEM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_CAD_image",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "monomer",
+        "side-by-side dimer",
+        "head-to-tail dimer"
+      ],
+      "staple_status": "published_design_image_located_full_staple_list_unverified",
+      "publication": "Shape-controlled synthesis of gold nanostructures using DNA origami molds.",
+      "first_publication_date": "2014-10-02",
+      "publication_url": "https://doi.org/10.1021/nl503441v",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl503441v_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3872113",
+          "publisher_bytes": 5936327,
+          "article_id": 2236192,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3872113-nl503441v_si_001.pdf",
+          "bytes": 5936327,
+          "sha256": "2a4346545a819e4bd2c264ebd1bb40a792d70363cb43d74ed1a365c92de3bc57",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_design_image_located_full_staple_list_unverified",
+        "location": "SI Fig. S6 page 7; Fig. S7 page 8; dimer connector Table S1 page 9",
+        "sources": [
+          {
+            "name": "nl503441v_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3872113",
+            "publisher_bytes": 5936327,
+            "article_id": 2236192,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3872113-nl503441v_si_001.pdf",
+            "bytes": 5936327,
+            "sha256": "2a4346545a819e4bd2c264ebd1bb40a792d70363cb43d74ed1a365c92de3bc57",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Sequence-labeled core design image and connector table located. Dimer changes and capture overhangs need full reconciliation; no complete sequence-list claim."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "TEM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl503441v",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S065",
+      "doi": "10.1021/nl5009635",
+      "design": "Square-lattice block for SERS gold-particle nanoantenna",
+      "family": "Square-lattice block for SERS gold-particle nanoantenna",
+      "lattice": "square",
+      "sequence_location": "SI Fig. S1, page 4: caDNAno routing and attachment sites",
+      "lattice_evidence": "SI caption explicitly identifies square-lattice block, 58×30×8 nm; diagram visually inspected.",
+      "notes": "Six poly-A capture extensions identified. Core staple list not established by this supplement; prior Stein template must be reconciled.",
+      "characterization": [
+        "SERS",
+        "TEM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_CAD_image",
+      "review_status": "primary_source_reviewed",
+      "variants": [],
+      "staple_status": "published_design_image_located_full_staple_list_unverified",
+      "publication": "Plasmonic DNA-origami nanoantennas for surface-enhanced Raman spectroscopy.",
+      "first_publication_date": "2014-04-25",
+      "publication_url": "https://doi.org/10.1021/nl5009635",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nl5009635_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3934906",
+          "publisher_bytes": 525841,
+          "article_id": 2297380,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3934906-nl5009635_si_001.pdf",
+          "bytes": 525841,
+          "sha256": "41e0ed05e3d0a7b1463fc403ceadb2b86e871fad4a6fb1585cb5a67c26e8cf44",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_design_image_located_full_staple_list_unverified",
+        "location": "SI Fig. S1, page 4: caDNAno routing and attachment sites",
+        "sources": [
+          {
+            "name": "nl5009635_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3934906",
+            "publisher_bytes": 525841,
+            "article_id": 2297380,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3934906-nl5009635_si_001.pdf",
+            "bytes": 525841,
+            "sha256": "41e0ed05e3d0a7b1463fc403ceadb2b86e871fad4a6fb1585cb5a67c26e8cf44",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Six poly-A capture extensions identified. Core staple list not established by this supplement; prior Stein template must be reconciled."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "SERS",
+          "TEM"
+        ],
+        "source_url": "https://doi.org/10.1021/nl5009635",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S066",
+      "doi": "10.1021/acsnano.5b00161",
+      "design": "Membrane-binding square-lattice block and assembly connectors",
+      "family": "Membrane-binding square-lattice block and assembly connectors",
+      "lattice": "square",
+      "sequence_location": "SI Fig. S1 page 2; Table S1 pages 12–18",
+      "lattice_evidence": "Block map visually inspected; Figs. S3–S4 identify square-lattice helix positions.",
+      "notes": "Unmodified, cholesterol, dye and assembly connector sets listed separately. Dimer/polymer variants are retained under one base block.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "unmodified block",
+        "cholesterol/dye variants",
+        "dimers",
+        "1D/2D assembly connectors"
+      ],
+      "publication": "Membrane-assisted growth of DNA origami nanostructure arrays.",
+      "first_publication_date": "2015-03-19",
+      "publication_url": "https://doi.org/10.1021/acsnano.5b00161",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn5b00161_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3621504",
+          "publisher_bytes": 2665675,
+          "article_id": 2050152,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3621504-nn5b00161_si_001.pdf",
+          "bytes": 2665675,
+          "sha256": "ea9dc55190c18ebbce4d77f0698346e3cbab8110fb4dff2193f34ef0edf999f6",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Fig. S1 page 2; Table S1 pages 12–18",
+        "sources": [
+          {
+            "name": "nn5b00161_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3621504",
+            "publisher_bytes": 2665675,
+            "article_id": 2050152,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3621504-nn5b00161_si_001.pdf",
+            "bytes": 2665675,
+            "sha256": "ea9dc55190c18ebbce4d77f0698346e3cbab8110fb4dff2193f34ef0edf999f6",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Unmodified, cholesterol, dye and assembly connector sets listed separately. Dimer/polymer variants are retained under one base block."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/acsnano.5b00161",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S067",
+      "doi": "10.1021/acsnano.5b00161",
+      "design": "Membrane-binding triskelion and trimer connectors",
+      "family": "Membrane-binding triskelion and trimer connectors",
+      "lattice": "requires_design_specific_review",
+      "sequence_location": "SI Fig. S2 page 3; Table S2 pages 19–23",
+      "lattice_evidence": "Named staple tables found; component packing and assembly eligibility need diagram review.",
+      "notes": "Do not infer eligibility from coexistence with an accepted square-lattice block.",
+      "characterization": [
+        "AFM"
+      ],
+      "map_status": "candidate",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "scope_verification_pending",
+      "variants": [],
+      "publication": "Membrane-assisted growth of DNA origami nanostructure arrays.",
+      "first_publication_date": "2015-03-19",
+      "publication_url": "https://doi.org/10.1021/acsnano.5b00161",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn5b00161_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3621504",
+          "publisher_bytes": 2665675,
+          "article_id": 2050152,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3621504-nn5b00161_si_001.pdf",
+          "bytes": 2665675,
+          "sha256": "ea9dc55190c18ebbce4d77f0698346e3cbab8110fb4dff2193f34ef0edf999f6",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Fig. S2 page 3; Table S2 pages 19–23",
+        "sources": [
+          {
+            "name": "nn5b00161_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3621504",
+            "publisher_bytes": 2665675,
+            "article_id": 2050152,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3621504-nn5b00161_si_001.pdf",
+            "bytes": 2665675,
+            "sha256": "ea9dc55190c18ebbce4d77f0698346e3cbab8110fb4dff2193f34ef0edf999f6",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Do not infer eligibility from coexistence with an accepted square-lattice block."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "AFM"
+        ],
+        "source_url": "https://doi.org/10.1021/acsnano.5b00161",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
+    },
+    {
+      "id": "S068",
+      "doi": "10.1021/nn405408g",
+      "design": "Compliant origami joint, five ssDNA-spring variants",
+      "family": "Compliant origami joint, five ssDNA-spring variants",
+      "lattice": "honeycomb",
+      "sequence_location": "SI Figs. S7–S11 pages 19–20; common staples pages 21–23; replacements pages 24–27",
+      "lattice_evidence": "SI describes honeycomb organization and 18-helix rigid ends; three caDNAno variant maps on page 19 visually inspected.",
+      "notes": "Shared core plus version-specific staple replacements must be combined. No completeness or mechanical validation performed.",
+      "characterization": [
+        "TEM"
+      ],
+      "map_status": "reviewed_in_scope",
+      "inclusion_basis": "published_staple_list",
+      "review_status": "primary_source_reviewed",
+      "variants": [
+        "version 1: 0 bases",
+        "version 2: 11 bases",
+        "version 3: 32 bases",
+        "version 4: 53 bases",
+        "version 5: 74 bases"
+      ],
+      "publication": "DNA origami compliant nanostructures with tunable mechanical properties.",
+      "first_publication_date": "2013-12-24",
+      "publication_url": "https://doi.org/10.1021/nn405408g",
+      "review_date": "2026-11-04",
+      "complete_staple_set_validated": false,
+      "image_file": null,
+      "quality_score": null,
+      "image_kind": "not_scored",
+      "rating_status": "not_scored_no_image_reconstruction_assessment",
+      "design_files": [],
+      "publication_supplements": [
+        {
+          "name": "nn405408g_si_001.pdf",
+          "url": "https://ndownloader.figshare.com/files/3966673",
+          "publisher_bytes": 2405387,
+          "article_id": 2329045,
+          "status": "downloaded",
+          "local_file": "sources/acs-expansion-20261104/3966673-nn405408g_si_001.pdf",
+          "bytes": 2405387,
+          "sha256": "382fcac6e6dd45092b3844561d0d4891f7fa2bbcb3a9de95faad818afeb7cf93",
+          "publisher_md5_verified": true
+        }
+      ],
+      "staple_list": {
+        "status": "published_list_located_variant_completeness_unverified",
+        "location": "SI Figs. S7–S11 pages 19–20; common staples pages 21–23; replacements pages 24–27",
+        "sources": [
+          {
+            "name": "nn405408g_si_001.pdf",
+            "url": "https://ndownloader.figshare.com/files/3966673",
+            "publisher_bytes": 2405387,
+            "article_id": 2329045,
+            "status": "downloaded",
+            "local_file": "sources/acs-expansion-20261104/3966673-nn405408g_si_001.pdf",
+            "bytes": 2405387,
+            "sha256": "382fcac6e6dd45092b3844561d0d4891f7fa2bbcb3a9de95faad818afeb7cf93",
+            "publisher_md5_verified": true
+          }
+        ],
+        "notes": "Shared core plus version-specific staple replacements must be combined. No completeness or mechanical validation performed."
+      },
+      "structural_characterization": {
+        "modalities": [
+          "TEM"
+        ],
+        "source_url": "https://doi.org/10.1021/nn405408g",
+        "scope": "Published characterization; raw data and exact experimental variant not independently verified."
+      },
+      "imaging_datasets": {
+        "public_raw_dataset_status": "not_verified",
+        "resources": []
+      }
     }
-  ]
+  ],
+  "acquisition_report": "acs_expansion_summary.json"
 }

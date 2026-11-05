@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-04",
+  "status": "resolved_for_supplement_acquisition",
+  "previously_failed_lookups_retried": 145,
+  "retry_dispositions": {
+    "repository_matched": 135,
+    "no_matching_deposit": 10
+  },
+  "remaining_lookup_failures": 0,
+  "remaining_download_failures": 0,
+  "files_before_recovery": 118,
+  "files_after_recovery": 269,
+  "additional_access_required_for_recovered_supplements": false,
+  "credentials_or_cookies_used": false,
+  "request_policy": {
+    "minimum_interval_seconds": 2,
+    "maximum_attempts_per_request": 3,
+    "backoff_seconds": [
+      30,
+      60
+    ],
+    "authentication": "none"
+  },
+  "diagnosis": "The same previously forbidden public API request succeeded later without authentication. Temporary request/service blocking is consistent with the evidence; the precise cause of the earlier 403s was not exposed. Sequential paced acquisition completed all retries.",
+  "full_article_probe": {
+    "url": "https://pubs.acs.org/doi/10.1021/ja906381y",
+    "http_status": 403,
+    "cf_mitigated": "challenge",
+    "qualification": "Journal-page browser challenge remains separate from the resolved supplement repository access. This probe does not establish missing subscription entitlement."
+  },
+  "scope": "Document/archive acquisition; media remain deferred and no new eligibility decisions are inferred.",
+  "policy_reference": "https://docs.figshare.com/v2/#rate-limiting"
+}
