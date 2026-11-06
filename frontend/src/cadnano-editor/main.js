@@ -1,3 +1,4 @@
+import { initEditorViewTools } from './view_tools.js'
 import { registerRecordingSource } from '../record/source.js'
 import { scaffoldSequenceChoice, updateScaffoldCustomInput, wireScaffoldCustomInput, validateScaffoldSequenceChoice } from '../ui/scaffold_custom_input.js'
 import { dispatchKeyEvent } from '../input/shortcuts.js'
@@ -760,28 +761,7 @@ function _syncFilterButtons(filter) {
 }
 
 // ── View tool buttons ───────────────────────────────────────────────────────
-const viewToolsEl = document.getElementById('view-tools')
-const vtBtns = viewToolsEl.querySelectorAll('.vt-btn')
-vtBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.vt
-    const cur = editorStore.getState().viewTools
-    editorStore.setState({ viewTools: { ...cur, [key]: !cur[key] } })
-  })
-})
-
-function _syncViewToolButtons(viewTools) {
-  vtBtns.forEach(btn => {
-    btn.classList.toggle('active', !!viewTools[btn.dataset.vt])
-  })
-  // Reflect the toggle's state as a ✓ on its View-menu item.
-  document.getElementById('menu-view-periodic-boundary')
-    ?.classList.toggle('is-checked', !!viewTools.periodicBoundary)
-}
-
-// Seed the toolbar from the store; otherwise default-on controls (grid,
-// loop/skips, reference geometry) look off until the first state change.
-_syncViewToolButtons(editorStore.getState().viewTools)
+const { element: viewToolsEl } = initEditorViewTools({ store: editorStore })
 
 // Native-orientation toggle — default ON (cadnano2 convention).
 const nativeOrientBtn = document.getElementById('btn-native-orientation')
@@ -2079,7 +2059,6 @@ editorStore.subscribe((state, prev) => {
 
   // Sync view tool buttons + notify pathview
   if (state.viewTools !== prev.viewTools) {
-    _syncViewToolButtons(state.viewTools)
     pathview.setViewTools(state.viewTools)
   }
 

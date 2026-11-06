@@ -1,3 +1,4 @@
+import { junctionIndex } from '../design/strand_junctions.js'
 import { domainKeys, strandSequenceDisplay, renderStrandSequence } from './strand_sequence_display.js'
 import { baseKey, xbKey } from '../scene/base_ref.js'
 
@@ -23,9 +24,10 @@ export function selectedSequenceKeys(design, refs = []) {
     }
   }
   const out = new Map()
+  const index = junctionIndex(design)
   for (const strand of design?.strands ?? []) {
     const owned = (strand.domains ?? []).flatMap(d => domainKeys(d, design))
-    owned.push(...strandSequenceDisplay(strand, design).runs.flatMap(r => r.keys))
+    owned.push(...strandSequenceDisplay(strand, design, undefined, index).runs.flatMap(r => r.keys))
     const selected = new Set(owned.filter(key => keys.has(key)))
     strand.domains?.forEach((d, i) => {
       if (refs.some(r => (r.kind === 'domain' && r.strandId === strand.id && r.domainIndex === i)

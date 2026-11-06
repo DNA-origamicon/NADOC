@@ -1477,3 +1477,21 @@ and deselection clears them. Check multi-selection, reverse domains with loops,
 overhang editing, and sequence search while marked. Unit coverage exercises both
 spreadsheet hosts; a read-only browser check verifies domain/base marks and clearing
 through canonical selection. Live picking gestures and appearance remain pending.
+
+### MV-58 — Staple temperature heatmap readability (PENDING, 2026-11-05)
+
+Open an existing sequenced part with both 21-bp and 42-bp crossover spacing in
+Full/Beads view. Cycle the Tm button beside Length through domain, total Tfold,
+and off. Inspect domain boundaries at close zoom and the adjustable legend
+(default 20–90 °C) at whole-object zoom; gray must be distinguishable from blue low-temperature
+regions. Check the longer-domain regions against the assigned sequences, rather
+than assuming crossover spacing alone fixes Tm. Confirm that total mode gives a
+uniform color per staple and off restores its prior colors. Numerical/model and
+DOM lifecycle tests cover the calculations, unsupported states, sequence edits,
+and restoration; the browser exercise covers actual mesh colors on U6hb. Human
+assessment of readability on a mixed-spacing design remains pending.
+
+MV-58 cadnano follow-up (2026-11-05): the same control is available beside Length
+in the standalone editor. Check close-zoom domain boundaries, crossover colors,
+selection visibility, and legend readability on mixed 21/42-bp routing. Browser
+coverage compares the rendered path-canvas pixels across both modes and Off.

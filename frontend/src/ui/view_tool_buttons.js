@@ -11,6 +11,7 @@
 // code they replace).
 
 import * as THREE from 'three'
+import { initStapleTemperatureView } from './staple_temperature_view.js'
 import { heatmapHex } from '../scene/color_util.js'
 import { strandDomainNt } from '../scene/strand_length.js'
 
@@ -40,6 +41,7 @@ export function initViewToolButtons({
   toggleUnfold,
   toggleClashes,
   getClashesOn,
+  getCurrentRepr,
 }) {
   // Length heatmap
   let _lengthHeatmapOn = false
@@ -76,6 +78,12 @@ export function initViewToolButtons({
     }
     _lenLegend?.classList.remove('visible')
   }
+
+  const temperatureView = initStapleTemperatureView({ store, designRenderer, getCurrentRepr, onActivate: () => {
+    if (_lengthHeatmapOn) _clearLengthHeatmap()
+    _lengthHeatmapOn = false
+    _syncVtButtons()
+  } })
 
   // Grid helper — the View "grid" toggle AND the hard-surface visualization. When
   // a hard surface is enabled in the oxDNA panel, the same grid is turned on and
@@ -164,6 +172,7 @@ export function initViewToolButtons({
   }
 
   document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.addEventListener('click', () => {
+    temperatureView.setMode('off')
     _lengthHeatmapOn = !_lengthHeatmapOn
     if (_lengthHeatmapOn) _applyLengthHeatmap()
     else _clearLengthHeatmap()
@@ -239,6 +248,7 @@ export function initViewToolButtons({
   })
 
   return {
+    temperatureView,
     syncButtons: _syncVtButtons,
     applyLengthHeatmap: _applyLengthHeatmap,
     clearLengthHeatmap: _clearLengthHeatmap,

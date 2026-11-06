@@ -65,3 +65,17 @@ describe('copyable strand sequences with crossover arcs', () => {
     expect(strandLength(strand, design)).toBe(12)
   })
 })
+
+
+it('keeps long unselected sequence compact without changing copied text or base highlights', () => {
+  const text = 'ACGT'.repeat(2000), keys = Array.from(text, (_, i) => String(i))
+  const display = { runs: [{ text, keys }] }, span = document.createElement('span')
+  renderStrandSequence(span, display)
+  expect(span.textContent).toBe(text)
+  expect(span.childNodes).toHaveLength(1)
+  span.replaceChildren()
+  renderStrandSequence(span, display, new Set(['1', '7998']))
+  expect(span.textContent).toBe(text)
+  expect([...span.querySelectorAll('mark')].map(m => m.textContent)).toEqual(['C', 'G'])
+  expect(span.childNodes.length).toBeLessThanOrEqual(5)
+})

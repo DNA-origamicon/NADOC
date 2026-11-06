@@ -30,3 +30,11 @@ The scaffold is physically a circular plasmid (M13mp18, 7249 nt). In NADOC it is
 
 ## Multiple Scaffold Strands
 DTP-0c: Multiple scaffold strands are supported (MagicDNA style). Validator treats >1 scaffold strand as INFO (not ERROR). The nick position convention only applies to the primary scaffold strand.
+
+## Temperature-model circularity (2026-11-05)
+
+For the staple-temperature view only, the user explicitly chose **each scaffold
+is circular**, including secondary scaffolds. Calculate loop closure independently
+within the owning scaffold; never concatenate separate scaffold contours. This
+is a thermodynamic modeling assumption, not a change to authored strand ends or
+geometry. See [temperature model](../docs/staple_temperature.md).

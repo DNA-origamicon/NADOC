@@ -4083,6 +4083,7 @@ async function main() {
     toggleUnfold: () => _toggleUnfold(),
     toggleClashes: () => clashOverlay.toggle(),
     getClashesOn: () => clashOverlay.isOn(),
+    getCurrentRepr: () => _currentRepr,
   })
 
   // ── Nucleotide Slab collapse toggle ──────────────────────────────────────────

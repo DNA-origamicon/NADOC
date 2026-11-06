@@ -441,3 +441,27 @@ describe('Staple palette ASSIGNMENT follows the 3D view, not the array index', (
     expect(strandColors.s2).toBe(asHex(STAPLE_PALETTE[2]))
   })
 })
+
+
+it('does not reindex junctions for row highlights and shares the table index across strands', () => {
+  Element.prototype.scrollIntoView = vi.fn()
+  mount()
+  const sheet = initSpreadsheet(store)
+  sheet.toggle()
+  const { design, strand } = junctionFixture()
+  design.strands = Array.from({ length: 40 }, (_, i) => ({ ...strand, id: 's' + i }))
+  const crossovers = design.crossovers
+  let reads = 0
+  Object.defineProperty(design, 'crossovers', { get() { reads++; return crossovers } })
+  store.setState({ currentDesign: design })
+  expect(reads).toBeLessThan(10)
+  const row = document.querySelector('tr[data-strand-id="s20"]')
+  reads = 0
+  store.setState({ selection: { items: [{ kind: 'strand', id: 's20' }] } })
+  expect(reads).toBe(0)
+  expect(document.querySelector('tr[data-strand-id="s20"]')).toBe(row)
+  expect(row.classList.contains('sheet-selected')).toBe(true)
+  store.setState({ selection: { items: [{ kind: 'domain', strandId: 's20', domainIndex: 1 }] } })
+  expect(reads).toBeLessThan(10)
+  expect(document.querySelectorAll('.sheet-seq-selected-base')).toHaveLength(3)
+})

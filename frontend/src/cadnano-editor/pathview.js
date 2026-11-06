@@ -1,3 +1,5 @@
+import { createCanvasLayerCache } from './pathview/canvas_layer_cache.js'
+import { createTemperatureStyles } from './pathview/temperature_styles.js'
 import { sequenceSelectionRefs } from './sequence_selection.js'
 import { quadruplexMarkers } from '../shared/aptamer.js'
 import { crossoverDragEndpoints, crossoverDragFits } from './pathview/crossover_drag.js'
@@ -1304,7 +1306,16 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Draw: track grid (2×N cell model) ────────────────────────────────────────
 
+  const _trackLayer = createCanvasLayerCache()
   function _drawAllTracks() {
+    _trackLayer.draw(ctx, [_rowBands, _viewTools.grid, _design?.lattice_type, _panX, _panY, _zoom], buffer => {
+      const destination = ctx
+      ctx = buffer
+      try { _paintAllTracks() } finally { ctx = destination }
+    }, CLR_BG)
+  }
+
+  function _paintAllTracks() {
     const isHC  = _design?.lattice_type === 'HONEYCOMB'
     const major = isHC ? 7 : 8
 
@@ -1695,6 +1706,7 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   // ── View tools state ──────────────────────────────────────────────────────
+  const _temperatureStyles = createTemperatureStyles()
   let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true, loopSkips: true }
 
   // Length heat map: maps nucleotide count to a blue→red colour.
@@ -1716,6 +1728,7 @@ export function initPathview(canvasEl, containerEl, {
   let _heatmapCacheDesign = null
   let _preparedHeatmapCache = new Map()
   function _rebuildHeatmapCache() {
+    _temperatureStyles.prepare(_design, _viewTools.stapleTemperature ?? 'off', _viewTools.temperatureBounds)
     if (!_viewTools.lengthHeatmap || !_design?.strands) {
       _heatmapCache = new Map()
       return
@@ -2132,12 +2145,12 @@ export function initPathview(canvasEl, containerEl, {
       // Reference geometry: hide when the view toggle is off, else draw dashed.
       if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const isGlow   = _strandSelectedIds.has(strand.id)
-      const hm       = _heatmapCache.get(si)
-      const color    = isGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
-      const thickMul = hm ? hm.thickMul : 1.0
       const n        = strand.domains.length
       for (let di = 0; di < n; di++) {
         const dom  = strand.domains[di]
+        const hm = _temperatureStyles.domain(si, di) ?? _heatmapCache.get(si)
+        const color = isGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
+        const thickMul = hm ? hm.thickMul : 1.0
         const info = _rowMap.get(dom.helix_id)
         if (!info) continue
         const sTop = (info.fwdY - CELL_H / 2) * _zoom + _panY
@@ -2255,7 +2268,7 @@ export function initPathview(canvasEl, containerEl, {
       const pvy =  ux
 
       // Strand colour (same lookup as _drawAllDomains)
-      const hm    = _heatmapCache.get(idx)
+      const hm    = _temperatureStyles.strand(idx) ?? _heatmapCache.get(idx)
       const color = hm ? hm.color : _components.colorOf(idx)
 
       // ── Arm line ────────────────────────────────────────────────────────────
@@ -2396,7 +2409,7 @@ export function initPathview(canvasEl, containerEl, {
       const isRef  = !!strand.is_reference
       if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = _strandSelectedIds.has(strand.id)
-      const hm = _heatmapCache.get(si)
+      const hm = _temperatureStyles.strand(si) ?? _heatmapCache.get(si)
       const color  = strandGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
       ctx.strokeStyle = color
       ctx.lineWidth = baseThick * (hm ? hm.thickMul : 1.0)
@@ -2484,7 +2497,7 @@ export function initPathview(canvasEl, containerEl, {
       const strandGlow = (sA >= 0 && _strandSelectedIds.has(_design.strands[sA].id)) ||
                          (sB >= 0 && _strandSelectedIds.has(_design.strands[sB].id))
       const arcSel  = _selectedElements.has(_xoverKey(xo))
-      const hmA = sA >= 0 ? _heatmapCache.get(sA) : null
+      const hmA = sA >= 0 ? (_temperatureStyles.site(sA, xo.half_a) ?? _heatmapCache.get(sA)) : null
       if (arcSel) {
         ctx.strokeStyle  = CLR_SEL_RING
         ctx.lineWidth    = baseThick * 2.5
@@ -2568,7 +2581,7 @@ export function initPathview(canvasEl, containerEl, {
       if (isRefFL && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = sIdx >= 0 && _strandSelectedIds.has(_design.strands[sIdx].id)
       const arcSel   = _selectedElements.has(_forcedLigKey(fl))
-      const hmFL = sIdx >= 0 ? _heatmapCache.get(sIdx) : null
+      const hmFL = sIdx >= 0 ? (_temperatureStyles.site(sIdx, { helix_id: fl.three_prime_helix_id, index: fl.three_prime_bp, strand: fl.three_prime_direction }) ?? _heatmapCache.get(sIdx)) : null
       if (arcSel) {
         ctx.strokeStyle  = CLR_SEL_RING
         ctx.lineWidth    = baseThick * 2.5

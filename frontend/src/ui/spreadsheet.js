@@ -1,3 +1,4 @@
+import { junctionIndex } from '../design/strand_junctions.js'
 import { selectedSequenceKeys, highlightOverhangCell } from './sequence_selection.js'
 /**
  * spreadsheet.js — Strand Spreadsheet Panel
@@ -141,7 +142,7 @@ function _selectedSequenceKeys(state) {
   return selectedSequenceKeys(state?.currentDesign, canonicalSelection(state).items)
 }
 
-function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, pins = null) {
+function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, pins = null, index = junctionIndex(design)) {
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
@@ -160,7 +161,7 @@ function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_S
   const withMeta = staples.map((s, idx) => ({
     strand:     s,
     color:      effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? [], pins),
-    length:     strandLength(s, design),
+    length:     strandLength(s, design, index),
     groupOrder: groupOrderById.has(s.id) ? groupOrderById.get(s.id) : Infinity,
   }))
   withMeta.sort((a, b) => {
@@ -518,6 +519,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     _rebuildHeader()
 
     const design       = state.currentDesign
+    const index = junctionIndex(design)
     const strandColors = state.strandColors ?? {}
     const strandGroups = state.strandGroups ?? []
     const highlightedIds = new Set(selectedStrandIds(state))
@@ -534,7 +536,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     }
 
     const pins    = stapleColorPins(state)
-    const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
+    const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins, index)
     const displayIds = buildStrandDisplayIdMap(design.strands)
     const hdIndex = hairpinDimerIndex.get(state.hairpinDimerReport, design)
     // Map internal ids to the same human label used by the viewport/pathview.
@@ -629,7 +631,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'sequence': {
-            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id))
+            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id), index)
             const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
@@ -644,7 +646,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
               const d3    = dLast !== d5 ? dLast : null
               const ovhg5Len = d5?.overhang_id    ? domainLength(d5) : 0
               const ovhg3Len = d3?.overhang_id ? domainLength(d3) : 0
-              const len = strandLength(strand, design) - ovhg5Len - ovhg3Len
+              const len = strandLength(strand, design, index) - ovhg5Len - ovhg3Len
               const span = document.createElement('span')
               span.className = 'sheet-seq-none'
               span.textContent = `N\xd7${len}`
@@ -714,7 +716,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'length': {
-            td.textContent = strandLength(strand, design)
+            td.textContent = strandLength(strand, design, index)
             break
           }
           case 'notes': {
@@ -1229,14 +1231,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const state = store.getState()
     const selectedBases = _selectedSequenceKeys(state)
     for (const strandId of selectedBases.keys()) selectedIds.add(strandId)
-    // Must pass the same pins as the render pass — colour is a sort key, so a
-    // different palette assignment here would reorder rows and misalign highlights.
-    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups, sortOrder, stapleColorPins(state))
+    // Rows already own their sorted identities; selection does not change order.
     let scrolled = false
-    for (let i = 0; i < strands.length; i++) {
-      const row = tbody.children[i]
-      if (!row) continue
-      const sel = selectedIds.has(strands[i].id)
+    for (const row of tbody.children) {
+      const sel = selectedIds.has(row.dataset.strandId)
       row.classList.toggle('sheet-selected', sel)
       if (sel && !scrolled) { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); scrolled = true }
     }

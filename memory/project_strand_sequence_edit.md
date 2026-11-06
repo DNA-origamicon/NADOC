@@ -13,6 +13,50 @@ to the strand right-click menu in BOTH editors; for a staple whose scaffold is
 sequenced, show the paired scaffold bases above the input and highlight incorrect
 base pairing — but still allow any bases.
 
+## Staple temperature view (2026-11-05)
+
+The Tm button beside Length cycles off/domain Tm/total staple Tfold in Full/Beads
+part views and the standalone cadnano path editor. Both editors share the model,
+Celsius palette and legend, with lower/upper numeric bounds, draggable handles and
+full-data-range reset (shared flex-map range math). Bounds persist across modes
+within each editor session and only recolor cached estimates. Cadnano caches estimates across pan/zoom and refreshes
+them on sequence/routing changes. Read-only calculation uses assigned sequences and the existing
+loop/skip projection; no structure or feature-history mutation. Domain mode uses
+SantaLucia–Owczarzy; total uses the user-selected PNAS 2024 model with a circular
+scaffold for every active scaffold molecule (including secondary scaffolds).
+Each staple uses its own scaffold’s contour length; inter-scaffold staples remain
+unavailable rather than being treated as intramolecular loops. Both assume 10 mM free Mg²⁺ and excess 200 nM staples. Missing
+or unsupported cases are gray. See [model, sources and limits](../docs/staple_temperature.md).
+
+## Selection latency (2026-11-05)
+
+Open spreadsheets must not rebuild the full crossover/ligation index per strand.
+`strandLength` and `strandSequenceDisplay` accept a caller-owned junction index;
+both table builders and the selected-sequence projection share it within each
+operation. The temperature estimator also reuses its existing index. No index
+is cached across edits. Whole-strand highlights use each rendered row’s strand ID
+without re-sorting or recomputing all lengths. Contiguous unselected sequence
+uses one text node per run while selected bases keep their precise marks. Cadnano rows now carry the same
+stable `data-strand-id` identity as the 3D sheet.
+
+Regression: both spreadsheet tests bound junction reads independently of strand
+count, preserve exact section highlights, and verify subsequent edits. The
+read-only `e2e/staple_selection_latency.spec.js` exercises both open spreadsheets,
+all temperature modes, and real cadnano canvas clicks. It defaults to U6hb;
+`NADOC_TEMPERATURE_DESIGN` selects a local large design without copying it.
+On VoltronCoreArmV2, 12 cadnano canvas clicks fell from 1,497–1,579 ms to
+265–341 ms through redraw with the spreadsheet open (all three thermal modes).
+A subsequent sub-200 ms pass updates only the changed sequence/overhang cells,
+preserving rows and unrelated editors; unchanged base selections do no rebuilding.
+The cadnano grid is cached in screen pixels per canvas context, with size,
+transform, row-layout, grid-toggle and stroke-state invalidation. Translucent
+periodic mirror passes paint directly. The opaque base layer preserves exact
+pixels, including after wheel zoom and grid toggles. Four distinct staples per
+thermal mode measured **143–198 ms** through redraw on VoltronCoreArmV2;
+the browser regression now enforces <200 ms for every measured click. A later
+color-scale validation measured one 216 ms outlier with the overlay off (other
+clicks 129–193 ms), so a consistent sub-200 ms guarantee remains unverified.
+
 ## Sequence preservation during topology edits (2026-09-19)
 
 `make_nick` slices an assigned sequence at the loop/skip-aware length of its first

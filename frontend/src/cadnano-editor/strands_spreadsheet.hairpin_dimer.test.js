@@ -63,3 +63,55 @@ describe('cadnano spreadsheet hairpin/dimer warnings', () => {
     document.querySelector('.hd-window .modal__close').click()
   })
 })
+
+
+it('bounds junction indexing per table operation and highlights existing rows by identity', () => {
+  Element.prototype.scrollIntoView = vi.fn()
+  const { design, strand } = junctionFixture()
+  design.strands = Array.from({ length: 40 }, (_, i) => ({ ...strand, id: 's' + i }))
+  const crossovers = design.crossovers
+  let reads = 0
+  Object.defineProperty(design, 'crossovers', { get() { reads++; return crossovers } })
+  sheet.update(design)
+  expect(reads).toBeLessThan(10)
+  reads = 0
+  const row = document.querySelector('tr[data-strand-id="s20"]')
+  sheet.setSelectedStrands(['s20'])
+  expect(reads).toBe(0)
+  expect(row.classList.contains('sheet-selected')).toBe(true)
+  reads = 0
+  sheet.setSelectedStrands(['s20'], [{ kind: 'domain', strandId: 's20', domainIndex: 1 }])
+  expect(reads).toBeLessThan(10)
+  expect(document.querySelectorAll('.sheet-seq-selected-base')).toHaveLength(3)
+  // A new table operation must observe in-place junction edits, not stale global caches.
+  crossovers[0].extra_bases = 'CC'
+  sheet.update(design)
+  expect(document.querySelector('tr[data-strand-id="s20"] .sheet-seq-extra').textContent).toBe('CC')
+})
+
+
+it('updates only changed sequence rows and retains unrelated edits and row order', () => {
+  Element.prototype.scrollIntoView = vi.fn()
+  const { design, strand } = junctionFixture()
+  design.strands.push({ ...strand, id: 'other' })
+  sheet.update(design)
+  const row = id => document.querySelector(`tr[data-strand-id="${id}"]`)
+  const before = row('s'), other = row('other'), originalOrder = [...other.parentNode.children].map(r => r.dataset.strandId)
+  const ref = [{ kind: 'domain', strandId: 's', domainIndex: 1 }]
+  sheet.setSelectedStrands(['s'], ref)
+  expect(row('other')).toBe(other)
+  expect(row('s')).toBe(before)
+  expect(row('s').querySelectorAll('mark')).toHaveLength(3)
+  const selected = row('s')
+  sheet.setSelectedStrands(['s'], ref)
+  expect(row('s')).toBe(selected)
+  sheet.setSelectedStrands(['other'])
+  expect(row('other')).toBe(other)
+  expect(row('s').querySelector('mark')).toBeNull()
+  expect([...other.parentNode.children].map(r => r.dataset.strandId)).toEqual(originalOrder)
+})
+
+it('initializes safely when the spreadsheet was already open in the previous session', () => {
+  localStorage.setItem('editor_spreadsheet_open', 'true')
+  expect(() => initStrandsSpreadsheet()).not.toThrow()
+})

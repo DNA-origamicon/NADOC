@@ -17,8 +17,7 @@ export function domainKeys(domain, design) {
   return keys
 }
 
-export function strandLength(strand, design) {
-  const index = junctionIndex(design)
+export function strandLength(strand, design, index = junctionIndex(design)) {
   const junctions = strandJunctions(strand, index)
   return (strand.domains ?? []).reduce((n, d, i) =>
     n + domainKeys(d, design).length + (junctions[i]?.extra_bases?.length ?? 0)
@@ -48,9 +47,8 @@ function extensionText(ext) {
  * change copied/searchable sequence or shift the downstream base highlights.
  * Terminal overhang columns and terminal extension notation retain their roles.
  */
-export function strandSequenceDisplay(strand, design, selectedKeys = new Set()) {
+export function strandSequenceDisplay(strand, design, selectedKeys = new Set(), index = junctionIndex(design)) {
   const domains = strand.domains ?? []
-  const index = junctionIndex(design)
   const junctions = strandJunctions(strand, index)
   const internal = domains.map(d => domainJunctions(d, index))
   const ext5 = design?.extensions?.find(e => e.strand_id === strand.id && e.end === 'five_prime')
@@ -96,13 +94,19 @@ export function renderStrandSequence(container, display, selectedKeys = new Set(
       parent.title = 'Extra crossover bases'
       container.appendChild(parent)
     }
+    // Keep contiguous unselected sequence in one text node. A scaffold can have
+    // thousands of bases; one DOM node per base makes selection-triggered layout costly.
+    let start = 0
     for (let i = 0; i < run.text.length; i++) {
       if (selectedKeys.has(run.keys[i])) {
+        if (i > start) parent.appendChild(document.createTextNode(run.text.slice(start, i)))
         const mark = document.createElement('mark')
         mark.className = 'sheet-seq-selected-base'
         mark.textContent = run.text[i]
         parent.appendChild(mark)
-      } else parent.appendChild(document.createTextNode(run.text[i]))
+        start = i + 1
+      }
     }
+    if (start < run.text.length) parent.appendChild(document.createTextNode(run.text.slice(start)))
   }
 }

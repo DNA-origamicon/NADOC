@@ -1,9 +1,11 @@
 import {it,expect} from 'vitest'
 import {VR_VIEW_KEYS,encodeVRView} from './vr_view_tools.js'
-it('retains desktop view toggles except screen-only layouts',async()=>{
+it('retains desktop view toggles except desktop-only layouts and temperature legend',async()=>{
   const fs=await import('node:fs')
   const html=fs.readFileSync('index.html','utf8')
-  expect([...new Set([...html.matchAll(/data-vt="([^"]+)"/g)].map(m=>m[1]).filter(k=>!['expanded','unfold'].includes(k)))]).toEqual(VR_VIEW_KEYS)
+  // Temperature requires its numerical/assumption legend; the native VR panel
+  // has no such legend. Keep it desktop-only rather than assigning a wire bit.
+  expect([...new Set([...html.matchAll(/data-vt="([^"]+)"/g)].map(m=>m[1]).filter(k=>!['expanded','unfold','stapleTemperature'].includes(k)))]).toEqual(VR_VIEW_KEYS)
 })
 it('encodes a bounded binary scene with separate geometry and sprite counts',()=>{
   const blob=encodeVRView({flags:256,triangles:new Float32Array(27),lines:new Float32Array(18),sprites:new Float32Array(15),pixels:new Uint8Array(16),width:2,height:2},9)

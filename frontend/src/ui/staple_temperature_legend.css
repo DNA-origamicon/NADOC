@@ -1,0 +1,16 @@
+    .vt-btn.active[data-vt="stapleTemperature"] { color: #ffbd69; border-color: #ffbd69; }
+    #staple-temperature-legend { position: absolute; right: 12px; top: 20%; width: 240px; max-width: calc(100% - 64px); box-sizing: border-box; padding: 10px; background: rgba(13,17,23,.93); border: 1px solid #484f58; border-radius: 5px; z-index: 5; font-size: 11px; color: #ddd; pointer-events: auto; }
+    #staple-temperature-legend[hidden] { display: none; }
+    #staple-temperature-legend small { display: block; margin-top: 6px; color: #aaa; }
+    .temperature-gradient { height: 10px; margin-top: 6px; background: linear-gradient(to right, hsl(240,90%,50%), hsl(180,90%,50%), hsl(120,90%,50%), hsl(60,90%,50%), hsl(0,90%,50%)); }
+    .temperature-ticks { display: flex; justify-content: space-between; margin-bottom: 6px; }
+
+.temperature-bound-inputs { display:flex; gap:8px; margin-top:8px; }
+.temperature-bound-inputs label { flex:1; min-width:0; font-size:11px; }
+.temperature-bound-inputs input { box-sizing:border-box; width:100%; color:#ddd; background:#161b22; border:1px solid #484f58; border-radius:3px; padding:3px; }
+.temperature-scale .temperature-gradient { position:relative; margin:12px 5px 8px; }
+[data-temperature-handle] { position:absolute; top:-4px; width:10px; height:18px; min-height:0; min-width:0; box-sizing:border-box; padding:0; transform:translateX(-50%); border:2px solid white; border-radius:2px; background:#161b22; cursor:ew-resize; touch-action:none; }
+[data-temperature-reset] { background:#21262d; color:#ddd; border:1px solid #484f58; border-radius:3px; padding:3px 6px; cursor:pointer; }
+
+/* Keep the legend clear of the floating sidebar tabs in narrow 3D views. */
+#canvas-area > #staple-temperature-legend { left:76px; right:auto; max-width:calc(100% - 88px); }

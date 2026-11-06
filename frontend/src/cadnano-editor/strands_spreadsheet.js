@@ -1,3 +1,4 @@
+import { junctionIndex } from '../design/strand_junctions.js'
 import { selectedSequenceKeys, highlightOverhangCell } from '../ui/sequence_selection.js'
 import { strandSequenceDisplay, renderStrandSequence, strandLength } from '../ui/strand_sequence_display.js'
 /**
@@ -66,7 +67,7 @@ function effectiveColor(strand) {
   return stapleColorOf(strand)
 }
 
-function sortedStrands(design, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER) {
+function sortedStrands(design, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, index = junctionIndex(design)) {
   ensureStapleColors(design)   // pin per-id colours before sorting by colour
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
@@ -74,7 +75,7 @@ function sortedStrands(design, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER) {
   const withMeta = staples.map((s) => ({
     strand: s,
     color:  effectiveColor(s),
-    length: strandLength(s, design),
+    length: strandLength(s, design, index),
   }))
   withMeta.sort((a, b) => {
     for (const key of sortOrder) {
@@ -128,6 +129,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   // ── Track selected strand IDs (from pathview) ──────────────────
   let _selectedStrandIds = new Set()
   let _selectionRefs = []
+  let _renderedSelectedBases = new Map()
   let _design = null
   const hairpinDimerIndex = createHairpinDimerIndexCache()
 
@@ -255,20 +257,23 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   }
 
   // ── Build table body ──────────────────────────────────────────────
-  function _rebuildTable() {
+  function _rebuildTable(changedIds = null, selectedBases = null) {
     if (!isOpen) return
-    const selectedBases = selectedSequenceKeys(_design, _selectionRefs)
-    _rebuildHeader()
+    selectedBases ??= selectedSequenceKeys(_design, _selectionRefs)
+    _renderedSelectedBases = selectedBases
+    if (!changedIds) _rebuildHeader()
 
     const design = _design
+    const index = junctionIndex(design)
     recordNameEdit('editor-rebuild', { activeStrandId: document.activeElement?.closest?.('tr')?.dataset?.strandId ?? null })
-    tbody.innerHTML = ''
+    const existingRows = changedIds ? new Map([...tbody.children].map(row => [row.dataset.strandId, row])) : null
+    if (!changedIds) tbody.innerHTML = ''
     if (!design?.strands?.length) {
       sequenceSearch.refresh()
       return
     }
 
-    const strands = sortedStrands(design, sortOrder)
+    const strands = changedIds ? design.strands.filter(s => changedIds.has(s.id)) : sortedStrands(design, sortOrder, index)
     const displayIds = buildStrandDisplayIdMap(design.strands)
     const hdReport = getHairpinDimerReport()
     const hdIndex = hairpinDimerIndex.get(hdReport, design)
@@ -282,6 +287,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
       const tr = document.createElement('tr')
+      tr.dataset.strandId = strand.id
       if (isScaffold)                          tr.classList.add('sheet-scaffold')
       if (isOhBinder)                          tr.classList.add('sheet-oh-binder')
       if (_selectedStrandIds.has(strand.id))   tr.classList.add('sheet-selected')
@@ -294,6 +300,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
       for (const col of COLUMNS) {
         if (col.toggleable && hiddenCols.has(col.key)) continue
+        if (changedIds && !['sequence', 'ovhg_5p', 'ovhg_3p'].includes(col.key)) continue
         const td = document.createElement('td')
         td.dataset.col = col.key
 
@@ -333,7 +340,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             break
           }
           case 'sequence': {
-            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id))
+            const display = strandSequenceDisplay(strand, design, selectedBases.get(strand.id), index)
             const displaySeq = display.text
             if (displaySeq) {
               const span = document.createElement('span')
@@ -343,7 +350,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
               td.dataset.searchSequence = displaySeq
               td.appendChild(span)
             } else {
-              const len = strandLength(strand, design)
+              const len = strandLength(strand, design, index)
               const span = document.createElement('span')
               span.className = 'sheet-seq-none'
               span.textContent = `N\xd7${len}`
@@ -387,7 +394,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             break
           }
           case 'length': {
-            td.textContent = strandLength(strand, design)
+            td.textContent = strandLength(strand, design, index)
             break
           }
           case 'notes': {
@@ -399,7 +406,13 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
         tr.appendChild(td)
       }
 
-      tbody.appendChild(tr)
+      if (existingRows?.has(strand.id)) {
+        const row = existingRows.get(strand.id)
+        for (const cell of [...tr.children]) {
+          // Only the base-marked readouts change; preserve name/notes/color editors.
+          row.querySelector(`td[data-col="${cell.dataset.col}"]`)?.replaceWith(cell)
+        }
+      } else tbody.appendChild(tr)
     })
     sequenceSearch.refresh()
   }
@@ -612,11 +625,8 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   // ── Highlight selected rows ───────────────────────────────────────
   function _applyHighlights() {
     if (!_design?.strands?.length) return
-    const strands = sortedStrands(_design, sortOrder)
-    for (let i = 0; i < strands.length; i++) {
-      const row = tbody.children[i]
-      if (!row) continue
-      row.classList.toggle('sheet-selected', _selectedStrandIds.has(strands[i].id))
+    for (const row of tbody.children) {
+      row.classList.toggle('sheet-selected', _selectedStrandIds.has(row.dataset.strandId))
     }
   }
 
@@ -637,18 +647,19 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       if (activeName && activeStrandId && !strandIds.includes(activeStrandId)) activeName.blur()
       _selectedStrandIds = new Set(strandIds)
       if (!isOpen) return
-      if (sectionsChanged) _rebuildTable()
+      if (sectionsChanged) {
+        const selectedBases = selectedSequenceKeys(_design, refs)
+        const changed = new Set([..._renderedSelectedBases.keys(), ...selectedBases.keys()].filter(id => {
+          const before = _renderedSelectedBases.get(id), after = selectedBases.get(id)
+          return before?.size !== after?.size || [...(before ?? [])].some(key => !after?.has(key))
+        }))
+        if (changed.size) _rebuildTable(changed, selectedBases)
+      }
       _applyHighlights()
       // Scroll the first selected row into view
       if (strandIds.length > 0) {
-        const strands = sortedStrands(_design, sortOrder)
-        for (let i = 0; i < strands.length; i++) {
-          if (_selectedStrandIds.has(strands[i].id)) {
-            const row = tbody.children[i]
-            if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-            break
-          }
-        }
+        const row = [...tbody.children].find(row => _selectedStrandIds.has(row.dataset.strandId))
+        row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
       }
     },
 
