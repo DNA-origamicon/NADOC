@@ -56,7 +56,7 @@ _fields = {
     m.NucleotideTransform: """id kind helix_id bp_index direction copy_k crossover_id extra_base_k
         pivot translation rotation""",
     m.ClusterRigidTransform: """id name is_default helix_ids domain_ids translation rotation pivot
-        parent_cluster_id overhang_duplex_driver_id color opacity auto_created""",
+        parent_cluster_id overhang_duplex_driver_id color opacity auto_created folding_order""",
     m.ClusterJoint: """id cluster_id name joint_type local_axis_origin local_axis_direction surface_detail
         min_angle_deg max_angle_deg""",
     m.Dimension: "id name a b visible",

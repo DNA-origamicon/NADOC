@@ -1667,11 +1667,12 @@ export async function routeForPolymerization() {
 // ── Sequence assignment ────────────────────────────────────────────────────
 
 export async function assignScaffoldSequence(scaffoldName = 'M13mp18', opts = {}) {
-  const { customSequence = null, strandId = null } = opts
+  const { customSequence = null, strandId = null, clusterId = null } = opts
   const json = await _request('POST', '/design/assign-scaffold-sequence', {
     scaffold_name: scaffoldName,
     custom_sequence: customSequence || null,
     strand_id: strandId || null,
+    ...(clusterId ? { cluster_id: clusterId } : {}),
   })
   return json  // caller reads json.padded_nt etc. before syncing design state
 }
@@ -3838,8 +3839,9 @@ export async function createCluster(body) {
 
 export async function patchCluster(clusterId, body) {
   // Ordinary sidebar/selection edits are authored operations even when an old
-  // caller supplies commit:false. Null fields retain PATCH's omitted semantics.
-  const authored = ['name', 'helix_ids', 'domain_ids', 'color', 'opacity'].some(key => body[key] != null)
+  // caller supplies commit:false. Explicit null clears a folding-order assignment;
+  // other null fields retain PATCH's omitted semantics.
+  const authored = Object.hasOwn(body, 'folding_order') || ['name', 'helix_ids', 'domain_ids', 'color', 'opacity'].some(key => body[key] != null)
   const membership = body.helix_ids != null || body.domain_ids != null
   const explicitPose = ['translation', 'rotation', 'pivot'].some(key => body[key] != null)
   const refreshGeometry = membership || (authored && explicitPose)

@@ -373,3 +373,6 @@ test.describe('Teardown gate', () => {
     expect(real, `console/page errors during close-session teardown:\n${real.join('\n')}`).toEqual([])
   })
 })
+
+// Experimental routing is covered only in the isolated smoke launcher.
+import './helpers/experimental_autostaple.js'

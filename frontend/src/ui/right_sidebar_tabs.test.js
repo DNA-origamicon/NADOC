@@ -30,6 +30,7 @@ describe('right sidebar tabs', () => {
         <div class="panel-section" id="repr-options-section"></div>
         <div class="panel-section" id="coloring-options-section"></div>
         <div class="panel-section" id="cluster-panel"></div>
+        <div class="panel-section" id="cluster-folding-panel"></div>
         <div class="panel-section" id="joints-panel"></div>
         <div class="panel-section" id="overhang-panel"></div>
         <div class="panel-section" id="overhang-connections-section"></div>
@@ -53,6 +54,7 @@ describe('right sidebar tabs', () => {
     expect(document.getElementById('measurements-section')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeNull()
+    expect(document.querySelector('#right-tab-content-clustering #cluster-folding-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-properties #move-rotate-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()

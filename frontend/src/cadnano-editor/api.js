@@ -708,11 +708,12 @@ export async function autoScaffoldSeamless(opts = {}) {
  * Returns raw JSON (not synced to store) — caller reads padded_nt etc. first.
  */
 export async function assignScaffoldSequence(scaffoldName = 'M13mp18', opts = {}) {
-  const { customSequence = null, strandId = null } = opts
+  const { customSequence = null, strandId = null, clusterId = null } = opts
   return _request('POST', '/design/assign-scaffold-sequence', {
     scaffold_name:   scaffoldName,
     custom_sequence: customSequence || null,
     strand_id:       strandId || null,
+    ...(clusterId ? { cluster_id: clusterId } : {}),
   })
 }
 

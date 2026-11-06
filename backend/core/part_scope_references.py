@@ -67,7 +67,7 @@ _schema("Duplex", "duplex", refs={"target_joint_id": "joint"}, children="left ri
 _schema("DuplexEnd", refs={"overhang_id": "overhang"}, plain="start_bp end_bp")
 _schema("ClusterRigidTransform", "cluster", children="domain_ids",
         refs={"helix_ids": "helix", "parent_cluster_id": "cluster", "overhang_duplex_driver_id": "overhang"},
-        plain="name is_default translation rotation pivot color opacity auto_created")
+        plain="name is_default translation rotation pivot color opacity auto_created folding_order")
 _schema("DomainRef", refs={"strand_id": "strand"}, plain="domain_index")
 _schema(GroupDomainRef, refs={"strand_id": "strand"}, plain="domain_index")
 _schema(PartGroup, "part_group", children="domain_ids", refs={"helix_ids": "helix"},

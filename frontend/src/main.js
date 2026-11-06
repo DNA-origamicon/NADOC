@@ -217,6 +217,7 @@ import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
+import { initClusterFoldingPanel } from './ui/cluster_folding_panel.js'
 import { createGroupPanelBindings } from './app/group_panel_bindings.js'
 import { initPlatesTab }                          from './ui/plates_tab.js'
 import { initHairpinDimerChecker }                from './ui/hairpin_dimer_checker.js'
@@ -5585,6 +5586,7 @@ async function main() {
     clusterGlowLayer, getClusterPanel: () => clusterPanel,
   })
 
+  initClusterFoldingPanel({ store, api })
   clusterPanel = initClusterPanel(store, {
     ...assemblyDisplayDesigns,
     onAssemblyClusterClick: (instanceId, clusterId) => {

@@ -28,6 +28,7 @@ const map = check => v => { if (!v || Object.getPrototypeOf(v) !== Object.protot
 const vec = n => v => vector(v, n), xyz = object({ x: num, y: num, z: num })
 const dir = literal('FORWARD', 'REVERSE'), nid = nullable(id), nstr = nullable(str), nnum = nullable(num)
 const pose = { translation: vec(3), rotation: vec(4), pivot: vec(3) }
+const foldingOrder = nullable(v => { int(v); if (v < 1 || v > 999) fail('invalid folding stage') })
 const ref = object({ strand_id: id, domain_index: uint })
 const anchor = object({ strand_id: id, domain_index: uint, bp_index: int, direction: dir })
 const end = object({ helix_id: id, bp: int, direction: dir })
@@ -79,7 +80,7 @@ function deformation(v) {
 }
 const schemas = {
   lattice_frames: object({ id, plane: literal('XY', 'XZ', 'YZ'), placement_cluster_id: id }), helices: helix, strands: strand,
-  cluster_transforms: object(placementFields), deformations: deformation, nucleotide_transforms: object(transformFields),
+  cluster_transforms: v => optional(v, placementFields, { folding_order: foldingOrder }), deformations: deformation, nucleotide_transforms: object(transformFields),
   cluster_joints: object(jointFields), cluster_join_constraints: object({ id, first: joinAttachment, second: joinAttachment, reach_nm: num }),
   overhangs: v => optional(v, { id, helix_id: id, strand_id: id, sequence: nstr, label: nstr, ...pose, sub_domains: array(subdomain),
     parent_overhang_id: nid, auxiliary_endpoint: bool, strand_anim_setup: nullable(json) }, { unpaired_source_helix_id: nid }),
@@ -459,7 +460,7 @@ function resetTarget(v) {
   else fail('invalid reset target')
   return v
 }
-const authored = { name: v => text(v, 512, true), helix_ids: array(id), domain_ids: array(ref), color: nullable(v => text(v, 512, true)), opacity: num }
+const authored = { name: v => text(v, 512, true), helix_ids: array(id), domain_ids: array(ref), color: nullable(v => text(v, 512, true)), opacity: num, folding_order: foldingOrder }
 function input(v, kind, indices, live, residuePoseIds) {
   const protectedFields = { _proof_version: literal(1), history_seed: id, expected_design_id: id, expected_revision: uint, expected_feature_id: id }
   const body = { kind: literal('base', 'extra_base'), ...pose }

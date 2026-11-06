@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installTestApi } from './test_api.js'
 import * as THREE from 'three'
 
 describe('installTestApi', () => {
+  it('renders a real review frame while the continuous loop is paused', () => {
+    const scene = {}, camera = {}, renderer = { setAnimationLoop: vi.fn(), render: vi.fn() }
+    installTestApi({ scene, camera, renderer, forceCrossoverTool: { testApi: {} } })
+    window.__nadocTest.pauseViewerRenderingForTest()
+    window.__nadocTest.renderViewerFrameForTest()
+    expect(renderer.setAnimationLoop).toHaveBeenCalledWith(null)
+    expect(renderer.render).toHaveBeenCalledWith(scene, camera)
+  })
   it('observes visible lattice cells without exposing hidden or offscreen targets', () => {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100)

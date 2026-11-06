@@ -61,6 +61,7 @@ family('Color', 'strands-color-bulk')
 family('Loop/Skip', 'loop-skip-insert loop-skip-clear loop-skip-clear-all loop-skip-twist loop-skip-bend')
 
 export function featureOperationName(entry) {
+  if (entry?.feature_type === 'cluster_op' && entry.source === 'folding-order') return 'Folding Order'
   if (entry?.op_kind === 'diagnostic-process') {
     const tools = { 'author-helix': 'Helix', 'author-strand': 'Strand', 'derive-connectivity': 'Crossover',
       'assembly-add': 'Add Part', 'assembly-polymerize': 'Polymerize Origami',

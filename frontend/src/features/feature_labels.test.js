@@ -35,3 +35,8 @@ it('recomputes numbering after reorder without changing stored elaboration', () 
   expect(featureLabels(log.toReversed())).toEqual(['F1: Extrude 1 [Other]', 'F2: Extrude 2 [Initial]'])
   expect(log[0].label).toBe('Initial')
 })
+
+it('labels recorded folding assignments separately from moves', () => {
+  expect(featureLabels([{ feature_type: 'cluster_op', source: 'folding-order' },
+    { feature_type: 'cluster_op' }])).toEqual(['F1: Folding Order 1', 'F2: Move/Rotate 1'])
+})

@@ -2776,7 +2776,7 @@ def compute_nick_plan(
 
 
 def nick_all_major_ticks(
-    design: Design, skip_strand_ids: frozenset[str] = frozenset()
+    design: Design, skip_strand_ids: frozenset[str] = frozenset(), *, experimental=None
 ) -> Design:
     """Nick every non-scaffold strand at *all* major tick marks (co-linear only).
 
@@ -2791,7 +2791,10 @@ def nick_all_major_ticks(
 
     ``skip_strand_ids`` names hand-routed staples (locked / overhang) that are left
     whole — never nicked — so full-autostaple does not split them.
+    Experimental HC routing omits nicks in the skipped crossover repeats.
     """
+    from backend.core.experimental_autostaple import retain_boundary
+
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
     period = 21 if is_hc else 32
     tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
@@ -2827,6 +2830,8 @@ def nick_all_major_ticks(
             h_cur, bp, d = positions[i]
             tick_bp = (bp + 1) if d == Direction.FORWARD else bp
             if (tick_bp % period) not in tick_set:
+                continue
+            if not retain_boundary(tick_bp - 1, experimental, helix_ids=(h_cur,)):
                 continue
             if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
                 continue

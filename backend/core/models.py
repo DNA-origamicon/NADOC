@@ -1599,6 +1599,9 @@ class ClusterRigidTransform(BaseModel):
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     parent_cluster_id: Optional[str] = None
+    # User-requested folding stage; None leaves routing unconstrained. This is
+    # a design objective, not a measured temperature or a kinetic prediction.
+    folding_order: Optional[int] = Field(default=None, ge=1, le=999, strict=True)
     # Non-None marks this as an auto-created overhang-DUPLEX cluster (child of the driver
     # part's cluster); the value is the DRIVER overhang id whose helix hosts the duplex.
     # One duplex cluster covers ALL duplexes on that overhang (multivalency). Used for

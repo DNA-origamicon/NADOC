@@ -1,0 +1,11 @@
+.autostaple-options .autostaple-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 1.2fr);
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.autostaple-options .autostaple-field > select,
+.autostaple-options .autostaple-field > input { width: 100%; min-width: 0; }
+.autostaple-options [role="alert"] { color: var(--color-danger, #d45b5b); }
+.autostaple-options .tool-help { line-height: 1.5; color: var(--color-text-muted); font-size: var(--text-xs); }
