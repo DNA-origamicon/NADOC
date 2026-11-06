@@ -4911,7 +4911,7 @@ async function main() {
   // factory reaches them via get/set shims. jointRenderer is declared just below,
   // so it is injected lazily. Alias-consts keep every external call site verbatim.
   const _nucleotideTransformTool = initNucleotideTransformTool({
-    store, scene, camera, canvas, controls, designRenderer, atomisticRenderer,
+    store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, unfoldView,
     getAtomisticRenderers: () => [
       atomisticRenderer,
       _atomSurface.getRegionVdwRenderer?.(),

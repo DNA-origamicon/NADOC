@@ -2184,10 +2184,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _connectorDirection = new THREE.Vector3()
   const _connectorRodQuat = new THREE.Quaternion()
   const _connectorColor = new THREE.Color()
-  function _refreshSlabConnectors() {
+  function _refreshSlabConnectors(entries = slabEntries) {
     if (!_slabConnectorsReady) return
-    for (let i = 0; i < slabEntries.length; i++) {
-      const slab = slabEntries[i]
+    for (const slab of entries) {
+      const i = slab.connectorId
       const bead = _nucToEntry.get(slab.nuc)?.pos ?? slab.bbPos
       iSlabs.getMatrixAt(slab.id, _tMatrix)
       _connectorScale.setFromMatrixScale(_tMatrix)
@@ -3317,7 +3317,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         info.slab.instMesh.setMatrixAt(info.slab.id, matrix.clone().multiply(info.slabMatrix))
         info.slab.instMesh.instanceMatrix.needsUpdate = true
       }
-      _refreshSlabConnectors()
+      // A domain drag calls this once per selected residue. Refreshing every
+      // slab here made each input O(selected residues × whole design).
+      if (info.slab) _refreshSlabConnectors([info.slab])
       return true
     },
 

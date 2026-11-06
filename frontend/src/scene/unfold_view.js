@@ -745,6 +745,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         }
       }
 
+      // Cluster preview positions are already in the displayed frame. Do not
+      // interpolate them a second time against the straight/deformed layout.
+      if (!straightPosMap) {
+        if (e.liveFrom) { bfx = e.liveFrom.x; bfy = e.liveFrom.y; bfz = e.liveFrom.z }
+        if (e.liveTo) { btx = e.liveTo.x; bty = e.liveTo.y; btz = e.liveTo.z }
+      }
       _sv0.set(bfx + offFrom.x * t, bfy + offFrom.y * t, bfz + offFrom.z * t)
       _sv1.set(btx + offTo.x * t,   bty + offTo.y * t,   btz + offTo.z * t)
 
@@ -778,6 +784,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * after applyFemPositions so the arcs don't lag at the original positions.
    */
   function applyFemArcs(updates) {
+    for (const e of _arcMeta) { e.liveFrom = null; e.liveTo = null }
     const posMap = updates
       ? new Map(updates.map(u => [`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position]))
       : null
@@ -1223,6 +1230,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     },
 
     applyDeformLerp(straightPosMap, deformT) {
+      for (const e of _arcMeta) { e.liveFrom = null; e.liveTo = null }
       if (straightPosMap) _refreshArcStraightPositions(straightPosMap)
       _currentDeformT = deformT
       // Re-draw arcs at t_unfold=0 with no offsets; _updateArcPositions uses
@@ -1343,12 +1351,18 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         const fromAff = _isAff(e.fromHelixId)
         const toAff   = _isAff(e.toHelixId)
         if (!fromAff && !toAff) continue
+        // Read both ends: the unselected endpoint can be displayed in straight
+        // geometry while from3D/to3D still hold the deformed layout.
+        const liveFrom = e.fromNuc && helixCtrl.getNucLivePos(e.fromNuc)
+        const liveTo = e.toNuc && helixCtrl.getNucLivePos(e.toNuc)
+        e.liveFrom = liveFrom ? (e.liveFrom ?? new THREE.Vector3()).copy(liveFrom) : null
+        e.liveTo = liveTo ? (e.liveTo ?? new THREE.Vector3()).copy(liveTo) : null
         if (fromAff && e.fromNuc) {
-          const pos = helixCtrl.getNucLivePos(e.fromNuc)
+          const pos = liveFrom
           if (pos) { e.from3D.copy(pos); changed = true }
         }
         if (toAff && e.toNuc) {
-          const pos = helixCtrl.getNucLivePos(e.toNuc)
+          const pos = liveTo
           if (pos) { e.to3D.copy(pos); changed = true }
         }
       }
@@ -1367,8 +1381,9 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       for (const e of _arcMeta) {
         if (!e.crossover_id || !e.fromNuc || !e.toNuc || e.hidden) continue
         if (!_isAff(e.fromHelixId) && !_isAff(e.toHelixId)) continue
-        arcControlPoint(e.from3D, e.to3D, e.fromNuc, e.toNuc, _ctrlOut)
-        designRenderer.updateExtraBaseArc(e.crossover_id, e.from3D, _ctrlOut, e.to3D)
+        const from = e.liveFrom ?? e.from3D, to = e.liveTo ?? e.to3D
+        arcControlPoint(from, to, e.fromNuc, e.toNuc, _ctrlOut)
+        designRenderer.updateExtraBaseArc(e.crossover_id, from, _ctrlOut, to)
         xoverUpdated = true
       }
       if (xoverUpdated) designRenderer.flushExtraBaseMeshes()

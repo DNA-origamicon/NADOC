@@ -152,6 +152,68 @@ describe('abstract nucleotide projection', () => {
 })
 
 describe('atomistic transform commit', () => {
+  it('preserves an explicitly selected insert when its crossover endpoint also moves', () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const scene = new THREE.Scene(), extra = new THREE.Vector3()
+    const state = { selection: { items: ['h:1:FORWARD', '__xb__:xo:0'].map(key => ({ kind: 'base', key })) } }
+    const tool = initNucleotideTransformTool({ store: { getState: () => state, setState: patch => Object.assign(state, patch) },
+      scene, camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas'), controls: { enabled: true },
+      designRenderer: {
+        residueTransformInfo: () => ({ centroid: new THREE.Vector3() }),
+        xoverResidueInfo: () => ({ centroid: new THREE.Vector3() }),
+        applyResidueTransformMatrix() {},
+        applyClusterCrossoverUpdate: () => extra.set(1, 0, 0),
+        applyXoverResidueMatrix: (_info, matrix) => extra.set(0, 0, 0).applyMatrix4(matrix),
+      } })
+    try {
+      expect(tool.activate()).toBe(true)
+      const tc = scene.children.find(node => node.controls)?.controls
+      tc.dispatchEvent({ type: 'dragging-changed', value: true })
+      tc.object.position.y = 3
+      tc.dispatchEvent({ type: 'change' })
+      expect(extra.toArray()).toEqual([0, 3, 0])
+      tc.dispatchEvent({ type: 'dragging-changed', value: false })
+      tool.cancel()
+      expect(extra.toArray()).toEqual([0, 0, 0])
+    } finally { tool.detach() }
+  })
+
+  it('refreshes crossing arcs after every selected residue moves and on Reset/Cancel', () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const scene = new THREE.Scene(), positions = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(2, 0, 0)]
+    const state = { selection: { items: [1, 2].map(bp => ({ kind: 'base', key: `h:${bp}:FORWARD` })) } }
+    const snapshots = []
+    const unfoldView = { applyClusterArcUpdate: vi.fn(() => snapshots.push(positions.map(p => p.toArray()))) }
+    const designRenderer = {
+      residueTransformInfo: target => ({ centroid: positions[target.bp_index - 1].clone(), index: target.bp_index - 1 }),
+      applyResidueTransformMatrix: (info, matrix) => positions[info.index].set(info.index + 1, 0, 0).applyMatrix4(matrix),
+      applyClusterCrossoverUpdate: vi.fn(),
+    }
+    const tool = initNucleotideTransformTool({ store: { getState: () => state, setState: patch => Object.assign(state, patch) },
+      scene, camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas'),
+      controls: { enabled: true }, designRenderer, unfoldView })
+    try {
+      expect(tool.activate()).toBe(true)
+      const tc = scene.children.find(node => node.controls)?.controls
+      tc.dispatchEvent({ type: 'dragging-changed', value: true })
+      tc.object.position.y += 3
+      tc.dispatchEvent({ type: 'change' })
+      expect(snapshots.at(-1)).toEqual([[1, 3, 0], [2, 3, 0]])
+      expect(unfoldView.applyClusterArcUpdate).toHaveBeenLastCalledWith(['h'])
+      expect(designRenderer.applyClusterCrossoverUpdate).toHaveBeenCalledTimes(1)
+      tc.object.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2)
+      tc.dispatchEvent({ type: 'change' })
+      expect(snapshots.at(-1)[0][1]).toBeCloseTo(2.5)
+      expect(snapshots.at(-1)[1][1]).toBeCloseTo(3.5)
+      tc.dispatchEvent({ type: 'dragging-changed', value: false })
+      tool.reset()
+      expect(snapshots.at(-1)).toEqual([[1, 0, 0], [2, 0, 0]])
+      tool.cancel()
+      expect(snapshots.at(-1)).toEqual([[1, 0, 0], [2, 0, 0]])
+      expect(designRenderer.applyClusterCrossoverUpdate).toHaveBeenCalledTimes(4)
+    } finally { tool.detach() }
+  })
+
   it('places a group gizmo at the mean centroid of all selected residues', () => {
     document.body.innerHTML = '<div id="mode-indicator"></div>'
     const state = { selection: { items: [

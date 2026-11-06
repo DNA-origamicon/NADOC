@@ -5,6 +5,18 @@ type: project
 originSessionId: 96a8235a-e27a-4ded-baaf-0d9bf2a43d2f
 ---
 
+## Live crossover endpoints (2026-11-05)
+
+Move/Rotate arc updates retain displayed endpoint positions separately from the
+straight/deformed layout interpolation. Previously, deformation display off
+discarded the moving endpoint entirely; intermediate deformation fractions
+attenuated its motion. Both ends of an affected arc now read live bead positions,
+including its unselected end, and visibility repaint retains the preview.
+Geometry rebuild, deformation interpolation and simulation updates release these
+overrides. Regression: `unfold_view.move_preview.test.js` covers translation,
+rotation, fixed endpoints and geometry restoration at deformation fractions
+0, 0.4 and 1.
+
 ## Feature-log delete clears joint indicators (2026-05-14)
 
 `delete_feature` in `backend/api/crud.py` now inverts joint deltas when a `routing-cluster` log entry is deleted: it decodes the entry's `pre_state_gz_b64` / `post_state_gz_b64`, computes joints created/deleted/updated by that cluster, and applies the inverse to `temp.cluster_joints` before `_seek_feature_log` runs. Without this, joint icons stayed in the 3D view because `_seek_feature_log` doesn't rebuild `cluster_joints` from log entries (joints mutate only via routing-cluster minor ops, and `_topology_substitute` deliberately does not include `cluster_joints`). Evicted routing-clusters (no pre/post payload) can't recover the delta and joints persist — manual joint-delete is the workaround. Tests: `test_delete_routing_cluster_removes_joints_it_placed`, `test_delete_routing_cluster_preserves_unrelated_joints` in `tests/test_joints.py`.
