@@ -574,3 +574,79 @@ def test_live_request_accepts_updated_surface_cards():
     ]
     assert wall["position_nm"] == -4
     assert body.surface_strands == {"enabled": True, "subjectToField": False}
+
+
+def test_live_frame_identity_is_published_atomically_with_positions():
+    building, release = threading.Event(), threading.Event()
+    calls = 0
+
+    def build(_):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            building.set()
+            assert release.wait(2)
+        return [{"snapshot": calls}]
+
+    live = LiveSession("atomic", _FakeEngine(), frame_builder=build,
+                       field_oxdna=0, field_dir=[0, 1, 0])
+    live._capture_frame()
+    live._n_bursts = 1  # The engine finished stepping; frame conversion is still pending.
+    worker = threading.Thread(target=live._capture_frame)
+    worker.start()
+    try:
+        assert building.wait(2)
+        old = live.frame()
+        assert old["positions"] == [{"snapshot": 1}]
+        assert old["n_bursts"] == 0
+        assert old["frame_id"] == 1
+    finally:
+        release.set()
+        worker.join(timeout=2)
+    new = live.frame()
+    assert new["positions"] == [{"snapshot": 2}]
+    assert new["n_bursts"] == 1
+    assert new["frame_id"] == 2
+    assert new["timing"]["capture_ms"] >= 0
+    assert new["timing"]["age_ms"] >= 0
+
+
+def test_failed_live_capture_keeps_the_published_frame_identity():
+    def build(_):
+        raise ValueError("capture unavailable")
+
+    live = LiveSession("failed-capture", _FakeEngine(), frame_builder=lambda _: [{"snapshot": 1}],
+                       field_oxdna=0, field_dir=[0, 1, 0])
+    live._capture_frame()
+    live._frame_builder = build
+    live._n_bursts = 1
+    live._capture_frame()
+    assert live.frame()["frame_id"] == 1
+    assert live.frame()["n_bursts"] == 0
+    assert live.frame()["positions"] == [{"snapshot": 1}]
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_live_prioritizes_foreground_and_releases_lease(tmp_path, monkeypatch, fail):
+    from backend.core import trajectory_priority
+
+    monkeypatch.setattr(trajectory_priority, "_directory", lambda: tmp_path)
+    observed = threading.Event()
+
+    class Engine(_FakeEngine):
+        def run(self, steps):
+            assert trajectory_priority.foreground_active()
+            observed.set()
+            if fail:
+                raise RuntimeError("engine stopped")
+            super().run(steps)
+
+    live = LiveSession("priority", Engine(), frame_builder=lambda _: [{"snapshot": 1}],
+                       field_oxdna=0, field_dir=[0, 1, 0])
+    live.start()
+    try:
+        assert observed.wait(2)
+    finally:
+        live.stop()
+    assert not trajectory_priority.foreground_active()
+    assert not list(tmp_path.iterdir())

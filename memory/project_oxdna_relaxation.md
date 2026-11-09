@@ -12,6 +12,22 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Live oxDNA has an upper-left Smooth checkbox (off by default). Four queued
+  snapshots fill/refill a jitter buffer; one future knot remains reserved for the
+  same Catmull–Rom interpolation as trajectories. The queue caps at eight frames
+  and coalesces overflow while preserving upcoming knots. Arrival cadence is
+  low-pass filtered; polling runs start-to-start without overlapping requests.
+  Packed snapshots are reused and the next curve is prepared on receipt rather
+  than at a renderer boundary. Live display ownership cleanup runs once on entry.
+  The popup's Timing details distinguish request, simulation burst, capture,
+  source age, curve preparation, scene update, render gaps and buffer stalls.
+  Frame IDs, burst counts and coordinates are published atomically (ISSUE-179),
+  preventing a reader from labeling old positions as a new frame. Live holds the
+  existing foreground-work lease so resumable background trajectory-cache work
+  yields until Live ends. Stop cancels
+  interpolation and rejects responses from older sessions. This remains a CG
+  display preview; no topology or stored trajectory is changed.
+
 - Copy Job retains the job-owned sequence-parameter file byte-for-byte (ISSUE-95).
   Missing legacy files remain absent; this is not complete physical provenance.
 

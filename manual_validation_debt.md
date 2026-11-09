@@ -1495,3 +1495,16 @@ MV-58 cadnano follow-up (2026-11-05): the same control is available beside Lengt
 in the standalone editor. Check close-zoom domain boundaries, crossover colors,
 selection visibility, and legend readability on mixed 21/42-bp routing. Browser
 coverage compares the rendered path-canvas pixels across both modes and Off.
+
+### MV-59 — Live oxDNA smooth motion (PENDING, 2026-11-09)
+
+In Dynamics, select an existing prepared/completed oxDNA job and start Live.
+Check the upper-left 3D-view popup; toggle Smooth while steering the field.
+Smooth now fills/refills four queued frames and uses the same four-frame
+Catmull–Rom interpolation as trajectories. Check startup latency, field-steering
+latency, knot transitions, and Timing details under native simulation load.
+Verify visually continuous CG motion, endpoint holds during slow frame production,
+responsive toggle-off, and no residual updates after Stop or switching jobs.
+Unit coverage exercises buffering, duplicate snapshots, teardown and stale-session
+responses; the browser exercise uses intercepted frames, not a physical oxDNA run.
+Real-simulation visual quality remains a manual check. No new design is required.

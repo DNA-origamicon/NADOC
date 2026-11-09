@@ -3703,3 +3703,24 @@ order-independent candidates, no cross-frame candidates, guarded save/reopen/rep
 The user's original file is unchanged. Its independent publication audit separately
 fails on unreplayed loadout fields (`AGENT_PROCESS_REQUIRED`); no derived copy of
 that file was published.
+
+
+## ISSUE-179 — Live oxDNA intermittently stalls despite smooth playback (2026-11-09)
+
+- **Status:** fixed in code; native-simulation visual confirmation remains MV-59.
+- **Cause:** burst count advanced before captured positions were published. Polls
+  during capture could tag old positions with the new count and cause the browser
+  to discard the actual new snapshot as a duplicate. A single spline-lookahead
+  frame provided no jitter reserve. Response-relative polling added request time
+  to every interval; allocation-heavy curve preparation ran at render boundaries,
+  and live subframes repeatedly performed display ownership cleanup. Live also
+  lacked the foreground lease that pauses competing trajectory-cache backfill.
+- **Change:** atomically publish frame ID/count/positions; expose burst/capture/age
+  timing. Fill/refill four queued frames, cap the queue at eight, preserve spline
+  knots, smooth arrival cadence, prepare cached packed curves ahead, poll at a
+  start-to-start cadence, perform ownership cleanup only on entering Live, and
+  hold the existing foreground-work lease until engine teardown.
+- **Evidence:** deterministic blocked-capture regression; slow-request single-flight
+  test; jitter-buffer, bounded-queue and interpolation tests. Popup Timing details
+  expose remaining source/network/render stalls instead of guessing their cause.
+  No native simulation settings, molecular coordinates or topology are authored.
