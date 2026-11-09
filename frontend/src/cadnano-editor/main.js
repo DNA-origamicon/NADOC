@@ -1,3 +1,4 @@
+import { mountScaffoldSequenceTarget, confirmedScaffoldOptions } from '../ui/scaffold_sequence_target.js'
 import { initEditorViewTools } from './view_tools.js'
 import { registerRecordingSource } from '../record/source.js'
 import { scaffoldSequenceChoice, updateScaffoldCustomInput, wireScaffoldCustomInput, validateScaffoldSequenceChoice } from '../ui/scaffold_custom_input.js'
@@ -502,6 +503,7 @@ const _strandSequenceDialog = initStrandSequenceDialog({
 
 // Which strand the currently-open modal targets (null = first scaffold), and the
 // nt count for that strand — read by the warning updater and the apply handler.
+let _ascTargetScope = null
 let _ascTargetStrandId = null
 let _ascTotalNt = 0
 let _ascListenersWired = false
@@ -532,6 +534,11 @@ function _openScaffoldModal(targetStrandId = null) {
   lengthEl.textContent = targetStrandId != null
     ? `Scaffold length: ${totalNt} nt (selected strand only)`
     : `Scaffold length: ${totalNt} nt`
+  _ascTargetScope = mountScaffoldSequenceTarget({ body: modal.firstElementChild, design,
+    state: { ...editorStore.getState(), selection: { items: _lastSelectedStrandIds.map(id => ({ kind: 'strand', id })) } }, explicitStrandId: targetStrandId,
+    onChange: nt => { _ascTotalNt = nt; _ascUpdateWarning() },
+  })
+  modal.style.zIndex = 'var(--z-modal)'
   modal.style.display = 'flex'
 
   // Wire the field events once — reopening the modal must not stack duplicate
@@ -1078,14 +1085,15 @@ document.getElementById('asc-apply')?.addEventListener('click', async () => {
   const choice = validateScaffoldSequenceChoice(modal)
   if (!choice) return
   const { scaffoldName, customRaw } = choice
-  const targetStrandId = _ascTargetStrandId
+  const targetOptions = await confirmedScaffoldOptions(_ascTargetScope, showToast)
+  if (!targetOptions) return
   modal.style.display = 'none'
   _ascTargetStrandId = null   // clear targeting after use
   const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
   _showProgress(`Assigning ${label} sequence…`)
   const json = await assignScaffoldSequence(scaffoldName, {
     customSequence: customRaw || null,
-    strandId: targetStrandId,
+    ...targetOptions,
   })
   _hideProgress()
   if (!json) { showToast('Assign scaffold sequence failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }); return }

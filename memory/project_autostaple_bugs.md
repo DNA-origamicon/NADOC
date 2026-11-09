@@ -6,6 +6,44 @@ originSessionId: ebee5130-b4fe-4931-8053-4e9bd2cfe8a2
 ---
 # Autostaple / Autocrossover / Autobreak Status (2026-04-11)
 
+## 2026-11-05 — Cluster folding-order assignment and routing
+
+The Clustering sidebar has a collapsible Folding Order card. Each part cluster
+stores `folding_order` (1–999 or null); lower stages precede higher stages, ties
+share priority, and null means Undefined/default routing. Edits and clears use
+the recorded cluster PATCH command, persist with the part, and support undo and
+independent replay. The feature log labels these assignments as Folding Order.
+
+The Experimental popup now enables actual whole-part honeycomb folding-order
+routing. It targets per-cluster median estimated staple Tfold with a configurable
+2 °C default inter-stage gap. The earliest stage uses 42-bp crossover repeats;
+later stages use 21-bp repeats and receive native nicks when needed. Undefined
+and interface sites use the baseline repeat; cross-cluster staples are excluded
+from scoring. Unsupported
+estimates, conflicting overlapping assignments and infeasible gaps fail atomically.
+This does not guarantee cooperative kinetic folding order. The report exposes
+ranges, counts, caps and nicks. See `docs/staple_temperature.md` for the Castro
+Marras et al. (2016) crossover-removal mechanism, model assumptions and bounded-search limitations. Assembly-wide
+routing remains undefined; the UI directs users to the part editor.
+
+Actual routing validation: 9 routing tests and 5 thermodynamic-parity tests pass,
+including native saved/reopened replay and atomic rejection. Frontend: 10,142
+passed, 1 skipped (878 files). Browser: 25 passed, including real assignment →
+ordered routing and rendered 6HB/18HB reviews; isolated artifacts cleaned. Backend
+FAST: 20,661 passed, 19 skipped, known CPD contract failure plus a VR subprocess
+mock/background-precompute interference failure (exact VR retry passed). FULL
+remains deferred. Final timing report has no per-test violators; guards unchanged.
+Evidence: `.development-artifacts/folding-routing-validation.json`.
+
+Prior assignment-UI checkpoint validation: 62 focused backend and 166 focused frontend checks pass, including
+guarded saved/reopened replay, undo/redo, and history preview compatibility. The
+real browser assignment/collapse/popup exercise and smoke checks pass across
+targeted retries; temporary browser artifacts were removed. FAST: 20,648 passed,
+19 skipped, one previously logged CPD display-contract failure. FULL remains
+deferred; timing triage left guards unchanged after the flagged native-linker
+case passed below its call-time limit in isolation. Compact evidence:
+`.development-artifacts/folding-order-validation.json`.
+
 ## Resolved bugs
 
 ### 1. min_crossover_gap=7 impossible for HC
@@ -112,3 +150,59 @@ through recorded user commands and checks both frames, independent ordering,
 standalone crossover recording, legacy replay and guarded save/reopen/replay.
 The original `test.nadoc` was read only; its independent agent audit also identifies
 unrecorded loadout fields, so no corrected derivative of that file was published.
+
+## 2026-11-04 — Experimental 42 bp honeycomb routing
+
+Autostaple now opens a Standard/Experimental method chooser (OK/Cancel).
+Standard retains the existing algorithm; Experimental opens settings after scope
+selection. `experimental` in the full-autostaple request/feature record contains
+`crossover_repeat_bp` (21 or 42), `pattern` (0/A or 1/B), `min_length` and
+`max_merged_length`. Missing/null experimental settings replay Standard behavior.
+Experimental routing rejects non-HC designs before mutation.
+
+`backend/core/experimental_autostaple.py` selects alternate 21 bp repeats by the
+existing crossover pair's lower nick boundary. Both members of a pair survive or
+are omitted together. The same filter skips preliminary nicks in omitted repeats;
+placement still uses the existing lattice rules. Absolute bp coordinates anchor
+the pattern, including negative bp coordinates. Regional routing retains its
+whole-touching-staple scope and outside-strand protections. Manual connections,
+forced ligations and overhang protections remain in force; they and boundaries
+can produce departures from the nominal pattern.
+
+The growth limit is explicitly a merge parameter, not a strict oligo length cap.
+The result dialog reports staple nucleotide counts and domain lattice spans for
+the routed scope. Spans are not sequence-based hybridization lengths when there
+are insertions/deletions or unpaired domains. No cluster folding-temperature
+prediction is made. Thermodynamic scoring, preferred-length optimization and a
+pre-apply geometric routing preview remain future extensions.
+
+Regression coverage: `tests/test_experimental_autostaple.py` authors native 6HB
+and standard-example-cross-section 18HB bundles, tests both patterns, crossover
+traversal, preserved coverage, regional isolation, Standard recovery, and guarded
+publication/save/reopen/independent replay. `scripts/build_autostaple_review.py`
+builds guarded browser fixtures; the isolated smoke run exercises both bundles
+through the method/settings/results dialogs.
+
+## 2026-11-04 — User-selected ordering maximum
+
+The Experimental settings dialog accepts a hard `max_staple_length` (21–300 nt,
+UI default 60). The method chooser contains only Standard/Experimental and OK/Cancel.
+Standard sends its original request and retains its existing routing and length behavior. It is distinct from the
+experimental lattice-span merge limit. Missing/None preserves legacy replay;
+new UI commands record the chosen limit in the native full-autostaple feature.
+After growth, a deterministic partition adds ordinary editor nicks inside domains,
+retaining crossover traversals and coverage. It prefers the growth minimum,
+requires new fragments of at least 7 nt, and keeps cuts 7 lattice bases from
+domain ends. Infeasible limits reject the whole command. This can shorten the
+long binding domains encouraged by 42 bp routing; it does not predict folding
+kinetics or temperature.
+
+Length includes loop/skip-adjusted sequence spans, overhang/binder sequences,
+terminal extension bases and junction inserts. Strands carrying extensions or
+junction inserts remain intact in capped routing, as do forced-ligation and
+overhang strands during the final cap pass; over-limit protected strands cause
+an explicit failure. Outside-region staples are exempt and unchanged. This is a
+routing constraint, not an estimate of vendor prices or a change to order export.
+Focused recorded 6HB/18HB tests cover maximum 42, crossover/coverage preservation,
+saved-file publication plus independent replay, regional exclusions, insertion/
+deletion accounting, validation and atomic rejection of a long extension.

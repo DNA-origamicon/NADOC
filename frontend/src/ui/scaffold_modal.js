@@ -10,6 +10,7 @@
  * `openModal(strandId)`).
  */
 import { scaffoldSequenceChoice, updateScaffoldCustomInput, wireScaffoldCustomInput, validateScaffoldSequenceChoice } from './scaffold_custom_input.js'
+import { mountScaffoldSequenceTarget, confirmScaffoldScope } from './scaffold_sequence_target.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { showToast } from './toast.js'
@@ -28,6 +29,7 @@ import { ascWarningText, SCAFFOLD_LENGTHS, countScaffoldNt } from '../scene/scaf
 export function initScaffoldModal({ store, api, showProgress, hideProgress, getUndefinedHighlightOn, refreshUndefinedHighlight }) {
   let _ascModalCtrl       = null
   let _ascBody            = null
+  let _ascTargetScope = null
   let _ascTargetStrandId  = null   // strand id passed in from the right-click "Assign Scaffold for strand…" path
   let _ascTotalNt         = 0      // scaffold length captured at open time
 
@@ -83,7 +85,13 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
     const choice = validateScaffoldSequenceChoice(_ascBody)
     if (!choice) return
     const { scaffoldName, customRaw } = choice
-    const targetStrandId = _ascTargetStrandId
+    let targetOptions
+    try {
+      const scope = _ascTargetScope.read()
+      if (!await confirmScaffoldScope(scope)) return
+      targetOptions = scope.options
+    }
+    catch (error) { showToast(error.message, { severity: 'error' }); return }
 
     _ascModalCtrl.close()
     _ascTargetStrandId = null   // clear targeting after use
@@ -92,7 +100,7 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
     showProgress('Assign Scaffold Sequence', `Assigning ${label} sequence…`)
     const json = await api.assignScaffoldSequence(scaffoldName, {
       customSequence: customRaw || null,
-      strandId: targetStrandId,
+      ...targetOptions,
     })
     hideProgress()
     if (!json) {
@@ -131,6 +139,10 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
     _ascTotalNt = totalNt   // remembered for the apply path's warning + 'N' fill
     updateScaffoldCustomInput(_ascBody)
     _ascUpdateWarning()
+    _ascTargetScope = mountScaffoldSequenceTarget({ body: _ascBody, design: currentDesign,
+      state: store.getState(), explicitStrandId: targetStrandId,
+      onChange: nt => { _ascTotalNt = nt; _ascUpdateWarning() },
+    })
     _ascModalCtrl.open()
   }
 

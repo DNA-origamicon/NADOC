@@ -19,7 +19,7 @@ from backend.core.part_overlay_commands import command_input
 KINDS = frozenset({"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                    "nucleotide-transform-delete"})
 POSE_FIELDS = frozenset({"translation", "rotation", "pivot"})
-AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity"})
+AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"})
 _BODY_FIELDS = frozenset({"kind", "helix_id", "bp_index", "direction", "copy_k",
     "crossover_id", "extra_base_k", "compose"}) | POSE_FIELDS
 _PROTECTED = frozenset({"_proof_version", "history_seed", "expected_design_id",
@@ -100,6 +100,10 @@ def _target(value):
 
 
 def _placement(values):
+    if 'folding_order' in values and values['folding_order'] is not None:
+        stage = values['folding_order']
+        if type(stage) is not int or not 1 <= stage <= 999:
+            _reject('Folding order requires a whole stage from 1 to 999 or null')
     _identity(values.get("cluster_id"), "cluster_id")
     _pose(values)
     if "name" in values and (type(values["name"]) is not str or len(values["name"]) > 512):

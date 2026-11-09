@@ -52,6 +52,7 @@ test('Autostaple offers selection-only vs entire structure and keeps unselected 
     const openAutostaple = async () => {
       await page.evaluate(() => document.activeElement?.blur())
       await page.keyboard.press('2')
+      await page.getByRole('dialog', { name: 'Autostaple method', exact: true }).getByRole('button', { name: 'OK', exact: true }).click()
     }
     await openAutostaple()
     const chooser = page.getByRole('dialog', { name: 'Autostaple scope', exact: true })

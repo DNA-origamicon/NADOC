@@ -36,7 +36,7 @@ describe('region from selection', () => {
 })
 
 describe('autostaple command', () => {
-  const deps = over => ({ design, autostaple: vi.fn(async () => ({ full_autostaple: { region: { restapled: 3, kept: 9 }, auto_crossover: { placed: 4 } } })),
+  const deps = over => ({ design, chooseMethod: async () => 'standard', autostaple: vi.fn(async () => ({ full_autostaple: { region: { restapled: 3, kept: 9 }, auto_crossover: { placed: 4 } } })),
     lastError: () => ({ message: 'boom' }), toast: vi.fn(), showProgress: vi.fn(), hideProgress: vi.fn(), ...over })
 
   it('runs the whole structure directly when nothing is selected', async () => {

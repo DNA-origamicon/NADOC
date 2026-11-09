@@ -71,21 +71,9 @@ def build_loop(kind, design, params):
 
 
 def build_sequence(kind, design, params):
-    from backend.core.sequences import (
-        assign_custom_scaffold_sequence,
-        assign_scaffold_sequence,
-        assign_staple_sequences,
-    )
+    from backend.core.sequences import assign_staple_sequences
+    from backend.core.scaffold_sequence_scope import assign_scoped_sequence
 
     if kind == "assign-staple-sequences":
         return assign_staple_sequences(design)
-    sequence = params.get("custom_sequence")
-    if sequence and sequence.strip():
-        return assign_custom_scaffold_sequence(
-            design, sequence, strand_id=params.get("strand_id")
-        )[0]
-    return assign_scaffold_sequence(
-        design,
-        params.get("scaffold_name", "M13mp18"),
-        strand_id=params.get("strand_id"),
-    )[0]
+    return assign_scoped_sequence(design, params)[0]

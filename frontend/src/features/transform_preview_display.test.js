@@ -285,3 +285,15 @@ it('does not reuse ownership when only the outer rows array is frozen', () => {
   c.nucleotides.rows[0][5] = 'other-owner'
   expect(() => validateTransformPreviewComponent(c)).toThrow()
 })
+
+it('accepts persisted folding stages in placement previews and rejects invalid stages', () => {
+  const packet = transformPacket()
+  for (const component of [packet.before, packet.candidate]) {
+    component.display_topology.cluster_transforms[0].folding_order = 2
+  }
+  packet.control_context.cluster_transforms[0].folding_order = 2
+  packet.control_state.cluster_transforms[0].folding_order = 2
+  expect(() => validateTransformPreviewDisplay(packet, { prepare: true })).not.toThrow()
+  packet.candidate.display_topology.cluster_transforms[0].folding_order = 0
+  expect(() => validateTransformPreviewDisplay(packet, { prepare: true })).toThrow()
+})

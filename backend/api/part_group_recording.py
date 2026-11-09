@@ -22,7 +22,7 @@ from backend.core.part_structure import MAX_ID_CHARS, MAX_ITEMS
 from backend.core.part_structure_gate import PartStructureError, require_valid_structure
 
 
-AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity"})
+AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"})
 MAX_COMPONENT_GRAPH_WORK = 200_000
 MAX_COMPONENT_GROUPS = 128
 
@@ -236,7 +236,8 @@ def update_group(cluster_id, fields):
     """
     with state._lock:
         session, source, revision, identity = _start("group_edit")
-        candidate, _ = prepare_group_update(source, cluster_id, fields)
+        candidate, _ = prepare_group_update(source, cluster_id, fields,
+            entry_source="folding-order" if set(fields) == {"folding_order"} else None)
         return _publish(session, source, revision, identity, candidate)
 
 

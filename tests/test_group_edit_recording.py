@@ -57,7 +57,7 @@ def test_ordinary_authored_patch_records_exact_inputs_and_roundtrips(document, f
     assert row.feature_type == "cluster_op" and row.proof_version == 1
     assert row.cluster_id == current.id == group.id
     assert row.authored_fields == current.model_dump(mode="json", include={
-        "name", "helix_ids", "domain_ids", "color", "opacity"})
+        "name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"})
     assert (row.translation, row.rotation, row.pivot) == (
         current.translation, current.rotation, current.pivot)
     assert updated.helices == source.helices and updated.strands == source.strands
@@ -189,7 +189,7 @@ def test_empty_authored_values_clear_membership_and_color_with_one_row(document)
     row = current.feature_log[-1]
     assert len(current.feature_log) == len(source.feature_log) + 1
     assert row.authored_fields == {
-        "helix_ids": [], "domain_ids": [], "color": None, "name": "", "opacity": 0.0}
+        "helix_ids": [], "domain_ids": [], "color": None, "name": "", "opacity": 0.0, "folding_order": None}
     _verified(current)
 
 

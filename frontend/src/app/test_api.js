@@ -50,6 +50,7 @@ export function installTestApi({
     viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._viewerFrame,
       focused: document.hasFocus(), hidden: document.hidden }),
     pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),
+    renderViewerFrameForTest: () => renderer.render(scene, camera),
     scrywrite,
     animPlayer,
     scene,

@@ -21,6 +21,8 @@ vi.mock('./primitives/button.js', () => ({
 const showToast = vi.fn()
 vi.mock('./toast.js', () => ({ showToast: (...a) => showToast(...a) }))
 
+vi.mock('./primitives/confirm.js', () => ({ showConfirm: vi.fn() }))
+import { showConfirm } from './primitives/confirm.js'
 import { initScaffoldModal } from './scaffold_modal.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
@@ -29,7 +31,7 @@ import { createButton } from './primitives/button.js'
 function designWithScaffold() {
   return {
     helices: [],
-    strands: [{ strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 9 }] }],
+    strands: [{ id: 'strand-7', strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 9 }] }],
   }
 }
 
@@ -180,7 +182,7 @@ describe('initScaffoldModal (factory)', () => {
     // 8000-nt scaffold exceeds p8064? no — use a design longer than M13mp18 (7249).
     const big = {
       helices: [],
-      strands: [{ strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 7299 }] }],
+      strands: [{ id: 'strand-7', strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 7299 }] }],
     }
     initScaffoldModal(makeDeps({ store: createMockStore({ currentDesign: big }) })).openModal()
     const warn = document.getElementById('asc-warning')
@@ -192,4 +194,25 @@ describe('initScaffoldModal (factory)', () => {
     p8064.dispatchEvent(new Event('change'))
     expect(warn.style.display).toBe('none')
   })
+})
+
+it('selected cluster requires Yes; No keeps the dialog open and sends nothing', async () => {
+  mountModalDom()
+  const design = designWithScaffold()
+  design.strands.push({ ...design.strands[0], id: 'strand-8' })
+  design.cluster_transforms = [{ id: 'cluster', name: 'Selected cluster', helix_ids: [0] }]
+  const deps = makeDeps({ store: createMockStore({ currentDesign: design,
+    selection: { items: [{ kind: 'cluster', id: 'cluster' }] } }) })
+  vi.clearAllMocks()
+  const modal = initScaffoldModal(deps)
+  modal.openModal()
+  expect(document.querySelector('[aria-label="Scaffold sequence target"]').value).toBe('cluster:cluster')
+  showConfirm.mockResolvedValue(false)
+  await applyButton().__onClick()
+  expect(deps.api.assignScaffoldSequence).not.toHaveBeenCalled()
+  expect(modalClose).not.toHaveBeenCalled()
+  showConfirm.mockResolvedValue(true)
+  await applyButton().__onClick()
+  expect(deps.api.assignScaffoldSequence).toHaveBeenCalledWith('M13mp18', { customSequence: null, strandId: null, clusterId: 'cluster' })
+  clearDom()
 })

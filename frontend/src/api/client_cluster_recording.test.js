@@ -41,7 +41,7 @@ afterEach(() => {
   localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals()
 })
 
-it.each([{ name: 'Renamed' }, { name: '' }, { color: '#123456' }, { color: '' }, { opacity: 0 }, { opacity: 0.4 }])(
+it.each([{ name: 'Renamed' }, { name: '' }, { color: '#123456' }, { color: '' }, { opacity: 0 }, { opacity: 0.4 }, { folding_order: 2 }, { folding_order: null }])(
   'records ordinary group edit %j even when a caller requests log:false and commit:false', async fields => {
     const result = payload(1, fields), fetch = transport(result), beforeGeometry = store.getState().currentGeometry
     const beforeAxes = store.getState().currentHelixAxes, body = Object.freeze({ ...fields, commit: false, log: false })

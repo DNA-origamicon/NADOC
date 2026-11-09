@@ -3704,6 +3704,28 @@ The user's original file is unchanged. Its independent publication audit separat
 fails on unreplayed loadout fields (`AGENT_PROCESS_REQUIRED`); no derived copy of
 that file was published.
 
+### 2026-11-05 — FAST VR-tour subprocess mock interference
+
+During folding-order regression validation, the ligate/validate case in
+`test_vr_tours.py::test_ligation_tour_launches_isolated_workflow` read a
+`backend.core.trajectory_precompute` command from its global `subprocess.Popen`
+mock instead of the expected tour command. Captured traceback shows the background
+precompute worker entering that mock. Exact isolated retry passed (0.04 s call).
+This is an observed suite-isolation race, not an autostaple failure; no VR or
+trajectory behavior changed. Compact evidence: `.development-artifacts/folding-routing-validation.json`.
+
+### Scaffold sequence scope validation — regression observations
+
+- `tests/test_aptamer_history.py::test_import_delete_handles_dependent_moves_and_independent_imports`
+  returned HTTP 413, “Part verification capture budget exceeded”, in the FAST run.
+  Exact isolated retry passed (0.37 s call). No capture budgets or aptamer code changed.
+- Read-only audit of the existing `workspace/test.nadoc` reports
+  `AGENT_PROCESS_REQUIRED` for `active_loadout_id`, `last_editable_loadout_id`, and
+  `loadouts`. The same mismatch occurs before scoped sequence assignment; no
+  derived file was published. Native scope fixtures independently replay correctly.
+
+Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
+
 
 ## ISSUE-179 — Live oxDNA intermittently stalls despite smooth playback (2026-11-09)
 

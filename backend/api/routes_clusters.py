@@ -68,6 +68,9 @@ class PatchClusterBody(BaseModel):
     ``color`` uses a sentinel: ``None`` means "not supplied" (PATCH semantics), so
     the empty string ``""`` is what CLEARS the color back to the auto palette. That
     is what the sidebar's Reset button sends.
+
+    ``folding_order`` uses field presence: omitted retains the stage; explicit
+    null clears it back to Undefined and is recorded like an assignment.
     """
 
     name: Optional[str] = None
@@ -78,7 +81,8 @@ class PatchClusterBody(BaseModel):
     pivot: Optional[List[float]] = None  # [x, y, z] nm
     color: Optional[str] = None  # "#rrggbb"; "" clears to the auto palette
     opacity: Optional[float] = None  # 0..1, clamped
-    commit: bool = False  # pose confirm; non-null authored fields always commit
+    folding_order: Optional[int] = Field(default=None, ge=1, le=999, strict=True)
+    commit: bool = False  # pose confirm; authored edits (including stage clears) commit
     log: bool = False  # deprecated compatibility field; every commit is logged
 
 
@@ -135,6 +139,8 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     from backend.api.part_group_recording import AUTHORED_FIELDS, update_group
 
     fields: dict = {}
+    if "folding_order" in body.model_fields_set:
+        fields["folding_order"] = body.folding_order  # explicit null clears the stage
     if body.name is not None:
         fields["name"] = body.name
     if body.helix_ids is not None:

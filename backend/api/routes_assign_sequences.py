@@ -30,9 +30,10 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.api import state as design_state
+from backend.core.experimental_autostaple import ExperimentalAutostaple
 
 # Shared response helpers (100+ crud.py callers) + the cross-region crossover
 # placer stay in crud.py and are imported back here (L13 / shared-kernel convention).
@@ -56,6 +57,7 @@ class _ScaffoldSeqBody(BaseModel):
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None  # if set, overrides scaffold_name
     strand_id: Optional[str] = None  # target strand (multi-scaffold support)
+    cluster_id: Optional[str] = None  # whole scaffolds contained in this cluster
 
     # Validate new submissions here; historical replay and N padding keep their
     # existing internal sequence contracts.
@@ -88,6 +90,8 @@ class _RegionInterval(BaseModel):
 
 
 class _FullAutostapleBody(BaseModel):
+    max_staple_length: int | None = Field(default=None, ge=21, le=300, strict=True)
+    experimental: ExperimentalAutostaple | None = None
     # Recorded routing semantics; missing historical params replay as False.
     frame_scoped_crossovers: bool = True
     history_seed: str | None = None
@@ -103,6 +107,10 @@ class _FullAutostapleBody(BaseModel):
 def autostaple_params(body: "_FullAutostapleBody") -> dict:
     """Record routing semantics; omit the region for whole-structure runs."""
     params = body.model_dump()
+    if body.max_staple_length is None:
+        params.pop("max_staple_length")
+    if body.experimental is None:
+        params.pop("experimental")
     if body.region is None:
         params.pop("region")
     return params
@@ -118,45 +126,15 @@ def assign_scaffold_sequence_endpoint(
     - ``scaffold_name``: one of "M13mp18", "p7560", "p8064", "custom" (default: M13mp18).
     - ``custom_sequence``: ATGC bases (case-insensitive, whitespace ignored); overrides scaffold_name.
     - ``strand_id``: target a specific scaffold strand (for multi-scaffold designs).
+    - ``cluster_id``: assign independently to whole scaffolds contained in a cluster; exclusive with strand_id.
 
     The response includes ``total_nt``, ``scaffold_len``, and ``padded_nt``.
     """
-    from backend.core.sequences import (
-        SCAFFOLD_LIBRARY,
-        assign_custom_scaffold_sequence,
-        assign_scaffold_sequence,
-    )
+    from backend.core.scaffold_sequence_scope import assign_scoped_sequence
     from fastapi import HTTPException
 
-    # Logged as a feature-log snapshot (op_kind='assign-scaffold-sequence') so the
-    # sequenced state is captured in the log — a feature-log seek (incl. an oxDNA/MD
-    # job roll) reproduces the sequences instead of dropping them.
     def _run(design):
-        use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
-        if use_custom:
-            updated, total_nt, padded_nt = assign_custom_scaffold_sequence(
-                design, body.custom_sequence, strand_id=body.strand_id
-            )
-            scaffold_len = len(
-                body.custom_sequence.strip()
-                .upper()
-                .replace(" ", "")
-                .replace("\n", "")
-                .replace("\r", "")
-            )
-        else:
-            updated, total_nt, padded_nt = assign_scaffold_sequence(
-                design, body.scaffold_name, strand_id=body.strand_id
-            )
-            scaffold_len = next(
-                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name),
-                0,
-            )
-        _run.info = {
-            "total_nt": total_nt,
-            "scaffold_len": scaffold_len,
-            "padded_nt": padded_nt,
-        }
+        updated, _run.info = assign_scoped_sequence(design, body.model_dump())
         return updated
 
     try:

@@ -13,6 +13,34 @@ to the strand right-click menu in BOTH editors; for a staple whose scaffold is
 sequenced, show the paired scaffold bases above the input and highlight incorrect
 base pairing — but still allow any bases.
 
+## Scoped scaffold assignment (2026-11-05)
+
+Assign Scaffold Sequence now offers Default, cluster, and scaffold-strand targets
+in both 3D and cadnano. The 3D menu initializes from the selected scaffold/domain
+or cluster; explicit strand context-menu targets take precedence. Cadnano uses
+its selected strand and also offers cluster targets in the dialog. No selection
+keeps the first editable scaffold behavior.
+
+Cluster scope includes whole non-reference scaffolds only. A scaffold crossing
+the cluster boundary requires an explicit whole-strand target; domain-scoped
+cluster membership uses the same bp coverage rules as native reconciliation.
+Multiple targets prompt “Multiple scaffolds detected, assign sequence to all?”
+with Yes/No. No keeps the assignment dialog open. Yes restarts the chosen sequence
+at each scaffold's existing 5′ end; it does not route/connect separate scaffolds.
+The native assign-scaffold-sequence command records `cluster_id` or `strand_id`
+and shares the scope resolver with independent replay. Assignment is atomic;
+other scaffold/staple sequences are unchanged. Short sequences retain N padding.
+
+Scope validation: 5 focused backend tests pass, including guarded saved/reopened
+replay. Full frontend: 10,148 passed, 1 skipped (879 files). Both editor flows and
+24 smoke tests pass; browser scratch cleanup verified. FAST: 20,666 passed,
+19 skipped, known CPD failure plus aptamer capture-budget failure (exact retry
+passed in 0.37 s call time); FULL deferred, no per-test timing violators.
+The user's existing `test.nadoc` accepts scoped assignment in isolated memory and
+preserves other strands, but its saved input already has an independent replay
+mismatch in loadout fields. No derived user file was published or saved.
+Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
+
 ## Staple temperature view (2026-11-05)
 
 The Tm button beside Length cycles off/domain Tm/total staple Tfold in Full/Beads

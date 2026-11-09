@@ -164,6 +164,7 @@ def build(kind, design, params):
         "domain_ids",
         "color",
         "opacity",
+        "folding_order",
     }
     cluster = ClusterRigidTransform.model_validate(
         {
@@ -212,7 +213,7 @@ def edit_entry(entry, patch, *, prefix=None):
     fields = {
         k: v
         for k, v in patch.items()
-        if k in {"name", "helix_ids", "domain_ids", "color", "opacity"}
+        if k in {"name", "helix_ids", "domain_ids", "color", "opacity", "folding_order"}
     }
     pose = {k: v for k, v in patch.items() if k in {"translation", "rotation", "pivot"}}
     return entry.model_copy(

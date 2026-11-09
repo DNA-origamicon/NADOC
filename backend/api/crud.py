@@ -3357,6 +3357,7 @@ def _place_auto_crossovers(
     tip_only_strand_ids: frozenset[str] = frozenset(),
     kept_strand_ids: frozenset[str] = frozenset(),
     frame_scoped: bool = True,
+    experimental=None,
 ) -> tuple[Design, dict]:
     """Place all possible staple crossovers, skipping a margin around scaffold seams.
 
@@ -3455,6 +3456,8 @@ def _place_auto_crossovers(
     seams = scaffold_seam_positions(design)
     seam_margin = 7 if is_hc else 8
 
+    from backend.core.experimental_autostaple import retain_boundary
+
     sites = all_valid_crossover_sites(design, frame_scoped=frame_scoped)
     min_autocrossover_segment_nt = 7 if is_hc else 8
     seen_pairs: set[tuple[str, str, int]] = set()
@@ -3474,6 +3477,8 @@ def _place_auto_crossovers(
         stap_a = "REVERSE" if fwd_a else "FORWARD"
         stap_b = "FORWARD" if fwd_a else "REVERSE"
         lower_bp = bp - 1 if (bp % period) in bow_right else bp
+        if not retain_boundary(lower_bp, experimental, helix_ids=(hid_a, hid_b)):
+            continue
         nick_a = lower_bp if stap_a == "FORWARD" else lower_bp + 1
         nick_b = lower_bp if stap_b == "FORWARD" else lower_bp + 1
 

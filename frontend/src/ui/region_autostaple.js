@@ -4,6 +4,7 @@
 // backend/api/part_autostaple_command.py. A region is a list of inclusive bp
 // intervals per helix (both directions) — positions, so the recorded feature
 // replays after upstream edits.
+import { chooseAutostapleMethod, chooseExperimentalAutostaple, showExperimentalAutostapleReport } from './autostaple_options.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
@@ -97,28 +98,35 @@ export function chooseAutostapleScope(region) {
 }
 
 /**
- * Menu command. With a selection, offer selection-only vs entire structure;
- * without one, autostaple the entire structure as before.
+ * Choose the routing method, then scope, and (for Experimental) its settings.
  */
-export async function runAutostapleCommand({ design, region = [], autostaple, lastError, toast, showProgress, hideProgress, choose = chooseAutostapleScope }) {
+export async function runAutostapleCommand({ design, region = [], autostaple, lastError, toast, showProgress, hideProgress, choose = chooseAutostapleScope, chooseMethod = chooseAutostapleMethod, chooseExperimental = chooseExperimentalAutostaple, showExperimentalReport = showExperimentalAutostapleReport }) {
   if (!design?.helices?.length) { toast('No design loaded.', { severity: 'error' }); return null }
+  const method = await chooseMethod()
+  if (!method) return null
   let scope = 'all'
   if (region.length) {
     scope = await choose(region)
     if (!scope) return null
   }
   const regional = scope === 'region'
+  const experimental = method === 'experimental' ? await chooseExperimental({ design, regional }) : null
+  if (method === 'experimental' && !experimental) return null
+  const { max_staple_length: maxStapleLength, ...routing } = experimental ?? {}
   showProgress(regional ? 'Region autostaple' : 'Full autostaple',
     regional ? 'Restapling the selected region…' : 'Assigning sequences and routing staples…')
   let result
-  try { result = await autostaple({ scaffold_name: 'M13mp18', ...(regional ? { region } : {}) }) } finally { hideProgress() }
+  try { result = await autostaple({ scaffold_name: 'M13mp18', ...(maxStapleLength != null ? { max_staple_length: maxStapleLength } : {}), ...(regional ? { region } : {}), ...(experimental ? { experimental: routing } : {}) }) } finally { hideProgress() }
   if (!result) {
     toast(`${regional ? 'Region' : 'Full'} autostaple failed: ${lastError()?.message ?? 'unknown error'}`, { severity: 'error' })
     return null
   }
   const report = result.full_autostaple ?? {}
-  toast(regional
+  const lengthSummary = report.length_limit
+    ? ` Maximum ${report.length_limit.maximum_nt} nt; longest routed staple ${report.length_limit.longest_nt} nt; ${report.length_limit.added_nicks} added nick(s).` : ''
+  toast((regional
     ? `Region autostaple complete: restapled ${report.region?.restapled ?? 0} staple(s); ${report.region?.kept ?? 0} kept unchanged.`
-    : `Full autostaple complete: ${report.auto_crossover?.placed ?? 0} crossovers placed.`)
+    : `Full autostaple complete: ${report.auto_crossover?.placed ?? 0} crossovers placed.`) + lengthSummary)
+  if (report.experimental) showExperimentalReport(report.experimental)
   return result
 }

@@ -1634,6 +1634,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         let humanSource = entry.source
         if (entry.source === 'bind-relax')        { iconText = '🔗'; humanSource = 'bind' }
         else if (entry.source === 'unbind-revert') { iconText = '🔓'; humanSource = 'unbind' }
+        else if (entry.source === 'folding-order') { humanSource = entry.authored_fields?.folding_order == null ? 'Undefined' : `stage ${entry.authored_fields.folding_order}` }
         icon.textContent = iconText
         const detail = [humanSource, cluster?.name].filter(Boolean).join(' · ')
         if (detail) label.textContent += ` [${detail}]`

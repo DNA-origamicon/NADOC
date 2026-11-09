@@ -130,3 +130,49 @@ Validation on November 5, 2026, including cadnano: 10,108 frontend tests passed
 VoltronCoreArmV2 with both scaffolds covered. Lint passed. The source files
 are unchanged, and temporary test artifacts were removed. Human
 mixed-spacing readability review remains tracked as MV-58.
+
+## Experimental folding-order routing
+
+The Folding Order card assigns cluster stages; lower numbers target higher
+**median estimated staple Tfold**. Ties share a stage. Experimental autostaple
+applies this objective to a whole honeycomb part, with a configurable 0.1–20 °C
+gap (default 2 °C). This is an engineering objective, not a measured cluster
+transition temperature or a guarantee of kinetic folding order.
+
+Scientific motivation: Marras, Zhou, Kolliopoulos, Su and Castro,
+[Directing folding pathways for multi-component DNA origami nanostructures with complex topology](https://doi.org/10.1088/1367-2630/18/5/055005)
+(2016). They selectively removed staple crossovers to strengthen binding sites
+in the component intended to fold first. Their analysis compared the 30 most
+favorable staple binding free energies; it did not prescribe a universal
+crossover interval or a median-Tfold gap. Their experiments used 18 mM MgCl2,
+200 nM staples, NaCl, Tris and EDTA. NADOC retains the temperature-view model
+above (10 mM free Mg, 200 nM staples); it does not reproduce those buffer conditions.
+
+Our honeycomb adaptation uses the existing valid crossover slots: alternate
+21-bp repeats (42-bp repeat, selected A/B pattern) in the earliest stage, and
+21-bp repeats in later stages. Tick nicking follows the same local policy.
+Undefined sites and interfaces between stages use the selected baseline repeat.
+These repeat lengths describe retained slot patterns, not every individual
+binding-domain length. The existing growth limits and hard maximum still apply.
+
+After routing, each later stage must have its highest cluster median below the
+previous stage's lowest cluster median by the requested gap. If necessary, the
+router tests decreasing staple-length caps in 7-nt steps down to 21 nt using
+native nicks and existing junction/protection constraints. It accepts the first
+feasible cap. This bounded search may fail even if another pattern would work.
+
+Only staples wholly contained in an assigned cluster enter its objective and
+length optimization. Connectors are excluded; their topology can still reflect
+the local crossover choices on either side. Overlapping assignments with different
+stages (including Undefined), regional requests, empty scoring groups and any
+unsupported temperature estimates are rejected atomically. In particular, some
+connected bundles contain staples spanning discontinuous scaffold coverage and
+cannot currently be ordered by this model. Unknown staples are never silently
+removed from the median. Multiple scaffolds require assigned sequences.
+
+The report shows cluster medians, ranges, counts, stage repeat patterns, caps,
+added nicks and the count outside the objective. Ranges can overlap despite
+separated medians. The backend model has numerical and recorded-design parity
+tests against the temperature view. The full routing request and upstream cluster
+assignments are native recorded commands; independent replay repeats the same
+deterministic search without a snapshot/import root.
