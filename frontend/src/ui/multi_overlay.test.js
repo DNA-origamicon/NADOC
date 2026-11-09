@@ -50,7 +50,7 @@ describe('multi-overlay', () => {
     const scene = new THREE.Scene()
     scene.add(new THREE.Mesh(new THREE.BoxGeometry(2, 3, 4), new THREE.MeshBasicMaterial()))
     const camera = new THREE.PerspectiveCamera(55, 1, .1, 100)
-    const renderer = { autoClear: true, setViewport: vi.fn(), setScissorTest: vi.fn(), render: vi.fn(), getPixelRatio: () => 1 }
+    const renderer = { autoClear: true, setViewport: vi.fn(), setScissorTest: vi.fn(), render: vi.fn(), getPixelRatio: () => 2 }
     let renderFn
     const api = initMultiOverlay({
       document, scene, camera, renderer, canvas,
@@ -84,6 +84,7 @@ describe('multi-overlay', () => {
     expect(api.getBroadcastView().scene).toBe(shared.scene)
     expect(shared.scene.children.every(layer => layer.parent === null)).toBe(true)
     renderFn()
+    expect(renderer.setViewport).toHaveBeenCalledWith(0, 0, 800, 600)
     expect(renderer.render).toHaveBeenCalledTimes(4)
   })
 

@@ -221,8 +221,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   function renderOverlay() {
     const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
     const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
-    const ratio = renderer.getPixelRatio?.() ?? 1
-    renderer.setViewport(0, 0, width * ratio, height * ratio)
+    renderer.setViewport(0, 0, width, height)
     renderer.setScissorTest(false)
     const oldAutoClear = renderer.autoClear
     const order = overlayRenderOrder(layers, count, camera)

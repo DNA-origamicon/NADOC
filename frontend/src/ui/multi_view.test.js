@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import * as THREE from 'three'
+import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { cloneMultiScene, initMultiView, MULTI_VIEW_REPRESENTATIONS, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 import { showToast } from './toast.js'
@@ -56,11 +57,43 @@ describe('multi-view', () => {
     expect(clone.geometry.getAttribute('color')).toBeUndefined()
   })
 
+  it('copies hidden bounding boxes without retaining editor controls or live resources', () => {
+    const scene = new THREE.Scene()
+    const box = new THREE.Box3(new THREE.Vector3(-1, -2, -3), new THREE.Vector3(1, 2, 3))
+    const helper = new THREE.Box3Helper(box)
+    helper.visible = false
+    const group = new THREE.Group()
+    const controls = new TransformControls(new THREE.PerspectiveCamera())
+    group.add(controls.getHelper(), helper)
+    scene.add(group)
+    const clone = cloneMultiScene(scene)
+    expect(() => clone.updateMatrixWorld(true)).not.toThrow()
+    expect(() => multiViewContentBounds(clone)).not.toThrow()
+    expect(clone.children[0].children).toHaveLength(1)
+    const copiedHelper = clone.children[0].children[0]
+    expect(copiedHelper.box).toEqual(box)
+    expect(copiedHelper.box).not.toBe(box)
+    expect(copiedHelper.geometry).not.toBe(helper.geometry)
+    expect(copiedHelper.material).not.toBe(helper.material)
+    expect(group.children).toEqual([controls.getHelper(), helper])
+  })
+
+  it('does not duplicate helper-owned arrow children', () => {
+    const scene = new THREE.Scene()
+    const arrow = new THREE.ArrowHelper()
+    scene.add(arrow)
+    const clone = cloneMultiScene(scene).children[0]
+    expect(clone.children).toEqual([clone.line, clone.cone])
+    expect(clone.line.geometry).not.toBe(arrow.line.geometry)
+    expect(clone.cone.material).not.toBe(arrow.cone.material)
+  })
+
   it('creates configuration icons and per-panel representation/color selectors', async () => {
     const canvas = document.getElementById('canvas')
     Object.defineProperties(canvas, { clientWidth: { value: 900 }, clientHeight: { value: 600 } })
     const scene = new THREE.Scene()
-    const renderer = { setScissorTest: vi.fn(), setViewport: vi.fn(), setScissor: vi.fn(), render: vi.fn(), getPixelRatio: () => 1 }
+    const renderer = { setScissorTest: vi.fn(), setViewport: vi.fn(), setScissor: vi.fn(), render: vi.fn(), getPixelRatio: () => 2 }
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshBasicMaterial()))
     let renderFn
     const api = initMultiView({
       document, scene, camera: new THREE.PerspectiveCamera(55, 1, .1, 100), renderer, canvas,
@@ -86,6 +119,16 @@ describe('multi-view', () => {
     expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['oxdna', 'oxDNA'])
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(3)
+    expect(renderer.setViewport.mock.calls).toEqual(multiViewRects(3, 900, 600).map(({ x, y, w, h }) => [x, y, w, h]))
+    expect(renderer.setScissor.mock.calls).toEqual(renderer.setViewport.mock.calls)
+    for (const panel of api.panels.slice(0, 3)) {
+      panel.camera.updateMatrixWorld(true)
+      for (const x of [-2, 2]) for (const y of [-2, 2]) for (const z of [-2, 2]) {
+        const projected = new THREE.Vector3(x, y, z).project(panel.camera)
+        expect(Math.abs(projected.x)).toBeLessThan(1)
+        expect(Math.abs(projected.y)).toBeLessThan(1)
+      }
+    }
   })
 })
 

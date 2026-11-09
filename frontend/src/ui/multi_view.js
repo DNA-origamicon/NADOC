@@ -32,25 +32,32 @@ function layoutIcon(count) {
 }
 
 export function cloneMultiScene(scene) {
-  const clone = scene.clone(true)
-  const interactiveControls = []
-  clone.traverse(obj => {
-    if (obj.isTransformControlsRoot) { interactiveControls.push(obj); return }
-    if (obj.geometry) obj.geometry = obj.geometry.clone()
-    if (Array.isArray(obj.material)) obj.material = obj.material.map(material => material.clone())
-    else if (obj.material) obj.material = obj.material.clone()
-  })
-  // clone() omits shader callbacks; preserve trusted render behavior in each pane.
-  const copyCallbacks = (source, target) => {
+  const copy = (source, existing = null) => {
+    // Controls require their live owner and cannot be reconstructed by clone().
+    if (source.isTransformControlsRoot) return null
+    // Box3Helper inherits Object3D.copy(), which does not copy its required box.
+    // Even a hidden helper updates its matrix during framing and rendering.
+    const target = existing ?? (source.type === 'Box3Helper'
+      ? new THREE.Box3Helper(source.box.clone()).copy(source, false)
+      : source.clone(false))
+    if (source.geometry) target.geometry = source.geometry.clone()
+    if (Array.isArray(source.material)) target.material = source.material.map(material => material.clone())
+    else if (source.material) target.material = source.material.clone()
+    // clone() omits shader callbacks; preserve trusted render behavior in each pane.
     const src = Array.isArray(source.material) ? source.material : [source.material]
     const dst = Array.isArray(target.material) ? target.material : [target.material]
     dst.forEach((m, i) => { if (m && src[i]) { m.onBeforeCompile = src[i].onBeforeCompile; m.customProgramCacheKey = src[i].customProgramCacheKey } })
     target.onAfterRender = source.onAfterRender
-    source.children.forEach((child, i) => { if (target.children[i]) copyCallbacks(child, target.children[i]) })
+    // Some helpers (e.g. ArrowHelper) construct and copy their own children even
+    // with recursive=false. Keep those owned references without duplicating them.
+    const existingChildren = [...target.children]
+    for (const [i, child] of source.children.entries()) {
+      const clonedChild = copy(child, existingChildren[i])
+      if (clonedChild && clonedChild.parent !== target) target.add(clonedChild)
+    }
+    return target
   }
-  copyCallbacks(scene, clone)
-  for (const control of interactiveControls) control.removeFromParent()
-  return clone
+  return copy(scene)
 }
 
 export function disposeMultiScene(scene) {
@@ -241,9 +248,14 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
           const boundsCenter = box.getCenter(new THREE.Vector3())
           const center = multiViewDesignCentroid(store.getState(), boundsCenter)
           const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1)
+          const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
+          const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
+          const aspect = Math.min(...multiViewRects(count, width, height).map(rect => rect.w / Math.max(rect.h, 1)))
+          const halfFov = Math.atan(Math.tan(THREE.MathUtils.degToRad(panels[0].camera.fov / 2)) * Math.min(1, aspect))
+          const distance = radius / Math.sin(halfFov) * 1.1
           controls.target.copy(center)
           camera.position.copy(center).add(
-            new THREE.Vector3(1, 0.75, 1).normalize().multiplyScalar(radius * 2.6),
+            new THREE.Vector3(1, 0.75, 1).normalize().multiplyScalar(distance),
           )
           camera.near = Math.max(0.01, radius / 100)
           camera.far = Math.max(1000, radius * 20)
@@ -285,7 +297,6 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   function renderMulti() {
     const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
     const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
-    const ratio = renderer.getPixelRatio?.() ?? 1
     renderer.setScissorTest(true)
     for (const [i, r] of multiViewRects(count, width, height).entries()) {
       const panelCamera = panels[i].camera
@@ -293,8 +304,8 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
       panelCamera.far = camera.far
       panelCamera.aspect = r.w / Math.max(r.h, 1)
       panelCamera.updateProjectionMatrix()
-      renderer.setViewport(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)
-      renderer.setScissor(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)
+      renderer.setViewport(r.x, r.y, r.w, r.h)
+      renderer.setScissor(r.x, r.y, r.w, r.h)
       renderer.render(panels[i].renderScene ?? scene, panelCamera)
     }
     renderer.setScissorTest(false)
@@ -321,8 +332,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
       for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
       const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
       const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
-      const ratio = renderer.getPixelRatio?.() ?? 1
-      renderer.setViewport(0, 0, width * ratio, height * ratio)
+      renderer.setViewport(0, 0, width, height)
       if (savedCamera) {
         camera.position.fromArray(savedCamera.position)
         camera.up.fromArray(savedCamera.up)
