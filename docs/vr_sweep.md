@@ -295,7 +295,7 @@ the intended motion; a small point count alone is not a passing criterion.
 ## Tour and physical validation
 
 In **Debug → VR Tours & Tests → Tools · Authoring**, choose **Sweep an S shape · Free
-Draw and point editing**. Demo draws with `steady_fast` and pauses at the glowing
+Draw and point editing**. Demo runs all four controller profiles and pauses at the glowing
 stroke, fitted S, trigger-dragged point and before/after XYZ controls. The command
 line exposes the same demo and four-profile validation:
 
@@ -305,8 +305,8 @@ uv run python -m tools.vr_workflows.sweep_tour --validate --output /tmp/sweep-va
 ```
 
 Both modes use a temporary document, workspace, backend and frontend, then drive
-normal controller handlers through ScryWrite transactions. The tour paints two
-lattice cells, checks radial **Delete Last** with a different point selected,
+normal controller handlers through ScryWrite transactions. The tour paints a six-helix
+honeycomb footprint, checks radial **Delete Last** with a different point selected,
 and draws an upright S in front of the tracked eye. An ordinary model-grip
 translation places the draft for review without changing the canonical points
 or configuration. The drawing frame is recorded, and profile timing and noise
@@ -321,15 +321,56 @@ opens **Edit** in the desktop feature log, changes an interior point, and checks
 Undo and Redo for both that edit and the original creation.
 
 These commands require the workstation's working OpenXR runtime and headset
-tracking. They must start with no active native viewer. A headed browser and
-visible pauses are used for Demo; validation runs all four profiles without
+tracking. They must start with no active native viewer. Both use a headed browser;
+Both modes run all four profiles. Demo adds visible pauses; validation runs without
 review pauses. `NADOC_VR_DEMO_HOLD` changes only the pauses outside measured
 motion, in seconds (default 3).
+
+The tour waits up to 90 seconds for focus **and tracked position/orientation**.
+It also waits for loading to finish and 15 distinct ready observations.
+OpenXR's provisional valid-but-untracked pose is insufficient: placing menus from
+it can leave them metres away once real tracking arrives. Readiness messages stream
+into the tour log; a timeout retains `failure-state.json` and a failed report
+marked `headset-readiness`. When focus is blocked, the tour uses SteamVR's shipped
+`vrcmd --hidedashboard` once, then still requires observed tracked focus. Teardown
+also dismisses the dashboard after the owned viewer closes, including on failure.
+Both actions retain `dashboard-dismissal.json`; no runtime preferences change.
+If the command is unavailable, the readiness message explains the manual fallback.
+Head tracking is never overridden.
+
+Each menu reopening captures the current eyes and derives a controller pose from
+the wrist-to-panel transform calibrated once, including tablet tilt. Subsequent
+openings go directly to the final pose, about 0.70–0.76 m from the current eyes, and
+checks reject a panel beyond 0.85 m. An ordinary two-hand border resize raises
+the menu scale from 0.45 to 0.65 once, before measured reaches, improving text
+and coordinate-arrow visibility. `resize.json` records this observation setup;
+the default-size failed variable-profile trial is retained separately. The painter opens
+beside that panel. Drawing uses the latest eye frame, held fixed during each
+measured stroke. Validation requires colored fitted-knot pixels in both eyes;
+blank, behind-camera, offscreen and single-eye cases have negative regressions.
+If tracking drops at an observation-only boundary, the rejected capture is kept
+with an `-untracked` suffix and one recapture follows renewed tracked readiness.
+Tracking loss while Trigger or Grip is held fails immediately; measured gestures
+are never silently replayed. Warning inspection closes the settings panel first
+and approaches the marker from the headset side to avoid panel interception.
+The final model review uses ordinary grip/zoom gestures to occupy at least 40%
+of an eye image dimension, with edge and visibility checks retained. After the
+occupancy checks, the demo restores that model view for a final review pause.
+The browser check uses the current immutable Sweep preview/apply editor, saves
+the final edited part through the normal save operation, and independently audits
+that file with `scripts.agent_structure_guard`. `saved-process-audit.json` retains
+the replay verdict; `result.json` records temporary workspace and browser credential
+cleanup. No part is retained as a separate demo deliverable.
 
 ```bash
 cd frontend
 NADOC_PHYSICAL_VR_TEST=1 npm exec playwright test -- --config playwright.vr-sweep.config.js
 ```
+
+The owned desktop headset mirror enters fullscreen. Actual desktop pixels are
+compared with the rendered mirror after footprint painting and final model review;
+`desktop-painted/` and `desktop-final/` retain those checks and desktop images.
+`mirror-window.json` records fullscreen state and window geometry.
 
 The tour keeps `sweep-evidence/tour-report.json`, per-profile shape and input
 reports, point-edit stereo captures and desktop history evidence under `--output`.
@@ -339,6 +380,36 @@ images, not compositor presentation measurements. Offscreen native rendering
 checks and headless geometry tests remain separate from physical-headset proof.
 
 ## Validation evidence and investigation history
+
+The later November 9 desktop/readability update passed the complete four-profile
+**Demo** in 6.6 minutes at
+`.development-artifacts/sweep-desktop-6hb-20261109/demo-enlarged/`.
+It creates six helices, performs all eight occupancy trials, checks desktop
+edit/Undo/Redo, and independently verifies the saved process. The actual desktop
+mirror was fullscreen at 1920×1080; both desktop checks passed. The final model
+spans about 50% of the eye image height, with unchanged authoring state. Review
+`desktop-final/desktop-client.png` and `desktop-painted/desktop-client.png` inside
+`sweep-evidence/`. `runtime-after.json` confirms dashboard hidden, viewer stopped,
+and workspace/credentials removed. Focused Sweep, review-view and tour catalog
+regressions also pass.
+
+The same root retains `initial/` (passing single-profile six-helix run),
+`demo-final/` (default-size coordinate arrow missed by variable_deliberate), and
+`demo-readable/` (resize setup initially placed wrists instead of controller tips).
+The final demo uses an explicitly recorded larger menu presentation; it does not
+establish that the default-size arrow passes the noisy profile. Motion noise,
+acquisition duration, playback lag and pixel thresholds were not relaxed.
+
+The November 9, 2026 visibility update passed the complete demo in
+`.development-artifacts/sweep-visibility-20261109/demo-tracked/` and final
+four-profile validation in `validation-headed/` under the same root (2.3 minutes).
+The latter retains eight occupancy checks, stereo knot/menu pixel verdicts,
+desktop edit/Undo/Redo, `saved-process-audit.json`, cleanup in `result.json`, and
+`runtime-after.json` confirming the dashboard hidden and the owned viewer closed.
+SteamVR remains running. The 26 focused Sweep workflow tests and 50 tour
+catalog/ownership tests pass. Earlier failed attempts remain beside these runs;
+no playback timing or pixel thresholds were relaxed. Eye-buffer evidence does
+not establish through-lens comfort.
 
 Paths below identify local review artifacts; `/tmp` files are temporary and are
 not shipped with the repository. Use the commands above to reproduce them.

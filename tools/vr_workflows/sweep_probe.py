@@ -24,6 +24,7 @@ from tools.vr_workflows.sidebar_pointer_scroll import at_fraction
 from tools.vr_workflows.demo_view import reveal
 from tools.vr_workflows.profile_input import reach_target
 from tools.vr_workflows.audit_intervals import operation
+from tools.vr_workflows.sweep_view import open_sidebar_in_view
 
 
 class SweepControls(SidebarControls):
@@ -36,8 +37,10 @@ class SweepControls(SidebarControls):
             if fraction is not None:
                 at_fraction(self.live, 1, float(fraction))
             if any(c.get('id') == identifier for c in self.live.state['controls']):
-                click_sidebar(self.live, 1, identifier, self.preset, self.trials)
-                (self.output/'sidebar-reaches.json').write_text(json.dumps(self.trials, indent=2))
+                try:
+                    click_sidebar(self.live, 1, identifier, self.preset, self.trials)
+                finally:
+                    (self.output/'sidebar-reaches.json').write_text(json.dumps(self.trials, indent=2))
                 return
         raise RuntimeError('Missing Sweep sidebar control: '+identifier)
 
@@ -93,25 +96,60 @@ def s_shape_report(points, orientation):
             'second_lobe_m': negative, 'minimum_lobe_m': .012}
 
 
+def wait_for_headset(bridge, output, timeout=30, stable_frames=15, dismiss=None):
+    """Retain readiness failures before LiveSession can own controller input."""
+    message = ('Waiting for tracked headset focus: wear the headset and close the SteamVR '
+               'dashboard. The Sweep starts from an empty part; drawing has not started.')
+    print(message, flush=True)
+    deadline = time.monotonic()+timeout
+    state = {}
+    ready_frames = 0
+    previous_frame = None
+    dismissal_attempted = False
+    while True:
+        try:
+            state = bridge.call('scrywrite_observe', {})
+            if (dismiss and not dismissal_attempted and state.get('runtime_connected')
+                    and not state.get('focused')):
+                dismissal_attempted = True
+                print('Dismissing SteamVR dashboard through vrcmd; waiting for tracked focus.', flush=True)
+                dismiss(output)
+            if (state.get('focused') and state.get('runtime_connected')
+                    and state.get('view_state_flags', 0) & 15 == 15
+                    and not state.get('startup', {}).get('active')):
+                if state.get('frame') != previous_frame:
+                    ready_frames += 1
+                previous_frame = state.get('frame')
+                if ready_frames >= stable_frames:
+                    (output/'headset-ready.json').write_text(json.dumps(state, indent=2))
+                    return
+            else:
+                ready_frames = 0
+                previous_frame = None
+        except OSError as error:
+            state = {'connection_error': str(error)}
+            ready_frames = 0
+            previous_frame = None
+        if time.monotonic() > deadline:
+            (output/'failure-state.json').write_text(json.dumps(state, indent=2))
+            (output/'tour-report.json').write_text(json.dumps({
+                'passed': False, 'stage': 'headset-readiness', 'reason': message,
+                'drawing_started': False}, indent=2))
+            raise RuntimeError(message)
+        time.sleep(.1)
+
+
 def run(socket, output):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     bridge = Bridge(socket)
-    deadline = time.monotonic()+30
-    while True:
-        try:
-            if bridge.call('scrywrite_observe', {}).get('focused'):
-                break
-        except OSError:
-            pass
-        if time.monotonic() > deadline:
-            raise RuntimeError('Viewer did not become focused')
-        time.sleep(.1)
+    from tools.vr_workflows.sweep_view import dismiss_dashboard
+    wait_for_headset(bridge, output, timeout=90, dismiss=dismiss_dashboard)
     live = LiveSession(bridge, physical=True, allow_transactions=True)
     from tools.vr_workflows.audit_representation import wait_startup
     wait_startup(live)
     controls = SweepControls(live, output, 'steady_fast')
-    profiles = FINAL_PRESETS if os.environ.get('NADOC_VR_SWEEP_VALIDATE', '1') == '1' else ['steady_fast']
+    profiles = FINAL_PRESETS
     if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles = [os.environ['NADOC_VR_AUDIT_PROFILE']]
     report = {'profiles': list(profiles), 'shape': 's-curve', 'point_edits': []}
 
@@ -126,9 +164,15 @@ def run(socket, output):
     def save(name):
         (output/(name+'.json')).write_text(json.dumps(live.state, indent=2))
 
+    menu_count = 0
+    menu_calibration = {}
     def menu():
+        nonlocal menu_count, head, q
         if not live.state['sidebars'][1]['open']:
-            live.button('menu', hand=1)
+            menu_count += 1
+            head, q = open_sidebar_in_view(live, output/f'menu-placement-{menu_count}', menu_calibration)
+            from tools.vr_workflows.sweep_view import enlarge_sidebar
+            enlarge_sidebar(live, output/f'menu-placement-{menu_count}')
             wait(lambda state: state['sidebars'][1]['open'])
 
     def settle(seconds=.4):
@@ -148,11 +192,22 @@ def run(socket, output):
         live.frame()
 
     def capture(name):
-        evidence, _ = live.capture_to(output/name,
-            files=['left.png', 'right.png', 'mirror.png', 'evidence.json'], discard_source=True)
+        from tools.vr_workflows.sweep_view import capture_tracked
+        evidence = capture_tracked(live, output/name,
+            lambda rejected: wait_for_headset(bridge, rejected, timeout=30))
         assert evidence['xr_end_frame_succeeded']
+        assert evidence['state']['view_state_flags'] & 15 == 15, 'Headset tracking lost during capture'
         assert all(side['layout'] == 'valid' for side in evidence['state']['sidebars'] if side['open'])
-        if os.environ.get('NADOC_VR_DEMO') == '1':
+        if evidence['state']['sidebars'][1]['open']:
+            eye_center = np.mean([eye['position'] for eye in evidence['eyes']], axis=0)
+            distance = np.linalg.norm(np.asarray(evidence['state']['sidebars'][1]['position'])-eye_center)
+            assert .55 < distance < .85, ('Sweep menu moved outside readable distance', name, distance)
+        if name == 'painted-footprint' or name.startswith('fitted-xyz-'):
+            from tools.vr_workflows.menu_pixels import check
+            pixels = check(output/name, evidence)
+            (output/name/'menu-pixels.json').write_text(json.dumps(pixels, indent=2))
+            assert pixels['passed'], ('Sweep controls not visible in both eyes', name)
+        if name != 'anchor' and os.environ.get('NADOC_VR_DEMO') == '1':
             reveal(live)
             print('Review: '+name.replace('-', ' '), flush=True)
             settle(float(os.environ.get('NADOC_VR_DEMO_HOLD', '3')))
@@ -171,6 +226,8 @@ def run(socket, output):
         live.frame()
 
     try:
+        from tools.vr_workflows.sweep_view import fullscreen_mirror
+        fullscreen_mirror(live, output)
         anchor = capture('anchor')
         q = anchor['eyes'][0]['orientation_xyzw']
         head = np.asarray(live.state['head_position'])
@@ -182,12 +239,15 @@ def run(socket, output):
         controls.click('sweep:recenter')
         settle()
         occupied_before = {tuple(cell) for cell in live.state['extrude']['occupied_cells']}
-        footprint = [(0, 0), (0, 1)]
+        from backend.core.benchmark import SIX_HB_CELLS
+        footprint = list(SIX_HB_CELLS)
         if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
             visible = {(c['row'], c['column']) for c in live.state['extrude']['visible_cells'] if not c['occupied']}
-            footprint = next(([cell, (cell[0], cell[1]+1)] for cell in sorted(visible, key=lambda c: abs(c[0])+abs(c[1]))
-                              if (cell[0], cell[1]+1) in visible), None)
-            assert footprint, 'Two adjacent free footprint cells are required'
+            footprint = next(([(r+dr, c+dc) for r,c in SIX_HB_CELLS]
+                              for dr,dc in sorted(visible, key=lambda c: abs(c[0])+abs(c[1]))
+                              if (dr+dc)%2 == 0 and all((r+dr,c+dc) in visible for r,c in SIX_HB_CELLS)), None)
+            assert footprint, 'A free six-helix footprint is required'
+        report['footprint'] = footprint
         for row, column in footprint:
             live.send('aim_lattice', hand=1, row=row, column=column)
             live.frame()
@@ -195,6 +255,8 @@ def run(socket, output):
             live.button('trigger')
         assert sorted(map(tuple, live.state['extrude']['cells'])) == sorted(footprint)
         capture('painted-footprint')
+        from tools.vr_motion.desktop_check import run as check_desktop
+        assert check_desktop(socket, output/'desktop-painted', live=live, reveal=True)['passed']
         controls.click('sweep:confirm')
         wait(lambda state: state['sweep']['step'] == 2)
         assert len(live.state['sweep']['points_nm']) == 2
@@ -276,7 +338,12 @@ def run(socket, output):
             'framed_origin_world': framed_origin.tolist(), 'sketch_orientation_xyzw': sketch_q,
             'method': 'ordinary model grip translation; upright stroke frame; unchanged points/configuration'}
         for preset in profiles:
+            controls.preset = preset
+            print('Controller profile: '+preset, flush=True)
             menu()
+            # A fresh menu placement also refreshes the tracked drawing frame.
+            # Freeze it for this measured stroke; do not steer during playback.
+            sketch_q = multiply(q, [math.sin(math.pi/4), 0, 0, math.cos(math.pi/4)])
             controls.click('sweep:free-draw')
             assert live.state['sweep']['free_draw_armed']
             assert len(live.state['sweep']['points_nm']) <= 1
@@ -318,7 +385,10 @@ def run(socket, output):
             shape = s_shape_report(live.state['sweep']['points_world'], sketch_q)
             (output/f's-shape-{preset}.json').write_text(json.dumps(shape, indent=2))
             assert shape['passed'], ('S shape lost an intended lobe', preset, shape)
-            capture(f'smoothed-s-shape-{preset}')
+            fitted_capture = capture(f'smoothed-s-shape-{preset}')
+            from tools.vr_workflows.sweep_view import check_draft_pixels
+            fitted_pixels = check_draft_pixels(output/f'smoothed-s-shape-{preset}', fitted_capture)
+            (output/f'smoothed-s-shape-{preset}'/'pixels.json').write_text(json.dumps(fitted_pixels, indent=2))
             # Edit a fitted interior knot, proving Free Draw produced ordinary
             # editable points. Its first lobe is easy to distinguish in stereo.
             fitted = np.asarray(live.state['sweep']['points_world'])
@@ -440,9 +510,17 @@ def run(socket, output):
         capture('committed')
         warning_points = live.state['sweep'].get('warning_points_world', [])
         if warning_points:
-            target = np.asarray(warning_points[0]); origin = target + np.array([0,0,.35])
+            # A correctly framed settings panel can now overlap the warning ray.
+            # Close it through normal input before inspecting the model marker.
+            for hand in (0, 1):
+                if live.state['sidebars'][hand]['open']:
+                    live.button('menu', hand=hand)
+            target = np.asarray(warning_points[0])
+            toward_head = np.asarray(live.state['head_position'])-target
+            origin = target+.35*toward_head/np.linalg.norm(toward_head)
             reach_target(live, target.tolist(), 'steady_fast', 7490, target_position=origin.tolist(),
                 target_orientation=aim_orientation(origin.tolist(), target.tolist()))
+            assert live.state['hands'][1]['input_owner'] == 'sweep-warning'
             live.send('button', hand=1, button='trigger', pressed=True); live.frame()
             live.send('button', hand=1, button='trigger', pressed=False); live.frame()
             wait(lambda state: state['sweep']['warning_tooltip'])
@@ -456,7 +534,7 @@ def run(socket, output):
         settle()
         live.capture_to(output/'committed-before-review', discard_source=True)
         from tools.vr_workflows.review_view import improve_review
-        improve_review(live, output/'committed-before-review', output/'design-review', expected_groups=1 if not os.environ.get('NADOC_VR_AUDIT_DESIGN') else None)
+        improve_review(live, output/'committed-before-review', output/'design-review', minimum_major_fraction=.4, expected_groups=1 if not os.environ.get('NADOC_VR_AUDIT_DESIGN') else None)
         save('committed')
         # Move the reviewed molecule aside through an ordinary scene grip so
         # it cannot obscure the occupied cells in the painter behind it.
@@ -467,6 +545,7 @@ def run(socket, output):
         pose(origin+rotate(q, [-.7, 0, 0]), q)
         live.send('button', hand=1, button='grip', pressed=False); live.frame()
         assert live.state['scene_revision'] == revision
+        review_displacement = rotate(q, [-.7, 0, 0])
         # Reopening either painter must display and reject the newly occupied
         # footprint. Exercise real controller reaches, including noisy profiles.
         occupancy_trials = []
@@ -487,6 +566,18 @@ def run(socket, output):
                                          'cells_after_click':live.state['extrude']['cells']})
                 capture(f'occupied-{tool}-{preset}')
                 controls.click('sweep:cancel' if tool=='sweep' else 'extrude:cancel')
+        # Restore the reviewed model after occupancy testing instead of ending
+        # with the molecule parked off to the side.
+        for hand in (0, 1):
+            if live.state['sidebars'][hand]['open']:
+                live.button('menu', hand=hand)
+        origin = head+rotate(q, [.2, -.25, -.35])
+        pose(origin, q)
+        live.send('button', hand=1, button='grip', pressed=True); live.frame()
+        pose(origin-review_displacement, q)
+        live.send('button', hand=1, button='grip', pressed=False); live.frame()
+        capture('final-design-review')
+        assert check_desktop(socket, output/'desktop-final', live=live, reveal=True)['passed']
         report['occupancy'] = occupancy_trials
         report['passed'] = True
         (output/'tour-report.json').write_text(json.dumps(report, indent=2))

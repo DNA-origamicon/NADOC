@@ -7,6 +7,56 @@ review_after: 2026-12-01
 
 # Native VR expansion
 
+## Sweep desktop readability follow-up (2026-11-09)
+
+Both Demo and validation now exercise all four profiles on a six-helix honeycomb
+footprint. The owned X11 mirror enters fullscreen, verified at 1920×1080 with
+actual desktop pixels. Menu calibration is reused rather than visibly repeated;
+ordinary border resizing raises scale 0.45 → 0.65 once, keeping menus about
+0.70–0.76 m from current eyes. Model review requires 40% major-axis coverage and
+reached about 50% through normal scene grip/zoom, with authoring state unchanged.
+
+Complete four-profile Demo passed in 6.6 minutes at
+`.development-artifacts/sweep-desktop-6hb-20261109/demo-enlarged/`, including eight
+occupancy checks, desktop edit/Undo/Redo, verified saved-process replay and actual
+desktop image agreement. Teardown verified dashboard hidden, viewer stopped and
+temporary workspace/credentials removed. Earlier attempts remain: `initial/`
+passed steady_fast; `demo-final/` exposed noisy acquisition failure on a default-
+size XYZ arrow; `demo-readable/` exposed a wrist-versus-tip resize setup error.
+Final success is for the declared enlarged presentation, not proof that the
+original small arrow passes variable_deliberate. No input thresholds were relaxed.
+
+## Sweep tour visibility (2026-11-09)
+
+The Sweep tour could place initial menus using OpenXR's provisional valid-but-
+untracked pose (flags 3, near the origin) before tracked eyes arrived (flags 15,
+about 2.8 m away in the reproduced run). `sweep_probe.wait_for_headset` now waits
+for tracked focus, completed startup and 15 distinct ready observations before
+authoring. Readiness/failure messages stream through Playwright into the tour log.
+`sweep_view.open_sidebar_in_view` derives an eye-facing wrist pose from observed
+panel axes and offset, calibrated once and reused with fresh eyes on reopening; no production tilt or head tracking is
+changed. Fitted knots and XYZ/menu controls have stereo pixel checks. The final
+model is restored after occupancy testing for a review pause.
+
+SteamVR's shipped `vrcmd --hidedashboard` dismisses a blocking dashboard at startup
+and in failure-safe teardown. It changes no persistent settings and does not start
+a stopped runtime. Observation-only tracking loss retains the rejected image and
+allows one tracked recapture; held gestures still fail. Warning review closes the
+settings panel before ray acquisition. Both demo and validation use headed browsers.
+
+The steady_fast demo passed at
+`.development-artifacts/sweep-visibility-20261109/demo-tracked/`; final four-profile
+validation passed at `validation-headed/` under the same root (2.3 minutes).
+It includes eight occupancy checks, stereo controls/knots, desktop editing,
+Undo/Redo and independently verified saved-process replay. After teardown, a fresh
+OpenVR query confirmed the dashboard hidden, no NADOC viewer, and SteamVR retained.
+All temporary workspaces/credentials were removed; 26 Sweep workflow and 50 tour
+catalog/ownership tests passed. Retained failures distinguish focus/startup, the
+provisional pose, obsolete edit endpoint, warning-ray interception, tracking loss
+and a 181 ms controller-playback delay. Thresholds/profiles were not relaxed.
+These are submitted-eye/runtime checks, not through-lens comfort qualification.
+See `docs/vr_sweep.md` for the maintained entry point and evidence.
+
 ## Current menu-hover timing follow-up (2026-10-13)
 
 The user reports substantially reduced doubling after normal deployment, with

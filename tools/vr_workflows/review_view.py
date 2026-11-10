@@ -85,12 +85,17 @@ def measure(directory, expected_groups=None):
     return {'passed':all(e['passed'] for e in eyes.values()),'eyes':eyes}
 
 
-def improve_review(live, initial, output, expected_groups=None):
+def improve_review(live, initial, output, expected_groups=None, minimum_major_fraction=.16):
     initial,output=Path(initial),Path(output)
     output.mkdir(parents=True,exist_ok=False)
-    before=measure(initial,expected_groups)
+    def measured(directory):
+        result = measure(directory, expected_groups)
+        result['passed'] &= all(eye['major_fraction'] >= minimum_major_fraction
+                                for eye in result['eyes'].values())
+        return result
+    before=measured(initial)
     report={'scope':'deterministic observation after authoring; canonical geometry unchanged',
-            'criteria':{'minimum_pixels':1000,'major_fraction':.16,'minor_fraction':.06,'edge_margin_fraction':.03},
+            'criteria':{'minimum_pixels':1000,'major_fraction':minimum_major_fraction,'minor_fraction':.06,'edge_margin_fraction':.03},
             'expected_groups':expected_groups,'before':before,'attempts':[]}
     sequence=live.state['config_sequence'];revision=live.state['scene_revision']
     if live.state['menu']!='closed' or live.state['extrude']['open']:
@@ -111,19 +116,19 @@ def improve_review(live, initial, output, expected_groups=None):
     finally:
         live.send('button',hand=1,button='grip',pressed=False);live.frame()
     live.capture_to(output/'oriented',discard_source=True)
-    current=measure(output/'oriented',expected_groups)
+    current=measured(output/'oriented')
     report['orientation']={'pivot':pivot,'target':target,'yaw_deg':45,'pitch_deg':-30}
     report['attempts'].append({'capture':'oriented','metrics':current})
     for attempt in range(2):
         if current['passed']:break
         span=min(e['major_fraction'] for e in current['eyes'].values())
         if span<=0:break
-        factor=min(2.5,max(.5,.22/span))
+        factor=min(2.5,max(.5,max(.22, minimum_major_fraction+.06)/span))
         # zoom_scene offsets its hand midpoint by -0.25 world-Y.
         zoom_scene(live,[target[0],target[1]+.25,target[2]],factor)
         name=f'scaled-{attempt+1}'
         live.capture_to(output/name,discard_source=True)
-        current=measure(output/name,expected_groups)
+        current=measured(output/name)
         report['attempts'].append({'capture':name,'scale_factor':factor,'metrics':current})
     report['passed']=current['passed']
     report['config_unchanged']=live.state['config_sequence']==sequence
