@@ -3,6 +3,8 @@
 These are storage receipts, not user-visible operations or construction inputs.
 Only current head/base records travel with a loadout, not every autosave.
 """
+import base64
+import gzip
 import hashlib
 import json
 
@@ -49,5 +51,14 @@ def verify(design, branch, snapshot):
         stripped = snapshot.model_copy(update={'loadouts': [], 'active_loadout_id': None,
                                                 'last_editable_loadout_id': None})
         digest = hashlib.sha256(stripped.model_dump_json().encode()).hexdigest()
-        if branch.revision_records[branch.head_revision_id]['snapshot_sha256'] != digest:
-            raise ValueError('Loadout revision does not bind its embedded snapshot')
+        expected = branch.revision_records[branch.head_revision_id]['snapshot_sha256']
+        if expected != digest:
+            # Verify the historical bytes as well as their current-schema value.
+            # Added default fields must not invalidate authentic saved receipts.
+            raw = json.loads(gzip.decompress(base64.b64decode(branch.design_snapshot_gz_b64)))
+            if type(snapshot).model_validate(raw) != snapshot:
+                raise ValueError('Loadout revision snapshot mismatch')
+            raw.update(loadouts=[], active_loadout_id=None, last_editable_loadout_id=None)
+            historical = hashlib.sha256(json.dumps(raw, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+            if expected != historical:
+                raise ValueError('Loadout revision does not bind its embedded snapshot')

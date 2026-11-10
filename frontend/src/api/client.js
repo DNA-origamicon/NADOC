@@ -5739,3 +5739,9 @@ export async function pasteVRClipboard(body, { onCommitted } = {}) {
 }
 
 export const getMdRuntimePreview = (body) => _oxdnaJSON('POST', '/md/runtime-preview', body)
+
+// UI-only region selection, kept with the job independently of its engine inputs.
+export const getSimulationSubmodel = (engine, id) => _oxdnaJSON('GET', `/${engine}/jobs/${id}/submodel`)
+export const saveSimulationSubmodel = (engine, id, box) => _oxdnaJSON('PUT', `/${engine}/jobs/${id}/submodel`, { box })
+
+export const estimateSimulationSubmodel = (id, box) => _oxdnaJSON('POST', '/oxdna/jobs/' + id + '/submodel-estimate', { box })

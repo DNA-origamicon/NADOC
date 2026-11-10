@@ -1,0 +1,26 @@
+#oxdna-submodel .submodel-shell-field,
+#md-submodel .submodel-shell-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 6px;
+  margin: 7px 0;
+}
+#oxdna-submodel input[type=number],
+#md-submodel input[type=number] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  background: #161b22;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: var(--text-xs);
+}
+
+/* Shared .btn uses inline-flex; retain the native hidden state of Retry save. */
+#oxdna-submodel > .btn[hidden],
+#md-submodel > .btn[hidden] {
+  display: none;
+}

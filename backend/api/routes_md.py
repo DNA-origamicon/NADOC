@@ -19,6 +19,8 @@ GET   /md/jobs/{job_id}/display     latest displayable NADOC MD trajectory
 
 from __future__ import annotations
 
+from backend.api.simulation_submodel import SubmodelSelection, read_selection, save_selection
+
 from backend.core import simulation_runtime
 
 from backend.api.startup_cache import coalesce_job_reads
@@ -6518,13 +6520,13 @@ def _clear_editable_job_artifacts(job: MdJob) -> None:
 
     The job directory (and archive-index entry) stays put.  Keeping ``job.json`` means a
     failed rebuild remains visible and retryable instead of becoming an orphan; removing
-    every other child prevents stale confs/checkpoints from the old settings being mixed
+    engine artifacts prevents stale confs/checkpoints from the old settings being mixed
     into the replacement package.
     """
     job_dir = job.job_dir(_workspace())
     job_dir.mkdir(parents=True, exist_ok=True)
     for child in job_dir.iterdir():
-        if child.name == "job.json":
+        if child.name in {"job.json", "submodel_selection.json"}:
             continue
         if child.is_dir() and not child.is_symlink():
             shutil.rmtree(child)
@@ -8770,3 +8772,15 @@ async def resume_md_chain(chain_id: str) -> dict:
     _chain.save_chain(chain, _workspace())
     await advance_chains(_workspace())
     return {"ok": True, "chain": _chain.load_chain(chain_id, _workspace()).to_dict()}
+
+
+
+
+@router.get("/md/jobs/{job_id}/submodel")
+async def get_md_submodel(job_id: str) -> dict:
+    return read_selection(_load_job(job_id).job_dir(_workspace()))
+
+
+@router.put("/md/jobs/{job_id}/submodel")
+async def put_md_submodel(job_id: str, selection: SubmodelSelection) -> dict:
+    return save_selection(_load_job(job_id).job_dir(_workspace()), selection)

@@ -1534,6 +1534,18 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
+  it('restores the submodel on job selection and returns to the draft on deselection', async () => {
+    const job = { job_id: 'region-job', status: 'draft', prep_params: {} }
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    const submodel = { select: vi.fn() }
+    const panel = initMdJobsPanel({ submodel })
+    await panel.selectJob(job.job_id)
+    expect(submodel.select).toHaveBeenLastCalledWith('md', job.job_id)
+    panel.deselectJob()
+    expect(submodel.select).toHaveBeenLastCalledWith('md', null)
+  })
+
   it('persists draft box edits and reselects the saved values without a list refresh', async () => {
     const {readFileSync}=await import('node:fs')
     const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')

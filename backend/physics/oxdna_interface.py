@@ -1667,7 +1667,8 @@ def read_configuration_full(
                 "a1": a1 / (np.linalg.norm(a1) + 1e-14),
                 "a3": a3 / (np.linalg.norm(a3) + 1e-14),
             }
-    return result
+    from backend.physics.oxdna_submodel import display_frame
+    return display_frame(result, conf_path)
 
 
 def write_configuration_from_full_map(
@@ -2195,6 +2196,8 @@ def unwrap_align_to_reference(
     # Superpose onto the reference frame over the chosen subset (the anchored
     # beads for a field run, else the whole assembly).
     keys = list(placed)
+    if align_keys is None:
+        align_keys = getattr(relax, "submodel_fixed_keys", None)
     align_set = {tuple(k)[:3] for k in align_keys} if align_keys else None
     subset = [k for k in keys if (align_set is None or k in align_set) and k in ref]
 
@@ -2371,7 +2374,8 @@ def read_trajectory_frames_full(
             trailing_extra_strand_length=trailing_extra_strand_length,
         )
         if m:
-            frames.append(m)
+            from backend.physics.oxdna_submodel import display_frame
+            frames.append(display_frame(m, traj_path))
     return frames
 
 
@@ -2401,6 +2405,8 @@ def read_trajectory_frames_at(
     want = {int(i) for i in indices}
     out: dict[int, dict] = {}
     def emit(idx, frame, data):
+        from backend.physics.oxdna_submodel import display_frame
+        frame = display_frame(frame, traj_path)
         if include_proteins:
             offset = _protein_lead_offset(data, order, n_trailing_extra)
             for i, line in enumerate(data[:offset]):
@@ -2473,7 +2479,8 @@ def read_latest_trajectory_frame_full(
             ]
             m = _parse_trajectory_frame_lines(data, order, copies=copies)
             if len(m) >= len(order):
-                return m
+                from backend.physics.oxdna_submodel import display_frame
+                return display_frame(m, traj_path)
         if tail_bytes >= size or tail_bytes >= max_tail_bytes:
             return None
         tail_bytes = min(size, tail_bytes * 2)

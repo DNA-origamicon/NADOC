@@ -119,23 +119,29 @@ export function createLatestFrameScheduler(task, {
   return { schedule, abort, revision: () => revision }
 }
 
-export function initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers = () => {} }) {
-  const pane = document.getElementById('right-tab-content-visualization')
+export function initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer, assemblyRenderer, applyAssemblyLayers = () => {}, host = null, outlineOnly = false }) {
+  const pane = host ?? document.getElementById('right-tab-content-visualization')
   if (!pane) return null
   const section = document.createElement('div')
-  section.id = 'view-volumes-section'; section.className = 'panel-section ox-card'
+  section.id = outlineOnly ? 'submodel-volume-section' : 'view-volumes-section'; section.className = 'panel-section ox-card'
+  const query = selector => section.querySelector(outlineOnly ? selector.replaceAll('#view-volume', '#submodel-volume') : selector)
   const boxIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 13v8M14 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   const hexIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M8 3h7l4 6-4 6H8L4 9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 14v8M14 18h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   const eyeIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>'
   const powerIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M12 2v9M7 5.5a8 8 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
   section.innerHTML = `<h2 id="view-volume-heading" aria-expanded="true" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="display:inline-flex;align-items:center;gap:7px"><span class="section-arrow">▼</span><span>View Volumes</span><span id="view-volume-busy" class="nadoc-spinner" role="status" aria-label="View volume representation loading" title="Building view volume representation…" style="display:none"></span></span><span style="display:inline-flex;gap:4px"><button id="view-volume-enable-all" type="button" title="Disable all volume representations" aria-label="Disable all volume representations" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${powerIcon}</button><button id="view-volume-toggle-all" type="button" title="Hide all volume outlines" aria-label="Hide all volume outlines" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${eyeIcon}</button><button id="view-volume-add-box" type="button" title="Add square view volume" aria-label="Add square view volume" style="width:28px;height:26px;display:grid;place-items:center">${boxIcon}</button><button id="view-volume-add-hexagonal" type="button" title="Add hexagonal view volume" aria-label="Add hexagonal view volume" style="width:28px;height:26px;display:grid;place-items:center">${hexIcon}</button></span></h2><div id="view-volume-body"><div class="view-volume-tool-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px"><button type="button" data-volume-tool="translate" class="xover-mode-btn active" title="Move the selected volume without changing its shape (Tab)">Move</button><button type="button" data-volume-tool="scale" class="xover-mode-btn" title="Resize the selected volume about its center (Tab)">Resize</button><button type="button" data-volume-tool="rotate" class="xover-mode-btn" title="Rotate the selected volume (Tab)">Rotate</button></div><div id="view-volume-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div></div>`
+  if (outlineOnly) {
+    section.innerHTML = section.innerHTML.replaceAll('id="view-volume', 'id="submodel-volume')
+    query('h2').hidden = true
+    query('h2').style.display = 'none'
+  }
   pane.append(section)
-  const list = section.querySelector('#view-volume-list')
-  const heading = section.querySelector('#view-volume-heading'), body = section.querySelector('#view-volume-body')
+  const list = query('#view-volume-list')
+  const heading = query('#view-volume-heading'), body = query('#view-volume-body')
   const collapseArrow = heading.querySelector('.section-arrow')
   let collapsed = getSectionCollapsed('visualization', 'view-volumes-section', false)
   function applyCollapsed() {
-    body.hidden = collapsed
+    body.hidden = outlineOnly ? false : collapsed
     heading.setAttribute('aria-expanded', String(!collapsed))
     collapseArrow.classList.toggle('is-collapsed', collapsed)
   }
@@ -165,7 +171,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     performance.mark?.(`nadoc:view-volume:${type}`, { detail })
     return item
   }
-  const busyIndicator = section.querySelector('#view-volume-busy')
+  const busyIndicator = query('#view-volume-busy')
   const busyKinds = new Set()
   const onStage = event => {
     const detail = event.detail ?? {}, stage = detail.stage ?? 'renderer-stage'
@@ -236,6 +242,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     scheduleRepresentation(layers, revision)
   })
   function requestPreview(sourceVolumes = volumes()) {
+    if (outlineOnly) return
     timing.counters.previewRequested += 1
     const revision = previewScheduler.schedule(sourceVolumes.map(volume => ({ ...volume })))
     note('preview-requested', { revision })
@@ -324,10 +331,17 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     for (const child of group.children.slice(2)) child.visible = outlineVisible && volume.id === selectedId
     return group
   }
+  const onEditorSelected = event => {
+    if (event.detail !== root.uuid && selectedId) { selectedId = null; render() }
+  }
+  window.addEventListener('nadoc:volume-editor-selected', onEditorSelected)
   function attachSelected() {
     const selected = volumes().find(volume => volume.id === selectedId)
     const visual = selected && selected.outline_visible !== false ? visualById.get(selectedId) : null
-    if (visual) transform.attach(visual); else transform.detach()
+    if (visual) {
+      if (transform.object !== visual) window.dispatchEvent(new CustomEvent('nadoc:volume-editor-selected', { detail: root.uuid }))
+      transform.attach(visual)
+    } else transform.detach()
     handles.splice(0, handles.length, ...(visual?.children.slice(2) ?? []))
     configureTransformAxes()
   }
@@ -365,7 +379,8 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       outline.innerHTML = eyeIcon; outline.title = volume.outline_visible === false ? 'Show volume outline' : 'Hide volume outline'
       outline.setAttribute('aria-label', outline.title); outline.setAttribute('aria-pressed', String(volume.outline_visible !== false))
       if (volume.outline_visible === false) outline.style.opacity = '.4'
-      top.append(name, enabled, outline, remove)
+      if (outlineOnly) { name.readOnly = true; name.title = 'Submodel region'; top.append(name, remove) }
+      else top.append(name, enabled, outline, remove)
       const controlsRow = document.createElement('div'); controlsRow.style.cssText = 'display:grid;grid-template-columns:1fr 74px;gap:5px'
       const rep = document.createElement('select'); rep.className = 'view-volume-representation'; rep.title = 'Representation'
       rep.style.cssText = 'min-width:0;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px'
@@ -376,7 +391,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       for (const mode of supportedColoringSet(volume.representation)) coloring.add(new Option(COLORING_LABELS[mode], mode))
       coloring.value = coloringFallbackMode(volume.representation, volume.coloring ?? 'strand') ?? volume.coloring ?? 'strand'
       coloring.style.cssText = rep.style.cssText
-      controlsRow.append(rep, opacity); row.append(top, controlsRow, coloring); list.append(row)
+      controlsRow.append(rep, opacity); row.append(top, ...(outlineOnly ? [] : [controlsRow, coloring])); list.append(row)
       row.addEventListener('click', () => { selectedId = selectedId === volume.id ? null : volume.id; render() })
       for (const control of [name, rep, coloring, opacity, enabled, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
       name.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, name: e.target.value.trim() || 'View Volume' } : v)))
@@ -388,19 +403,19 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       remove.addEventListener('click', e => { e.stopPropagation(); if (selectedId === volume.id) selectedId = null; save(volumes().filter(v => v.id !== volume.id)) })
     }
     const allVisible = volumes().length > 0 && volumes().every(volume => volume.outline_visible !== false)
-    const master = section.querySelector('#view-volume-toggle-all')
+    const master = query('#view-volume-toggle-all')
     master.style.opacity = allVisible ? '1' : '.4'
     master.title = allVisible ? 'Hide all volume outlines' : 'Show all volume outlines'
     master.setAttribute('aria-label', master.title); master.setAttribute('aria-pressed', String(allVisible))
     const allEnabled = volumes().length > 0 && volumes().every(volume => volume.enabled !== false)
-    const enableMaster = section.querySelector('#view-volume-enable-all')
+    const enableMaster = query('#view-volume-enable-all')
     enableMaster.style.opacity = allEnabled ? '1' : '.4'
     enableMaster.title = allEnabled ? 'Disable all volume representations' : 'Enable all volume representations'
     enableMaster.setAttribute('aria-label', enableMaster.title); enableMaster.setAttribute('aria-pressed', String(allEnabled))
     attachSelected(); requestPreview()
   }
   function addVolume(shape) {
-    const bounds = defaultBounds(entries()), id = crypto.randomUUID()
+    const bounds = defaultBounds(entries()), id = outlineOnly ? 'submodel' : crypto.randomUUID()
     if (shape === 'hexagonal') {
       const centerX = (bounds.min_corner[0] + bounds.max_corner[0]) / 2
       const centerY = (bounds.min_corner[1] + bounds.max_corner[1]) / 2
@@ -413,16 +428,16 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     // design. The user explicitly opts into surface/atomistic computation.
     save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', coloring: coloringFallbackMode('full', store.getState().coloringMode) ?? store.getState().coloringMode ?? 'strand', opacity: 1, outline_visible: true, enabled: true }])
   }
-  section.querySelector('#view-volume-enable-all').addEventListener('click', () => {
+  query('#view-volume-enable-all').addEventListener('click', () => {
     const enable = volumes().some(volume => volume.enabled === false)
     save(volumes().map(volume => ({ ...volume, enabled: enable })))
   })
-  section.querySelector('#view-volume-toggle-all').addEventListener('click', () => {
+  query('#view-volume-toggle-all').addEventListener('click', () => {
     const show = volumes().some(volume => volume.outline_visible === false)
     save(volumes().map(volume => ({ ...volume, outline_visible: show })))
   })
-  section.querySelector('#view-volume-add-box').addEventListener('click', () => addVolume('box'))
-  section.querySelector('#view-volume-add-hexagonal').addEventListener('click', () => addVolume('hexagonal'))
+  query('#view-volume-add-box').addEventListener('click', () => addVolume('box'))
+  query('#view-volume-add-hexagonal').addEventListener('click', () => addVolume('hexagonal'))
   for (const button of section.querySelectorAll('[data-volume-tool]')) button.addEventListener('click', () => {
     transform.setMode(button.dataset.volumeTool)
     configureTransformAxes()
@@ -545,7 +560,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   assemblyRenderer?.onRebuildComplete?.(() => { if (store.getState().assemblyActive) render() })
   render()
   const apiDebug = {
-    add: (shape = 'box') => section.querySelector(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),
+    add: (shape = 'box') => query(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),
     layers: () => { const active = activeViewVolumes(volumes()); return active.length ? resolveViewVolumeLayers(active, points()) : [] },
     select: id => { selectedId = id; render() },
     handles: () => {
@@ -638,5 +653,5 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing: () => structuredClone(timing),
     abort: () => previewScheduler.abort('debug-abort'),
   }
-  return { render, debug: apiDebug, dispose: () => { disposed = true; assemblyPoints.clear(); clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
+  return { render, add: addVolume, select: apiDebug.select, debug: apiDebug, dispose: () => { disposed = true; window.removeEventListener('nadoc:volume-editor-selected', onEditorSelected); assemblyPoints.clear(); clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
 }

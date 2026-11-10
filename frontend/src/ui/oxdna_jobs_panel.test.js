@@ -848,6 +848,17 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
   }
 
+  it('restores the submodel on job selection and returns to the draft on deselection', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'region-job', status: 'queued', design_source_path: 'A.nadoc', stages: relaxStages() }])
+    const submodel = { select: vi.fn() }
+    const panel = initOxdnaJobsPanel({ submodel, getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    await panel.selectJob('region-job')
+    expect(submodel.select).toHaveBeenLastCalledWith('oxdna', 'region-job')
+    panel.deselectJob()
+    expect(submodel.select).toHaveBeenLastCalledWith('oxdna', null)
+  })
+
   it('accepts selection before progress loads and ignores late details from the previous job', async () => {
     api.listOxdnaJobs.mockResolvedValue([
       { job_id: 'slow', status: 'running', design_source_path: 'A.nadoc', stages: relaxStages() },

@@ -1300,7 +1300,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
+export function initMdJobsPanel({ submodel = null, mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getIonPathsOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -2108,6 +2108,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     _stopLiveFrameTimer()   // no selection ⇒ no pod to snapshot
     _selectedId = null
+    void submodel?.select('md', null)
     _userDeselected = false   // a forced clear (design switch / empty list), not a user deselect
     _displayMeta = null
     _closeWs()
@@ -3626,6 +3627,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (_displayJobId === _selectedId) _stopMdDisplay('Native positions restored')
       showToast('MD job deleted', 'ok')
       _selectedId = null
+    void submodel?.select('md', null)
       await _fetchJobs()
       if (!_jobs.length && detailEl) detailEl.style.display = 'none'
       return true
@@ -4160,6 +4162,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
 
     try {
+      const submodelBox = submodel?.capture('md')
       let d = await api.spawnMdProduction(parentId, full)
       if (!d) {
         const why = api.lastErrorMessage() ?? 'Server error'
@@ -4169,6 +4172,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       }
       const childId = d.job?.job_id
+      if (childId) await submodel?.created('md', childId, submodelBox)
       await _fetchJobs()
       if (childId) _selectJob(childId)
       if (isLocalRun) {
@@ -4409,6 +4413,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // design from THIS tab's document (without it the default/empty doc is used
       // and prep 404s with "No active design"). Returns null on any HTTP error.
       // A draft prepares in place (seed comes from the draft record, not the payload).
+      const submodelBox = submodel?.capture('md')
       const job = draftId
         ? await api.prepareMdDraft(draftId, payload)
         : await api.createMdJob(payload)
@@ -4423,6 +4428,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         return
       }
 
+      if (!draftId) await submodel?.created('md', job.job_id, submodelBox)
       hideOpProgress()
 
       if (job.status === 'failed') {
@@ -4803,6 +4809,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // ── Job selection + WS subscription ───────────────────────────────────────
   function _selectJob(jobId, options = false) {
+    void submodel?.select('md', jobId)
     const explicit = options === true || (options && typeof options === 'object' && options.automatic === false)
     _grapheneSelectionId = jobId
     const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
@@ -4954,6 +4961,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _syncSurfaceCard()
     _userDeselected = true
     _selectedId = null
+    void submodel?.select('md', null)
     _displayMeta = null
     _gateBDismissed = null
     _closeWs()

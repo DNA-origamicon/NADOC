@@ -71,6 +71,7 @@ class OxdnaJob:
     status: OxdnaStatus
     created_at: float
     n_nucleotides: int = 0
+    submodel: Optional[dict] = None  # Native counts/budgets; full source order remains the display context.
     stages: list[OxdnaStageStatus] = field(default_factory=list)
     current_stage_idx: int = 0
     error: Optional[str] = None

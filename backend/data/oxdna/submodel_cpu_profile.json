@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor",
+  "platform": "x86_64",
+  "particle_range": [
+    182,
+    1134
+  ],
+  "max_particles": 1134,
+  "anchor_particles": 182,
+  "anchor_md_steps_per_second": 3284.072249589491,
+  "particle_exponent": 1.258676981892625,
+  "peak_rss_bytes": 10801152,
+  "evidence": ".development-artifacts/oxdna-submodel-benchmark-20261110",
+  "method": "Two constrained-system MD anchors; geometry-dependent reference estimate, not a universal scaling law.",
+  "full_mobile_steps_per_second": 473.26076668244207,
+  "full_fixed_steps_per_second": 328.35330815957974
+}

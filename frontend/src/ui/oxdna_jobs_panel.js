@@ -573,7 +573,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCurrentDesign = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ submodel = null, oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCurrentDesign = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -1586,11 +1586,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (!jobId) return
       if (!(await confirmNoConcurrentJob({
         excludeJobId: jobId,
-        usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
+        usesGpu: !submodel?.capture('oxdna') && (_selectedJob()?.backend || 'CUDA') === 'CUDA',
       }))) return
       if (_selectedId !== jobId) return
       oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
       _setRunActionLabel('Resuming…')
+      await submodel?.flush?.('oxdna')
       const started = await api.startOxdnaJob(jobId)
       if (!started) throw new Error('Could not resume the oxDNA job.')
       await _fetchJobs()
@@ -1603,7 +1604,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       const jobId = job.job_id
       if (!(await confirmNoConcurrentJob({
         excludeJobId: _selectedId,
-        usesGpu: (job.backend || 'CUDA') === 'CUDA',
+        usesGpu: !submodel?.capture('oxdna') && (job.backend || 'CUDA') === 'CUDA',
       }))) return
       if (_selectedId !== jobId) return
       // Capture even a typed edit whose card debounce has not fired yet.
@@ -1617,6 +1618,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       oxdnaLive?.stop()   // any job start/resume supersedes a live session (shared overlay)
       if (_selectedId !== jobId) return
       _setRunActionLabel('Starting…')
+      await submodel?.flush?.('oxdna')
       const started = await api.startOxdnaJob(jobId)
       if (!started) {
         showToast(api.lastErrorMessage?.() || 'Could not start oxDNA job', 'error')
@@ -1681,6 +1683,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     if (el.anchors?.length) body.anchors = el.anchors
     if (el.surfaceAnchors?.length) body.surface_anchors = el.surfaceAnchors
+    const submodelBox = submodel?.capture('oxdna')
+    if (submodelBox !== undefined) body.submodel = { box: submodelBox }
     try {
       const fc = await api.estimateOxdnaDisk(body)
       if (!(await confirmDiskSpaceOk(fc))) {
@@ -1695,6 +1699,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _launching = false
     _updateButtons(_selectedJob())
     if (job?.job_id) {
+      await submodel?.created('oxdna', job.job_id, submodelBox)
       _selectedId = job.job_id
       showToast(remoteTarget ? `oxDNA job submitted to ${wizardPayload.execution_target === 'runpod' ? 'RunPod' : 'Alpine'}` : 'oxDNA job created — press Run when ready', 'ok')
       _setStatus(remoteTarget ? 'Remote job submitted.' : 'Job ready to run.', _C.ok)
@@ -1952,6 +1957,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     const controlsChanged = _controlsJobId !== jobId || _controlsSignature !== _settingsSignature(_jobSettings.overlay(job))
     _selectedId = jobId
+    void submodel?.select('oxdna', jobId)
     const epoch = ++selectionEpoch
     if (controlsChanged && selectionUpdatesVisualization(job)) _applyRunControls(_jobSettings.overlay(job))
     // Accept the selection using the job already in the list. Disk-backed progress
@@ -1997,6 +2003,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _deselectJob() {
     selectionEpoch++
     _selectedId = null
+    void submodel?.select('oxdna', null)
     _progress = null
     _hideDetail()
     _renderList()
@@ -2505,8 +2512,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // A field with no anchors drifts the whole structure (COM drift) — the E-field
     // card shows a warning notice, but the run is allowed (no longer blocked here).
 
+    const submodelBox = submodel?.capture('oxdna')
+    if (submodelBox !== undefined) body.submodel = { box: submodelBox }
     try {
-      const fc = await api.estimateOxdnaRunDisk(parentJobId, { steps, steps_per_frame: stepsPerFrame })
+      const fc = await api.estimateOxdnaRunDisk(parentJobId, { steps, steps_per_frame: stepsPerFrame, ...(body.submodel ? { submodel: body.submodel } : {}) })
       if (!(await confirmDiskSpaceOk(fc))) return null
     } catch { /* forecast is best-effort — never block a launch on it */ }
 
@@ -2518,6 +2527,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // queued — the wizard autoselects it and the single Run button starts it.
     const r = await api.appendOxdnaRun(parentJobId, body)
     if (r && r.job_id) {
+      await submodel?.created('oxdna', r.job_id, submodelBox)
       showToast('oxDNA run created — press Run when ready', 'ok')
       _setProdStatus(`Run created (${what}) — press Run to start it.`, _C.ok)
       _selectedId = r.job_id
@@ -2906,6 +2916,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const active = oxdnaDisplay?.activeJobId()
     if (active && deletedIds.includes(active)) _allDisplaysOff()
     _selectedId = null
+    void submodel?.select('oxdna', null)
     _hideDetail()
     _updateButtons(null)
     _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
@@ -3238,6 +3249,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Still reset the player and checked controls belonging to that document.
     _allDisplaysOff()
     _selectedId = null
+    void submodel?.select('oxdna', null)
     _hideDetail()
     _resetControlsToDefaults()   // drop the previous design's relaxation/run settings
     _updateButtons(null)

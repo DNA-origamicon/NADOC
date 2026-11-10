@@ -581,6 +581,8 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # November 9 FAST: compiles and executes a C++ recorder probe (5.12 s).
+    "test_native_recorder_is_opt_in_and_exclusive",
     # November 1 FAST: nine HTTP mutations, history edit, and independent proofs
     # take 5.31–5.49 s. Keep lightweight connection refusal tests in FAST.
     "test_http_lifecycle_and_metadata_history_edit",
@@ -1076,7 +1078,7 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
-    if module == "test_part_routing_large_history":
+    if module in {"test_part_routing_large_history", "test_vr_frame_audit"}:
         return "headless"
     if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"
