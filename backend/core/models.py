@@ -1321,10 +1321,12 @@ class Annotation(BaseModel):
     ``{"kind": "domain", "strandId": ..., "domainIndex": ...}``, base/end keys, ...),
     stored verbatim; a ref whose element no longer exists simply resolves to nothing
     (annotations are never pruned behind the user's back, so undo can bring it back).
-    ``screen_pos`` is the manual callout's top-left as fractions of the viewport.
+    ``screen_pos`` is the rotated bounding rectangle's top-left as viewport fractions.
+    ``box_size`` is the unrotated CSS-pixel size; null keeps automatic sizing.
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = Field("", max_length=120)
     text: str = Field("", max_length=2000)
     icon: Optional[str] = Field(None, max_length=32)
     callout_type: Literal["elbow", "line", "rounded", "shelf"] = "elbow"
@@ -1334,9 +1336,12 @@ class Annotation(BaseModel):
     glow_intensity: float = Field(1.0, ge=0.0, le=2.0)
     highlight_type: Literal["glow", "silhouette"] = "glow"
     transparency: float = Field(0.0, ge=0.0, le=1.0)
-    size: float = Field(1.0, ge=0.25, le=4.0)
+    size: float = Field(1.0, gt=0.0, allow_inf_nan=False)
+    font_family: Literal["system-ui", "Arial", "Verdana", "Georgia", "Times New Roman", "monospace"] = "system-ui"
     manual: bool = False
     screen_pos: Optional[tuple[float, float]] = None
+    box_size: Optional[tuple[float, float]] = None
+    rotation_deg: float = Field(0.0, allow_inf_nan=False)
     visible: bool = True
     refs: List[Dict[str, Any]] = Field(default_factory=list, max_length=5000)
 
@@ -1345,6 +1350,8 @@ class Annotation(BaseModel):
         for ref in self.refs:
             if not isinstance(ref.get("kind"), str) or not ref["kind"]:
                 raise ValueError("every annotation ref needs a string 'kind'")
+        if self.box_size is not None and not (32 <= self.box_size[0] <= 10000 and 24 <= self.box_size[1] <= 10000):
+            raise ValueError("box_size must be width [32, 10000] and height [24, 10000] in pixels")
         if self.screen_pos is not None and not all(0.0 <= v <= 1.0 for v in self.screen_pos):
             raise ValueError("screen_pos must be fractions within [0, 1]")
         return self
@@ -1716,6 +1723,7 @@ class CameraPose(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Camera Pose"
+    thumbnail: Optional[str] = Field(None, max_length=150000, pattern=r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$")
     position: List[float] = Field(default_factory=lambda: [6.0, 3.0, 7.0])
     target: List[float] = Field(default_factory=lambda: [0.0, 0.0, 7.0])
     up: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
@@ -1943,6 +1951,7 @@ class OverhangRotationLogEntry(FeatureLogProvenance):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "annotations-state", "view-volumes-state",
     "diagnostic-process",
     "duplex-relax",
     "duplex-sync-bindings",
@@ -2296,6 +2305,7 @@ class AnimationKeyframe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     camera_pose_id: Optional[str] = None
+    annotation_ids: Optional[List[str]] = None  # None keeps legacy visibility; [] hides all
     configuration_id: Optional[str] = (
         None  # assembly configuration snapshot id; None = no assembly state change
     )

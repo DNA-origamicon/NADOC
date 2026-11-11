@@ -52,9 +52,11 @@ class PatchAssemblyAnimationBody(BaseModel):
 
 
 class CreateAssemblyKeyframeBody(BaseModel):
+    annotation_ids: Optional[list[str]] = None
     name: str = ""
     camera_pose_id: Optional[str] = None
     configuration_id: Optional[str] = None
+    feature_log_index: Optional[int] = None
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
@@ -71,9 +73,11 @@ class CreateAssemblyKeyframeBody(BaseModel):
 
 
 class PatchAssemblyKeyframeBody(BaseModel):
+    annotation_ids: Optional[list[str]] = None
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
     configuration_id: Optional[str] = None
+    feature_log_index: Optional[int] = None
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
@@ -157,9 +161,11 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
     joint_values = {j.id: j.current_value for j in assembly.joints}
 
     kf = AnimationKeyframe(
+        annotation_ids=body.annotation_ids,
         name=body.name,
         camera_pose_id=body.camera_pose_id,
         configuration_id=body.configuration_id,
+        feature_log_index=body.feature_log_index,
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,

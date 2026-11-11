@@ -67,7 +67,7 @@ it('anchors follow shared live frames and the guest camera, and off removes call
 })
 it('rejects invalid style, text and target references before mounting the guest', () => {
   const f = fixture(), bytes = prepareScene({ ...f.capture(), camera: pose })
-  for (const patch of [{ targets: ['missing'] }, { size: Infinity }, { text: 'x'.repeat(501) }, { icon: '<svg>' }, { color: 'url(example)' }, { refs: [] }]) {
+  for (const patch of [{ targets: ['missing'] }, { size: Infinity }, { fontFamily: 'unreviewed font' }, { text: 'x'.repeat(501) }, { icon: '<svg>' }, { color: 'url(example)' }, { refs: [] }]) {
     const data = decodeContainer(bytes); Object.assign(data.view.annotations[0], patch)
     expect(() => validateScene(data)).toThrow('Invalid shared annotations')
   }
@@ -105,5 +105,19 @@ it('keeps the target anchor when annotation highlighting uses instanced cluster 
   const overlay = mountSharedAnnotations({ current: guest, container: parent, runtime: { camera: f.camera } })
   overlay.update()
   expect(overlay.getRecord(f.visible.id).hasAnchor).toBe(true)
+  overlay.dispose(); guest.dispose(); f.dispose()
+})
+
+it('keeps box aspect and rotation in prepared sharing without exposing editing handles', async () => {
+  const f = fixture()
+  f.controller.update(f.visible.id, { boxSize: { w: 360, h: 120 }, rotationDeg: 30 })
+  const source = f.capture()
+  expect(source.view.annotations[0]).toMatchObject({ boxSize: { w: 360, h: 120 }, rotationDeg: 30 })
+  const guest = await loadPreparedScene(prepareScene({ ...source, camera: pose }))
+  const parent = document.createElement('div'); document.body.append(parent)
+  const overlay = mountSharedAnnotations({ current: guest, container: parent, runtime: { camera: f.camera } })
+  overlay.update()
+  expect(parent.querySelector('.nadoc-anno__box').style.transform).toBe('rotate(30deg)')
+  expect(parent.querySelector('[data-handle]')).toBeNull()
   overlay.dispose(); guest.dispose(); f.dispose()
 })

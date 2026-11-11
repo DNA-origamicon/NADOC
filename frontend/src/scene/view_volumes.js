@@ -1,3 +1,5 @@
+import { PRESENTATION_EVENT } from './presentation_checkpoint_animation.js'
+import { createPresentationCheckpointButton } from '../ui/presentation_checkpoint_button.js'
 import { createAssemblyVolumePointCache } from './assembly_volume_points.js'
 import { COLORING_LABELS, supportedColoringSet, coloringFallbackMode } from './coloring_modes.js'
 import { withSkippedColumnPoints } from './view_volume_points.js'
@@ -183,7 +185,8 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   window.addEventListener('nadoc:view-volume-stage', onStage)
 
   const documentKey = () => store.getState().assemblyActive ? 'currentAssembly' : 'currentDesign'
-  const volumes = () => draftVolumes ?? store.getState()[documentKey()]?.view_volumes ?? []
+  let animationVolumes = null
+  const volumes = () => animationVolumes ?? draftVolumes ?? store.getState()[documentKey()]?.view_volumes ?? []
   const assemblyPoints = createAssemblyVolumePointCache(assemblyRenderer)
   const entries = () => store.getState().assemblyActive
     ? assemblyPoints.get(store.getState().currentAssembly).map(p => { const i = p.key.lastIndexOf(':'); return { pos: new THREE.Vector3(...p.position), nuc: { helix_id: p.key.slice(0, i), bp_index: Number(p.key.slice(i + 1)) } } })
@@ -206,15 +209,16 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing.last.pointCount = sourcePoints.length; timing.last.layerCount = layers.length
     return layers
   }
-  function applyLayers(layers, revision) {
+  function applyLayers(layers, revision, waitUntil) {
     const started = performance.now()
     if (store.getState().assemblyActive) {
-      void applyAssemblyLayers(layers)
+      const work = applyAssemblyLayers(layers)
+      waitUntil?.(work)
       return
     }
     void applyAssemblyLayers([])
     designRenderer.applyViewVolumeLayers?.(layers)
-    window.dispatchEvent(new CustomEvent('nadoc:view-volume-layers', { detail: { layers, revision } }))
+    window.dispatchEvent(new CustomEvent('nadoc:view-volume-layers', { detail: { layers, revision, waitUntil } }))
     timing.last.rendererApplyMs = performance.now() - started
     note('renderer-applied', { revision, durationMs: timing.last.rendererApplyMs })
   }
@@ -250,6 +254,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     finally { polling = false }
   }, 1000)
   function save(next) {
+    if (animationVolumes !== null) return
     // Update immediately so rapid rename/representation/opacity gestures compose
     // against the latest UI state, then serialize persistence to prevent an older
     // response from overwriting a newer edit.
@@ -272,6 +277,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       const started = performance.now(), response = key === 'currentAssembly'
         ? await api.saveAssemblyViewVolumes(next)
         : api.changeViewVolumes ? await api.changeViewVolumes(id, changes, requestContext) : await api.saveViewVolumes(next)
+      if (response === null) throw new Error('Could not save view volumes')
       timing.last.persistMs = performance.now() - started; timing.counters.persisted += 1
       note('persisted', { durationMs: timing.last.persistMs })
       // A stale rebuild response may have replaced currentDesign while this PUT
@@ -285,6 +291,17 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     }).then(() => requestPreview()).finally(() => { pendingSaves-- })
     return saveQueue
   }
+
+  const checkpoint = createPresentationCheckpointButton({ document,
+    available: () => !!store.getState()[documentKey()] && !!api.savePresentationCheckpoint && animationVolumes === null && !draftVolumes && (store.getState()[documentKey()].feature_log_cursor ?? -1) === -1,
+    save: async () => {
+      const key = documentKey(), id = store.getState()[key]?.id
+      await saveQueue
+      if (pendingSaves) throw new Error('View volumes are still saving; try again')
+      if (documentKey() !== key || store.getState()[key]?.id !== id) throw new Error("The active document changed")
+      return api.savePresentationCheckpoint("view-volumes-state", { assembly: key === "currentAssembly", documentId: id })
+    } })
+  body.prepend(checkpoint.root)
 
   function makeVisual(volume) {
     const group = new THREE.Group(); group.userData.volumeId = volume.id
@@ -429,7 +446,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     for (const other of section.querySelectorAll('[data-volume-tool]')) other.classList.toggle('active', other === button)
   })
   transform.addEventListener('mouseDown', () => {
-    if (!selectedId) return
+    if (!selectedId || animationVolumes !== null) return
     draftVolumes = volumes().map(volume => ({ ...volume, min_corner: [...volume.min_corner], max_corner: [...volume.max_corner] }))
     const selected = volumes().find(volume => volume.id === selectedId)
     transformStart = performance.now(); controls.enabled = false
@@ -530,7 +547,32 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   let previousDesign = store.getState()[documentKey()]
   let previousMode = store.getState().assemblyActive
   let previousGeometry = store.getState().currentGeometry
+  const onPresentation = ({ detail }) => {
+    animationVolumes = detail?.documentId === store.getState()[documentKey()]?.id ? detail.state.view_volumes ?? null : null
+    body.inert = animationVolumes !== null
+    if (animationVolumes !== null) transform.detach()
+    checkpoint.refresh()
+    render()
+    if (detail?.waitUntil) {
+      // Animation frames apply once geometry has settled in this JS turn, without
+      // the authoring drag debounce; export waits for the heavy layer promises.
+      previewScheduler.abort('animation frame')
+      if (representationTimer !== null) clearTimeout(representationTimer)
+      representationTimer = null; pendingRepresentation = null
+      detail.waitUntil(Promise.resolve().then(() => {
+        if (disposed || detail.documentId !== store.getState()[documentKey()]?.id) return false
+        const pending = []
+        applyLayers(computeLayers(), previewScheduler.revision(), promise => pending.push(promise))
+        return Promise.all(pending)
+      }))
+    }
+  }
+  window.addEventListener(PRESENTATION_EVENT, onPresentation)
   const unsubscribe = store.subscribe(state => {
+    if (previousDesign?.id !== state[documentKey()]?.id || previousMode !== state.assemblyActive) {
+      animationVolumes = null; body.inert = false
+    }
+    checkpoint.refresh()
     const designChanged = state[documentKey()] !== previousDesign || previousMode !== state.assemblyActive
     if (previousMode !== state.assemblyActive || previousDesign?.id !== state[documentKey()]?.id) { assemblyPoints.clear(); draftVolumes = null; selectedId = null; saveGeneration++; previewScheduler.abort('document changed'); clearTimeout(representationTimer) }
     previousMode = state.assemblyActive
@@ -638,5 +680,5 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing: () => structuredClone(timing),
     abort: () => previewScheduler.abort('debug-abort'),
   }
-  return { render, debug: apiDebug, dispose: () => { disposed = true; assemblyPoints.clear(); clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
+  return { render, debug: apiDebug, dispose: () => { disposed = true; window.removeEventListener(PRESENTATION_EVENT, onPresentation); assemblyPoints.clear(); clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
 }

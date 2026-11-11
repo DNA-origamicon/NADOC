@@ -1,6 +1,8 @@
 /** User-facing tool names. Recipe identifiers never serve as display labels. */
 const names = new Map()
 function family(name, kinds) { for (const kind of kinds.split(' ')) names.set(kind, name) }
+family('Annotations', 'annotations-state')
+family('View Volumes', 'view-volumes-state')
 family('Extrude', 'bundle-create extrude-segment extrude-continuation extrude-deformed-continuation extrude-frame overhang-extrude')
 family('Move/Rotate', 'cluster_op cluster-pose placement-poses nucleotide-transform nucleotide-transform-batch nucleotide-transform-delete assembly-transform-group assembly-transform-instance assembly-transform-instance-cluster')
 family('Bend', 'bend')

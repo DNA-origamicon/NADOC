@@ -2078,7 +2078,9 @@ def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
             "annotations_enabled": current.annotations_enabled,
         }
     )
-    assembly_state.set_assembly_silent(final)
+    from backend.core.presentation_checkpoints import at_position
+    final = at_position(current, final, target_pos)
+    assembly_state.set_assembly_silent(final, preserve_annotations=False)
     return _assembly_response(assembly_state.get_or_404())
 
 
@@ -2105,6 +2107,7 @@ _EDITABLE_OP_KINDS: set[str] = {
 # of instances / connectors / joints don't have a useful Edit UI but they
 # CAN be replayed using their stored ids.
 _REPLAYABLE_OP_KINDS: set[str] = _EDITABLE_OP_KINDS | {
+    "annotations-state", "view-volumes-state",
     "assembly-transform-instance",
     "assembly-add-instance",
     "assembly-delete-instance",
@@ -2141,6 +2144,9 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
     Raises HTTPException with a specific message when the op kind isn't
     replayable or its params are malformed.
     """
+    if op_kind in {"annotations-state", "view-volumes-state"}:
+        from backend.core.presentation_checkpoints import apply
+        return apply(assembly, op_kind, params)
     if op_kind == "assembly-transform-instance":
         instance_id = params.get("instance_id")
         transform = params.get("transform")

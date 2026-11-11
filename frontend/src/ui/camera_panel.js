@@ -1,3 +1,4 @@
+import { attachPoseThumbnail } from './pose_thumbnail.js'
 /**
  * Camera Poses panel — sidebar list of saved camera viewpoints.
  *
@@ -12,7 +13,7 @@
  */
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 
-export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api }) {
+export function initCameraPanel(store, { captureCurrentCamera, captureThumbnail = () => null, animateCameraTo, api }) {
   const listEl   = document.getElementById('camera-pose-list')
   const captureBtn = document.getElementById('camera-pose-capture-btn')
   const heading  = document.getElementById('camera-panel-heading')
@@ -46,14 +47,14 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
 
   // ── Capture current view ──────────────────────────────────────────────────
   captureBtn.addEventListener('click', async () => {
-    const camState = captureCurrentCamera()
+    const camState = { ...captureCurrentCamera(), thumbnail: captureThumbnail() }
     if (_partInstanceId) {
       const n = (_partDesign?.camera_poses?.length ?? 0) + 1
       await _modifyPartDesign(d => {
         d.camera_poses = [...(d.camera_poses ?? []), {
           id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `Pose ${n}`,
           position: camState.position, target: camState.target,
-          up: camState.up, fov: camState.fov, orbit_mode: camState.orbitMode ?? 'trackball',
+          up: camState.up, fov: camState.fov, thumbnail: camState.thumbnail, orbit_mode: camState.orbitMode ?? 'trackball',
         }]
       })
       return
@@ -117,6 +118,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
   function _makeRow(pose, allPoses) {
     const row = document.createElement('div')
     row.dataset.poseId = pose.id
+    attachPoseThumbnail(row, pose)
     row.style.cssText = [
       'display:flex;align-items:center;gap:5px;padding:5px 6px',
       'border-radius:4px;cursor:default;user-select:none',
@@ -295,11 +297,12 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
     updateBtn.addEventListener('pointerleave', () => { updateBtn.style.cssText = _updateStyle })
     updateBtn.addEventListener('click', async e => {
       e.stopPropagation()
-      const camState = captureCurrentCamera()
+      const camState = { ...captureCurrentCamera(), thumbnail: captureThumbnail() }
       if (_partInstanceId) {
         await _modifyPartDesign(d => {
           const p = d.camera_poses?.find(p => p.id === pose.id)
           if (!p) return
+          p.thumbnail  = camState.thumbnail
           p.position   = camState.position
           p.target     = camState.target
           p.up         = camState.up
@@ -308,6 +311,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
         })
       } else {
         const patch = {
+          thumbnail: camState.thumbnail,
           position:  camState.position,
           target:    camState.target,
           up:        camState.up,

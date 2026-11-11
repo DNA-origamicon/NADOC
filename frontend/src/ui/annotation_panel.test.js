@@ -51,7 +51,7 @@ describe('annotation panel', () => {
     root.querySelector('.anno-add').click()
     const card = cards()[0]
     const order = [...card.querySelectorAll('[data-field]')].map(e => e.dataset.field)
-    const wanted = ['text', 'icon', 'calloutType', 'color', 'transparency', 'size', 'manual', 'useSelection']
+    const wanted = ['text', 'size', 'fontFamily', 'icon', 'calloutType', 'color', 'transparency', 'manual', 'useSelection']
     expect(wanted.map(f => order.indexOf(f))).toEqual([...wanted.map(f => order.indexOf(f))].sort((a, b) => a - b))
     for (const f of wanted) expect(order).toContain(f)
   })
@@ -63,13 +63,16 @@ describe('annotation panel', () => {
     const text = field(card, 'text')
     text.focus()
     input(text, 'Check this')
-    input(field(card, 'size'), '1.5')
+    field(card, 'size').value = '20'
+    field(card, 'size').dispatchEvent(new window.Event('change'))
+    field(card, 'fontFamily').value = 'Georgia'
+    field(card, 'fontFamily').dispatchEvent(new window.Event('change'))
     input(field(card, 'transparency'), '0.4')
     input(field(card, 'color'), '#123456')
     field(card, 'calloutType').value = 'rounded'
     field(card, 'calloutType').dispatchEvent(new window.Event('change'))
     const e = controller.get(id)
-    expect(e).toMatchObject({ text: 'Check this', size: 1.5, transparency: 0.4, color: '#123456', calloutType: 'rounded' })
+    expect(e).toMatchObject({ text: 'Check this', size: 20 / 13, fontFamily: 'Georgia', transparency: 0.4, color: '#123456', calloutType: 'rounded' })
     expect(cards()[0]).toBe(card)
     expect(document.activeElement).toBe(text)
   })
@@ -209,4 +212,31 @@ describe('annotation panel', () => {
     panel.setAvailable(true)
     expect(root.querySelector('.anno-list').hidden).toBe(false)
   })
+})
+
+it('names annotations, supports renaming, and keeps the header when collapsed', () => {
+  root.querySelector('.anno-add').click()
+  root.querySelector('.anno-add').click()
+  const [first, second] = cards()
+  expect(field(first, 'name').value).toBe('Annotation 1')
+  expect(field(second, 'name').value).toBe('Annotation 2')
+  field(first, 'name').value = 'Opening'
+  field(first, 'name').dispatchEvent(new Event('change'))
+  expect(controller.list()[0].name).toBe('Opening')
+  first.querySelector('.anno-collapse').click()
+  expect(first.classList.contains('is-collapsed')).toBe(true)
+  expect(first.firstChild.contains(field(first, 'name'))).toBe(true)
+  expect(first.firstChild.contains(field(first, 'delete'))).toBe(true)
+})
+
+it('accepts fractional custom font sizes and rejects zero without changing the saved size', () => {
+  root.querySelector('.anno-add').click()
+  const input = field(cards()[0], 'size')
+  input.value = '20.5'
+  input.dispatchEvent(new Event('change'))
+  expect(controller.list()[0].size).toBe(20.5 / 13)
+  input.value = '0'
+  input.dispatchEvent(new Event('change'))
+  expect(input.validationMessage).toContain('positive')
+  expect(controller.list()[0].size).toBe(20.5 / 13)
 })

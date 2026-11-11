@@ -851,7 +851,8 @@ export function initAtomSurfaceDisplay({
   // View volumes are spatial (derived from live rendered positions), so their
   // overlay membership arrives independently of the persisted design object.
   window.addEventListener('nadoc:view-volume-layers', event => {
-    void volumeDisplays.update(event.detail?.layers ?? [])
+    const work = volumeDisplays.update(event.detail?.layers ?? [])
+    event.detail?.waitUntil?.(work)
   })
 
   // Selection change → atomistic highlight + surface strand recolor (no recompute).

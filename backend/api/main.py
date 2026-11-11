@@ -74,6 +74,7 @@ from backend.api.routes_deformation import router as deformation_router
 from backend.api.routes_part_deformation_preview import router as deformation_preview_router
 from backend.api.routes_display_geometry import router as display_geometry_router
 from backend.api.routes_display_metadata import router as display_metadata_router
+from backend.api.routes_presentation_checkpoints import router as presentation_checkpoints_router
 from backend.api.routes_export_3dprint import router as export_3dprint_router
 from backend.api.routes_export_md import router as export_md_router
 from backend.api.routes_export_structure import router as export_structure_router
@@ -486,6 +487,7 @@ app.include_router(sweep_router, prefix="/api")
 app.include_router(sweep_preview_router, prefix="/api")
 app.include_router(transform_preview_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
+app.include_router(presentation_checkpoints_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
 app.include_router(duplex_router, prefix="/api")
 app.include_router(export_3dprint_router, prefix="/api")

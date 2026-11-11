@@ -7244,8 +7244,10 @@ def _seek_snapshot_base(
 def _seek_feature_log(design: Design, position: int, sub_position: int | None = None,
                       *, optimized: bool | None = None) -> Design:
     from backend.api.part_history_navigation import seek_with_recovery
-    return seek_with_recovery(design, position, sub_position, _seek_feature_log_recovery,
-                              optimized=optimized)
+    from backend.core.presentation_checkpoints import at_position
+    candidate = seek_with_recovery(design, position, sub_position, _seek_feature_log_recovery,
+                                   optimized=optimized)
+    return at_position(design, candidate, position)
 
 
 def _seek_feature_log_recovery(

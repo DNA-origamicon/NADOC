@@ -5,6 +5,7 @@
  * An annotation is VIEW metadata attached to stable selection refs (see
  * selection_ref.js). It never touches topology or geometry.
  */
+import { normalizeBoxAngle } from './annotation_box_math.js'
 import { normalizeAssemblyAnnotationRef } from './assembly_annotation_refs.js'
 import { dedupeSelectionRefs } from './selection_ref.js'
 import { isAnnotationIcon } from './annotation_icons.js'
@@ -21,7 +22,8 @@ export const ANNOTATION_COLORS = Object.freeze([
   '#f0883e', '#58a6ff', '#3fb950', '#f778ba', '#d2a8ff', '#e3b341', '#ff7b72', '#39c5cf',
 ])
 
-export const SIZE_RANGE = Object.freeze({ min: 0.7, max: 2.5, step: 0.05, default: 1 })
+export const SIZE_RANGE = Object.freeze({ min: Number.MIN_VALUE, max: Number.MAX_VALUE, default: 1 })
+export const ANNOTATION_FONTS = Object.freeze(['system-ui', 'Arial', 'Verdana', 'Georgia', 'Times New Roman', 'monospace'])
 export const TRANSPARENCY_RANGE = Object.freeze({ min: 0, max: 0.8, step: 0.05, default: 0 })
 export const GLOW_INTENSITY_RANGE = Object.freeze({ min: 0, max: 2, step: 0.05, default: 1 })
 export const MAX_TEXT_LENGTH = 500
@@ -47,6 +49,7 @@ export function normalizeAnnotation(input = {}, { index = 0 } = {}) {
     : null
   return {
     id: typeof input.id === 'string' && input.id ? input.id : newAnnotationId(),
+    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim().slice(0, 120) : `Annotation ${index + 1}`,
     text: typeof input.text === 'string' ? input.text.slice(0, MAX_TEXT_LENGTH) : '',
     icon: isAnnotationIcon(input.icon) ? input.icon : null,
     calloutType: CALLOUT_KEYS.has(input.calloutType) ? input.calloutType : 'elbow',
@@ -56,7 +59,11 @@ export function normalizeAnnotation(input = {}, { index = 0 } = {}) {
     glowColor: typeof input.glowColor === 'string' && HEX.test(input.glowColor) ? input.glowColor.toLowerCase() : color,
     glowIntensity: clamp(finiteOr(input.glowIntensity, 1), 0, 2),
     transparency: clamp(finiteOr(input.transparency, TRANSPARENCY_RANGE.default), TRANSPARENCY_RANGE.min, TRANSPARENCY_RANGE.max),
-    size: clamp(finiteOr(input.size, SIZE_RANGE.default), SIZE_RANGE.min, SIZE_RANGE.max),
+    size: Number.isFinite(input.size) && input.size > 0 ? input.size : SIZE_RANGE.default,
+    fontFamily: ANNOTATION_FONTS.includes(input.fontFamily) ? input.fontFamily : 'system-ui',
+    boxSize: input.boxSize && Number.isFinite(input.boxSize.w) && Number.isFinite(input.boxSize.h)
+      ? { w: clamp(input.boxSize.w, 32, 10000), h: clamp(input.boxSize.h, 24, 10000) } : null,
+    rotationDeg: normalizeBoxAngle(input.rotationDeg),
     manual: input.manual === true,
     screenPos,
     visible: input.visible !== false,
@@ -79,9 +86,10 @@ export const legacyStorageKeyFor = designId => `nadoc.annotations.v1:${designId}
 /** Entry → the snake_case shape stored in the .nadoc (`Design.annotations`). */
 export function annotationToWire(entry) {
   return {
-    id: entry.id, text: entry.text, icon: entry.icon, callout_type: entry.calloutType, color: entry.color,
+    id: entry.id, name: entry.name, text: entry.text, icon: entry.icon, callout_type: entry.calloutType, color: entry.color,
     highlight: entry.highlight, highlight_type: entry.highlightType, glow_color: entry.glowColor, glow_intensity: entry.glowIntensity,
-    transparency: entry.transparency, size: entry.size, manual: entry.manual,
+    transparency: entry.transparency, size: entry.size, font_family: entry.fontFamily, manual: entry.manual,
+    box_size: entry.boxSize ? [entry.boxSize.w, entry.boxSize.h] : null, rotation_deg: entry.rotationDeg ?? 0,
     screen_pos: entry.screenPos ? [entry.screenPos.x, entry.screenPos.y] : null,
     visible: entry.visible, refs: entry.refs,
   }
@@ -91,9 +99,10 @@ export function annotationToWire(entry) {
 export function annotationFromWire(wire, { index = 0 } = {}) {
   const pos = Array.isArray(wire?.screen_pos) ? { x: wire.screen_pos[0], y: wire.screen_pos[1] } : null
   return normalizeAnnotation({
-    id: wire?.id, text: wire?.text, icon: wire?.icon, calloutType: wire?.callout_type, color: wire?.color,
+    id: wire?.id, name: wire?.name, text: wire?.text, icon: wire?.icon, calloutType: wire?.callout_type, color: wire?.color,
     highlight: wire?.highlight, highlightType: wire?.highlight_type, glowColor: wire?.glow_color, glowIntensity: wire?.glow_intensity,
-    transparency: wire?.transparency, size: wire?.size, manual: wire?.manual, screenPos: pos,
+    transparency: wire?.transparency, size: wire?.size, fontFamily: wire?.font_family, manual: wire?.manual, screenPos: pos,
+    boxSize: Array.isArray(wire?.box_size) ? { w: wire.box_size[0], h: wire.box_size[1] } : null, rotationDeg: wire?.rotation_deg,
     visible: wire?.visible, refs: wire?.refs,
   }, { index })
 }

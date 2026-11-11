@@ -52,6 +52,7 @@ class PatchAnimationBody(BaseModel):
 
 
 class CreateKeyframeBody(BaseModel):
+    annotation_ids: Optional[List[str]] = None
     name: str = ""
     camera_pose_id: Optional[str] = None
     feature_log_index: Optional[int] = None
@@ -84,6 +85,7 @@ class CreateKeyframeBody(BaseModel):
 
 
 class PatchKeyframeBody(BaseModel):
+    annotation_ids: Optional[List[str]] = None
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
     feature_log_index: Optional[int] = None
@@ -188,6 +190,7 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
 
     kf = AnimationKeyframe(
+        annotation_ids=body.annotation_ids,
         name=body.name,
         camera_pose_id=body.camera_pose_id,
         feature_log_index=body.feature_log_index,

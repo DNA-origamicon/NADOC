@@ -22,6 +22,23 @@ All three representations are animated via the same pre-bake pipeline in `animat
 > "Trajectory keyframes". The player's private trajectory pipeline (`_bakedTrajectories`,
 > `_bakedTrajAtom`, `_bakedTrajSurf`, the fixed 40/20-frame caps) is **deleted**.
 
+## Local presentation mode (2026-11-10)
+
+The parts editor's Animations tab has a red **Start Presentation** button above
+Camera Poses. `ui/animation_presentation.js` owns local fullscreen and manual
+navigation; it reuses the existing player's preparation, seek and settle paths.
+Each keyframe plays its transition and hold, then waits with its caption visible. Click, Space, Right/Down
+or PageDown advances, interrupting any remaining transition/hold and starting the next
+keyframe. Forward during the final keyframe exits immediately. Right-click, Left/Up,
+PageUp or Backspace jumps directly to the previous keyframe endpoint and waits
+without replaying its transition. Navigation generations discard obsolete async
+frame completions, including rapid input while scene preparation settles. Esc,
+native fullscreen exit, cancellation/errors, document teardown, or completion of
+the last keyframe restores the editor. Loop/bounce and disabled-pose settings are
+restored; saved animation timing is unchanged. If native fullscreen is unavailable,
+the canvas fills the browser viewport. Assemblies and assembly part contexts are
+excluded by the requested initial scope. This does not create a shared presentation.
+
 ## Construction sequences (2026-10-08)
 
 Existing state-pinned keyframes now traverse all intervening **top-level** feature-log
@@ -105,6 +122,16 @@ with ffmpeg/ffprobe. Source workspace designs are not modified.
 - [`apply_deformations_to_atoms`](details/project_animation_all_reprs/01-shared-presentation-playback-2026-09-30.md#apply_deformations_to_atoms)
 
 ## Stop/finish cleanup
+
+November 10, 2026: captured/updated camera poses store a small JPEG thumbnail of
+the rendered 3D canvas. Pose rows and the keyframe pose listbox display it on
+hover/focus; legacy poses need Capture/Update to acquire an image. Keyframe cards
+collapse while keeping selection, individual preview and delete available.
+Selecting a title seeks to its assigned endpoint; the adjacent preview plays
+only its transition/hold, using the same state baking and frame readiness as
+whole-animation playback. Annotation checkboxes select all/none/a subset of the
+right-sidebar entries (now renameable/collapsible). Null selection retains legacy
+visibility; explicit IDs transiently override it without changing working notes.
 
 On `stopped` or `finished` events: `_atomDataCache = null` + re-fetch atomistic, `_surfaceDataCache = null` + re-fetch surface. Restores strand colours and correct deformed state after animation ends.
 

@@ -1052,7 +1052,7 @@ def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
 
     Annotations are display-only view metadata saved through their own route (no undo
     entry), so undo/redo must neither rewind them to an older list nor resurrect a
-    deleted one — the current annotations always win. Repair proposals also
+    deleted one unless an explicit presentation checkpoint is crossed. Repair proposals also
     remain current within the same branch; cross-branch undo restores that
     branch's own proposal. Source retention may refuse before stacks change.
     """
@@ -1061,9 +1061,9 @@ def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
     if snapshot.active_loadout_id == current.active_loadout_id:
         from backend.api.part_repair_document import restore_recovery_metadata
         snapshot = restore_recovery_metadata(current, snapshot)
+    from backend.core.presentation_checkpoints import restore_history_channels
     return snapshot.model_copy(update={
-        "annotations": current.annotations,
-        "annotations_enabled": current.annotations_enabled,
+        **restore_history_channels(current, snapshot),
         "metadata": snapshot.metadata.model_copy(update={
             "identity_last_known_path": current.metadata.identity_last_known_path,
             "identity_confirmed_at": current.metadata.identity_confirmed_at,

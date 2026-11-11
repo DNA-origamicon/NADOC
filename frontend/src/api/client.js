@@ -1,3 +1,4 @@
+import { createPresentationCheckpointAPI } from './presentation_checkpoint_endpoints.js'
 import { passiveReadScheduler, isPassiveRead } from './passive_read_scheduler.js'
 import { TRAJECTORY_RESPONSE_BYTES } from '../scene/trajectory_memory.js'
 import { getRunDir } from '../ui/run_location_preferences.js'
@@ -1230,6 +1231,9 @@ export async function clearRepresentationOverrides() {
   const json = await _request('DELETE', '/design/representation-overrides')
   return _syncFromDesignResponse(json)
 }
+
+export const savePresentationCheckpoint = createPresentationCheckpointAPI({ store, request: _request,
+  designRevisions: _designRevisions, assemblyRevisions: _assemblyRevisions, persistDesign, persistAssembly })
 
 /** Replace display-only spatial view volumes persisted with the part. */
 export async function saveViewVolumes(volumes) {
@@ -4370,9 +4374,9 @@ export function _syncDesignAuthoringResponse(json, field) {
   return json
 }
 
-export async function createCameraPose(name, { position, target, up, fov, orbitMode }) {
+export async function createCameraPose(name, { position, target, up, fov, orbitMode, thumbnail }) {
   const json = await _request('POST', '/design/camera-poses', {
-    name, position, target, up, fov, orbit_mode: orbitMode,
+    name, position, target, up, fov, orbit_mode: orbitMode, thumbnail,
   })
   return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
@@ -4395,9 +4399,9 @@ export async function reorderCameraPoses(orderedIds) {
   return _syncDesignAuthoringResponse(json, 'camera_poses')
 }
 
-export async function createAssemblyCameraPose(name, { position, target, up, fov, orbitMode }) {
+export async function createAssemblyCameraPose(name, { position, target, up, fov, orbitMode, thumbnail }) {
   const json = await _request('POST', '/assembly/camera-poses', {
-    name, position, target, up, fov, orbit_mode: orbitMode,
+    name, position, target, up, fov, orbit_mode: orbitMode, thumbnail,
   })
   return _syncFromAssemblyResponse(json)
 }

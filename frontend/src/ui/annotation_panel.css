@@ -57,3 +57,14 @@
 .anno-enable { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: var(--text-sm, 14px); color: var(--color-text-secondary, #c9d1d9); }
 .anno-enable[hidden] { display: none; }
 .anno-list.is-globally-off .anno-card { opacity: 0.55; }
+
+.anno-card.is-collapsed > :not(:first-child) { display: none !important; }
+.anno-name { min-width: 0; flex: 1; width: 80px; background: transparent; color: inherit; border: 1px solid transparent; padding: 3px; }
+.anno-name:hover, .anno-name:focus { border-color: #596777; }
+.anno-collapse { flex-shrink: 0; }
+.anno-font-size-control { display: flex; flex: 1; min-width: 0; gap: 4px; }
+.anno-font-size-control input { width: 0; min-width: 0; flex: 1; padding: 3px 4px; font: inherit; background: var(--color-bg-canvas); color: var(--color-text-primary); border: 1px solid var(--color-border-default); border-radius: 3px; }
+.anno-font-size-control select { flex: 0 0 38px; width: 38px; }
+.anno-box-controls { display: grid; gap: 6px; }
+.anno-box-controls input { width: 90px; min-width: 0; background: var(--color-bg-canvas); color: var(--color-text-primary); border: 1px solid var(--color-border-default); border-radius: 3px; padding: 3px 4px; font: inherit; }
+.anno-box-controls .btn { justify-self: end; }

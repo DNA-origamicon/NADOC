@@ -112,8 +112,10 @@ export function createAnnotationController({
     },
 
     add(partial = {}) {
+      let number = 1
+      while (entries.some(entry => entry.name === `Annotation ${number}`)) number++
       const entry = normalizeAnnotation({
-        color: ANNOTATION_COLORS[entries.length % ANNOTATION_COLORS.length], ...partial,
+        color: ANNOTATION_COLORS[entries.length % ANNOTATION_COLORS.length], name: `Annotation ${number}`, ...partial,
       }, { index: entries.length })
       entries = [...entries, entry]
       touch()

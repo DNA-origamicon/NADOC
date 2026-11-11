@@ -4,7 +4,7 @@ import { docKey } from '../shared/doc_id.js'
 
 /** Visibility preferences never alter the recipe or its seek indices. */
 export function createFeatureLogFilters({ onChange }) {
-  const values = { fineRouting: true, documentOps: false }
+  const values = { fineRouting: true, documentOps: false, annotations: false }
   const preferenceKey = docKey('nadoc:feature-log-filters')
   const readPreferences = () => {
     try {
@@ -33,7 +33,7 @@ export function createFeatureLogFilters({ onChange }) {
   for (const [key, label, disabled] of [
     ['fineRouting', 'Fine routing', false],
     ['documentOps', 'Document ops', false],
-    ['annotations', 'Annotations and visuals', true],
+    ['annotations', 'Annotations and view volumes', false],
   ]) {
     const row = document.createElement('label')
     const input = document.createElement('input')

@@ -988,6 +988,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       // Skip any legacy checkpoint entries (stripped by backend validator but guard here too).
       if (entry.feature_type === 'checkpoint') return
       if (entry.feature_type === 'routing-cluster' && !filters.values.fineRouting) return
+      if (['annotations-state', 'view-volumes-state'].includes(entry.op_kind) && !filters.values.annotations) return
 
       const suppressed = cursor >= 0 && i > cursor
       const brokenReason = _brokenReason(entry)
@@ -1863,6 +1864,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
 
     const displayLabels = featureLabels(log)
     log.forEach((entry, i) => {
+      if (['annotations-state', 'view-volumes-state'].includes(entry.op_kind) && !filters.values.annotations) return
       const suppressed = cursor >= 0 && i > cursor
       const row = document.createElement('div')
       row.dataset.flRow = i + 1

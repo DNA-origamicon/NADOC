@@ -112,7 +112,7 @@ describe('committing edits', () => {
     c.update(a.id, { size: 99 })
     c.update(a.id, { refs: [{ kind: 'strand', id: 's' }] })
     c.setEnabled(false); c.setEnabled(false)
-    expect(c.get(a.id).size).toBe(2.5)
+    expect(c.get(a.id).size).toBe(99)
     expect(events).toEqual([['add', true], ['update', false], ['update', true], ['enabled', false]])
     expect(c.remove(a.id)).toBe(true); expect(c.remove('nope')).toBe(false)
     expect(c.update('nope', {})).toBeNull()

@@ -382,3 +382,15 @@ it('rejects a missing intermediate state instead of skipping it in a movie', asy
   await expect(h.player.play({ keyframes: [kf({ feature_log_index: 2 })] })).rejects.toThrow('Build state 1')
   expect(h.player.isPlaying()).toBe(false)
 })
+
+it('keeps presentation captions visible at a keyframe endpoint without changing normal fades', async () => {
+  const h = makeHarness({ design: design(3) })
+  const animation = { keyframes: [kf({ feature_log_index: null, text: 'Caption', transition_duration_s: 0, hold_duration_s: 1 })] }
+  await h.player.play(animation, { holdKeyframeText: true })
+  h.player.pause(); h.player.seekTo(1)
+  expect(h.player.getActiveTextOverlay()).toMatchObject({ text: 'Caption', opacity: 1 })
+  await h.player.play(animation)
+  h.player.pause(); h.player.seekTo(1)
+  expect(h.player.getActiveTextOverlay()).toBeNull()
+  h.player.stop()
+})

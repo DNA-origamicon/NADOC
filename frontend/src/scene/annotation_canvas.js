@@ -53,50 +53,60 @@ export function drawAnnotationCallouts(ctx, records, scale) {
     }
     for (const rec of records) {
       if (!rec.rect) continue
-      const { entry, rect } = rec
-      const shelf = entry.calloutType === 'shelf'
-      ctx.globalAlpha = 1 - entry.transparency
-      ctx.lineWidth = 2
-      ctx.strokeStyle = entry.color
-      ctx.beginPath()
-      if (shelf) {
-        ctx.moveTo(rect.x, rect.y + rect.h - 1)
-        ctx.lineTo(rect.x + rect.w, rect.y + rect.h - 1)
-      } else {
-        ctx.roundRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2, entry.calloutType === 'rounded' ? 15 : 0)
-        ctx.fillStyle = 'rgba(13,17,23,0.92)'
-        ctx.fill()
-      }
-      ctx.stroke()
-      const iconSize = Math.round(18 * entry.size)
-      const x = rect.x + (shelf ? 4 : entry.calloutType === 'rounded' ? 15 : 12)
-      const y = rect.y + (shelf ? 2 : 8)
-      if (entry.icon) drawIcon(ctx, entry.icon, x, y, iconSize)
-      ctx.fillStyle = entry.color
-      ctx.font = `600 ${(13 * entry.size).toFixed(1)}px system-ui, sans-serif`
-      ctx.textBaseline = 'top'
-      // Use actual DOM glyph positions to preserve whitespace and CSS wrapping.
-      const node = rec.text.firstChild
-      if (!node) continue
-      const origin = rec.el.getBoundingClientRect()
-      const range = rec.text.ownerDocument.createRange()
-      let offset = 0
-      const runs = []
-      for (const char of entry.text) {
-        range.setStart(node, offset)
-        offset += char.length
-        range.setEnd(node, offset)
-        const bounds = range.getBoundingClientRect()
-        if (char !== '\n' && bounds.width) {
-          const previous = runs.at(-1)
-          if (previous && Math.abs(previous.top - bounds.top) < 0.5) previous.text += char
-          else runs.push({ text: char, left: bounds.left, top: bounds.top })
+      const { entry, rect: occupied } = rec
+      const { w, h } = rec.boxSize ?? occupied
+      const rect = { x: -w / 2, y: -h / 2, w, h }
+      ctx.save()
+      ctx.translate(occupied.x + occupied.w / 2, occupied.y + occupied.h / 2)
+      ctx.rotate((entry.rotationDeg ?? 0) * Math.PI / 180)
+      const transform = rec.box.style.transform
+      rec.box.style.transform = 'none'
+      try {
+        const shelf = entry.calloutType === 'shelf'
+        ctx.globalAlpha = 1 - entry.transparency
+        ctx.lineWidth = 2
+        ctx.strokeStyle = entry.color
+        ctx.beginPath()
+        if (shelf) {
+          ctx.moveTo(rect.x, rect.y + rect.h - 1)
+          ctx.lineTo(rect.x + rect.w, rect.y + rect.h - 1)
+        } else {
+          ctx.roundRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2, entry.calloutType === 'rounded' ? 15 : 0)
+          ctx.fillStyle = 'rgba(13,17,23,0.92)'
+          ctx.fill()
         }
-      }
-      ctx.shadowColor = '#0d1117'
-      ctx.shadowBlur = shelf ? 4 * scale : 0
-      for (const run of runs) ctx.fillText(run.text, rect.x + run.left - origin.left, rect.y + run.top - origin.top)
-      ctx.shadowBlur = 0
+        ctx.stroke()
+        const displaySize = rec.displaySize ?? entry.size
+        const iconSize = 18 * displaySize
+        const x = rect.x + (shelf ? 4 : entry.calloutType === 'rounded' ? 15 : 12)
+        const y = rect.y + (shelf ? 2 : 8)
+        if (entry.icon) drawIcon(ctx, entry.icon, x, y, iconSize)
+        ctx.fillStyle = entry.color
+        ctx.font = `600 ${13 * displaySize}px ${entry.fontFamily ?? 'system-ui'}, sans-serif`
+        ctx.textBaseline = 'top'
+        // Use actual DOM glyph positions to preserve whitespace and CSS wrapping.
+        const node = rec.text.firstChild
+        if (!node) continue
+        const origin = rec.box.getBoundingClientRect()
+        const range = rec.text.ownerDocument.createRange()
+        let offset = 0
+        const runs = []
+        for (const char of entry.text) {
+          range.setStart(node, offset)
+          offset += char.length
+          range.setEnd(node, offset)
+          const bounds = range.getBoundingClientRect()
+          if (char !== '\n' && bounds.width) {
+            const previous = runs.at(-1)
+            if (previous && Math.abs(previous.top - bounds.top) < 0.5) previous.text += char
+            else runs.push({ text: char, left: bounds.left, top: bounds.top })
+          }
+        }
+        ctx.shadowColor = '#0d1117'
+        ctx.shadowBlur = shelf ? 4 * scale : 0
+        for (const run of runs) ctx.fillText(run.text, rect.x + run.left - origin.left, rect.y + run.top - origin.top)
+        ctx.shadowBlur = 0
+      } finally { rec.box.style.transform = transform; ctx.restore() }
     }
   } finally { ctx.restore() }
 }

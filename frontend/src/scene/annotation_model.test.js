@@ -11,7 +11,9 @@ describe('normalizeAnnotation', () => {
     expect(a.highlightType).toBe('glow')
     expect(normalizeAnnotation({ highlightType: 'unknown' }).highlightType).toBe('glow')
     expect(normalizeAnnotation({ glowIntensity: 99, glowColor: 'invalid', color: '#123456' })).toMatchObject({ glowIntensity: 2, glowColor: '#123456' })
-    expect(a.size).toBe(2.5)
+    expect(a.size).toBe(99)
+    for (const size of [0, -1, Infinity, NaN]) expect(normalizeAnnotation({ size }).size).toBe(1)
+    expect(normalizeAnnotation({ size: 1e200 }).size).toBe(1e200)
     expect(a.transparency).toBe(0.8)
     expect(a.color).toBe(ANNOTATION_COLORS[1])
     expect(a.calloutType).toBe('elbow')
@@ -47,7 +49,7 @@ describe('file wire format', () => {
   it('maps to the snake_case .nadoc shape and back without loss', () => {
     const entry = normalizeAnnotation({
       highlight: true, highlightType: 'silhouette', glowColor: '#00ff00', glowIntensity: 1.5, id: 'a', text: 't', icon: 'check', calloutType: 'rounded', color: '#123456', transparency: 0.3, size: 1.4,
-      manual: true, screenPos: { x: 0.2, y: 0.7 }, visible: false, refs: [{ kind: 'domain', strandId: 's', domainIndex: 1 }],
+      fontFamily: 'Georgia', manual: true, screenPos: { x: 0.2, y: 0.7 }, visible: false, refs: [{ kind: 'domain', strandId: 's', domainIndex: 1 }],
     })
     const wire = annotationToWire(entry)
     expect(wire).toMatchObject({ callout_type: 'rounded', screen_pos: [0.2, 0.7], visible: false })
@@ -71,4 +73,11 @@ describe('legacy browser-storage payload', () => {
     expect(deserializeAnnotations('{"entries":[1,null,{"id":"x"},{"id":"x"}]}')).toHaveLength(1)
     expect(legacyStorageKeyFor('d')).toBe('nadoc.annotations.v1:d')
   })
+})
+
+it('preserves box dimensions and rotation through the saved wire format', () => {
+  const entry = normalizeAnnotation({ boxSize: { w: 360, h: 120 }, rotationDeg: 450 })
+  expect(annotationFromWire(annotationToWire(entry))).toEqual(entry)
+  expect(entry.rotationDeg).toBe(90)
+  expect(normalizeAnnotation().boxSize).toBeNull()
 })
