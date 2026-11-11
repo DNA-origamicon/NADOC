@@ -27,6 +27,7 @@ export function createAnnotationController({
   let timer = null
   let dirty = false
   let inflight = 0
+  let pendingFlush = Promise.resolve()
   let lastWire = null       // the annotations array last hydrated from / committed to the design
   const listeners = new Set()
 
@@ -36,16 +37,18 @@ export function createAnnotationController({
 
   function flush() {
     cancel()
-    if (!dirty || designId == null) return Promise.resolve()
+    if (!dirty || designId == null) return pendingFlush
     dirty = false
     const wire = toWire()
     lastWire = wire
     inflight += 1
     const savedId = designId, savedEnabled = enabled
-    return Promise.resolve()
+    const work = Promise.resolve()
       .then(() => commit({ designId: savedId, annotations: wire, enabled: savedEnabled }))
       .catch(() => { if (designId === savedId) dirty = true })   // stays local; the next edit retries
       .finally(() => { inflight -= 1 })
+    pendingFlush = Promise.all([pendingFlush, work]).then(() => {})
+    return pendingFlush
   }
   function touch() {
     dirty = true
