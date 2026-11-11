@@ -29,9 +29,10 @@ test('protein zoom connectors touch the projected volume at Voltron pose 3', asy
     createSelectionController({ store: window.__nadocTest.store }).replace([{ kind: 'protein', id: state.currentDesign.protein_attachments[0].id }])
     document.querySelector('.right-tab-btn[data-tab="visualization"]').click()
   }, owned)
-  await page.locator('#zoom-volume-set').click()
-  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().ready), { timeout: 60000 }).toBe(true)
-  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().triangles)).toBeGreaterThan(0)
+  await page.locator('#zoom-volume-add').click()
+  await page.locator('.zoom-volume-options summary').click()
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().entries[0].ready), { timeout: 60000 }).toBe(true)
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().entries[0].triangles)).toBeGreaterThan(0)
   const capture = process.env.NADOC_ZOOM_LINES_CAPTURE
   if (capture) { mkdirSync(capture, { recursive: true }); await page.screenshot({ path: `${capture}/pose3-protein.png` }) }
   const errorsPx = await page.evaluate(() => {
@@ -42,7 +43,7 @@ test('protein zoom connectors touch the projected volume at Voltron pose 3', asy
       const p = new THREE.Vector3().fromBufferAttribute(positions, i).applyMatrix4(box.matrixWorld).project(camera)
       points.push({ x: rect.left + (p.x + 1) * rect.width / 2, y: rect.top + (1 - p.y) * rect.height / 2 })
     }
-    const host = document.getElementById('zoom-volume-inset'), inset = host.getBoundingClientRect()
+    const host = document.querySelector('.zoom-volume-inset'), inset = host.getBoundingClientRect()
     return [...host.nextElementSibling.querySelectorAll('line')].map(line => {
       const x = +line.getAttribute('x1'), y = +line.getAttribute('y1'), ix = +line.getAttribute('x2'), iy = +line.getAttribute('y2')
       return { volume: Math.min(...points.map(p => Math.hypot(p.x-x,p.y-y))), inset: Math.min(...[inset.left,inset.right].flatMap(cx => [inset.top,inset.bottom].map(cy => Math.hypot(cx-ix,cy-iy)))) }

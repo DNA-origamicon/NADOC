@@ -14,6 +14,42 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Zoom volume entry list (2026-11-10)
+
+Zoom Volumes now owns a scrollable list of independent entries. Add captures the
+current part or assembly selection; each row can rename, replace its selected
+entities, change representation/coloring/opacity, toggle its inset and outline,
+or delete itself. Inset options retain position, size, connector lines and nearby
+structure/transparency controls. Master power/eye controls affect all entries.
+View and zoom volume rows share icons, list bounds, input styling and control layout.
+After integrating upstream `84227195`, every inset also owns its +/− camera zoom
+(1.25× steps, clamped to ±8). Zoom survives representation rebuilds and does not
+change other insets, the main camera, or selection bounds. Submodel-box events
+create/update one dedicated entry; they never retarget the entire list. Upstream
+trajectory synchronization is retained inside each entry.
+One lazy WebGL renderer serves separate entry canvases; deleting an entry aborts
+its build and removes its scene helpers and frame callback.
+Zoom definitions now persist as display-only `zoom_volumes` in parts and assemblies,
+including stable IDs, targets, inset settings and `zoom_step`. Serial compact metadata
+writes retain the newest edit across stale full-document responses. Document switching
+restores saved definitions. Keyframe selectors continue to reference stable volume IDs;
+preview/playback visibility overrides do not change the saved lens or working visibility.
+Insets live under the viewport so fullscreen presentation includes them. Editor GIF/WebM
+and photo frame sessions composite fresh inset renders after awaiting builds, using the
+same saved magnification and live trajectory geometry. This adds no authoring features.
+Persistence/export validation: 10,290 frontend tests passed, one skipped (904 files);
+85 focused backend checks passed. The backend selector chose FULL for shared models;
+that broad sweep remains deferred. Browser preview/presentation/export-composition
+and independent-entry/rapid-zoom workflows passed. Smoke: 22 passed, two skipped,
+known assembly scaffold-mesh setup timeout. Cleanup verified; `main.js` LOC delta 0.
+Evidence: `.development-artifacts/zoom-volume-persistence/validation.json`.
+
+Validation after the pull: 10,261 frontend tests passed, one skipped; 15 focused
+checks and the real-browser multi-entry workflow passed, including rendered
+magnification, limits, all four corners and independent zoom settings. Lint passed.
+Smoke repeated the two pre-pull setup/progress failures (21 passed, two skipped).
+Cleanup and compact results: `.development-artifacts/zoom-volume-pull/validation.json`.
+
 ## Explicit presentation checkpoints (2026-11-06)
 
 **Save to feature log** at the top of View Volumes records the complete volume list,

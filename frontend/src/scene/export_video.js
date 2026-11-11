@@ -1,3 +1,4 @@
+import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
 import { encodeWebM } from './encode_webm.js'
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { withMediaExport } from '../shared/media_export_activity.js'
@@ -153,6 +154,7 @@ async function capturePhotoVideo({ animation, player, photoRenderer, width, heig
  * we already had. Kept as a fallback so an older session object still works.
  */
 async function _frameToCanvas(session, w, h, scratch, ctx) {
+  await session.settleOverlays?.()
   if (typeof session.renderFrameToCanvas === 'function') {
     const src = session.renderFrameToCanvas()
     ctx.clearRect(0, 0, w, h)
@@ -229,7 +231,9 @@ async function _captureWebM({ animation, canvas, renderer, scene, camera, player
       player.seekTo(t)
       if (await player.settleFrame?.() === false) throw new Error('Animation frame is not ready for export')
       renderer.render(scene, camera)
+      await settleZoomVolumes(scene)
       _copyEditorFrame(ctx, canvas, w, h)
+      drawZoomVolumes(scene, ctx, w, h, camera)
       _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     },
   })
@@ -259,7 +263,9 @@ async function _captureGIF({ animation, canvas, renderer, scene, camera, player,
     player.seekTo(t)
     if (await player.settleFrame?.() === false) throw new Error('Trajectory ions / bounding box are not ready for export')
     renderer.render(scene, camera)
+    await settleZoomVolumes(scene)
     _copyEditorFrame(ctx, canvas, w, h)
+    drawZoomVolumes(scene, ctx, w, h, camera)
     _drawTextOverlay(ctx, player.getActiveTextOverlay?.(), w, h)
     const { data } = ctx.getImageData(0, 0, w, h)
     if (!palette || i % _PALETTE_EVERY === 0) palette = quantize(data, 256)

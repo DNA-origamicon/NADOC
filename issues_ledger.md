@@ -59,6 +59,18 @@ files carry all the state a cold session needs.
 - [x] Frontend: 10,267 passed / 1 skipped; final focused: 260 passed; direct app audit: passed; smoke: 25 passed; lint and diff checks passed.
 - Validation evidence: `.development-artifacts/wizard-numbers-20261110/`.
 
+## Zoom-list validation follow-up (2026-11-10)
+
+- Zoom-list follow-up (2026-11-10): 21 passed, two skipped, two failed.
+  The assembly scaffold-mesh timeout repeated. Close Session also failed before
+  closing, waiting for `#op-progress.visible` (8 seconds, smoke.spec.js:342).
+  No zoom entries are created by either failing smoke case. Root cause remains
+  unverified; the smoke gate is not green. Evidence:
+  `.development-artifacts/zoom-volume-entries/validation.json`.
+  The same two failures repeated after pulling `84227195`; the complete zoom
+  browser workflow passed. Follow-up: `.development-artifacts/zoom-volume-pull/validation.json`.
+
+
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
 - [ ] During inset zoom-button validation, `just smoke` passed 22 checks and
@@ -3784,3 +3796,18 @@ Evidence: `.development-artifacts/scaffold-sequence-scope-validation.json`.
   test; jitter-buffer, bounded-queue and interpolation tests. Popup Timing details
   expose remaining source/network/render stalls instead of guessing their cause.
   No native simulation settings, molecular coordinates or topology are authored.
+
+
+## Zoom volume persistence and animation output (2026-11-10)
+
+- [x] Per-entry +/- magnification was camera-local, zoom definitions disappeared
+  on document reload, and video export copied the main canvas without inset canvases.
+  Fullscreen presentation excluded overlays appended outside its viewport subtree.
+- User-requested correction: persist complete display-only inset definitions and
+  stable IDs in parts/assemblies; retain magnification through previews/playback;
+  compose ready insets into editor and photo animation frames; host DOM overlays
+  beneath the fullscreen viewport. Serialized writes protect rapid clicks against
+  stale full-document responses. Zoom remains adjustable during inset rebuilds.
+- Browser regressions verify independent lenses/limits, saved zoom, keyframe preview,
+  fullscreen hit testing and rendered export pixels. Evidence and remaining broad
+  validation debt: `.development-artifacts/zoom-volume-persistence/validation.json`.

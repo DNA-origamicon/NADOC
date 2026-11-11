@@ -3,19 +3,20 @@ import { initKeyframeControls } from './keyframe_controls.js'
 
 let controls
 function setup() {
-  document.body.innerHTML = '<div data-kf-id="b"><div><span style="flex:1"></span><button title="Delete keyframe">×</button></div><input class="body"></div>'
+  document.body.innerHTML = '<div data-kf-id="b"><div><span style="flex:1"></span><button title="Delete keyframe">×</button></div><div><select data-role="keyframe-pose"></select></div><input class="body"></div>'
   const row = document.body.firstChild
   let time = 0
   document.body.insertAdjacentHTML('beforeend', '<div id="canvas-area"><canvas></canvas></div>')
   const player = { stop: vi.fn(), play: vi.fn(async () => {}), pause: vi.fn(), seekTo: vi.fn(t => { time = t }),
     settleFrame: vi.fn(async () => true), getCurrentTime: () => time, getKeyframeRange: () => ({ start: 2, end: 4 }) }
-  const save = vi.fn(async () => {})
+  const save = vi.fn(async () => {}), capture = vi.fn(async () => {}), duplicate = vi.fn(async () => {})
   const animation = { keyframes: ['a', 'b', 'future'].map(id => ({ id, transition_duration_s: 1, hold_duration_s: 1 })) }
-  controls = initKeyframeControls({ player, getAnimation: () => animation,
+  controls = initKeyframeControls({ player, capture, duplicate, getAnimation: () => animation,
     getAnnotations: () => [{ id: 'one', name: 'Opening' }, { id: 'two', name: 'Closing' }],
+    getViewVolumes: () => [{ id: 'v', name: 'Detail' }], getZoomVolumes: () => [{ id: 'z', name: 'Inset' }],
     stopPreview: vi.fn(), save, onError: error => { throw error } })
   controls.decorate(row, animation.keyframes[1], 1, [])
-  return { row, player, save }
+  return { row, player, save, capture, duplicate }
 }
 afterEach(() => { controls?.dispose(); vi.restoreAllMocks(); document.body.replaceChildren() })
 it('collapses controls while keeping selectable title, preview and delete in the header', async () => {
@@ -76,4 +77,30 @@ it('returns the viewport to editing when a selected keyframe is dismissed by a 3
   expect(player.stop).toHaveBeenCalledOnce()
   document.querySelector('canvas').dispatchEvent(new Event('pointerdown', { bubbles: true }))
   expect(player.stop).toHaveBeenCalledOnce()
+})
+
+it.each([['view_volume_ids', 'v'], ['zoom_volume_ids', 'z']])('saves independent %s selections with the annotation controls', async (field, id) => {
+  const { row, save } = setup()
+  const picker = row.querySelector(`[data-field="${field}"]`)
+  picker.open = true; picker.dispatchEvent(new Event('toggle'))
+  picker.querySelector('input').click()
+  await vi.waitFor(() => expect(save).toHaveBeenLastCalledWith(expect.anything(), { [field]: [] }))
+  await Promise.resolve()
+  ;[...picker.querySelectorAll('button')].find(b => b.textContent === 'All').click()
+  await vi.waitFor(() => expect(save).toHaveBeenLastCalledWith(expect.anything(), { [field]: [id] }))
+})
+
+
+it('places capture above the pose and duplicate between preview and delete', async () => {
+  const { row, capture, duplicate } = setup()
+  const button = row.querySelector('[data-role="capture-keyframe"]')
+  expect(button.nextElementSibling.querySelector('[data-role="keyframe-pose"]')).toBeTruthy()
+  const copy = row.querySelector('[title="Duplicate keyframe"]')
+  expect(copy.previousElementSibling.title).toBe('Preview keyframe')
+  expect(copy.nextElementSibling.title).toBe('Delete keyframe')
+  button.click(); copy.click()
+  expect(capture).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }))
+  expect(duplicate).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }))
+  expect(button.disabled).toBe(true)
+  await Promise.resolve(); expect(button.disabled).toBe(false)
 })

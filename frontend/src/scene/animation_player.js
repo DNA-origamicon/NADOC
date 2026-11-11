@@ -328,6 +328,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       segments.push({
         kfId:                kf.id,
         annotationIds:       kf.annotation_ids ?? null,
+        viewVolumeIds: kf.view_volume_ids ?? null,
+        zoomVolumeIds: kf.zoom_volume_ids ?? null,
         featurePath: transDur > 0 && !presentationOnly ? featurePath(prevFLI, toFLI, getDesign()?.feature_log?.length ?? 0) : [toFLI, toFLI],
         fromFeatureLogIndex: prevFLI,
         toFeatureLogIndex:   toFLI,
@@ -904,7 +906,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       controls.update()
     }
 
-    presentation.show(seg.fromFeatureLogIndex, seg.toFeatureLogIndex, t, seg.annotationIds)
+    presentation.show(seg.fromFeatureLogIndex, seg.toFeatureLogIndex, t, seg.annotationIds, seg.viewVolumeIds, seg.zoomVolumeIds)
     if (_cameraOnly) return
 
     // Trajectory keyframe — geometry comes from the job's trajectory, not the design
@@ -1451,5 +1453,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep, getKeyframeRange: id => { const s = _schedule.find(s => s.kfId === id); return s ? { start: s.startT, end: s.endT } : null } }
+  return { getCapturedFeatureIndex: () => presentation.getFeatureIndex(), assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep, getKeyframeRange: id => { const s = _schedule.find(s => s.kfId === id); return s ? { start: s.startT, end: s.endT } : null } }
 }

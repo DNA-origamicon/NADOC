@@ -1,3 +1,4 @@
+import { settleZoomVolumes, drawZoomVolumes } from './zoom_volume_export.js'
 import { prepareExportGrids } from './photo_renderer/export_grid.js'
 import { renderSilhouetteHighlights } from './silhouette_highlight.js'
 /**
@@ -1216,6 +1217,7 @@ export function createPhotoMode(sceneCtx) {
         camera.clearViewOffset()
         camera.updateProjectionMatrix()
         drawSceneAnnotations(scene, finalCtx, width, height, camera)
+        drawZoomVolumes(scene, finalCtx, width, height, camera)
       } finally {
         restoreGrids()
         camera.clearViewOffset()
@@ -1242,7 +1244,7 @@ export function createPhotoMode(sceneCtx) {
       offRenderer.dispose()
     }
 
-    return { renderFrame, renderFrameToCanvas, dispose, tiles: tilesX * tilesY }
+    return { renderFrame, renderFrameToCanvas, settleOverlays: () => settleZoomVolumes(scene), dispose, tiles: tilesX * tilesY }
   }
 
   /**

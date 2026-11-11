@@ -84,16 +84,17 @@ Production promotion remains deferred where native qualification failed or plate
 
 ## Zoom Volume inset magnification (2026-11-10)
 
-The +/− pair beside the inset changes its camera magnification in 1.25× steps
+Each entry in the Zoom Volumes list has a +/− pair beside its inset that changes
+only that camera’s magnification in 1.25× steps
 (±8 steps from the automatic fit). Controls follow the inset on the side with
 more viewport room and hide with it. Magnification persists across rotation,
 playback, resizing and representation rebuilds; Clear/document changes reset it.
 The main camera and selected volume bounds are unchanged. `main.js` LOC delta: 0.
-Validation: frontend 10,256 passed / 1 skipped; inset browser regression and lint
-passed. Smoke: 22 passed / 2 skipped / 1 failed in the unrelated Square-lattice
-New Part request assertion; isolated rerun also fails (tracked in issues ledger).
-Test parts, revision stores, playback scratch, reports and bridge credentials
-were cleaned and checked after validation.
+List integration after pull `84227195`: 10,261 frontend tests passed / one skipped;
+15 focused checks and the multiple-inset browser regression passed. Lint passed.
+Smoke repeated the pre-pull assembly readiness and Close Session progress failures
+(21 passed / two skipped / two failed). Test artifacts were cleaned and checked.
+Evidence: `.development-artifacts/zoom-volume-pull/validation.json`.
 
 ## Zoom Volume trajectory synchronization (2026-11-10)
 
@@ -251,7 +252,8 @@ also passed. These establish execution, not equilibration or shell convergence.
 The four completed trial copies are now published in normal workspace jobs,
 associated with their source filenames; original evidence remains isolated.
 Submodel controls sit at the bottom of the box cards. Use as zoom volume copies
-the current inner box and rotation to the existing independent zoom inset; no
+the current inner box and rotation to a dedicated entry in the zoom-volume list;
+repeated assignments update that entry and preserve the other entries. No
 shell or molecular document edits are involved.
 Submodel controls open on Define/Edit, guidance is a button tooltip, and active
 NAMD submodels suppress the solvent-cell overlay in favor of mobile-box dimensions.

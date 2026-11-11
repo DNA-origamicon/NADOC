@@ -32,6 +32,16 @@ Frontend: 10,267 passed / 1 skipped; final focused: 260 passed; direct app audit
 Source unchanged and isolated browser/smoke artifacts removed and verified.
 Evidence: `.development-artifacts/wizard-numbers-20261110/`; main.js LOC delta: 0.
 
+## ISSUE-179 — Zoom-list validation follow-up (2026-11-10, unresolved)
+
+Smoke: 21 passed, two skipped; assembly setup timed out waiting for scaffold
+meshes, and Close Session failed waiting for its progress indicator before close.
+Neither case creates zoom entries. No root cause or fix is claimed; no timeout
+or guard changed. Details: `.development-artifacts/zoom-volume-entries/validation.json`.
+After pull `84227195`, the same two smoke failures repeated (21 passed / two skipped);
+zoom browser and frontend checks passed. Evidence: `.development-artifacts/zoom-volume-pull/validation.json`.
+
+
 ## ISSUE-180 — Square-lattice smoke failure intake (2026-11-10)
 
 Unresolved. Full smoke: 22 passed / 2 skipped / 1 failed; focused retry also
@@ -1382,3 +1392,20 @@ start-to-start polling. Reduced curve-allocation and per-subframe display setup
 work. Timings are available in the Live popup. Native visual confirmation remains
 MV-59; software validation details are retained under
 `.development-artifacts/live-jitter-validation.json`.
+
+
+## Zoom volume persistence and animation output (2026-11-10)
+
+Root causes: `zoomStep` existed only inside each camera controller; documents stored
+no inset definitions; animation encoders copied only the main render target; inset
+DOM lived outside the fullscreen subtree. Added display-only part/assembly metadata,
+serialized writes and stale-response protection, saved-lens restoration, scene-scoped
+export compositing/readiness, and viewport-owned overlays. Browser checks also found
+that disabling zoom during builds dropped rapid clicks; lens adjustments now remain
+available while meshes build. No molecular authoring or main.js logic was added.
+Validation: `.development-artifacts/zoom-volume-persistence/validation.json`.
+
+Persistence/export validation completed: 10,290 frontend tests passed / one skipped;
+85 focused backend checks and both browser workflows passed. Smoke: 22 passed,
+two skipped, existing assembly scaffold-mesh setup timeout. The earlier Close Session
+and Square-lattice checks passed this run. FULL backend sweep deferred; cleanup verified.

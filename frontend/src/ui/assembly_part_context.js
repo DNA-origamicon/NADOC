@@ -12,16 +12,19 @@ export function initAssemblyPartContext({ api, onChange, beforePatch }) {
 
   function makeContext(id) {
     const context = { id, design: null, published: false, patch: null, loading: false, pending: null }
-    context.patch = async modifier => {
-      if (current !== context || context.loading || !context.design) return
+    context.patch = async (modifier, { optimistic = true } = {}) => {
+      if (current !== context || context.loading || !context.design) return false
       const original = JSON.stringify(context.design)
       const design = JSON.parse(original)
       modifier(design)
       const content = JSON.stringify(design)
       if (content === original) return
       beforePatch?.(id)
-      publish(context, design)
-      await api.patchInstanceDesign(id, content)
+      if (optimistic) publish(context, design)
+      const result = await (optimistic ? api.patchInstanceDesign(id, content)
+        : api.patchInstanceDesign(id, content, { suppressBusy: true }))
+      if (!optimistic && (result === null || result === false)) return false
+      if (!optimistic) publish(context, design)
       if (current !== context) return
       try {
         const fresh = await api.getInstanceDesign(id)

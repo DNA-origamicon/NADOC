@@ -9,8 +9,9 @@ from backend.core.models import Annotation, CameraPose
 THUMBNAIL = "data:image/jpeg;base64,YQ=="
 
 
+@pytest.mark.parametrize("field", ["annotation_ids", "view_volume_ids", "zoom_volume_ids"])
 @pytest.mark.parametrize("host", ["design", "assembly"])
-def test_pose_thumbnail_and_keyframe_annotation_choices_round_trip(host):
+def test_pose_thumbnail_and_keyframe_annotation_choices_round_trip(host, field):
     client = TestClient(app)
     response = client.post(f"/api/{host}", json={"name": "__e2e__animation-sidebar"})
     assert response.status_code in (200, 201)
@@ -26,14 +27,14 @@ def test_pose_thumbnail_and_keyframe_annotation_choices_round_trip(host):
     response = client.post(f"/api/{host}/animations", json={"name": "Slides"})
     animation_id = response.json()[host]["animations"][-1]["id"]
     response = client.post(f"/api/{host}/animations/{animation_id}/keyframes",
-                           json={"camera_pose_id": saved_pose["id"], "annotation_ids": ["a", "b"]})
+                           json={"camera_pose_id": saved_pose["id"], field: ["a", "b"]})
     keyframe = response.json()[host]["animations"][-1]["keyframes"][-1]
-    assert keyframe["annotation_ids"] == ["a", "b"]
+    assert keyframe[field] == ["a", "b"]
     for selection in [[], ["b"], None]:
         response = client.patch(f"/api/{host}/animations/{animation_id}/keyframes/{keyframe['id']}",
-                                json={"annotation_ids": selection})
+                                json={field: selection})
         assert response.status_code == 200, response.text
-        assert response.json()[host]["animations"][-1]["keyframes"][-1]["annotation_ids"] == selection
+        assert response.json()[host]["animations"][-1]["keyframes"][-1][field] == selection
 
 
 def test_annotation_name_survives_wire_round_trip():

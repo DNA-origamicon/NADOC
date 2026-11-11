@@ -23,10 +23,11 @@ _fields = {
         cluster_join_constraints overhangs overhang_connections overhang_bindings connection_versions
         duplexes flexible_segment_marks flexible_connections protein_assets protein_attachments nanoparticles
         nanoparticle_conjugations nanoparticle_connection_versions tm_settings extensions staple_groups
-        plate_layout representation_overrides view_volumes annotations annotations_enabled visibility_state
+        plate_layout representation_overrides view_volumes zoom_volumes annotations annotations_enabled visibility_state
         photoproduct_junctions crossovers crossover_constraints forced_ligations camera_poses animations
         chain_sim_projects loadouts atomistic_reference active_loadout_id last_editable_loadout_id
         feature_log feature_log_cursor feature_log_sub_cursor""",
+    m.ZoomVolume: "id name zoom_step targets volume settings custom_position",
     m.Vec3: "x y z",
     m.Helix: """id axis_start axis_end native_residues native_source phase_offset twist_per_bp_rad
         length_bp bp_start loop_skips label lattice_frame_id grid_pos direction""",
@@ -80,7 +81,7 @@ _fields = {
         transition_duration_s easing joint_values binding_states strand_anim_phi is_trajectory trajectory_job_id
         trajectory_engine trajectory_frame_start trajectory_frame_end trajectory_scope trajectory_stride
         trajectory_show_ions trajectory_show_box spin_axis spin_rotations spin_invert text text_font_family
-        text_font_size_px text_color text_bold text_italic text_align""",
+        text_font_size_px text_color text_bold text_italic text_align view_volume_ids zoom_volume_ids""",
     m.ChainSimStage: """id engine protocol field anchors surface run_target cluster_name length_ns steps label
         seed_job_id seed_job_name seed_engine""",
     m.ChainSimProject: "id name stages",

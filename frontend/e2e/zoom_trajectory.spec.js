@@ -56,7 +56,7 @@ test('zoom follows saved and interpolated NAMD frames in the rendered viewport',
   await expect.poll(()=>page.evaluate(()=>{
     let count=0;window.__nadocTest.getAtomisticRenderer().visitAtoms(()=>count++);return count
   }),{timeout:120000}).toBeGreaterThan(100)
-  await page.locator('#zoom-volume-representation').selectOption('vdw',{force:true})
+  await page.locator('.zoom-volume-row [data-control="representation"]').selectOption('vdw',{force:true})
   await expect.poll(()=>page.evaluate(()=>window.__NADOC_ZOOM_VOLUME__.debug().ready),{timeout:60000}).toBe(true)
   const atomAudit=()=>page.evaluate(async()=>{
     const {zoomLiveAtoms}=await import('/src/scene/zoom_volume_motion.js')
@@ -83,5 +83,5 @@ test('zoom follows saved and interpolated NAMD frames in the rendered viewport',
   console.log('REVIEW_IMAGE',info.outputPath('zoom-atomistic-trajectory.png'))
   await page.waitForTimeout(20000)
   await page.evaluate(()=>window.__NADOC_ZOOM_VOLUME__.clear())
-  await expect(page.locator('#zoom-volume-inset')).toBeHidden()
+  await expect(page.locator('.zoom-volume-inset')).toBeHidden()
 })

@@ -1,3 +1,5 @@
+import { createKeyframeActions } from './keyframe_actions.js'
+import { createKeyframeDeletion } from './keyframe_deletion.js'
 import { initKeyframeControls } from './keyframe_controls.js'
 import { enhancePoseSelect } from './pose_thumbnail.js'
 import { animationPlayOptions } from './animation_play_options.js'
@@ -104,7 +106,7 @@ export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
   return [..._trajEntriesForEngine(ox, 'oxdna'), ..._trajEntriesForEngine(md, 'namd')]
 }
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null }) {
+export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null, zoomVolume = null, viewVolumes = null }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -153,12 +155,26 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     onError: error => showToast(`Could not create animation 1: ${error.message}`, { severity: 'error' }),
   })
 
+  const keyframeDeletion = createKeyframeDeletion({
+    getScope: () => JSON.stringify([_assemblyMode, _partMode, _partInstanceId,
+      (_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.id]),
+    refresh: () => _rebuildKfList(_getActiveAnim()?.keyframes ?? []),
+    stopPlayback: animationId => { if (_activeAnimId === animationId) _stopPlayback() },
+    onError: error => showToast(error.message, { severity: 'error' }),
+  })
+
   const localPresentation = initAnimationPresentation({ host: document.getElementById('tab-content-scene') ?? panelEl, viewport: document.getElementById('canvas-area'),
     player, getAnimation: _getActiveAnim, isPart: () => !_assemblyMode && !_partMode,
     stopPreview: _stopPreview, onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
 
-  const keyframeControls = initKeyframeControls({ player, getAnimation: _getActiveAnim,
+  const keyframeActions = createKeyframeActions({ api, player, scene, viewVolumes, zoomVolume, captureCurrentCamera,
+    getContext: () => ({ document: _partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'],
+      animationId: _activeAnimId, assembly: _assemblyMode, patchPart: _partMode ? _partPatchFn : null }) })
+
+  const keyframeControls = initKeyframeControls({ player, capture: keyframeActions.capture, duplicate: keyframeActions.duplicate, getAnimation: _getActiveAnim,
     getAnnotations: () => (_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.annotations ?? [],
+    getViewVolumes: () => ((_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.view_volumes ?? []).map(entry => ({ ...entry, visible: entry.enabled !== false })),
+    getZoomVolumes: () => zoomVolume?.list() ?? [],
     getPlayOptions: () => animationPlayOptions(_assemblyMode ? store.getState().currentAssembly : null, api),
     stopPreview: () => { _lastPlayedKfSig = null; localPresentation.exit(); _stopPreview() }, save: _patchKfNoRebuild,
     onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
@@ -166,9 +182,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Mode-aware helpers ────────────────────────────────────────────────────────────
 
   function _getAnimations() {
-    if (_partMode)     return _partDesign?.animations ?? []
-    if (_assemblyMode) return store.getState().currentAssembly?.animations ?? []
-    return store.getState().currentDesign?.animations ?? []
+    const source = _partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign']
+    return (source?.animations ?? []).map(keyframeDeletion.filter)
   }
 
   /** Pick the correct API function based on current mode (design/assembly only). */
@@ -352,6 +367,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Keyframe list ─────────────────────────────────────────────────────────────
 
   function _rebuildKfList(keyframes) {
+    keyframes = keyframeDeletion.filter({ id: _activeAnimId, keyframes })?.keyframes
     localPresentation.refresh()
     kfListEl.innerHTML = ''
     reportReadiness = readinessBar.setAnimation(_getActiveAnim()) || (() => {})
@@ -1269,17 +1285,17 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const delBtn = document.createElement('button')
     delBtn.textContent = '×'; delBtn.title = 'Delete keyframe'
     delBtn.className = 'btn btn--sm btn--icon btn--danger'
-    delBtn.addEventListener('click', async e => {
+    delBtn.addEventListener('click', e => {
       e.stopPropagation()
       if (!_activeAnimId) return
-      if (_partMode) {
-        await _partPatchFn(d => {
-          const a = d.animations?.find(a => a.id === _activeAnimId)
+      const animationId = _activeAnimId, patchPart = _partMode ? _partPatchFn : null
+      const deleteRemote = _api(api.deleteKeyframe, api.deleteAssemblyKeyframe)
+      void keyframeDeletion.remove({ animationId, keyframeId: kf.id, row,
+        commit: () => patchPart ? patchPart(d => {
+          const a = d.animations?.find(a => a.id === animationId)
           if (a) a.keyframes = a.keyframes?.filter(k => k.id !== kf.id)
-        })
-      } else {
-        await _api(api.deleteKeyframe, api.deleteAssemblyKeyframe)(_activeAnimId, kf.id)
-      }
+        }, { optimistic: false }) : deleteRemote(animationId, kf.id),
+      })
     })
 
     // Joints badge — shown in assembly mode when keyframe has joint_values
@@ -1774,6 +1790,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.text_overlay?.text ?? '',
         JSON.stringify(k.binding_states ?? {}),
         JSON.stringify(k.annotation_ids ?? null),
+        JSON.stringify(k.view_volume_ids ?? null), JSON.stringify(k.zoom_volume_ids ?? null),
       ].join(':'))
       .join('|')
   }
