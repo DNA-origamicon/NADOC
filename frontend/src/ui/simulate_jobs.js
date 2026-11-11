@@ -832,6 +832,15 @@ export function initSimulateJobs({
   function _renderMaster() {
     const node = _selectedNode()
     let transfer = node ? _endTransfers.get(node.job_id) : null
+    const remoteName = node?.execution_target === 'runpod' ? 'RunPod' : 'Alpine'
+    if (!transfer && node?.execution_target === 'runpod' && !nodeIsActive(node)) {
+      const ds = node.download_status
+      if (ds?.state === 'verified') transfer = { ...ds, phase: 'done', pct: 100 }
+      else if (ds?.local_verification_error || ds?.state === 'interrupted') {
+        const pct = ds.total_bytes ? Math.round((ds.verified_bytes || 0) / ds.total_bytes * 100) : 0
+        transfer = { ...ds, phase: 'unverified', pct }
+      }
+    }
     if (!transfer && node?.execution_target === 'alpine') {
       const ds = node.download_status
       if (ds?.state === 'verified') transfer = { phase: 'done', pct: 100, ...ds }
@@ -859,7 +868,7 @@ export function initSimulateJobs({
       : transfer?.phase === 'cancelling' ? 'Cancelling simulation transfer…'
       : transfer?.phase === 'downloading'
       ? (transfer.peer_id ? `Transferring simulation from ${transfer.source_peer_name || 'peer'}${peerDetail}…`
-        : `Downloading results from Alpine${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`)
+        : `Downloading results from ${remoteName}${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`)
       : transfer?.phase === 'moving'
         ? `Moving downloaded results · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total || 0)} (${transfer.pct || 0}%)`
         : transfer?.phase === 'processing'
@@ -868,7 +877,7 @@ export function initSimulateJobs({
         : transfer?.phase === 'installing' ? 'Transfer verified — installing the local simulation job…'
         : transfer?.phase === 'done' ? (transfer.peer_id
           ? 'Transfer verified complete — every simulation file matches its remote size.'
-          : 'Download verified complete — every Alpine result file matches its remote size.')
+          : `Download verified complete — every ${remoteName} result file matches its remote size.`)
         : ['failed', 'cancelled', 'interrupted'].includes(transfer?.phase) ? `Transfer ${transfer.phase}: ${transfer.error || 'unknown error'}`
           : transfer?.phase === 'unverified' || transfer?.phase === 'interrupted'
             ? `Download incomplete locally${transfer.total_bytes ? ` · ${formatBytes(transfer.verified_bytes || 0)} / ${formatBytes(transfer.total_bytes)}` : ''}`
@@ -918,17 +927,20 @@ export function initSimulateJobs({
         clusterState: getClusterState?.() ?? 'disconnected',
         runpodConnected: getRunpodConnected?.() ?? false,
       })
+      const podUnavailable = node?.execution_target === 'runpod' && node.runpod_pod_connected === false
       endDownloadBtn.style.display = show ? '' : 'none'
-      endDownloadBtn.disabled = _busy || transferLocked || !sourceConnected
+      endDownloadBtn.disabled = _busy || transferLocked || !sourceConnected || podUnavailable
       endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
         : transfer?.phase === 'queued' ? 'Waiting to download…'
         : transfer?.phase === 'processing' ? 'Processing…'
           : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
-          : transfer ? 'Retry download' : 'Terminate run and download'
+          : transfer ? 'Retry download'
+            : nodeIsActive(node) || node?.pending_scancel ? 'Terminate run and download' : 'Download results'
       endDownloadBtn.style.opacity = endDownloadBtn.disabled ? '0.5' : '1'
       endDownloadBtn.style.cursor = endDownloadBtn.disabled ? 'not-allowed' : 'pointer'
       endDownloadBtn.title = !sourceConnected
-        ? `Connect to ${node?.execution_target === 'alpine' ? 'Alpine' : 'RunPod'} to terminate and download this run.`
+        ? `Connect to ${remoteName} to ${nodeIsActive(node) || node?.pending_scancel ? 'terminate and download this run' : 'download results'}.`
+        : podUnavailable ? 'No live RunPod pod is connected to this run. Downloading requires access to its remote output.'
         : ''
     }
   }
@@ -1209,7 +1221,8 @@ export function initSimulateJobs({
         _endTransfers.set(node.job_id, { phase: 'done', pct: 100, moved: 0, total: 0 })
         _renderMaster()
       }
-      showToast('Run terminated and results downloaded.', { severity: 'ok' })
+      showToast(nodeIsActive(node) || node.pending_scancel
+        ? 'Run terminated and results downloaded.' : 'Results downloaded.', { severity: 'ok' })
       await _fetch()
     } catch (err) {
       await stopWatching()
