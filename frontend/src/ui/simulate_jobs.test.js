@@ -923,6 +923,38 @@ describe('consolidated Change directory / Delete (above the jobs card)', () => {
 })
 
 describe('Terminate run and download feedback', () => {
+  it.each(['completed', 'paused', 'stopped', 'failed'])('does not imply a %s RunPod job is running, even with a historical pod ID', async (status) => {
+    mount()
+    const { sim } = make([mdNode({ status, execution_target: 'runpod', runpod_pod_id: 'old-pod' })])
+    await sim.refresh(); sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-end-download-btn').textContent).toBe('Download results')
+  })
+
+  it('shows the completed P1 RunPod incomplete-download evidence instead of termination', async () => {
+    mount()
+    const error = 'Local results contain 13 of 19 files and 930794482 of 9895644487 bytes'
+    const { sim } = make([mdNode({ status: 'completed', execution_target: 'runpod',
+      runpod_pod_id: 'historical-pod', runpod_pod_connected: false, download_status: { state: 'downloading',
+        total_bytes: 9895644487, verified_bytes: 0, local_verification_error: error } })])
+    await sim.refresh(); sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    expect(btn.textContent).toBe('Retry download')
+    expect(btn.disabled).toBe(true)
+    expect(btn.title).toContain('No live RunPod pod')
+    expect(document.getElementById('simulate-jobs-status').textContent).toContain(error)
+  })
+
+  it('honors persisted RunPod download verification after reload', async () => {
+    mount()
+    const { sim } = make([mdNode({ status: 'completed', execution_target: 'runpod',
+      download_status: { state: 'verified' } })])
+    await sim.refresh(); sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    expect(btn.textContent).toBe('Download complete')
+    expect(btn.disabled).toBe(true)
+    expect(document.getElementById('simulate-jobs-status').textContent).toContain('every RunPod result')
+  })
+
   it.each(['alpine', 'runpod'])('uses the displayed default directory for %s without a browser preference', async (execution_target) => {
     localStorage.removeItem('nadoc.runDir')
     mount()

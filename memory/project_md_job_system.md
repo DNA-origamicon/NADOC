@@ -7,6 +7,13 @@ review_after: 2026-10-01
 
 # MD job system
 
+Remote result controls use termination wording only for active jobs or pending
+Alpine cancellation (2026-11-10). Terminal RunPod jobs show download/retry wording,
+honor persisted verification, and expose local verification failures. An explicit
+`runpod_pod_connected: false` disables the download action: historical pod IDs do
+not establish access. The finish endpoint still requires a reachable pod; this UI
+fix does not provision recovery pods or alter saved jobs.
+
 The generic “Inputs changed” job-row label was removed at user request (2026-11-10).
 Prepared-input evidence and execution guards remain intact; the list no longer
 shows this advisory for expected runtime package changes such as resource reports
