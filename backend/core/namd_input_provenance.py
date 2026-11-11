@@ -19,7 +19,7 @@ RECEIPT = 'namd_input_receipt.json'
 # Only editor bookkeeping is excluded; new model fields are included by default.
 EDITOR_FIELDS = {'id', 'feature_log', 'feature_log_cursor',
                  'feature_log_sub_cursor', 'camera_poses', 'animations',
-                 'representation_overrides', 'view_volumes', 'annotations',
+                 'representation_overrides', 'view_volumes', 'zoom_volumes', 'annotations',
                  'annotations_enabled', 'visibility_state', 'chain_sim_projects',
                  'plate_layout', 'tm_settings', 'loadouts', 'active_loadout_id',
                  'last_editable_loadout_id'}

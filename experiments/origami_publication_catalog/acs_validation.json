@@ -8,7 +8,7 @@
   "legacy_ids_preserved": 78,
   "review_decisions_checked": 23,
   "saved_structure_rows": 100,
-  "original_image_scores_and_paths_preserved": true,
+  "original_image_scores_and_previews_preserved": true,
   "D003_qualification_preserved": true,
   "integration_idempotent": true,
   "new_native_structures_authored": 0,

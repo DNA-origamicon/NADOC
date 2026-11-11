@@ -1,5 +1,10 @@
 # Welcome library performance
 
+Nested Git design repositories (2026-11-04): hidden entries such as `.git` are
+pruned at every depth before scanning. Ordinary nested design folders remain
+selectable, including an empty `Shared Designs` checkout. Setup and explicit Git
+handoff are documented in `START.md`; this does not add automatic synchronization.
+
 The welcome screen deliberately paints its file tree in stages so a large
 workspace does not delay the first useful UI.
 

@@ -141,22 +141,108 @@ are in workspace `Nanobase Imports`. Scientific audit: Archive
 not a generative-history reconstruction. Native references are post-inference checks;
 24extra reference staple bases on helices27/29 are unresolved and were not copied.
 
-### Optional relaxation after image import
+### Shared All Origami workflow (November 4, 2026)
 
-Add `--relax` to `reconstruct_image compile`, `import_d003_figure.py`, or
-`import_triangle_figure.py` to fit the reviewed/registered draft after conversion.
-For an existing reviewed draft:
+The supported entry point is `python -m tools.design_archive.shared_pipeline`.
+Only the generated `Dnnn.nadoc` is placed in
+`workspace/Shared Designs/All Origami/Dnnn/RUN/`. Source PDFs, extraction data,
+recipes and `run.json` stay in `.development-artifacts/all-origami/runs/Dnnn/RUN/`
+(or `--development-root`). Existing runs are never overwritten. The part embeds
+all executable construction inputs and source hashes; reopening/replay needs no
+sidecars. No native author reference is fetched, no Git commit/push occurs, and
+no simulation is launched.
 
+Recover D003 directly from the catalog's hash-pinned publisher PDF:
+
+```bash
+.venv/bin/python -m tools.design_archive.shared_pipeline D003 recovered-v1 \
+  --pdf experiments/origami_publication_catalog/assets/sources/tilings.pdf
 ```
-.venv/bin/python -m tools.design_archive.relax_image_import registered.cadnano.json NEW_OUTPUT_DIRECTORY
+
+D003's profile traces vector Fig.S71 and reads Table S2 (166 interior/bridge
+staples) plus Table S4 (44 unextended stacking-edge staples). The 210 table names
+map to start rows and ordered columns. Exact scaffold-complement anchors determine
+M13 register 1515 (zero-based); all bound domains must agree with the sequences.
+The 40 interpanel junctions retain the remaining 226 table bases, including the
+one `ATTTTT` gap at Bri-T1R07C2. That figure depicts two fewer helical sites than
+the other corresponding bridges; the compiler preserves the drawn endpoints and
+records the exact remaining sequence at the junction. It does not silently extend
+the helices or replace those bases with poly-T.
+
+`d003_recipe.py` composes native cell, helix-axis, strand, crossover, ligation,
+deletion and sequence commands. The 3 nm helix pitch comes from the supplement
+(page7), an explicit input beyond routing images and sequence tables. The existing
+helix editor now records v2 updates that preserve its unedited lattice, twist and
+deletions; saved v1 commands keep their original replay semantics. Both computers
+need this updated NADOC code to replay the new spacing edits. The recovered graph is never imported. Native strand sequences
+contain domain bases; explicit junction records own their inserted bases. The
+independent `d003_audit.py` checks every directed route, deletion, connection and
+full table sequence, then checks the actual oxDNA topology builder's bases and
+reciprocal backbone links. This is software/export validation, not a simulation.
+
+Case-specific selections remain explicit: source pages, crop, palette, rail
+polarity, slice layout, table naming convention and stacking-edge variant. The
+square register is inferred modulo32; global origin is arbitrary. Short scaffold
+loops retain the figure's unpaired helical sites. Rigid panel fitting does not
+relax these internal single-stranded paths: the converged fit can retain stretched
+junctions, explicitly measured in `run.json`. It is not an equilibrated simulation
+seed or an atomistic conformation validation. This is a qualified profile for this
+publication, not a general raster-image recognizer.
+
+Profiles D001/D002/D005/D006 still retain extraction evidence and stop with
+`AGENT_PROCESS_REQUIRED` before native publication. D004 remains excluded by the
+user's selection. D003's generated `*.cadnano.json` files are **image-derived
+evidence**, not author references or import roots.
+
+A reviewed native recipe can be built with:
+
+```bash
+.venv/bin/python -m tools.design_archive.shared_pipeline D003 native-v1 --recipe recipe.json
 ```
 
-The step preserves the source draft and writes `image_imported.nadoc`, a separate
-`image_relaxed.nadoc` when fitting succeeds, and `image_relaxation.json`. It refuses
-to overwrite those files. Unsupported layouts still produce the imported design
-and a report explaining the skipped fit. Relaxation preserves rigid bodies and
-routing, uses planar clash prevention, and may increase bond stretch. It does not
-validate or infer image routing, correct polarity, or run a simulation engine.
+Recipe version 1 contains `design_id`, `name`, `lattice`, `unresolved`, `sources`,
+`folded_geometry`, and ordered `operations`. Each source has a directory-relative
+`path`, exact `sha256`, and `role`; symlink escapes and mismatched hashes are refused.
+Each operation contains `kind`, `label`, native `params`, and optional `evidence`
+references. Supply actual native UUID identities for newly authored entities.
+The allowed commands are explicitly listed in `recorded_authoring.BUILDERS`:
+cell/extent creation, strand/domain drawing, explicit crossovers/ligations,
+loop/skip insertion, and sequence assignment. Params execute through the same
+native builders and feature-recording transactions used by the editor. The saved
+rows retain source hashes and selection attribution in `_generator`; those
+annotations accompany executable operations and never replace them.
+
+`folded_geometry` must contain boolean `required` and nonempty `evidence` explaining
+the decision. A required fit runs even without `--relax`. Cluster detection always
+runs; newly detected rigid memberships become recorded Make Cluster operations.
+Existing intentional memberships/poses are preserved, not silently redetected.
+Fitting uses current clash-aware Relax Origami, records explicit Move/Rotate poses,
+and retains independent all-nucleotide rigidity and interbody-clearance checks.
+The solver is not rerun during replay. An unsupported required fit blocks publication.
+Rigid-body fitting cannot model D005's distributed torsion or resolve D006's
+missing helper-row placement. Multi-nucleotide loop authoring is still unsupported.
+
+Continue a part with a complete upstream history using:
+
+```bash
+.venv/bin/python -m tools.design_archive.shared_pipeline D003 fitted-v2 \
+  --recorded-part PATH_TO_RECORDED_PART.nadoc --relax
+```
+
+The source is independently audited before it is copied or fitted. The old
+`relax_d003`, `audit_d003_rigidity`, and `relax_d003_clashes` entry points delegate
+to this guarded workflow. They no longer write structures directly. Old
+`relax_image_import` / extractor `--relax` calls explicitly refuse generated
+caDNAno snapshots and point to the native recipe workflow. Earlier benchmark/source folders were moved to
+`.development-artifacts/all-origami/previous-runs/`; `relocation.json` preserves
+the old-to-new paths and file hashes. No import-capture or diagnostic feature is substituted.
+
+Outputs are `published_for_review`, **never automatically simulation-ready**.
+Feature replay proves the recorded construction, not agreement with the publication,
+sequence chemistry, folded structure, or atomistic validity. Resolve scientific
+mapping/placement gaps before simulation preparation. Synchronization remains the
+normal Shared Designs Git workflow; that repository still needs a configured
+remote before another computer can fetch these runs.
 
 Browser caDNAno/scadnano imports from the import menu, Library, and Recent Files expose the
 same opt-in **Relax after import** checkbox. It defaults off. The upload API accepts `relax_origami: true`; its

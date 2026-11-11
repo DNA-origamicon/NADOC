@@ -22,6 +22,33 @@ def assert_verified():
     assert result["status"] == "verified", result
 
 
+def test_helix_update_preserves_lattice_and_indels_and_replays_v2():
+    from backend.api.part_structural_commands import build
+    from backend.core.part_history_proof import command_rows
+    from backend.core.models import Vec3
+    from scripts.agent_structure_guard import audit
+    from backend.api.routes_loop_skip import insert_loop_skip, LoopSkipInsertRequest
+
+    h = state.get_or_404().helices[0]
+    insert_loop_skip(LoopSkipInsertRequest(helix_id=h.id, bp_index=8, delta=-1))
+    before = state.get_or_404().find_helix(h.id)
+    body = crud.HelixRequest(axis_start=Vec3(x=0, y=3, z=0),
+        axis_end=Vec3(x=0, y=3, z=before.axis_end.z),
+        length_bp=before.length_bp, phase_offset=before.phase_offset)
+    crud.update_helix(h.id, body)
+    after = state.get_or_404().find_helix(h.id)
+    unchanged = set(type(before).model_fields) - {'axis_start', 'axis_end'}
+    assert all(getattr(before, key) == getattr(after, key) for key in unchanged)
+    commands = list(command_rows(state.get_or_404(), 2000))
+    assert commands[-1][2]['_proof_version'] == 2
+    assert audit(state.get_or_404())['status'] == 'verified'
+    # Historical v1 rows still reproduce the old replacement contract.
+    legacy = build('helix-update', state.get_or_404(), {
+        'helix_id': h.id, '_proof_version': 1, **body.model_dump(mode='json')})
+    assert legacy.find_helix(h.id).lattice_frame_id is None
+    assert legacy.find_helix(h.id).loop_skips == []
+
+
 @pytest.mark.parametrize(
     "operation",
     ["nick", "nick-batch", "strand-delete", "strand-delete-batch", "domain-delete"],

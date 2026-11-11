@@ -890,6 +890,9 @@ _SLOW_TESTS = {
     "test_hinge_with_staple_only_helix_still_routes_to_one_strand",
     "test_scaffold_fls_filter_excludes_staple_only_endpoint_fl",
     "test_build_2x6_has_the_hinge_shape",
+    # Mock field lifecycle still builds/exports a bundle, spawns stage processes,
+    # polls completion and parses trajectory frames (5.17 s in the Nov 4 fast run).
+    "test_equilibration_timeline_inconclusive_on_short_run",
     # test_headless_oxdna_build.py (real oxpy relax/field/iterate passes that slipped past)
     "test_autorefine_regional_runs_end_to_end_and_reports_pattern",
     "test_field_sweep_oracle_fires_on_gap",
@@ -1021,6 +1024,9 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    # Repeated seamless routing, extrusion edits, independent replay and undo/redo
+    # of a six-helix bundle (5.08 s). Keep the seamed parameter in the fast gate.
+    "test_resize_routed_six_helix_bundle[auto-scaffold-seamless]",
     # Default atomistic linker minimization on the smallest existing two-helix
     # fixture (49.30s/10.75s). Keep every display variant in the fast suite.
     "test_crossover_endpoint_pose_preserves_every_unselected_atom[default-build-half_b-TT]",
@@ -1078,7 +1084,7 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
-    if module in {"test_part_routing_large_history", "test_vr_frame_audit"}:
+    if module in {"test_part_routing_large_history", "test_extrusion_auto_routing_history", "test_vr_frame_audit"}:
         return "headless"
     if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"

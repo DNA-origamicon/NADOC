@@ -96,6 +96,7 @@ def test_capabilities_advertise_local_group_versions_without_global_upgrade():
     assert result["proof_version_overrides"] == {
         "cluster_create": {"supported": [1, 2, 3], "authoring": 3},
         "extension-upsert": {"supported": [1, 2], "authoring": 2},
+        "helix-update": {"supported": [1, 2], "authoring": 2},
     }
 
 

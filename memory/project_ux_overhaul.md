@@ -40,6 +40,12 @@ browser controls remain assessment-only. See `docs/expandable_panels_implementat
 
 ## Corrections from the 2026-07-31 audit (the archive is wrong about these)
 
+**Shared design folder (2026-11-04):** `scripts/setup_shared_design_workspace.py`
+initializes a separate Git repository at `workspace/Shared Designs` (honoring
+`NADOC_WORKSPACE`). It uses the existing Library folder navigation. Hidden
+directories are now pruned at every listing depth so nested `.git` data is not
+scanned or shown. Remote setup and synchronization remain explicit; see `START.md`.
+
 | Archive claim | Reality |
 |---|---|
 | Item 7 `input/drag_scrub.js` "SHIPPED", wired into 7 panels | **File does not exist.** Zero hits for `dragScrub`/`drag_scrub` anywhere in `frontend/src`; none of the 7 named panels reference it. Removed at an unknown date, unrecorded. `frontend/src/input/` holds only `shortcuts.js`. **User decision pending** (parked in `plan_audit_ledger.md` HOLD) |

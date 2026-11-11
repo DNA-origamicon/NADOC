@@ -184,8 +184,11 @@ class Process:
                 updated = self.execute_diagnostic(params)
         else:
             updated = execute(kind, before, params)
-        # Normalization is a deterministic part of every persisted boundary.
-        updated = m.Design.model_validate_json(updated.model_dump_json())
+        # Normalize the molecular/document state at every persisted boundary.
+        # The prefix history is retained below, not reconstructed from outputs.
+        # Serializing its accumulated recovery snapshots here makes a long
+        # native recipe quadratic in cache bytes without contributing evidence.
+        updated = m.Design.model_validate_json(updated.model_dump_json(exclude={'feature_log'}))
         self.design = updated.copy_with(id=before.id, recipe_root=before.recipe_root, feature_log=list(before.feature_log),
                                         feature_log_cursor=-1, feature_log_sub_cursor=None)
 

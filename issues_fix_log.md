@@ -59,7 +59,6 @@ or guard changed. Details: `.development-artifacts/zoom-volume-entries/validatio
 After pull `84227195`, the same two smoke failures repeated (21 passed / two skipped);
 zoom browser and frontend checks passed. Evidence: `.development-artifacts/zoom-volume-pull/validation.json`.
 
-
 ## ISSUE-180 — Square-lattice smoke failure intake (2026-11-10)
 
 Unresolved. Full smoke: 22 passed / 2 skipped / 1 failed; focused retry also
@@ -84,6 +83,67 @@ now use the existing unmodified-drag gesture; the base lasso uses a side view to
 avoid an axial view's overlapping glow spheres. Native ligation's merged-domain
 case has separate sequence and ownership regressions. Final checks and
 cleanup: [audit](docs/audits/extra_base_ui_20261104.json). `main.js` LOC delta: 0.
+
+## ISSUE-176 — Preserve helix properties during recorded axis edits (2026-11-04)
+
+Root cause: public helix updates and their proof builder reconstructed a new Helix
+instead of changing the four supplied fields, silently resetting routing metadata.
+Version2 copies the existing helix and changes only those fields; saved version1
+rows still replay identically. Public authoring and independent replay share the
+builder. Thirty-five native routing/history tests pass. D003's source explicitly
+requires 3 nm pitch; the standard 2.25 nm grid produced a poor panel fit.
+No phase/rise constants or optimizer formulas changed. `main.js` LOC delta: 0.
+
+## ISSUE-175 — Normalize replay state without recopying recovery caches (2026-11-04)
+
+Root cause: each command normalized the entire Design, including accumulated
+snapshot-bearing history that was immediately replaced with the existing prefix.
+The 1,592-command D003 build and original publication check reproduced the cost.
+Exclude only that redundant history serialization; preserve all command execution,
+model normalization, physical comparisons and refusal checks. The cache-independence
+regression and all 20 publication-guard tests pass. `main.js` LOC delta: 0.
+
+## ISSUE-174 — Guard shared origami reconstruction (2026-11-04)
+
+D003 follow-up: the apparent 210/166 mismatch was a missed separate 44-strand
+edge table. Exact sequence anchors recover M13 offset1515 and every bound domain;
+40 recorded bridge inserts retain all226 remaining bases, including ATTTTT.
+The source's 3 nm helix spacing is explicit beyond the image/table profile.
+Two independent builds have identical molecular authoring fields and fitted poses.
+Ordinary loading plus full replay verifies1,692 commands, and the native topology
+export preserves14,281 nucleotides and reciprocal bonds. Shared Designs contains
+only the generated part; source/recipe/reports moved outside the workspace.
+The converged four-panel fit remains approximate (max junction excess6.71 nm);
+no simulation-readiness claim. Final qualification: 95 focused checks and four
+isolated timeout/timing diagnostics pass. FAST: 20,601 passed / 19 skipped /
+seven failed; one assertion corrected, one isolated timeout passes, five known
+filesystem/CPD failures remain. FULL deferred. All 32 preview hashes verified;
+15 disposable files (119,763,751 bytes) removed. The compact report is
+`experiments/origami_publication_catalog/recovery/d003_20261104.json`.
+Earlier infrastructure-only evidence follows.
+
+
+Root cause: the early reconstruction scripts treated importer output plus prose
+sidecars as provenance and wrote structures outside the new native feature-log
+boundary. Reuse recorded editor commands and group poses; block source snapshots,
+unknown authoring adapters, unresolved selections and required unsupported fits.
+All-nucleotide rigidity/clearance checks are retained as independent evidence,
+not molecular authoring operations. No topology/polarity guesses or phase changes.
+The feature-history fix does not establish D003 sequence-to-route equivalence.
+`main.js` LOC delta: 0. Final focused validation: 11 shared-workflow tests and
+10 import/relaxation tests pass. Real first-five source extraction produces
+portable, hash-verified blocked runs with no native parts; D003 records 210
+traced staple starts versus 166 extracted staple rows. Broad FAST and timing
+triage evidence are retained in `.development-artifacts/shared-origami-validation.json`.
+
+## ISSUE-173 intake — shared workspace validation (2026-11-04)
+
+[ ] Recorded six broad FAST failures and four timing overruns separately from
+the Git design-folder change. Four failures trace to unhandled unavailable WSL
+drive enumeration; CPD display-contract and preview timeout causes need separate
+diagnosis. No unrelated production changes, test reclassification, or budget
+changes made. Five focused workspace checks and lint pass; live Library endpoint
+shows `Shared Designs` without `.git`. `main.js` LOC delta: 0.
 
 Tracks the "fix next issue" loop (backlog + protocol in `issues_ledger.md`). One row per phase shipped,
 one commit per phase. Mirrors `main_js_extraction_log.md` for the carve-up.
@@ -1398,6 +1458,39 @@ DEFERRED in `.nadoc-slow-pending`. The aggregate runtime gate fired at 485 secon
 triage found zero per-test budget violators, so no unrelated tests were reclassified
 and no limits changed. Compact evidence: `.development-artifacts/autostaple-frames-20261104/validation.json`.
 
+
+## ISSUE-179 — Smoke setup timeouts found during presentation work (2026-11-10)
+
+Open: assembly scaffold-mesh readiness (20 seconds) and an invisible New Part
+name input (30 seconds) failed in the required smoke run. 21 tests passed and
+two were skipped. Both failures precede presentation entry. Root cause is not
+established; no speculative product fix or timeout increase was made. The local
+presentation controller has independent unit and browser coverage. Compact
+results: `.development-artifacts/animation-presentation/validation.json`.
+
+Animation sidebar follow-up: smoke 22 passed, two skipped, one failure at the
+same assembly scaffold-mesh setup; New Part creation passed this time. The full
+sidebar workflow and presentation browser checks passed. Backend FAST initially
+reported 20,637 passed and 41 failed: 40 archive-schema failures were corrected
+by explicitly retaining the new view metadata, with 137 affected tests passing
+on retry; the documented CPD display-contract failure remains. Frontend: 887
+files, 10,173 tests passed, one skipped; final focused rerun 37 passed. An actual
+browser failure exposed a deferred pose update rebuilding the annotation picker
+when disabled controls lost focus; open multiselects now defer that rebuild.
+Compact evidence and cleanup audit:
+`.development-artifacts/animation-sidebar/validation.json`.
+
+Sidebar polish validation: standard buttons, NAMD-style annotation selection,
+font selectors and viewport deselection passed both live browser workflows.
+The new reselection regression exposed the debounced saved-document snapshot as
+the wrong source for live annotations; display-only subsets now project from the
+working controller. Final affected tests: 11 passed. The frontend sweep had
+10,174 passed, that one subsequently fixed regression, and one skipped. Backend
+FAST: 20,677 passed, the existing CPD display failure, 19 skipped. Runtime triage
+found no per-test violators (532-second aggregate run); no limits or test
+classifications changed. Smoke: 22 passed, two skipped, the known assembly setup
+timeout. Cleanup verified. Evidence:
+`.development-artifacts/animation-sidebar-polish/validation.json`.
 
 ### ISSUE-179 — Live oxDNA jitter (2026-11-09)
 

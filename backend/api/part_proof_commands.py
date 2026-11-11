@@ -113,6 +113,7 @@ def capabilities():
     return {**part_replay_capabilities(), **editing_capabilities(kinds), "proof_version": PROOF_VERSION,
             "proof_version_overrides": {"cluster_create": {"supported": [1, 2, GROUP_CREATE_VERSION],
                                                             "authoring": GROUP_CREATE_VERSION},
+                                        "helix-update": {"supported": [1, 2], "authoring": 2},
                                         "extension-upsert": {"supported": [1, EXTENSION_UPSERT_VERSION],
                                                              "authoring": EXTENSION_UPSERT_VERSION}},
             "proof_commands": sorted(PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS),

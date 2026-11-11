@@ -4,6 +4,8 @@ from fastapi import HTTPException
 
 from backend.core.models import Domain, Helix, Strand, StrandType
 
+HELIX_UPDATE_VERSION = 2
+
 KINDS = frozenset(
     {
         "helix-add",
@@ -38,6 +40,17 @@ def build(kind, design, params):
             length_bp=body.length_bp,
             phase_offset=body.phase_offset,
         )
+        if kind == 'helix-update' and params.get('_proof_version', HELIX_UPDATE_VERSION) >= 2:
+            original = design.find_helix(identity)
+            if original is None:
+                raise HTTPException(404, detail='Helix not found')
+            # Editing the four public fields must preserve routing coordinates,
+            # indels, twist and authored ownership. Saved v1 replacement rows
+            # retain their historical semantics above.
+            helix = original.model_copy(update={
+                'axis_start': body.axis_start, 'axis_end': body.axis_end,
+                'length_bp': body.length_bp, 'phase_offset': body.phase_offset,
+            })
         helices = (
             [*design.helices, helix]
             if kind == "helix-add"

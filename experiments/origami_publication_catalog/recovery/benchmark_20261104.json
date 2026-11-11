@@ -1,0 +1,46 @@
+{
+  "selection": "D001, D002, D003, D005, D006; D004 replaced with D006 by user",
+  "native_reference_files_used": false,
+  "structure_files_created": 0,
+  "results": [
+    {
+      "id": "D001",
+      "status": "RECOVERY_EVIDENCE_REQUIRED",
+      "extracted_sequence_rows": 212,
+      "nadoc_published": false,
+      "gap": "Raster-only map. Need validated pixel-to-track routing, crossover/endpoint discrimination at bridge intersections, deletion recognition, base register, and slice/helix placement. Named sequences alone do not specify those mappings."
+    },
+    {
+      "id": "D002",
+      "status": "RECOVERY_EVIDENCE_REQUIRED",
+      "extracted_sequence_rows": 170,
+      "nadoc_published": false,
+      "gap": "Vector drawing is split among many strokes, grid cells and endpoint marks. Need graph assembly with endpoint direction/bridge semantics, complete staple-to-route matching, and folded helix placement; sequence labels are not caDNAno endpoints."
+    },
+    {
+      "id": "D003",
+      "status": "RECOVERY_EVIDENCE_REQUIRED",
+      "extracted_sequence_rows": 166,
+      "nadoc_published": false,
+      "gap": "Same unresolved vector-graph and folded-placement stages as D002. Strong-strong bridge routes and sequences must be independently reconstructed; cannot substitute the strong-weak variant."
+    },
+    {
+      "id": "D005",
+      "status": "AGENT_PROCESS_REQUIRED",
+      "extracted_sequence_rows": 217,
+      "nadoc_published": false,
+      "gap": "Recorded loop-skip-insert only supports -1, 0, +1; figure contains a 144-nt loop. Do not replace it with +1 or distribute it across neighboring sites."
+    },
+    {
+      "id": "D006",
+      "status": "RECOVERY_EVIDENCE_REQUIRED",
+      "extracted_sequence_rows": 209,
+      "nadoc_published": false,
+      "gap": "Figure has 19 routing rows (helper 19 plus 0\u201317), but only 18 slice circles (0\u201317). Helper 19 has no published slice placement in this figure. The old recovery script used an author-file coordinate for it; that coordinate is explicitly excluded here. Need a documented representation of the unpaired scaffold carrier, not an invented lattice helix."
+    }
+  ],
+  "recipe_sha256": "979941fe6a1a6dd12283771904168d315a29ffff977552f28fe4c7b831f7e814",
+  "cluster_detection": "not run",
+  "relaxation": "not run",
+  "full_local_report": "workspace/Shared Designs/image-sequence-first5-20261104/README.md"
+}

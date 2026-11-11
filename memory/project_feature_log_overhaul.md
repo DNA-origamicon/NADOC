@@ -9,6 +9,25 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current state and navigation
 
+November4 All Origami pipeline: `tools.design_archive.shared_pipeline` now builds
+D003 from Fig.S71 plus Tables S2/S4 using 1,680 native construction commands from
+an empty root, followed by recorded detection and rigid poses for four 22-helix
+panels. All 210 staple sequences map exactly; 226 junction bases are explicit.
+Source p7 supplies 3 nm spacing beyond image/table recovery. Helix updates record
+v2 preserving unedited grid/frame/indel/twist fields; v1 replay remains unchanged.
+The agent verifier avoids copying recovery caches while retaining every command
+and final physical-state check (ISSUE-175/176). Saved/reopened replay and the
+independent figure/table/native export audit gate publication. A converged rigid
+fit is still not an equilibrated seed: unpaired scaffold loops retain their drawn
+helical sites and junction strain remains. No molecular constants changed.
+Only `.nadoc` files enter `workspace/Shared Designs/All Origami`; evidence lives
+under `.development-artifacts/all-origami/`. Earlier evidence folders were moved
+with a hash-preserving relocation index. Other first-five profiles still stop
+before unqualified native compilation. See `tools/design_archive/README.md`,
+`tests/test_shared_origami_pipeline.py` and `tests/test_d003_recovery.py`.
+The compact qualification, exact artifact hash and general-pipeline gaps are in
+`experiments/origami_publication_catalog/recovery/d003_20261104.json`.
+
 November3 master integration: ordinary replayable scadnano import now honors the
 optional rigid relaxation choice. Fitted cluster poses are applied in a private
 session through the existing recorded Make Cluster and Move/Rotate operations,
