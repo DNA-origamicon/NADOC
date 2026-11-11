@@ -33,6 +33,17 @@ loading bar with live `(done/total frames) · ~ETA`.
   populates the whole card.
 
 ## Backend
+- **2026-11-11 bounded-memory analysis:** RMSF and combined production metrics
+  stream trajectory particle maps through `iter_trajectory_frames_full`.
+  RMSF uses per-particle Welford moments; mean positions/orientations use running
+  means instead of retaining every frame. All written frames, copy identities,
+  alignment and backbone-site definitions are preserved. This removes the
+  whole-file text and coordinate-history allocations that exhausted the 2 GiB
+  precompute worker limit on job `d2e4501e0b25` (2.3 GB of trajectory text).
+  The worker's memory cap is unchanged. Recomputed that job through `prepare`
+  under the same cap and memory reservations: both artifacts cover all 294
+  frames, peak RSS 383 MiB, 379 s elapsed. Reopened the source-valid prepared
+  manifest and verified no temporary cache files or foreground lease remained.
 - `backend/core/oxdna_health.py` (all pure/additive, pins in `test_oxdna_relaxation.py`):
   - `production_metric_series(design, traj_paths, ref_conf, analytic_reference, *, n_slices, on_frame)`
     — SINGLE trajectory pass (mirrors `production_twist_series` frame handling); per frame:

@@ -477,7 +477,7 @@ def test_repeated_timeouts_release_real_ssh_channels():
                     released.clear()
                     with pytest.raises(ClusterSSHError, match="timed out"):
                         await c.run('stall', timeout=0.03)
-                    await asyncio.wait_for(released.wait(), 1)
+                    # The caller must not need a delay before its next query.
                     assert not active
                 released.clear()
                 assert (await c.run('true')).rc == 0

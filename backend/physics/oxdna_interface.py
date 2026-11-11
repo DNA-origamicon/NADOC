@@ -2357,26 +2357,51 @@ def read_trajectory_frames_full(
     maps (same shape as read_configuration_full: position nm + a1 + a3).  Frames are
     split on the ``t = …`` header lines.  ``copies=True`` keeps loop-insertion copies
     under their own 4-tuple key (see ``read_configuration_full``)."""
+    return list(iter_trajectory_frames_full(
+        traj_path, design, copies=copies, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    ))
+
+
+def iter_trajectory_frames_full(
+    traj_path: str | Path,
+    design: Design,
+    *,
+    copies: bool = False,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+):
+    """Yield full particle maps, retaining only one frame's text at a time.
+
+    Shares parsing and submodel display semantics with the full-list reader,
+    including tolerant partial-frame parsing and ignoring pre-header text.
+    """
+    from backend.physics.oxdna_submodel import display_frame
+
     order = _strand_nucleotide_order(design)
-    lines = Path(traj_path).read_text(encoding="utf-8").splitlines()
-    starts = [i for i, l in enumerate(lines) if l.startswith("t ")]
-    frames: list[dict] = []
-    for fi, s in enumerate(starts):
-        e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
-        data = [
-            l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))
-        ]
-        m = _parse_trajectory_frame_lines(
-            data,
-            order,
-            copies=copies,
-            n_trailing_extra=n_trailing_extra,
+
+    def parse(data):
+        frame = _parse_trajectory_frame_lines(
+            data, order, copies=copies, n_trailing_extra=n_trailing_extra,
             trailing_extra_strand_length=trailing_extra_strand_length,
         )
-        if m:
-            from backend.physics.oxdna_submodel import display_frame
-            frames.append(display_frame(m, traj_path))
-    return frames
+        return display_frame(frame, traj_path) if frame else None
+
+    data = None
+    with Path(traj_path).open(encoding="utf-8") as stream:
+        for line in stream:
+            if line.startswith("t "):
+                if data is not None:
+                    frame = parse(data)
+                    if frame is not None:
+                        yield frame
+                data = []
+            elif data is not None and line.strip() and not line.startswith(("b ", "E ")):
+                data.append(line)
+        if data is not None:
+            frame = parse(data)
+            if frame is not None:
+                yield frame
 
 
 def read_trajectory_frames_at(
