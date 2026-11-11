@@ -1,0 +1,18 @@
+.pose-thumbnail { position: fixed; width: 240px; max-height: 150px; object-fit: contain; z-index: 100020; pointer-events: none; background: #15151b; border: 1px solid #596777; border-radius: 5px; box-shadow: 0 4px 16px #0008; }
+.pose-options { position: fixed; z-index: 100010; max-height: 230px; overflow-y: auto; padding: 4px; background: #161b22; border: 1px solid #596777; border-radius: 4px; }
+.pose-options button { display: block; width: 100%; text-align: left; margin-bottom: var(--space-1); }
+.pose-options button[aria-selected="true"] { background: var(--color-bg-elevated); border-color: var(--color-accent); }
+.anim-keyframe.is-selected { outline: 1px solid #58a6ff; }
+.anim-keyframe.is-collapsed > :not(:first-child) { display: none !important; }
+.anim-keyframe-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; justify-content: flex-start; }
+.anim-annotation-picker { font-size: var(--text-xs); padding-left: 18px; }
+.anim-annotation-picker summary { cursor: pointer; }
+.anim-annotation-picker .choices { padding-top: 6px; }
+.anim-annotation-actions { display: flex; gap: var(--space-2); margin-bottom: 6px; }
+/* Match the canonical NAMD jobs list and renderJobRow spacing. */
+.anim-annotation-list { max-height: 160px; overflow-y: auto; scrollbar-width: thin; background: #010409; border: 1px solid #21262d; border-radius: 3px; padding: 3px; }
+.anim-annotation-list label { display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 11px; }
+.anim-annotation-list label:hover, .anim-annotation-list label:has(input:checked) { background: #2a3a4a; }
+.anim-annotation-list label:focus-within { outline: 1px solid var(--color-accent); }
+.anim-annotation-list label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anim-annotation-list input { flex-shrink: 0; accent-color: var(--color-accent); }

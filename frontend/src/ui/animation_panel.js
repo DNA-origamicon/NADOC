@@ -1,3 +1,8 @@
+import { initKeyframeControls } from './keyframe_controls.js'
+import { enhancePoseSelect } from './pose_thumbnail.js'
+import { animationPlayOptions } from './animation_play_options.js'
+import { initAnimationPresentation } from './animation_presentation.js'
+import { appendAssemblyPresentationSelect } from './assembly_presentation_keyframe.js'
 import { featureLabels } from '../features/feature_labels.js'
 /**
  * Animation panel — sidebar UI for building and playing keyframe animations.
@@ -147,6 +152,16 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     getContext: () => ({ assemblyMode: _assemblyMode, partMode: _partMode, partDesign: _partDesign, partPatchFn: _partPatchFn, partInstanceId: _partInstanceId }),
     onError: error => showToast(`Could not create animation 1: ${error.message}`, { severity: 'error' }),
   })
+
+  const localPresentation = initAnimationPresentation({ host: document.getElementById('tab-content-scene') ?? panelEl, viewport: document.getElementById('canvas-area'),
+    player, getAnimation: _getActiveAnim, isPart: () => !_assemblyMode && !_partMode,
+    stopPreview: _stopPreview, onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
+
+  const keyframeControls = initKeyframeControls({ player, getAnimation: _getActiveAnim,
+    getAnnotations: () => (_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.annotations ?? [],
+    getPlayOptions: () => animationPlayOptions(_assemblyMode ? store.getState().currentAssembly : null, api),
+    stopPreview: () => { _lastPlayedKfSig = null; localPresentation.exit(); _stopPreview() }, save: _patchKfNoRebuild,
+    onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
 
   // ── Mode-aware helpers ────────────────────────────────────────────────────────────
 
@@ -337,6 +352,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Keyframe list ─────────────────────────────────────────────────────────────
 
   function _rebuildKfList(keyframes) {
+    localPresentation.refresh()
     kfListEl.innerHTML = ''
     reportReadiness = readinessBar.setAnimation(_getActiveAnim()) || (() => {})
     trajectoryKeyframes?.retain?.(_getActiveAnim())
@@ -356,7 +372,6 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     })
   }
 
-  const _delStyle  = 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
   const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
   const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:var(--text-xs);line-height:1.4;cursor:pointer;padding:3px 4px;flex-shrink:0'
 
@@ -470,6 +485,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
    *  leaving a preview alive after the user switched animation / left the design would
    *  keep a trajectory pinned over a model it no longer belongs to. */
   function _stopPlayback() {
+    keyframeControls.cancel()
+    localPresentation.exit()
     _stopPreview()
     player.stop()
   }
@@ -1251,9 +1268,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // Delete button
     const delBtn = document.createElement('button')
     delBtn.textContent = '×'; delBtn.title = 'Delete keyframe'
-    delBtn.style.cssText = _delStyle
-    delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })
-    delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
+    delBtn.className = 'btn btn--sm btn--icon btn--danger'
     delBtn.addEventListener('click', async e => {
       e.stopPropagation()
       if (!_activeAnimId) return
@@ -1323,6 +1338,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     }
     const _isSpin = (k) => k.spin_axis != null
     poseSelect.value = kf.camera_pose_id ?? ''
+    enhancePoseSelect(poseSelect, poses)
 
     // ── Independent spin toggle + controls ─────────────────────────────────
     const spinToggleRow = document.createElement('label')
@@ -1509,6 +1525,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         await api.updateAssemblyKeyframe(_activeAnimId, kf.id, { configuration_id: raw || null })
       })
       cfgRow.appendChild(cfgSelect)
+      appendAssemblyPresentationSelect(cfgRow, { document, assembly: store.getState().currentAssembly, keyframe: kf,
+        save: index => api.updateAssemblyKeyframe(_activeAnimId, kf.id, { feature_log_index: index }) })
     } else {
       // Plain <select> over the top-level feature-log entries. Replaces the
       // earlier "pick from the Feature Log tab" flow — picking inline avoids
@@ -1644,6 +1662,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     row.append(topRow, poseRow, spinToggleRow, spinRow, cfgRow)
     if (bindingsRow) row.append(bindingsRow)
     row.append(timingRow)
+    keyframeControls.decorate(row, kf, index, poses)
     return row
   }
 
@@ -1754,6 +1773,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.trajectory_show_box ? '1' : '0',
         k.text_overlay?.text ?? '',
         JSON.stringify(k.binding_states ?? {}),
+        JSON.stringify(k.annotation_ids ?? null),
       ].join(':'))
       .join('|')
   }
@@ -1774,18 +1794,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       //   3. Any keyframe added / removed / edited since last bake (animDirty)
       // Otherwise resume from the paused position.
       if (!hasSchedule || atEnd || animDirty) {
-        let playOpts = {}
-        if (_assemblyMode) {
-          // Collect live joint values for restore-on-stop, then drive patches during playback
-          const joints = store.getState().currentAssembly?.joints ?? []
-          const liveJointValues = Object.fromEntries(joints.map(j => [j.id, j.current_value]))
-          playOpts = {
-            liveJointValues,
-            onJointUpdate: (jointId, value) => {
-              api.patchAssemblyJoint(jointId, { current_value: value, _silent: true })
-            },
-          }
-        }
+        const playOpts = animationPlayOptions(_assemblyMode ? store.getState().currentAssembly : null, api)
         _lastPlayedKfSig = sig
         // Playback takes the controllers over; a preview still holding them would fight
         // the player for every frame.
@@ -1849,6 +1858,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
+    localPresentation.onPlayerEvent(evt)
+    keyframeControls.onPlayerEvent(evt)
     // An export (from EITHER tab — this panel's Export button or the Photo tab's
     // Export Video) owns the popup for its whole run. The bake happens inside that
     // run, so its ticks belong to the export's phase bar, not to a second popup:
@@ -2010,7 +2021,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // escapes to the global number hotkeys (1–6). Defer the rebuild until focus
   // leaves the list, so the box the user is typing in stays alive and focused.
   let _pendingRebuild = false
-  const _editingInKfList = () => !!kfListEl && kfListEl.contains(document.activeElement)
+  const _annotationPickerOpen = () => !!kfListEl?.querySelector('.anim-keyframe:not(.is-collapsed) .anim-annotation-picker[open]')
+  const _editingInKfList = () => !!kfListEl && (kfListEl.contains(document.activeElement) || _annotationPickerOpen())
 
   function _rebuildSelectMaybeDefer(animations) {
     if (_editingInKfList()) { _pendingRebuild = true; return }
@@ -2020,7 +2032,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   kfListEl?.addEventListener('focusout', (e) => {
     // Ignore focus moving between inputs within the list — only act when focus
     // actually leaves the list (relatedTarget null or outside).
-    if (kfListEl.contains(e.relatedTarget)) return
+    // Checkbox saves temporarily disable their controls. Keep an open multiselect
+    // alive when that drops focus, including a deferred earlier pose update.
+    if (kfListEl.contains(e.relatedTarget) || _annotationPickerOpen()) return
     if (!_pendingRebuild) return
     _pendingRebuild = false
     _rebuildSelect(_getAnimations())

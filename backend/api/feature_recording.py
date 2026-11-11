@@ -45,7 +45,8 @@ def _run(session, before, fn, state, *, retry=True, command=None):
     from backend.api.part_annotation_commands import NUCLEOTIDE_KINDS
     preserve_topology = command is not None and (
         metadata_policy(*command) or command[0] == "extension-delete"
-        or command[0] in NUCLEOTIDE_KINDS)
+        or command[0] in NUCLEOTIDE_KINDS
+        or command[0] in {"annotations-state", "view-volumes-state"})
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):

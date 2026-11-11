@@ -1,0 +1,25 @@
+.animation-presentation-start {
+  background: #c52d35;
+  color: #fff;
+  border: 1px solid #e54a52;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.animation-presentation-start:hover:not(:disabled) { background: #e03842; }
+.animation-presentation-start:disabled { opacity: .45; cursor: default; }
+.animation-presentation-start[hidden] { display: none; }
+#canvas-area.animation-presentation-active {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 100000;
+  background: var(--color-bg, #15151b);
+}
+body.animation-presentation-mode { overflow: hidden; }
+body.animation-presentation-mode :is(#left-panel, #right-panel, #spreadsheet-panel, #sheet-edge, #menu-bar, #filter-view-strip) {
+  visibility: hidden !important;
+}
+.animation-presentation-active :is(#mode-indicator, #selection-count-hud, #extrude-legend) {
+  display: none !important;
+}

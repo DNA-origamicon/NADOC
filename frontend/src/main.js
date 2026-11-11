@@ -367,7 +367,7 @@ async function main() {
   const canvas = document.getElementById('canvas')
   const {
     scene, camera, renderer, controls,
-    switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
+    switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo, captureThumbnail,
     getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,
@@ -1094,6 +1094,7 @@ async function main() {
     controls,
     getCameraPoses:         () => store.getState().currentDesign?.camera_poses        ?? [],
     getDesign:              () => store.getState().currentDesign,
+    getPresentationDocument: () => store.getState()[store.getState().assemblyActive ? "currentAssembly" : "currentDesign"],
     getClusterTransforms:   () => store.getState().currentDesign?.cluster_transforms   ?? [],
     getHelixCtrl:           () => designRenderer.getHelixCtrl(),
     getBluntEnds:           () => bluntEnds,
@@ -5672,7 +5673,7 @@ async function main() {
 
   // ── Animation tab support panels ─────────────────────────────────────────────
   // (Assembly Configurations panel removed 2026-05-17 — now in Feature Log.)
-  _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api })
+  _partCameraPanel = initCameraPanel(store, { captureCurrentCamera, captureThumbnail, animateCameraTo, api })
 
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {

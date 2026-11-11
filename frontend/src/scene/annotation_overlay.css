@@ -24,6 +24,7 @@
   font: 600 13px/1.3 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .nadoc-anno__icon { flex: none; display: inline-flex; line-height: 0; }
+.nadoc-anno__text { min-width: 0; }
 .nadoc-anno__text:empty { display: none; }
 .nadoc-anno--rounded .nadoc-anno__box { border-radius: 16px; padding-inline: 13px; }
 .nadoc-anno--shelf .nadoc-anno__box {
@@ -41,3 +42,45 @@
 }
 .nadoc-anno--manual .nadoc-anno__grip { display: block; }
 .nadoc-anno--dragging .nadoc-anno__grip { filter: brightness(1.4); }
+
+/* Editing controls are local to the rotated box; playback and shared views hide them. */
+.nadoc-anno__handles { display: none; }
+.nadoc-anno--editing .nadoc-anno__handles { display: contents; }
+.nadoc-anno--manual .nadoc-anno__grip { display: none; }
+.nadoc-anno--editing .nadoc-anno__grip {
+  display: flex; align-items: center; justify-content: center;
+  top: 6px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%);
+  background: #161b22; color: #e6edf3; border: 1px solid #8b949e; border-radius: 3px;
+  font: 14px/1 system-ui; cursor: move;
+}
+/* Eight sharp, filled squares centered on the corners and edge midpoints. */
+.nadoc-anno__handle {
+  position: absolute; box-sizing: border-box; width: 16px; height: 16px;
+  /* Override the global 32px button minimum: these are viewport handles. */
+  padding: 0; min-width: 0; min-height: 0; border: 3px solid #0d3344;
+  border-radius: 0; background: #1b6480;
+  pointer-events: auto; touch-action: none; z-index: 2;
+}
+.nadoc-anno__handle--nw { left: -9px; top: -9px; cursor: nwse-resize; }
+.nadoc-anno__handle--n { left: calc(50% - 8px); top: -9px; cursor: ns-resize; }
+.nadoc-anno__handle--ne { right: -9px; top: -9px; cursor: nesw-resize; }
+.nadoc-anno__handle--e { right: -9px; top: calc(50% - 8px); cursor: ew-resize; }
+.nadoc-anno__handle--se { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.nadoc-anno__handle--s { left: calc(50% - 8px); bottom: -9px; cursor: ns-resize; }
+.nadoc-anno__handle--sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
+.nadoc-anno__handle--w { left: -9px; top: calc(50% - 8px); cursor: ew-resize; }
+.nadoc-anno__handle--rotate {
+  width: 32px; height: 32px; border: 0; border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 40%, 40% 100%, 0 100%);
+  background: transparent; color: #1b6480; cursor: grab;
+  filter: drop-shadow(0 0 2px #0d1117);
+}
+.nadoc-anno__handle--rotate svg { display: block; width: 100%; height: 100%; }
+.nadoc-anno__handle--rotate-nw { top: -24px; left: -24px; }
+.nadoc-anno__handle--rotate-ne { top: -24px; right: -24px; transform: scaleX(-1); }
+.nadoc-anno__handle--rotate-se { bottom: -24px; right: -24px; transform: scale(-1); }
+.nadoc-anno__handle--rotate-sw { bottom: -24px; left: -24px; transform: scaleY(-1); }
+.nadoc-anno--interactive .nadoc-anno__box { pointer-events: auto; cursor: pointer; }
+.anno-card.is-selected { outline: 2px solid #58a6ff; outline-offset: -2px; }
+.nadoc-anno__handle:focus-visible { outline: 2px solid #58a6ff; }
+.nadoc-anno--editing .nadoc-anno__box { pointer-events: auto; touch-action: none; cursor: move; }

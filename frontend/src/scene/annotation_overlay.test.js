@@ -14,7 +14,7 @@ const sizeDescriptors = {}
 beforeEach(() => {
   for (const [prop, value] of [['offsetWidth', 120], ['offsetHeight', 40]]) {
     sizeDescriptors[prop] = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop)
-    Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get() { return this.classList?.contains('nadoc-anno') ? value : 0 } })
+    Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get() { return this.classList?.contains('nadoc-anno__box') ? value : 0 } })
   }
   container = document.createElement('div')
   document.body.append(container)
@@ -227,10 +227,11 @@ describe('annotation overlay', () => {
   })
 
   it('applies size and transparency to the callout without reviving target shading', () => {
-    const a = controller.add({ text: 'hi', refs: [{ kind: 'strand', id: 's1' }], size: 2, transparency: 0.5 })
+    const a = controller.add({ text: 'hi', refs: [{ kind: 'strand', id: 's1' }], size: 2, fontFamily: 'Georgia', transparency: 0.5 })
     overlay.update()
     expect(callout(a.id).style.opacity).toBe('0.5')
     expect(callout(a.id).querySelector('.nadoc-anno__box').style.fontSize).toBe('26px')
+    expect(callout(a.id).querySelector('.nadoc-anno__box').style.fontFamily).toBe('Georgia')
     expect(highlight(a.id).material.opacity).toBe(0)
   })
 
@@ -302,4 +303,15 @@ describe('annotation overlay', () => {
     expect(container.querySelector('.nadoc-anno-layer')).toBeNull()
     overlay = initAnnotationOverlay({ container, scene, controller, getCamera: () => camera, getViewport: () => VIEW })
   })
+})
+
+it('numeric rotation keeps a manually positioned box centered', () => {
+  const a = controller.add({ text: 'Caption', manual: true, screenPos: { x: .4, y: .4 } })
+  overlay.update()
+  const before = { ...overlay.getRecord(a.id).rect }
+  controller.update(a.id, { rotationDeg: 90 })
+  overlay.update()
+  const after = overlay.getRecord(a.id).rect
+  expect(after.x + after.w / 2).toBeCloseTo(before.x + before.w / 2, 0)
+  expect(after.y + after.h / 2).toBeCloseTo(before.y + before.h / 2, 0)
 })

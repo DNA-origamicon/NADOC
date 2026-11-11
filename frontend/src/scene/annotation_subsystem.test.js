@@ -60,14 +60,15 @@ describe('annotation subsystem: annotations are saved with the design', () => {
     expect(store.getState().currentDesign.annotations).toEqual([])
     expect(api.saveAnnotations).not.toHaveBeenCalled()
   })
-  it('no active assembly hides the overlay and tab', () => {
+  it('no active assembly hides the overlay and tab; returning waits for the model frame', async () => {
     sub.controller.add({ text: 'x' })
     store.setState({ assemblyActive: true })
     expect(container.querySelector('.nadoc-anno-layer').hidden).toBe(true)
     expect(pane.querySelector('.anno-unavailable').hidden).toBe(false)
     expect(sub.controller.list()).toEqual([])
     store.setState({ assemblyActive: false })
-    expect(container.querySelector('.nadoc-anno-layer').hidden).toBe(false)
+    expect(container.querySelector('.nadoc-anno-layer').hidden).toBe(true)
+    await vi.waitFor(() => { sub.overlay.update(); expect(container.querySelector('.nadoc-anno-layer').hidden).toBe(false) })
   })
 })
 

@@ -1,3 +1,6 @@
+import { createAnnotationSelection } from './annotation_selection.js'
+import { createAnnotationPresentationController } from './annotation_presentation_controller.js'
+import { createAnnotationLoadGate } from './annotation_load_gate.js'
 /**
  * Annotation subsystem: controller + 3D/DOM overlay + sidebar tab, plus the
  * document bindings (saved in the active .nadoc or .nass). One factory so main.js carries a single init line.
@@ -53,12 +56,16 @@ export function initAnnotations({
   }
   controller = createAnnotationController({ commit, ...(legacyStorage ? { legacyStorage } : {}) })
 
+  const selection = createAnnotationSelection({ document, container, pane, controller })
+
   const assemblyTargets = createAssemblyAnnotationTargets({ store, getRenderer: getAssemblyRenderer })
   const external = createExternalTargets({
     getDesign: () => store.getState().currentDesign, getProteinRenderer, getNanoparticleSubsystem,
   })
+  const displayController = createAnnotationPresentationController({ controller, getDocument: () => host().doc })
+  const loadGate = createAnnotationLoadGate({ store, document, getAssemblyRenderer })
   const overlay = initAnnotationOverlay({
-    document, container, scene, getCamera, controller,
+    document, container, scene, getCamera, selection, controller: displayController, isReady: loadGate.isReady,
     getEntries: () => host().assembly ? [] : getEntries(),
     resolveTargetEntries: refs => host().assembly ? assemblyTargets.resolve(refs) : null,
     getDesign: () => host().doc, resolveBasePosition,
@@ -74,12 +81,20 @@ export function initAnnotations({
     resolveExternal: external.resolve, getOccluders: () => host().assembly ? assemblyTargets.occluders() : external.listAll(),
     addFrameCallback, removeFrameCallback,
   })
-  const panel = initAnnotationPanel({ document, root: pane, controller, store, getDesign: () => host().doc })
+  const panel = initAnnotationPanel({ document, root: pane, controller, selection, store, getDesign: () => host().doc, saveCheckpoint: async () => {
+    if (displayController.isPreviewing()) throw new Error("Stop playback before saving an annotation state")
+    const target = host()
+    await controller.flush()
+    await saveQueue
+    if (host().id !== target.id) throw new Error("The active document changed")
+    if (controller.hasPendingEdits()) throw new Error("Annotations are still saving; try again")
+    return api.savePresentationCheckpoint("annotations-state", { assembly: target.assembly, documentId: target.doc.id })
+  } })
 
   let lastId = null
   const bind = () => {
     const current = host()
-    if (lastId !== current.id) { assemblyTargets.clear(); lastId = current.id }
+    if (lastId !== current.id) { selection.select(null); assemblyTargets.clear(); lastId = current.id }
     controller.syncFromDesign(current.doc ? { ...current.doc, id: current.id } : null)
     overlay.setEnabled(!!current.doc)
     panel.setAvailable(!!current.doc)
@@ -89,6 +104,6 @@ export function initAnnotations({
 
   return {
     controller, overlay, panel,
-    dispose() { unsubscribe(); panel.dispose(); overlay.dispose(); controller.dispose() },
+    dispose() { unsubscribe(); selection.dispose(); loadGate.dispose(); panel.dispose(); overlay.dispose(); displayController.dispose(); controller.dispose() },
   }
 }

@@ -207,8 +207,8 @@ def set_assembly(a: Assembly) -> None:
             _trim_to(s.history, _undo_cap_for(s.assembly))
         s.redo.clear()
         if s.assembly is not None and s.assembly.id == a.id:
-            a.annotations = s.assembly.annotations
-            a.annotations_enabled = s.assembly.annotations_enabled
+            from backend.core.presentation_checkpoints import restore_history_channels
+            a = a.model_copy(update=restore_history_channels(s.assembly, a))
         s.assembly = a
         s.revision += 1
 
@@ -244,8 +244,8 @@ def undo() -> Assembly:
         _trim_to(s.redo, _undo_cap_for(s.assembly))
         previous = s.assembly
         s.assembly = s.history.pop()
-        s.assembly.annotations = previous.annotations
-        s.assembly.annotations_enabled = previous.annotations_enabled
+        from backend.core.presentation_checkpoints import restore_history_channels
+        s.assembly = s.assembly.model_copy(update=restore_history_channels(previous, s.assembly))
         s.revision += 1
         return s.assembly
 
@@ -263,8 +263,8 @@ def redo() -> Assembly:
         _trim_to(s.history, _undo_cap_for(s.assembly))
         previous = s.assembly
         s.assembly = s.redo.pop()
-        s.assembly.annotations = previous.annotations
-        s.assembly.annotations_enabled = previous.annotations_enabled
+        from backend.core.presentation_checkpoints import restore_history_channels
+        s.assembly = s.assembly.model_copy(update=restore_history_channels(previous, s.assembly))
         s.revision += 1
         return s.assembly
 
@@ -336,7 +336,7 @@ def snapshot() -> None:
         s.redo.clear()
 
 
-def set_assembly_silent(a: Assembly) -> None:
+def set_assembly_silent(a: Assembly, *, preserve_annotations=True) -> None:
     """Update the active assembly without pushing to the undo stack.
 
     Use for intermediate steps in a multi-step operation where snapshot()
@@ -344,9 +344,9 @@ def set_assembly_silent(a: Assembly) -> None:
     """
     with _lock:
         s = _session()
-        if s.assembly is not None and s.assembly.id == a.id:
-            a.annotations = s.assembly.annotations
-            a.annotations_enabled = s.assembly.annotations_enabled
+        if preserve_annotations and s.assembly is not None and s.assembly.id == a.id:
+            from backend.core.presentation_checkpoints import restore_history_channels
+            a = a.model_copy(update=restore_history_channels(s.assembly, a))
         s.assembly = a
         s.revision += 1
 

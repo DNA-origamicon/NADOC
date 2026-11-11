@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 
@@ -42,6 +42,7 @@ class CreateCameraPoseBody(BaseModel):
     up: List[float]  # [x, y, z]
     fov: float = 55.0
     orbit_mode: str = "trackball"
+    thumbnail: Optional[str] = Field(None, max_length=150000, pattern=r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$")
 
 
 class PatchCameraPoseBody(BaseModel):
@@ -51,6 +52,7 @@ class PatchCameraPoseBody(BaseModel):
     up: Optional[List[float]] = None
     fov: Optional[float] = None
     orbit_mode: Optional[str] = None
+    thumbnail: Optional[str] = Field(None, max_length=150000, pattern=r"^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$")
 
 
 class ReorderCameraPosesBody(BaseModel):
@@ -70,6 +72,7 @@ def create_camera_pose(body: CreateCameraPoseBody) -> dict:
         up=body.up,
         fov=body.fov,
         orbit_mode=body.orbit_mode,
+        thumbnail=body.thumbnail,
     )
     updated = design.model_copy(
         update={"camera_poses": list(design.camera_poses) + [pose]}, deep=True

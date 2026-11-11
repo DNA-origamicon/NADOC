@@ -35,7 +35,8 @@ loadouts have independent source/branch and portable revision verification.
 Legacy missing history and protected simulation branches remain fail-closed.
 See [the contract](../docs/document_operation_provenance.md) and
 [user scope](feedback_document_operation_provenance.md). The filter now toggles
-fine routing and document ops; annotations/visuals and animation remain deferred.
+fine routing and document ops. November 6 adds explicit annotation/view-volume
+checkpoints and their default-off filter; ordinary presentation autosaves remain outside history.
 
 November2 scrubber representation fix: design-change notifications stop all
 simulation panels. Idle CanDo/SNUPI controllers now leave the shared renderer

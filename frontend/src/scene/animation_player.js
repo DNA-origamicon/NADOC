@@ -1,3 +1,4 @@
+import { createPresentationAnimation } from './presentation_checkpoint_animation.js'
 import { sweepAnimationReveal, revealSweepSurface } from './sweep_animation_reveal.js'
 import { createFeatureAtomisticDisplay } from './feature_atomistic_display.js'
 import { createFeatureAnimationDisplay, featureTopologySignature } from './feature_animation_display.js'
@@ -56,7 +57,10 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate, onPlaybackFrame, getNanoparticleRenderer }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate, onPlaybackFrame, getNanoparticleRenderer, getPresentationDocument = getDesign }) {
+  const presentation = createPresentationAnimation({ getDocument: getPresentationDocument })
+  let presentationOnly = false
+  let holdKeyframeText = false
   const featureDisplay = createFeatureAnimationDisplay({ getDesignRenderer, getUnfoldView, getNanoparticleRenderer })
   const featureAtoms = createFeatureAtomisticDisplay(getAtomisticRenderer)
   let _raf          = null
@@ -132,7 +136,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         translation: [...c.translation],
         rotation:    [...c.rotation],
       })),
-      featureLogIndex: getDesign()?.feature_log_cursor ?? -1,
+      featureLogIndex: getPresentationDocument()?.feature_log_cursor ?? -1,
       // jointValues from live assembly state, if provided via liveJointValues
       jointValues: _liveJointValues ? { ..._liveJointValues } : null,
     }
@@ -232,13 +236,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const poses = getCameraPoses()
     const pose  = kf.camera_pose_id ? poses.find(p => p.id === kf.camera_pose_id) : null
 
-    const clusterTransforms = (kf.feature_log_index != null)
+    const clusterTransforms = (!presentationOnly && kf.feature_log_index != null)
       ? _clusterStateAtIndex(kf.feature_log_index, getDesign())
       : null
     // Phase 4: also snapshot sub-domain (theta, phi) state at this index.
     // Per-frame slerp is deferred to Phase 6; seek/restore applies the
     // full state at each keyframe boundary.
-    const subDomainState = (kf.feature_log_index != null)
+    const subDomainState = (!presentationOnly && kf.feature_log_index != null)
       ? _subDomainStateAtIndex(kf.feature_log_index, getDesign())
       : null
 
@@ -323,7 +327,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
       segments.push({
         kfId:                kf.id,
-        featurePath: transDur > 0 ? featurePath(prevFLI, toFLI, getDesign()?.feature_log?.length ?? 0) : [toFLI, toFLI],
+        annotationIds:       kf.annotation_ids ?? null,
+        featurePath: transDur > 0 && !presentationOnly ? featurePath(prevFLI, toFLI, getDesign()?.feature_log?.length ?? 0) : [toFLI, toFLI],
         fromFeatureLogIndex: prevFLI,
         toFeatureLogIndex:   toFLI,
         startT:              cursor,
@@ -426,7 +431,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _bakeAbort = abort
     const signal = abort.signal
     try {
-      const positions = _cameraOnly ? [] : featureBakePositions(
+      const positions = _cameraOnly || presentationOnly ? [] : featureBakePositions(
         animation, liveFeatureLogIndex, getDesign()?.feature_log?.length ?? 0)
 
       const atomisticActive = getAtomisticRenderer?.()?.getMode?.() !== 'off'
@@ -825,6 +830,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       if (elapsed <= s.endT) { seg = s; break }
     }
     if (!seg.text) return null
+    if (holdKeyframeText) return { ...seg.text, opacity: 1 }
     const segDur = Math.max(0, seg.endT - seg.startT)
     if (segDur <= 0) return null
     const inSeg = Math.max(0, Math.min(elapsed - seg.startT, segDur))
@@ -898,6 +904,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       controls.update()
     }
 
+    presentation.show(seg.fromFeatureLogIndex, seg.toFeatureLogIndex, t, seg.annotationIds)
     if (_cameraOnly) return
 
     // Trajectory keyframe — geometry comes from the job's trajectory, not the design
@@ -1131,7 +1138,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _applyAt(atBound ? (_direction === 1 ? _totalDur : 0) : elapsed)
     _pendingTime = { epoch: loopEpoch, time: Math.max(0, Math.min(elapsed, _totalDur)) }
     try {
-      await trajectoryKeyframes?.settle?.()
+      await settleFrame()
       if (_playing && _animation === animation && loopEpoch === _loopEpoch) {
         await onPlaybackFrame?.({ time: Math.max(0, Math.min(elapsed, _totalDur)), duration: _totalDur, text: _textOverlayAt(Math.max(0, Math.min(elapsed, _totalDur))), isCurrent: () => loopEpoch === _loopEpoch })
       }
@@ -1199,11 +1206,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _liveJointValues = opts.liveJointValues ?? null
 
     _animation = animation
-    _hasBuildStates = animation.keyframes.some(kf => kf.feature_log_index != null)
+    holdKeyframeText = !!opts.holdKeyframeText
+    presentationOnly = getPresentationDocument !== getDesign && getPresentationDocument() !== getDesign()
+    presentation.start()
+    _hasBuildStates = !presentationOnly && animation.keyframes.some(kf => kf.feature_log_index != null)
     const sourceDesign = getDesign()
     // Camera-only animations orbit the live visualization without taking geometry ownership.
     _cameraOnly = animation.keyframes.every(kf =>
-      kf.feature_log_index == null && !kf.trajectory_job_id &&
+      (presentationOnly || kf.feature_log_index == null) && !kf.trajectory_job_id &&
       !Object.keys(kf.joint_values ?? {}).length &&
       !Object.keys(kf.binding_states ?? {}).length &&
       !Object.keys(kf.strand_anim_phi ?? {}).length)
@@ -1311,6 +1321,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _restoreBaseClusters()
     _restoreBaseGeometry()
     featureDisplay.clear()
+    presentation.clear()
     getSurfaceRenderer?.()?.getMesh?.()?.geometry.setDrawRange(0, Infinity)
     featureAtoms.clear()
     // Restore overhang link arcs to full visibility — playback may have
@@ -1333,6 +1344,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _playing         = false
     _direction       = 1
     _animation       = null
+    holdKeyframeText  = false
     _schedule        = []
     _totalDur        = 0
     _seekOffset      = 0
@@ -1403,7 +1415,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     onEvent?.({ type: 'tick', currentTime: _seekOffset, totalDuration: _totalDur })
     if (!wasPlaying && onPlaybackFrame) {
       const epoch = _loopEpoch, time = _seekOffset
-      Promise.resolve(trajectoryKeyframes?.settle?.()).then(() => {
+      settleFrame().then(() => {
         if (epoch === _loopEpoch) return onPlaybackFrame({ time, duration: _totalDur, text: _textOverlayAt(time), seek: true, isCurrent: () => epoch === _loopEpoch })
       }).catch(error => onEvent?.({ type: 'baking_error', message: error.message }))
     }
@@ -1425,7 +1437,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     ))
   }
   function getTotalDuration() { return _totalDur }
-  function settleFrame() { return trajectoryKeyframes?.settle?.() ?? Promise.resolve(true) }
+  function settleFrame() { return Promise.all([trajectoryKeyframes?.settle?.(), presentation.settle()]).then(results => results.every(value => value !== false)) }
 
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
@@ -1439,5 +1451,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
+  return { assertExportSampling: fps => assertFeatureSampling(_schedule, fps), play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep, getKeyframeRange: id => { const s = _schedule.find(s => s.kfId === id); return s ? { start: s.startT, end: s.endT } : null } }
 }

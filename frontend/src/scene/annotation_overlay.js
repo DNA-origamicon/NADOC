@@ -13,11 +13,14 @@ import { createGlowLayer } from './glow_layer.js'
 import { drawAnnotationCallouts } from './annotation_canvas.js'
 import './annotation_overlay.css'
 import { annotationIsRenderable } from './annotation_model.js'
+import { rotatedAnnotationLeader, rotatedBoxSize } from './annotation_box_math.js'
+import { wireAnnotationBoxHandles } from './annotation_box_handles.js'
+import { fitAnnotationFont } from './annotation_font_fit.js'
 import { isExternalRef } from './annotation_external.js'
 import { buildOccupancy } from './annotation_occupancy.js'
 import { annotationIconMarkup } from './annotation_icons.js'
 import { anchorFromPoints, matchTargetEntries, unresolvedBaseKeys } from './annotation_targets.js'
-import { layoutCallouts, leaderPoints } from './annotation_layout.js'
+import { layoutCallouts } from './annotation_layout.js'
 
 const sharedOverlays = new WeakMap()
 const exportOverlays = new WeakMap()
@@ -34,7 +37,6 @@ export function captureSceneAnnotations(scene) {
 export function syncSceneAnnotations(scene) { exportOverlays.get(scene)?.update() }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
-const BASE_FONT_PX = 13
 const BASE_ICON_PX = 18
 const HIGHLIGHT_RENDER_ORDER = 1200
 const HALO_SCALE = 3.2          // sprite diameter as a multiple of the sphere radius
@@ -60,15 +62,16 @@ function glowTexture(document) {
 }
 
 export function initAnnotationOverlay({
-  document = globalThis.document, container, scene, getCamera, controller,
+  document = globalThis.document, container, scene, getCamera, controller, selection = null,
   getEntries = () => [], getDesign = () => null, resolveBasePosition = () => null,
   resolveSilhouette = (_refs, matched) => matched,
   resolveExternal = () => null, getOccluders = () => [],
   addFrameCallback = null, removeFrameCallback = null, getViewport = null,
-  readOnly = false, resolveSharedPoints = null, resolveTargetEntries = null,
+  readOnly = false, resolveSharedPoints = null, resolveTargetEntries = null, isReady = () => true,
 }) {
   const root = document.createElement('div')
   root.className = 'nadoc-anno-layer'
+  root.hidden = true
   root.setAttribute('aria-hidden', 'true')
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('class', 'nadoc-anno-leaders')
@@ -77,6 +80,7 @@ export function initAnnotationOverlay({
 
   const group = new THREE.Group()
   group.name = 'Annotation highlights'
+  group.visible = false
   group.userData.setupOnly = true
   scene.add(group)
   const texture = readOnly ? null : glowTexture(document)
@@ -100,7 +104,9 @@ export function initAnnotationOverlay({
     text.className = 'nadoc-anno__text'
     const grip = document.createElement('div')
     grip.className = 'nadoc-anno__grip'
-    grip.title = 'Drag to place this callout'
+    grip.title = 'Move annotation'
+    grip.textContent = '+'
+    grip.setAttribute('aria-label', 'Move annotation')
     box.append(icon, text)
     if (!readOnly) box.append(grip)
     el.append(box)
@@ -119,39 +125,9 @@ export function initAnnotationOverlay({
       src: null, srcLen: -1, design: null, matched: [], extra: [], externalRefs: [], halos: [], glow: null, points: null, pointCount: 0,
       shown: false, styleSig: '', tx: NaN, ty: NaN, hasAnchor: false,
     }
-    if (!readOnly) wireDrag(rec)
+    if (!readOnly) rec.disposeHandles = wireAnnotationBoxHandles({ rec, root, controller, viewport })
     records.set(entry.id, rec)
     return rec
-  }
-
-  function wireDrag(rec) {
-    const { grip, el } = rec
-    grip.addEventListener('pointerdown', event => {
-      if (event.button != null && event.button !== 0) return
-      event.preventDefault()
-      event.stopPropagation()
-      const base = root.getBoundingClientRect()
-      const rect = rec.rect ?? { x: 0, y: 0 }
-      rec.drag = { dx: event.clientX - base.left - rect.x, dy: event.clientY - base.top - rect.y }
-      grip.setPointerCapture?.(event.pointerId)
-      el.classList.add('nadoc-anno--dragging')
-    })
-    grip.addEventListener('pointermove', event => {
-      if (!rec.drag) return
-      const base = root.getBoundingClientRect()
-      const { width, height } = viewport()
-      const x = event.clientX - base.left - rec.drag.dx
-      const y = event.clientY - base.top - rec.drag.dy
-      controller.update(rec.id, { screenPos: { x: x / width, y: y / height } })
-    })
-    const end = event => {
-      if (!rec.drag) return
-      rec.drag = null
-      grip.releasePointerCapture?.(event.pointerId)
-      el.classList.remove('nadoc-anno--dragging')
-    }
-    grip.addEventListener('pointerup', end)
-    grip.addEventListener('pointercancel', end)
   }
 
   function disposeHalos(rec) {
@@ -174,6 +150,7 @@ export function initAnnotationOverlay({
 
   function destroyRecord(rec) {
     disposeHighlight(rec)
+    rec.disposeHandles?.()
     rec.el.remove()
     rec.g.remove()
     records.delete(rec.id)
@@ -181,16 +158,17 @@ export function initAnnotationOverlay({
 
   /** Text/icon/colour/size; re-measures because box size feeds the layout. */
   function syncStyle(rec, entry) {
-    const sig = JSON.stringify([entry.text, entry.icon, entry.calloutType, entry.color, entry.size, entry.manual, entry.transparency])
+    const sig = JSON.stringify([entry.text, entry.icon, entry.calloutType, entry.color, entry.size, entry.fontFamily, entry.boxSize, entry.rotationDeg, entry.manual, entry.transparency])
     if (sig === rec.styleSig) return
     rec.styleSig = sig
     const { el, box, icon, text } = rec
     el.className = `nadoc-anno nadoc-anno--${entry.calloutType}${entry.manual ? ' nadoc-anno--manual' : ''}${rec.drag ? ' nadoc-anno--dragging' : ''}`
     el.style.setProperty('--anno-color', entry.color)
     el.style.opacity = String(1 - entry.transparency)
-    box.style.fontSize = `${(BASE_FONT_PX * entry.size).toFixed(1)}px`
+    rec.fontFitSignature = null
+    box.style.fontFamily = entry.fontFamily ?? 'system-ui'
     text.textContent = entry.text
-    icon.innerHTML = annotationIconMarkup(entry.icon, Math.round(BASE_ICON_PX * entry.size))
+    icon.innerHTML = annotationIconMarkup(entry.icon, BASE_ICON_PX)
     icon.hidden = !entry.icon
     rec.line.setAttribute('stroke', entry.color)
     rec.dot.setAttribute('stroke', entry.color)
@@ -342,8 +320,8 @@ export function initAnnotationOverlay({
 
   /** Per-frame: resolve anchors, project, lay out, draw. */
   function update(exportView = null, exportCamera = null) {
-    // Two independent switches: part mode, and the user's global annotations toggle.
-    const on = enabled && controller.isEnabled()
+    // Document availability, the user's visibility toggle, and model readiness.
+    const on = enabled && controller.isEnabled() && isReady()
     if (on !== shown) { shown = on; root.hidden = !on; group.visible = on }
     if (!on) return
     const camera = exportCamera ?? getCamera?.()
@@ -360,6 +338,9 @@ export function initAnnotationOverlay({
     for (const entry of list) {
       const rec = records.get(entry.id)
       if (!rec || !annotationIsRenderable(entry)) continue
+      rec.el.classList.toggle('nadoc-anno--editing', !readOnly && entry.manual && (!selection || selection.get() === entry.id) && !controller.isPreviewing?.())
+      rec.el.classList.toggle('nadoc-anno--interactive', !readOnly && !controller.isPreviewing?.())
+      fitAnnotationFont(rec, entry, { width, height })
       const liveTargets = resolveTargetEntries?.(entry.refs)
       const stale = (liveTargets != null && liveTargets !== rec.matched) || rec.dirty || !sameTargetDesign(rec.design, design) || (rec.src !== src && (src.length || rec.srcLen))
       if (stale && !resolveSharedPoints) rebuildTarget(rec, entry, src, design)
@@ -388,7 +369,7 @@ export function initAnnotationOverlay({
       if (tx !== rec.tx || ty !== rec.ty) { rec.el.style.transform = `translate(${tx}px, ${ty}px)`; rec.tx = tx; rec.ty = ty }
       rec.g.style.display = anchor ? '' : 'none'
       if (anchor) {
-        const pts = leaderPoints(entry.calloutType, rect, anchor)
+        const pts = rotatedAnnotationLeader(entry.calloutType, rect, rec.boxSize, entry.rotationDeg ?? 0, anchor)
         rec.line.setAttribute('points', pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '))
         rec.dot.setAttribute('cx', anchor.x.toFixed(1))
         rec.dot.setAttribute('cy', anchor.y.toFixed(1))
@@ -400,8 +381,16 @@ export function initAnnotationOverlay({
     if (event.type === 'update' && event.patch) {
       const rec = records.get(event.id)
       if ('refs' in event.patch && rec) rec.dirty = true
+      if ('rotationDeg' in event.patch && !event.patch.screenPos && rec?.rect && rec.entry.manual) {
+        const { width, height } = viewport()
+        const next = rotatedBoxSize(rec.boxSize.w, rec.boxSize.h, controller.get(event.id).rotationDeg)
+        controller.update(event.id, { screenPos: {
+          x: (rec.rect.x + (rec.rect.w - next.w) / 2) / width,
+          y: (rec.rect.y + (rec.rect.h - next.h) / 2) / height,
+        } })
+      }
       // Switching to manual pins the box where it currently sits.
-      if (event.patch.manual === true && rec) {
+      if (event.patch.manual === true && !event.patch.screenPos && rec) {
         const { width, height } = viewport()
         const at = rec.rect ?? { x: 16, y: 16 }
         controller.update(event.id, { screenPos: { x: at.x / width, y: at.y / height } })
@@ -410,12 +399,12 @@ export function initAnnotationOverlay({
   })
   function captureShared() {
     update()
-    if (!enabled || !controller.isEnabled()) return []
+    if (!shown) return []
     return controller.list().filter(annotationIsRenderable).map(entry => {
       const rec = records.get(entry.id)
       return { id: entry.id, text: entry.text, icon: entry.icon, calloutType: entry.calloutType,
-        color: entry.color, size: entry.size, transparency: entry.transparency,
-        manual: entry.manual, screenPos: entry.screenPos,
+        color: entry.color, size: entry.size, fontFamily: entry.fontFamily, transparency: entry.transparency,
+        manual: entry.manual, screenPos: entry.screenPos, boxSize: entry.boxSize, rotationDeg: entry.rotationDeg,
         targets: [rec?.points, rec?.glow?.getMesh(), ...(rec?.halos ?? [])].filter(o => o?.visible).map(o => o.uuid) }
     })
   }
@@ -425,7 +414,7 @@ export function initAnnotationOverlay({
     const previousRects = new Map([...records].map(([id, rec]) => [id, rec.rect]))
     try {
       update({ width: width / scale, height: height / scale }, camera)
-      if (!enabled || !controller.isEnabled()) return
+      if (!shown) return
       drawAnnotationCallouts(ctx, [...records.values()].filter(rec => annotationIsRenderable(rec.entry)), scale)
     } finally {
       // Export layout must not become the next frame's preferred live layout.
@@ -441,7 +430,7 @@ export function initAnnotationOverlay({
     exportOverlays.set(scene, { draw: drawExport, update })
   }
   const unregisterSilhouette = readOnly ? () => {} : registerSilhouetteHighlights(scene, (renderer, camera, pixelScale) => {
-    if (!enabled || !controller.isEnabled()) return
+    if (!shown) return
     for (const rec of records.values()) {
       const entry = rec.entry
       if (!annotationIsRenderable(entry) || !entry.highlight || entry.highlightType !== 'silhouette') continue
@@ -455,7 +444,7 @@ export function initAnnotationOverlay({
     update, captureShared,
     setEnabled(next) {
       enabled = !!next
-      const on = enabled && controller.isEnabled()
+      const on = enabled && controller.isEnabled() && isReady()
       shown = on
       root.hidden = !on
       group.visible = on

@@ -14,6 +14,16 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Explicit presentation checkpoints (2026-11-06)
+
+**Save to feature log** at the top of View Volumes records the complete volume list,
+including bounds, rotation, representation, coloring, opacity, enablement and outline
+visibility. Ordinary edits retain their existing autosave behavior. Parts and assemblies
+use `view-volumes-state`; the **Annotations and view volumes** history filter defaults
+off. Seeking and animation pins restore the latest saved volume configuration, empty
+before its first checkpoint. Playback overrides are transient and restore on stop.
+The matching annotation action records its own channel independently.
+
 ## Multi-view / multi-overlay crash (2026-11-09)
 
 Reproduced on existing `workspace/duplex.nadoc`: recursive scene cloning left

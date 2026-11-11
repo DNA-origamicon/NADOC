@@ -1,7 +1,7 @@
 import { createSharedAnnotationOccupancy } from './shared_annotation_occupancy.js'
 import * as THREE from 'three'
 import { initAnnotationOverlay } from '../scene/annotation_overlay.js'
-import { CALLOUT_TYPES, MAX_TEXT_LENGTH, SIZE_RANGE, TRANSPARENCY_RANGE } from '../scene/annotation_model.js'
+import { ANNOTATION_FONTS, CALLOUT_TYPES, MAX_TEXT_LENGTH, SIZE_RANGE, TRANSPARENCY_RANGE } from '../scene/annotation_model.js'
 import { isAnnotationIcon } from '../scene/annotation_icons.js'
 
 export function validateSharedAnnotations(entries, root) {
@@ -11,7 +11,7 @@ export function validateSharedAnnotations(entries, root) {
   const nodes = new Map(), ids = new Set()
   const visit = node => { nodes.set(node.uuid, node); node.children.forEach(visit) }
   visit(root)
-  const fields = new Set(['id', 'text', 'icon', 'calloutType', 'color', 'size', 'transparency', 'manual', 'screenPos', 'targets'])
+  const fields = new Set(['id', 'text', 'icon', 'calloutType', 'color', 'size', 'fontFamily', 'boxSize', 'rotationDeg', 'transparency', 'manual', 'screenPos', 'targets'])
   for (const e of entries) {
     if (!e || typeof e !== 'object' || Object.keys(e).some(k => !fields.has(k)) ||
         typeof e.id !== 'string' || !e.id.length || e.id.length > 256 || ids.has(e.id) ||
@@ -19,6 +19,9 @@ export function validateSharedAnnotations(entries, root) {
         (e.icon !== null && !isAnnotationIcon(e.icon)) || !CALLOUT_TYPES.some(t => t.key === e.calloutType) ||
         typeof e.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(e.color) ||
         !Number.isFinite(e.size) || e.size < SIZE_RANGE.min || e.size > SIZE_RANGE.max ||
+        (e.boxSize != null && (!Number.isFinite(e.boxSize.w) || e.boxSize.w < 32 || e.boxSize.w > 10000 || !Number.isFinite(e.boxSize.h) || e.boxSize.h < 24 || e.boxSize.h > 10000)) ||
+        (e.rotationDeg != null && (!Number.isFinite(e.rotationDeg) || e.rotationDeg < -180 || e.rotationDeg > 180)) ||
+        (e.fontFamily != null && !ANNOTATION_FONTS.includes(e.fontFamily)) ||
         !Number.isFinite(e.transparency) || e.transparency < TRANSPARENCY_RANGE.min || e.transparency > TRANSPARENCY_RANGE.max ||
         typeof e.manual !== 'boolean' || (e.screenPos !== null && (!e.screenPos || !['x', 'y'].every(k => Number.isFinite(e.screenPos[k]) && e.screenPos[k] >= 0 && e.screenPos[k] <= 1))) ||
         !Array.isArray(e.targets) || e.targets.length > 4096 || e.targets.some(id => !['Points', 'Sprite', 'InstancedMesh'].includes(nodes.get(id)?.type))) fail()

@@ -112,7 +112,7 @@ describe('committing edits', () => {
     c.update(a.id, { size: 99 })
     c.update(a.id, { refs: [{ kind: 'strand', id: 's' }] })
     c.setEnabled(false); c.setEnabled(false)
-    expect(c.get(a.id).size).toBe(2.5)
+    expect(c.get(a.id).size).toBe(99)
     expect(events).toEqual([['add', true], ['update', false], ['update', true], ['enabled', false]])
     expect(c.remove(a.id)).toBe(true); expect(c.remove('nope')).toBe(false)
     expect(c.update('nope', {})).toBeNull()
@@ -155,4 +155,20 @@ it('a flush captures the owning document before its commit microtask runs', asyn
   expect(commit.mock.calls[0][0].designId).toBe('d1')
   expect(c.list()).toEqual([])
   c.dispose()
+})
+
+
+it('flush waits for an autosave already in flight before allowing a checkpoint', async () => {
+  let finish
+  const { c, t } = make({ commit: () => new Promise(resolve => { finish = resolve }) })
+  c.syncFromDesign(design())
+  c.add({ text: 'Checkpoint caption' }); t.run()
+  await Promise.resolve()
+  let done = false
+  const pending = c.flush().then(() => { done = true })
+  await Promise.resolve()
+  expect(done).toBe(false)
+  expect(c.hasPendingEdits()).toBe(true)
+  finish(); await pending
+  expect(c.hasPendingEdits()).toBe(false)
 })

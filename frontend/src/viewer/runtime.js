@@ -1,3 +1,4 @@
+import { capturePoseThumbnail } from './pose_thumbnail_capture.js'
 /**
  * Three.js scene bootstrap.
  *
@@ -324,6 +325,7 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     dispose,
     scene, camera, renderer, controls,
     switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
+    captureThumbnail: () => capturePoseThumbnail(canvas, _renderFn),
     getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,

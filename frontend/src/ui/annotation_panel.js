@@ -5,9 +5,11 @@
  * list; value edits update in place so typing never loses focus.
  */
 import './annotation_panel.css'
+import { createAnnotationBoxControls } from './annotation_box_controls.js'
+import { createPresentationCheckpointButton } from './presentation_checkpoint_button.js'
 import { ANNOTATION_ICONS, annotationIconMarkup } from '../scene/annotation_icons.js'
 import {
-  CALLOUT_TYPES, GLOW_INTENSITY_RANGE, SIZE_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
+  ANNOTATION_FONTS, CALLOUT_TYPES, GLOW_INTENSITY_RANGE, TRANSPARENCY_RANGE, annotationHasContent, MAX_TEXT_LENGTH,
 } from '../scene/annotation_model.js'
 import { assemblyAnnotationSelection } from '../scene/assembly_annotation_refs.js'
 import { describeTarget } from '../scene/annotation_targets.js'
@@ -28,7 +30,7 @@ function h(document, tag, className, props = {}) {
   return node
 }
 
-export function initAnnotationPanel({ document = globalThis.document, root, controller, store, getDesign = () => null }) {
+export function initAnnotationPanel({ document = globalThis.document, root, controller, selection = null, store, getDesign = () => null, saveCheckpoint }) {
   if (!root) return null
   root.replaceChildren()
   const panel = h(document, 'div', 'anno-panel')
@@ -49,10 +51,12 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   const unavailable = h(document, 'p', 'anno-note anno-unavailable', {
     text: 'Open a part or assembly to add annotations.', hidden: true,
   })
-  panel.append(head, enableRow, disabledNote, hint, list, unavailable)
+  const checkpoint = createPresentationCheckpointButton({ document, save: saveCheckpoint, available: () => !!getDesign() && !!saveCheckpoint && (getDesign().feature_log_cursor ?? -1) === -1 })
+  panel.append(head, checkpoint.root, enableRow, disabledNote, hint, list, unavailable)
   root.append(panel)
 
   const cards = new Map()
+  const collapsed = new Set()
   let popover = null
   let available = true
 
@@ -87,6 +91,7 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     closePopover()
     const current = controller.get(entryId)?.icon ?? null
     const node = h(document, 'div', 'anno-icon-pop', { role: 'dialog', 'aria-label': 'Choose icon' })
+    node.dataset.annotationId = entryId
     const choose = key => { controller.update(entryId, { icon: key }); refreshIconButton(entryId); closePopover() }
     for (const item of ANNOTATION_ICONS) {
       const b = h(document, 'button', item.key === current ? 'is-selected' : '', { type: 'button', title: item.label, 'aria-label': item.label })
@@ -174,7 +179,25 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     const topRow = h(document, 'div', 'anno-row')
     const actions = h(document, 'div', 'anno-actions')
     actions.append(eye, del)
-    topRow.append(h(document, 'span', 'anno-count', { text: 'Text' }), actions)
+    const collapse = h(document, 'button', 'anno-collapse btn btn--sm btn--icon', { type: 'button', title: 'Collapse annotation' })
+    const name = h(document, 'input', 'anno-name', { value: entry.name, maxLength: 120, 'aria-label': 'Annotation name' })
+    name.dataset.field = 'name'
+    name.addEventListener('change', () => {
+      const updated = controller.update(id, { name: name.value })
+      name.value = updated.name
+    })
+    name.addEventListener('keydown', event => { event.stopPropagation(); if (event.key === 'Enter') name.blur() })
+    const syncCollapsed = () => {
+      card.classList.toggle('is-collapsed', collapsed.has(id))
+      collapse.textContent = collapsed.has(id) ? '▸' : '▾'
+      collapse.setAttribute('aria-expanded', String(!collapsed.has(id)))
+    }
+    collapse.addEventListener('click', () => {
+      collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id)
+      closePopover(); syncCollapsed()
+    })
+    syncCollapsed()
+    topRow.append(collapse, name, actions)
 
     const iconBtn = h(document, 'button', 'anno-icon-btn', { type: 'button', title: 'Choose an icon' })
     iconBtn.dataset.field = 'icon'
@@ -225,17 +248,46 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
 
     const transparency = rangeRow('Transparency', TRANSPARENCY_RANGE, entry.transparency,
       v => `${Math.round(v * 100)}%`, v => controller.update(id, { transparency: v }), 'transparency')
-    const size = rangeRow('Size', SIZE_RANGE, entry.size, v => `${v.toFixed(2)}×`, v => controller.update(id, { size: v }), 'size')
+    const size = h(document, 'div', 'anno-row')
+    size.append(h(document, 'label', '', { text: 'Font size' }))
+    const sizeInput = h(document, 'input', '', { type: 'number', step: 'any', min: '0', 'aria-label': 'Font size', title: 'Font size in pixels. Oversized text scales to fit the view.' })
+    const sizeSelect = h(document, 'select', '', { 'aria-label': 'Font size presets', title: 'Choose a font size' })
+    sizeInput.dataset.field = 'size'
+    const currentSize = Math.min(Number.MAX_VALUE, 13 * entry.size)
+    sizeInput.value = String(currentSize)
+    sizeSelect.append(h(document, 'option', '', { value: '', text: '▾' }))
+    for (const px of [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 48, 64, 96])
+      sizeSelect.append(h(document, 'option', '', { value: String(px), text: `${px} px` }))
+    const commitSize = () => {
+      const value = Number(sizeInput.value), scale = value / 13
+      if (!Number.isFinite(scale) || scale <= 0) {
+        sizeInput.setCustomValidity('Enter a positive, finite font size.'); sizeInput.reportValidity(); return
+      }
+      sizeInput.setCustomValidity(''); controller.update(id, { size: scale })
+    }
+    sizeInput.addEventListener('input', () => sizeInput.setCustomValidity(''))
+    sizeInput.addEventListener('change', commitSize)
+    sizeInput.addEventListener('keydown', event => { event.stopPropagation(); if (event.key === 'Enter') { commitSize(); sizeInput.blur() } })
+    sizeSelect.addEventListener('change', () => { if (sizeSelect.value) { sizeInput.value = sizeSelect.value; commitSize(); sizeSelect.value = '' } })
+    const sizeControls = h(document, 'div', 'anno-font-size-control')
+    sizeControls.append(sizeInput, sizeSelect); size.append(sizeControls)
+    const font = h(document, 'label', 'anno-row', { text: 'Font style' })
+    const fontSelect = h(document, 'select', '', { 'aria-label': 'Font style' })
+    fontSelect.dataset.field = 'fontFamily'
+    for (const family of ANNOTATION_FONTS)
+      fontSelect.append(h(document, 'option', '', { value: family, text: family === 'system-ui' ? 'System sans-serif' : family, selected: family === entry.fontFamily }))
+    fontSelect.addEventListener('change', () => controller.update(id, { fontFamily: fontSelect.value }))
+    font.append(fontSelect)
 
     const manual = h(document, 'input', '', { type: 'checkbox', checked: entry.manual })
     manual.dataset.field = 'manual'
-    const manualLabel = h(document, 'label', '', { text: 'Manual position' })
+    const manualLabel = h(document, 'label', '', { text: 'Edit box in view' })
     manualLabel.style.cssText = 'display:flex;align-items:center;gap:6px;min-width:0;color:inherit'
     manualLabel.prepend(manual)
-    const manualHint = h(document, 'span', 'anno-note', { text: entry.manual ? 'Drag the ◢ corner in the viewport.' : 'Follows the target.' })
+    const manualHint = h(document, 'span', 'anno-note', { text: entry.manual ? 'Drag + to move, edge handles to resize, or ⟳ to rotate.' : 'Follows the target.' })
     manual.addEventListener('change', () => {
       controller.update(id, { manual: manual.checked })
-      manualHint.textContent = manual.checked ? 'Drag the ◢ corner in the viewport.' : 'Follows the target.'
+      manualHint.textContent = manual.checked ? 'Drag + to move, edge handles to resize, or ⟳ to rotate.' : 'Follows the target.'
     })
     const manualRow = h(document, 'div', 'anno-row')
     manualRow.append(manualLabel)
@@ -257,8 +309,9 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
 
     const warn = h(document, 'p', 'anno-warn', { text: 'Add text or pick an icon — the callout won’t appear until you do.' })
 
-    card.append(topRow, text, iconRow, typeRow, colorRow, highlightRow, highlightTypeRow, glowColorRow, glowIntensity, transparency, size, manualRow, manualHint, targetRow, target, warn)
-    cards.set(id, { card, iconBtn, warn, target, clear, use, text })
+    const boxControls = createAnnotationBoxControls({ document, controller, id })
+    card.append(topRow, text, size, font, boxControls.root, iconRow, typeRow, colorRow, highlightRow, highlightTypeRow, glowColorRow, glowIntensity, transparency, manualRow, manualHint, targetRow, target, warn)
+    cards.set(id, { card, iconBtn, warn, target, clear, use, text, boxControls })
     refreshIconButton(id)
     refreshTarget(id)
     return card
@@ -274,11 +327,13 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   function renderList({ focusId = null } = {}) {
     closePopover()
     const scroll = list.scrollTop
+    for (const card of cards.values()) card.boxControls.dispose()
     cards.clear()
     const entries = controller.list()
     list.replaceChildren()
     if (!entries.length) list.append(h(document, 'div', 'anno-empty', { text: 'No annotations yet.' }))
     for (const entry of entries) list.append(buildCard(entry))
+    selection?.select(selection.get())
     count.textContent = entries.length ? `${entries.length}` : ''
     syncEnabled()
     list.scrollTop = scroll
@@ -313,6 +368,8 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
   return {
     setAvailable(next) {
       available = !!next
+      checkpoint.root.hidden = !available
+      checkpoint.refresh()
       list.hidden = head.hidden = hint.hidden = enableRow.hidden = !available
       unavailable.hidden = available
       syncEnabled()
@@ -320,6 +377,6 @@ export function initAnnotationPanel({ document = globalThis.document, root, cont
     },
     isAvailable: () => available,
     refresh: renderList,
-    dispose() { closePopover(); off(); unsubscribeStore?.(); root.replaceChildren() },
+    dispose() { for (const card of cards.values()) card.boxControls.dispose(); closePopover(); off(); unsubscribeStore?.(); root.replaceChildren() },
   }
 }

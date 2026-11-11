@@ -1,4 +1,5 @@
 """Audited versioned part replay contracts, separate from recovery dispatch."""
+from backend.core.presentation_checkpoints import KINDS as PRESENTATION_KINDS
 from backend.api.part_photoproduct_commands import KINDS as PHOTOPRODUCT_KINDS
 from backend.api.part_refinement_commands import KINDS as REFINEMENT_KINDS
 from backend.api.part_linker_commands import KINDS as LINKER_KINDS
@@ -44,7 +45,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
 PROOF_SNAPSHOT_KINDS = (
-    GROUP_ORGANIZATION_KINDS | NP_CONNECTION_KINDS | CADNANO_KINDS | SCADNANO_KINDS | DNA_PDB_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
+    PRESENTATION_KINDS | GROUP_ORGANIZATION_KINDS | NP_CONNECTION_KINDS | CADNANO_KINDS | SCADNANO_KINDS | DNA_PDB_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
     | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
@@ -121,6 +122,13 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind in PRESENTATION_KINDS:
+        from backend.core.presentation_checkpoints import values
+        try:
+            values(kind, params)
+        except (ValueError, TypeError, AttributeError):
+            return Dependencies(known=False)
+        return Dependencies(writes=frozenset({Resource("presentation", kind)}))
     from backend.core.part_suppression import KIND, valid_definition
     if kind == KIND:
         return Dependencies(known=valid_definition(params, dependencies))
@@ -421,6 +429,9 @@ def _execute_candidate(kind, design, params, *, expensive):
     from backend.core.part_suppression import KIND
     if kind == KIND:
         return design
+    if kind in PRESENTATION_KINDS:
+        from backend.core.presentation_checkpoints import apply
+        return apply(design, kind, params)
     from backend.core.positional_refs import resolve as resolve_positions
     params = resolve_positions(kind, params, design)
     if design.group_organization is not None:
