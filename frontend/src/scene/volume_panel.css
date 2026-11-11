@@ -1,0 +1,14 @@
+.volume-entry { display:grid; gap:6px; border:1px solid #30363d; border-radius:4px; padding:6px; background:#0d1117; }
+.volume-entry-top { display:flex; gap:5px; align-items:center; margin-bottom:5px; }
+.volume-entry-top input { min-width:0; flex:1; }
+.volume-entry input:not([type="range"]):not([type="checkbox"]), .volume-entry select {
+  min-width:0; background:#161b22; color:#c9d1d9; border:1px solid #30363d; border-radius:3px; padding:3px;
+}
+.volume-entry-top button { flex-shrink:0; display:grid; place-items:center; }
+.volume-entry-top button[aria-pressed="false"] { opacity:.4; }
+.volume-entry-controls { display:grid; grid-template-columns:minmax(0,1fr) 74px; gap:5px; }
+.volume-entry-controls input { min-width:0; width:100%; }
+.volume-entry-list { max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+.volume-panel-heading { display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+.volume-panel-actions { display:inline-flex; gap:4px; }
+.volume-panel-actions button { width:28px; height:26px; display:grid; place-items:center; }

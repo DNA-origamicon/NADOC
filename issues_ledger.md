@@ -30,6 +30,18 @@ files carry all the state a cold session needs.
 
 ---
 
+## Zoom-list validation follow-up (2026-11-10)
+
+- Zoom-list follow-up (2026-11-10): 21 passed, two skipped, two failed.
+  The assembly scaffold-mesh timeout repeated. Close Session also failed before
+  closing, waiting for `#op-progress.visible` (8 seconds, smoke.spec.js:342).
+  No zoom entries are created by either failing smoke case. Root cause remains
+  unverified; the smoke gate is not green. Evidence:
+  `.development-artifacts/zoom-volume-entries/validation.json`.
+  The same two failures repeated after pulling `84227195`; the complete zoom
+  browser workflow passed. Follow-up: `.development-artifacts/zoom-volume-pull/validation.json`.
+
+
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
 - [ ] During inset zoom-button validation, `just smoke` passed 22 checks and

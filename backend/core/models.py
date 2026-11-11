@@ -2306,6 +2306,8 @@ class AnimationKeyframe(BaseModel):
     name: str = ""
     camera_pose_id: Optional[str] = None
     annotation_ids: Optional[List[str]] = None  # None keeps legacy visibility; [] hides all
+    view_volume_ids: Optional[List[str]] = None
+    zoom_volume_ids: Optional[List[str]] = None
     configuration_id: Optional[str] = (
         None  # assembly configuration snapshot id; None = no assembly state change
     )

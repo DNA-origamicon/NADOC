@@ -12,6 +12,15 @@ metadata:
 
 # Annotations (right sidebar → "Annotations")
 
+November 10 keyframe volume options: keyframes share one expandable picker for
+Annotations, View Volumes, and Zoom Volumes, with scrollable checkboxes and All/None.
+Nullable `view_volume_ids` / `zoom_volume_ids` persist on part and assembly keyframes;
+null retains working/checkpoint visibility, [] hides the channel. Preview/playback
+applies display-only subsets and stop clears overrides. View volumes retain their
+authored representation/coloring/outline settings. Zoom entries remain session-local;
+saved IDs do not recreate insets after reopening. UUIDs prevent stale keyframes from
+selecting unrelated new insets. `main.js` only passes the zoom manager (LOC delta 0).
+
 November 10 sidebar polish: numeric pixel-size and font-family dropdowns sit
 directly beneath the callout text (the legacy `size` multiplier is retained on
 wire; the UI shows `13 * size` pixels). `font_family` defaults to `system-ui`;

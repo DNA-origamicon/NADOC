@@ -104,7 +104,7 @@ export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
   return [..._trajEntriesForEngine(ox, 'oxdna'), ..._trajEntriesForEngine(md, 'namd')]
 }
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null }) {
+export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null, zoomVolume = null }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -159,6 +159,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   const keyframeControls = initKeyframeControls({ player, getAnimation: _getActiveAnim,
     getAnnotations: () => (_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.annotations ?? [],
+    getViewVolumes: () => ((_partMode ? _partDesign : store.getState()[_assemblyMode ? 'currentAssembly' : 'currentDesign'])?.view_volumes ?? []).map(entry => ({ ...entry, visible: entry.enabled !== false })),
+    getZoomVolumes: () => zoomVolume?.list() ?? [],
     getPlayOptions: () => animationPlayOptions(_assemblyMode ? store.getState().currentAssembly : null, api),
     stopPreview: () => { _lastPlayedKfSig = null; localPresentation.exit(); _stopPreview() }, save: _patchKfNoRebuild,
     onError: error => onPlayerEvent({ type: 'baking_error', message: error.message }) })
@@ -1774,6 +1776,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.text_overlay?.text ?? '',
         JSON.stringify(k.binding_states ?? {}),
         JSON.stringify(k.annotation_ids ?? null),
+        JSON.stringify(k.view_volume_ids ?? null), JSON.stringify(k.zoom_volume_ids ?? null),
       ].join(':'))
       .join('|')
   }

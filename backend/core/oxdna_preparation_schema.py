@@ -80,7 +80,7 @@ _fields = {
         transition_duration_s easing joint_values binding_states strand_anim_phi is_trajectory trajectory_job_id
         trajectory_engine trajectory_frame_start trajectory_frame_end trajectory_scope trajectory_stride
         trajectory_show_ions trajectory_show_box spin_axis spin_rotations spin_invert text text_font_family
-        text_font_size_px text_color text_bold text_italic text_align""",
+        text_font_size_px text_color text_bold text_italic text_align view_volume_ids zoom_volume_ids""",
     m.ChainSimStage: """id engine protocol field anchors surface run_target cluster_name length_ns steps label
         seed_job_id seed_job_name seed_engine""",
     m.ChainSimProject: "id name stages",

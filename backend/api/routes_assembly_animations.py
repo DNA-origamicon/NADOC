@@ -53,6 +53,8 @@ class PatchAssemblyAnimationBody(BaseModel):
 
 class CreateAssemblyKeyframeBody(BaseModel):
     annotation_ids: Optional[list[str]] = None
+    view_volume_ids: Optional[list[str]] = None
+    zoom_volume_ids: Optional[list[str]] = None
     name: str = ""
     camera_pose_id: Optional[str] = None
     configuration_id: Optional[str] = None
@@ -74,6 +76,8 @@ class CreateAssemblyKeyframeBody(BaseModel):
 
 class PatchAssemblyKeyframeBody(BaseModel):
     annotation_ids: Optional[list[str]] = None
+    view_volume_ids: Optional[list[str]] = None
+    zoom_volume_ids: Optional[list[str]] = None
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
     configuration_id: Optional[str] = None
@@ -162,6 +166,8 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
 
     kf = AnimationKeyframe(
         annotation_ids=body.annotation_ids,
+        view_volume_ids=body.view_volume_ids,
+        zoom_volume_ids=body.zoom_volume_ids,
         name=body.name,
         camera_pose_id=body.camera_pose_id,
         configuration_id=body.configuration_id,

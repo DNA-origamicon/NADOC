@@ -60,3 +60,18 @@ it('keyframe annotation subsets override working visibility without changing the
   player.clear(); expect(emit).toHaveBeenLastCalledWith(null)
   expect(source).toEqual(original)
 })
+
+it('overrides volume subsets independently and emits changes between zoom-only frames', () => {
+  const source = { id: 'd', view_volumes: [{ id: 'v', enabled: false, representation: 'beads' }] }
+  const original = structuredClone(source), emit = vi.fn()
+  const player = createPresentationAnimation({ getDocument: () => source, emit })
+  player.start(); player.show(-1, -1, 1, null, ['v'], ['z'])
+  expect(emit.mock.lastCall[0]).toMatchObject({ state: { view_volumes: [{ id: 'v', enabled: true }] }, zoomVolumeIds: ['z'] })
+  player.show(-1, -1, 1, null, ['v'], [])
+  expect(emit).toHaveBeenCalledTimes(2)
+  expect(emit.mock.lastCall[0].zoomVolumeIds).toEqual([])
+  player.show(-1, -1, 1, null, [], null)
+  expect(emit.mock.lastCall[0].state.view_volumes).toEqual([])
+  player.clear(); expect(emit).toHaveBeenLastCalledWith(null)
+  expect(source).toEqual(original)
+})

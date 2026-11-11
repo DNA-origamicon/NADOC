@@ -1,5 +1,15 @@
 # Issues fix log
 
+## ISSUE-179 — Zoom-list validation follow-up (2026-11-10, unresolved)
+
+Smoke: 21 passed, two skipped; assembly setup timed out waiting for scaffold
+meshes, and Close Session failed waiting for its progress indicator before close.
+Neither case creates zoom entries. No root cause or fix is claimed; no timeout
+or guard changed. Details: `.development-artifacts/zoom-volume-entries/validation.json`.
+After pull `84227195`, the same two smoke failures repeated (21 passed / two skipped);
+zoom browser and frontend checks passed. Evidence: `.development-artifacts/zoom-volume-pull/validation.json`.
+
+
 ## ISSUE-180 — Square-lattice smoke failure intake (2026-11-10)
 
 Unresolved. Full smoke: 22 passed / 2 skipped / 1 failed; focused retry also

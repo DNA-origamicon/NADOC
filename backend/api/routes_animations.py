@@ -53,6 +53,8 @@ class PatchAnimationBody(BaseModel):
 
 class CreateKeyframeBody(BaseModel):
     annotation_ids: Optional[List[str]] = None
+    view_volume_ids: Optional[List[str]] = None
+    zoom_volume_ids: Optional[List[str]] = None
     name: str = ""
     camera_pose_id: Optional[str] = None
     feature_log_index: Optional[int] = None
@@ -86,6 +88,8 @@ class CreateKeyframeBody(BaseModel):
 
 class PatchKeyframeBody(BaseModel):
     annotation_ids: Optional[List[str]] = None
+    view_volume_ids: Optional[List[str]] = None
+    zoom_volume_ids: Optional[List[str]] = None
     name: Optional[str] = None
     camera_pose_id: Optional[str] = None
     feature_log_index: Optional[int] = None
@@ -191,6 +195,8 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
 
     kf = AnimationKeyframe(
         annotation_ids=body.annotation_ids,
+        view_volume_ids=body.view_volume_ids,
+        zoom_volume_ids=body.zoom_volume_ids,
         name=body.name,
         camera_pose_id=body.camera_pose_id,
         feature_log_index=body.feature_log_index,

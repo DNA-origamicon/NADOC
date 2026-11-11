@@ -27,7 +27,7 @@ export function createPresentationAnimation({ getDocument, emit = detail => glob
   let source = null, previous = null, ready = Promise.resolve(true)
   return {
     start() { source = getDocument?.(); previous = null },
-    show(from, to, t, annotationIds = null) {
+    show(from, to, t, annotationIds = null, viewVolumeIds = null, zoomVolumeIds = null) {
       if (!source) return
       const state = presentationAt(source, t >= 1 ? to : from)
       const liveAnnotations = Array.isArray(annotationIds) || !Object.hasOwn(state, 'annotations')
@@ -41,11 +41,15 @@ export function createPresentationAnimation({ getDocument, emit = detail => glob
         state.annotations ??= live.annotations ?? []
         state.annotations_enabled ??= live.annotations_enabled !== false
       }
-      const signature = JSON.stringify(state)
+      if (Array.isArray(viewVolumeIds)) {
+        const selected = new Set(viewVolumeIds)
+        state.view_volumes = (live.view_volumes ?? []).filter(entry => selected.has(entry.id)).map(entry => ({ ...entry, enabled: true }))
+      }
+      const signature = JSON.stringify({ state, zoomVolumeIds })
       if (signature === previous) return
       previous = signature
       const pending = []
-      emit({ documentId: source.id, state, annotationIds, liveAnnotations, waitUntil: promise => pending.push(promise) })
+      emit({ documentId: source.id, state, annotationIds, liveAnnotations, zoomVolumeIds, waitUntil: promise => pending.push(promise) })
       ready = Promise.all(pending).then(results => results.every(value => value !== false))
       ready.catch(() => {}) // Playback/export owns the surfaced failure.
 
