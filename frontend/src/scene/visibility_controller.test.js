@@ -502,3 +502,16 @@ describe('organization persistent visibility', () => {
     api.destroy()
   })
 })
+
+it('layers submodel visibility without persisting it or losing existing hidden bases', async () => {
+  const { setSubmodelHiddenKeys }=await import('./submodel_visibility.js')
+  const persist=vi.fn()
+  const {api,designRenderer}=setup({hidden_base_keys:['h1:0:FORWARD']},persist)
+  setSubmodelHiddenKeys(['h1:1:FORWARD'])
+  expect(designRenderer.setHiddenNucs.mock.calls.at(-1)[0]).toEqual(new Set(['h1:0:FORWARD','h1:1:FORWARD']))
+  expect(api.getHiddenBaseKeys()).toEqual(new Set(['h1:0:FORWARD']))
+  setSubmodelHiddenKeys([])
+  expect(designRenderer.setHiddenNucs.mock.calls.at(-1)[0]).toEqual(new Set(['h1:0:FORWARD']))
+  expect(persist).not.toHaveBeenCalled()
+  api.destroy()
+})

@@ -261,3 +261,38 @@ it('enables zoom only for a loaded box and sends a detached snapshot for either 
     }
   } finally { window.removeEventListener('nadoc:zoom-volume-box', listener); x.controller.dispose() }
 })
+
+it('shows only prepared membership, restores context on switching jobs, and never saves display filtering', async () => {
+  const { submodelHiddenKeys } = await import('../scene/submodel_visibility.js')
+  const x = setup({getSimulationSubmodel:vi.fn(async()=>({box})),
+    getSimulationSubmodelMembership:vi.fn(async(engine,id)=>id==='prepared'?{ready:true,omitted_keys:['h:2:FORWARD']}:{ready:false})})
+  window.dispatchEvent(new CustomEvent('nadoc:simulation-engine',{detail:{engine:'namd'}}))
+  await x.controller.select('md','prepared')
+  const toggle=document.getElementById('md-submodel-only')
+  expect(toggle.disabled).toBe(false)
+  expect(toggle.parentElement.nextElementSibling.querySelector('#md-define-submodel')).not.toBeNull()
+  toggle.click()
+  expect([...submodelHiddenKeys()]).toEqual(['h:2:FORWARD'])
+  expect(x.saves).toEqual([])
+  await x.controller.select('md','draft')
+  expect(toggle.disabled).toBe(true)
+  expect(submodelHiddenKeys().size).toBe(0)
+  await x.controller.select('md','prepared')
+  expect(toggle.checked).toBe(true)
+  expect(submodelHiddenKeys().size).toBe(1)
+  x.controller.dispose()
+  expect(submodelHiddenKeys().size).toBe(0)
+})
+
+it('rejects a stale membership reply after editing the region', async () => {
+  let release
+  const x=setup({getSimulationSubmodel:vi.fn(async()=>({box})),getSimulationSubmodelMembership:vi.fn(()=>new Promise(resolve=>{release=resolve}))})
+  window.dispatchEvent(new CustomEvent('nadoc:simulation-engine',{detail:{engine:'namd'}}))
+  const loading=x.controller.select('md','copy')
+  await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+  x.edit({...box,min_corner:[-6,-3,-4]})
+  release({ready:true,omitted_keys:['stale:0:FORWARD']})
+  await loading
+  expect(document.getElementById('md-submodel-only').disabled).toBe(true)
+  x.controller.dispose()
+})

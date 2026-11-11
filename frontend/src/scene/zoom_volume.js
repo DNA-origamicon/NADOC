@@ -1,4 +1,5 @@
 import { copyZoomBox, zoomBoxBounds, entriesInZoomBox } from './zoom_volume_box.js'
+import { createZoomLayerMotion, zoomMotionFrame, zoomLiveAtoms } from './zoom_volume_motion.js'
 import './zoom_volume.css'
 import * as THREE from 'three'
 import { matchTargetEntries, describeTarget } from './annotation_targets.js'
@@ -69,7 +70,7 @@ export function zoomSelectionSource(design, entries) {
   } }
 }
 
-export function initZoomVolume({ document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getProteinGeometry, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
+export function initZoomVolume({ document, scene, canvas, store, api, designRenderer, assemblyRenderer, ensureAtoms, getAtomisticRenderer, getProteinGeometry, getAssemblyCluster = () => null, getRenderCamera, addFrameCallback, removeFrameCallback }) {
   const pane = document.getElementById('right-tab-content-visualization')
   if (!pane) return null
   const section = document.createElement('div'); section.id = 'zoom-volume-section'; section.className = 'panel-section ox-card'
@@ -120,11 +121,34 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   const insetScene = new THREE.Scene(); insetScene.add(new THREE.AmbientLight(0xffffff, 2))
   const light = new THREE.DirectionalLight(0xffffff, 2); insetScene.add(light)
   const camera = new THREE.PerspectiveCamera(40, 1, .01, 10000)
-  const bounds = new THREE.Box3(), displayedBounds = new THREE.Box3(), box = new THREE.Box3Helper(displayedBounds, 0x67c5ff)
+  const bounds = new THREE.Box3(), externalBounds = new THREE.Box3(), displayedBounds = new THREE.Box3(), box = new THREE.Box3Helper(displayedBounds, 0x67c5ff)
   box.name = 'zoom-volume-selection-box'; box.visible = false; box.userData.helper = true; box.userData.setupOnly = true; box.raycast = () => {}; scene.add(box)
   let renderer = null, targets = [], displays = [], revision = 0, disposed = false, ready = false, customPosition = null
   let loading = false, hasFrozenImage = false
   let volume = null
+  let motionLayers = [], motionConnections = [], motionRevision = 0, appliedMotionRevision = -1
+  let atomVersion = null
+  let simulationActive = !!designRenderer.hasFemPositions?.()
+  function syncPlaybackRepresentation() {
+    // Axis cylinders describe the reference design, not bent trajectory poses.
+    const cylinders = [...$('representation').options].find(o => o.value === 'cylinders')
+    cylinders.disabled = simulationActive
+    if (simulationActive && $('representation').value === 'cylinders') {
+      $('representation').value = 'full'; colors()
+      return true
+    }
+    return false
+  }
+  $('representation').title = 'Trajectory playback uses live nucleotide poses. For exact atom coordinates, use an atomistic main viewport; otherwise inset atoms follow rigid nucleotide poses. Surfaces use playback skinning. Reference-axis cylinders switch to Full during playback.'
+  syncPlaybackRepresentation()
+  const unsubscribeMotion = designRenderer.subscribeSimulation?.(() => {
+    motionRevision++
+    const next = !!designRenderer.hasFemPositions?.()
+    const stopped = simulationActive && !next
+    simulationActive = next
+    const switched = syncPlaybackRepresentation()
+    if ((stopped || switched) && targets.length) void rebuild()
+  })
   let documentId = null, mode = null, abort = new AbortController()
   let contextRoots = [], contextBaseCount = 0, contextObjectCount = 0, selectionConnectionCount = 0, contextConnectionCount = 0
   const contextOpacity = () => 1 - Number($('structure-transparency').value) / 100
@@ -145,6 +169,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     loadingOverlay.hidden = false; host.setAttribute('aria-busy', 'true')
   }
   function clear() {
+    motionLayers = []; motionConnections = []
     loading = false; hasFrozenImage = false; frozen.hidden = true; loadingOverlay.hidden = true
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
     abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
@@ -185,6 +210,8 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     void rebuild()
   }
   async function rebuild() {
+    motionLayers = []; motionConnections = []
+    externalBounds.makeEmpty()
     abort.abort(); abort = new AbortController()
     const signal = abort.signal
     if (!targets.length) return
@@ -204,6 +231,11 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
       async function buildDna(root, design, entries, instanceId, id, opacity) {
         if (!entries.length) return
         const subset = zoomSelectionSource(design, entries)
+        // Keep reference coordinates for reversible physical display updates.
+        if (!instanceId) {
+          const original = new Map(entries.map(e => [baseKey(e.nuc, e.nuc.copy_k ?? 0), e.nuc]))
+          subset.geometry = subset.geometry.map(n => ({ ...n, backbone_position: original.get(baseKey(n, n.copy_k ?? 0)).backbone_position }))
+        }
         const source = { ...state, assemblyActive: false, currentDesign: subset.design, currentGeometry: subset.geometry, currentHelixAxes: null, showReferenceGeometry: true, simulationTabActive: false }
         const display = initViewVolumeDisplays({ scene: root, store: { getState: () => source, subscribe: () => () => {} },
           api: { getRegionSurface: (segments, opts) => instanceId ? api.getInstanceRegionSurface(instanceId, segments, opts) : api.getRegionSurface(segments, opts) },
@@ -212,6 +244,10 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
         displays.push({ dispose: () => { display.dispose(); root.removeFromParent() } })
         const keys = [...new Set(subset.geometry.map(n => `${n.helix_id}:${n.bp_index}`))]
         await display.update([{ id, representation: $('representation').value, coloring: $('coloring').value, opacity, keys, baseKeys: subset.keys, segments: segmentsForKeys(keys) }])
+        if (!instanceId && current === revision && !disposed) {
+          motionLayers.push({ motion: createZoomLayerMotion(display, subset.geometry), geometry: subset.geometry, display, context: id === 'zoom-context' })
+          appliedMotionRevision = -1
+        }
       }
       for (const target of targets) {
         const data = target.instanceId ? assemblyRenderer.getInstanceBackboneEntries(target.instanceId) : null
@@ -239,7 +275,10 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
         if (disposed || current !== revision) { external?.dispose(); root.removeFromParent(); return }
         externalOwner.layer = external
         externalCount += external?.count ?? 0
-        if (external && !external.bounds.isEmpty()) bounds.union(data?.matrixWorld ? external.bounds.clone().applyMatrix4(data.matrixWorld) : external.bounds)
+        if (external && !external.bounds.isEmpty()) {
+          externalBounds.union(data?.matrixWorld ? external.bounds.clone().applyMatrix4(data.matrixWorld) : external.bounds)
+          bounds.union(externalBounds)
+        }
         if (!matched.length) continue
         await buildDna(root, design, matched, target.instanceId, 'zoom', Number($('opacity').value))
         if (disposed || current !== revision) return
@@ -251,6 +290,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
         const connections = buildZoomConnections({ root, design: selected.design, entries: selected.entries, selectedKeys: selected.keys,
           selectionOnly: true, representation: $('representation').value, coloring: $('coloring').value, state })
         displays.push({ dispose() { connections.dispose(); root.removeFromParent() } })
+        if (!mode) motionConnections.push(connections)
         selectionConnectionCount += connections.count
         setZoomContextOpacity(connections.group, Number($('opacity').value))
         root.updateWorldMatrix(true, true)
@@ -278,7 +318,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
           contextRoots.push(root)
           const connections = buildZoomConnections({ root, design, entries, selectedKeys: selected?.keys ?? new Set(), bounds: neighborhood, matrix,
             representation: $('representation').value, coloring: $('coloring').value, state })
-          displays.push(connections); contextConnectionCount += connections.count
+          displays.push(connections); if (!mode) motionConnections.push(connections); contextConnectionCount += connections.count
           const owner = { layer: null, dispose() { this.layer?.dispose(); root.removeFromParent() } }; displays.push(owner)
           const external = await buildZoomExternal({ root, design, refs, proteinData: () => proteinData,
             representation: $('representation').value, coloring: $('coloring').value, opacity: contextOpacity(),
@@ -324,6 +364,22 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     host.style.left = `${left}px`; host.style.top = `${top}px`
     host.style.width = `${size}px`; host.style.height = `${size + 26}px`
     if (loading || !ready) { svg.style.display = 'none'; return }
+    const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
+    if (motionLayers.length && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
+      const updates = designRenderer.getFemPositions?.()
+      const live = designRenderer.getBackboneEntries()
+      const atoms = updates?.length ? zoomLiveAtoms(getAtomisticRenderer?.()) : null
+      if (!volume) bounds.copy(externalBounds)
+      for (const layer of motionLayers) {
+        const positions = zoomMotionFrame(layer.geometry, updates, live)
+        layer.motion.apply(positions, atoms, !!updates?.length)
+        if (!volume && !layer.context) for (const n of positions) bounds.expandByPoint(new THREE.Vector3(...n.backbone_position))
+      }
+      if (!volume) bounds.expandByScalar(1.5)
+      for (const connections of motionConnections) connections.update?.(live, updates)
+      appliedMotionRevision = motionRevision
+      atomVersion = currentAtomVersion
+    }
     displayedBounds.copy(bounds)
     box.box = volume ? new THREE.Box3(new THREE.Vector3(...volume.min_corner), new THREE.Vector3(...volume.max_corner)) : displayedBounds
     box.quaternion.fromArray(volume?.rotation ?? [0, 0, 0, 1])
@@ -350,5 +406,5 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   })
   assemblyRenderer?.onRebuildComplete?.(() => { if (!disposed && mode && targets.length) void rebuild() })
   addFrameCallback(frame)
-  return { capture, setBox, clear, debug: () => ({ ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
+  return { capture, setBox, clear, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
 }

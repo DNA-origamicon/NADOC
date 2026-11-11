@@ -1,4 +1,5 @@
 import './simulation_submodel.css'
+import { setSubmodelHiddenKeys } from '../scene/submodel_visibility.js'
 import { createSubmodelShell } from '../scene/simulation_submodel_shell.js'
 import { initViewVolumes } from '../scene/view_volumes.js'
 
@@ -22,7 +23,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     if (!records.has(key)) records.set(key, { key, job, engine: forEngine, box: null, loaded: !job, loading: false, error: '', queue: Promise.resolve(), pending: 0 })
     return records.get(key)
   }
-  const status = {}, buttons = {}, retries = {}, shellInputs = {}, shellDirty = {}, projections = {}, details = {}
+  const status = {}, buttons = {}, retries = {}, shellInputs = {}, shellDirty = {}, projections = {}, details = {}, onlyInputs = {}
   const shell = createSubmodelShell(sceneDeps.scene)
   const mdVisibility = document.getElementById('md-box-view-details')
   let oxVisibility = null
@@ -69,7 +70,13 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     })
     zoomButtons[key] = zoom
     const actions = document.createElement('div'); actions.className = 'submodel-actions'; actions.append(button, zoom)
-    host.append(actions, label, retry, content)
+    const onlyLabel = document.createElement('label')
+    onlyLabel.className = 'box-solvent-toggle'
+    const only = document.createElement('input'); only.type = 'checkbox'; only.id = `${key}-submodel-only`
+    onlyInputs[key] = only
+    onlyLabel.append(only, ' Show submodel only')
+    only.addEventListener('change', () => { record(key).only = only.checked; notify(); paint() })
+    host.append(onlyLabel, actions, label, retry, content)
     content.append(shellLabel)
     if (key === 'oxdna') {
       const visibilityLabel = document.createElement('label')
@@ -96,7 +103,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     const s = store.getState(), key = s.assemblyActive ? 'currentAssembly' : 'currentDesign'
     return { ...s, [key]: { ...s[key], id: active?.key, view_volumes: volumes(active) } }
   }
-  function notify() { window.dispatchEvent(new CustomEvent('nadoc:submodel-details', { detail: { engine, box: active?.box ?? null, visible: visible(active) } })); shell.update(active?.box, visible(active)); for (const fn of subscribers) fn(state()) }
+  function notify() { setSubmodelHiddenKeys(active?.only && active?.box && active?.membership?.ready ? active.membership.omitted_keys : []); window.dispatchEvent(new CustomEvent('nadoc:submodel-details', { detail: { engine, box: active?.box ?? null, visible: visible(active) } })); shell.update(active?.box, visible(active)); for (const fn of subscribers) fn(state()) }
   async function updateProjection(r) {
     if (r.engine !== 'oxdna' || !api.estimateSimulationSubmodel || !r.job || !r.box) return
     const key = JSON.stringify({ ...r.box, visible: undefined })
@@ -116,6 +123,11 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
   function paint() {
     for (const key of Object.keys(hosts)) {
       const r = record(key)
+      onlyInputs[key].disabled = !r.box || !r.membership?.ready || r.loading
+      onlyInputs[key].checked = !!r.only && !!r.membership?.ready && !!r.box
+      onlyInputs[key].parentElement.title = r.membership?.ready
+        ? 'Show only simulated DNA, including the retained shell and bonded support. Water and ion controls remain independent.'
+        : (r.membership?.reason || 'Available after submodel preparation identifies the simulated nucleotides.')
       details[key].hidden = !r.opened
       buttons[key].setAttribute('aria-expanded', String(!!r.opened))
       status[key].hidden = !r.opened && !r.error
@@ -141,8 +153,11 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
       window.dispatchEvent(new CustomEvent('nadoc:submodel-new-setup', { detail: { engine: 'namd' } }))
       refresh()
     }
+    const membershipChanged = geometry(r.box) !== geometry(box)
+    if (membershipChanged) { r.membershipGeneration = (r.membershipGeneration || 0) + 1; r.membership = null; r.only = false }
     r.box = box; if (!box) { r.projectionText = ''; r.projectionKey = null }; r.error = ''; r.loaded = true; r.loading = false
     if (!r.job) { paint(); return Promise.resolve() }
+    notify()
     r.pending++; paint()
     const snapshot = structuredClone(box)
     r.queue = r.queue.catch(() => {}).then(async () => {
@@ -188,6 +203,16 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
       } catch (error) { if (!r.loaded) r.error = error.message }
       finally { r.loading = false }
     }
+    if (r.job && r.box && !r.membership?.ready && !r.membershipLoading && api.getSimulationSubmodelMembership) {
+      r.membershipLoading = true
+      const generation = r.membershipGeneration || 0
+      try {
+        const result = await api.getSimulationSubmodelMembership(forEngine, id)
+        if (generation === (r.membershipGeneration || 0)) r.membership = result
+      }
+      catch { r.membership = null }
+      finally { r.membershipLoading = false }
+    }
     refresh()
   }
   const onEngine = event => { engine = event.detail?.engine === 'namd' ? 'md' : event.detail?.engine; refresh() }
@@ -205,7 +230,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     select,
     setEditable(forEngine, id, editable) {
       const r = records.get(`${forEngine}:job:${id}`)
-      if (r) r.editable = editable
+      if (r) { r.editable = editable; if (!editable && r.box && !r.membership?.ready && !r.membershipLoading) void select(forEngine, id) }
     },
     async flush(forEngine) {
       const r = record(forEngine)
@@ -226,6 +251,6 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
       refresh()
     },
     debug: { ...editor.debug, shellVisible: shell.visible, selectJob: select, saveToJob: async (forEngine, id) => { const box = structuredClone(record(forEngine).box); selected[forEngine] = id; await save(record(forEngine), box); refresh() } },
-    dispose() { for (const host of Object.values(hosts)) { host.removeEventListener('input', stopSettingsEvent); host.removeEventListener('change', stopSettingsEvent) }; window.removeEventListener('nadoc:box-solvent-details', onMdVisibility); disposed = true; unsubscribe?.(); window.removeEventListener('nadoc:simulation-engine', onEngine); mdVisibility?.removeEventListener('change', onMdVisibility); shell.dispose(); editor.dispose(); mount.remove() },
+    dispose() { for (const host of Object.values(hosts)) { host.removeEventListener('input', stopSettingsEvent); host.removeEventListener('change', stopSettingsEvent) }; window.removeEventListener('nadoc:box-solvent-details', onMdVisibility); disposed = true; setSubmodelHiddenKeys([]); unsubscribe?.(); window.removeEventListener('nadoc:simulation-engine', onEngine); mdVisibility?.removeEventListener('change', onMdVisibility); shell.dispose(); editor.dispose(); mount.remove() },
   }
 }

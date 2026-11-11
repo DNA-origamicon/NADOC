@@ -63,12 +63,6 @@ function inputFreshnessMarker(job) {
     text: 'Preparation settings changed',
     title: 'Job preparation settings differ from the recorded package settings. The saved result is retained.',
   }
-  if (evidence.status === 'stale') return {
-    text: 'Inputs changed',
-    title: evidence.package_match === false
-      ? 'Prepared package files changed or are unavailable. The saved result is retained.'
-      : 'The recorded design differs from the active design. The saved result is retained.',
-  }
   if (evidence.reasons?.includes('saved_inputs_unavailable')) return {
     text: 'Saved inputs unavailable',
     title: 'Files recorded in the preparation receipt are missing or unreadable.',

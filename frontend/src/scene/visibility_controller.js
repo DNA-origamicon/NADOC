@@ -1,3 +1,4 @@
+import { submodelHiddenKeys, subscribeSubmodelVisibility } from './submodel_visibility.js'
 import { baseKey } from './base_ref.js'
 import { clusterNucKeysFor } from './cluster_entries.js'
 import { hasOrganization, displayGroups, partGroupIdsForNucleotide } from './part_group_display.js'
@@ -102,6 +103,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
     for (const id of hiddenGroupIds) for (const key of groupBaseKeys.get(id) ?? []) all.add(key)
     for (const key of shown) all.delete(key)
+    for (const key of submodelHiddenKeys()) all.add(key)
     effectiveHidden = all
     hiddenPartGroups = new Set()
     for (const [id, keys] of groupBaseKeys) {
@@ -279,6 +281,8 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     }
   })
 
+  const unsubscribeSubmodel = subscribeSubmodelVisibility(() => _apply({ persist: false }))
+
   return {
     hide, show, setHiddenClusters, unhideAll, undo, redo, isStrandShown,
     isPartGroupShown: id => !hiddenPartGroups.has(id),
@@ -289,6 +293,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     isBaseShown: key => !effectiveHidden.has(key),
     flushPersistence: () => persistChain,
     destroy: () => {
+      unsubscribeSubmodel()
       disposed = true
       invalidateContext()
       eventTarget?.removeEventListener('nadoc:document-reset', invalidateContext)

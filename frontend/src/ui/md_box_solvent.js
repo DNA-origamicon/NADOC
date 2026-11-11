@@ -191,7 +191,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
     if(event.target===inputs.padding && event.type==='input')return
     if(event.target===inputs.padding && inputs.sizing.value==='auto' && Number(inputs.padding.value)!==DEFAULTS.padding)inputs.sizing.value='bbox'
     if(event.target===inputs.sizing && inputs.sizing.value==='auto')inputs.padding.value=DEFAULTS.padding
-    if(host.contains(event.target)){
+    if(Object.values(inputs).includes(event.target)){
       // A saved setup preset can dispatch input events even on disabled controls.
       // That is a new preparation intent, never an edit to the selected package.
       if(selectedJob){selectedJob=null;selectedPreparation=null;jobMeta=null;for(const input of Object.values(inputs))input.disabled=false}

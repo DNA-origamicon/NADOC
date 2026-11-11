@@ -8830,3 +8830,15 @@ async def put_md_submodel(job_id: str, selection: SubmodelSelection) -> dict:
     return save_job_selection(_load_job(job_id), _workspace(), selection,
         clear_artifacts=_clear_editable_job_artifacts, reset_runtime=_reset_editable_runtime_state,
         editable=_job_settings_editable)
+
+@router.get("/md/jobs/{job_id}/submodel-membership")
+async def get_md_submodel_membership(job_id: str) -> dict:
+    from backend.core.submodel_membership import namd_membership
+    from backend.api.md_submodel import require_prepared_selection
+    job = _load_job(job_id)
+    try:
+        if (job.package_dir(_workspace()) / 'submodel.json').exists():
+            require_prepared_selection(job, _workspace())
+        return await run_in_threadpool(namd_membership, job.package_dir(_workspace()), _md_snapshot_design(job))
+    except (OSError, ValueError, KeyError) as exc:
+        raise HTTPException(409, str(exc)) from exc

@@ -89,3 +89,18 @@ it('anchors a reverse loop crossover to its routed copy, including inserted base
   expect(partial.count).toBe(0)
   partial.dispose()
 })
+
+it('updates existing connection line buffers from the displayed trajectory endpoints',()=>{
+  const entries=[0,1].map(bp_index=>({nuc:{helix_id:'h',bp_index,direction:'FORWARD',strand_id:'s',axis_tangent:[0,0,1]},pos:new THREE.Vector3(bp_index,0,0)}))
+  const design={strands:[],crossovers:[{id:'xo',half_a:{helix_id:'h',index:0,strand:'FORWARD'},half_b:{helix_id:'h',index:1,strand:'FORWARD'}}]}
+  const root=new THREE.Group()
+  const layer=buildZoomConnections({root,design,entries,selectedKeys:new Set(['h:0:FORWARD','h:1:FORWARD']),selectionOnly:true,representation:'full',state:{},coloring:'strand'})
+  const line=root.getObjectByName('xoverArcMerged_zoom-selection')
+  const buffer=line.geometry.attributes.position
+  entries[0].pos.set(10,2,3);entries[1].pos.set(11,2,3)
+  layer.update(entries,[])
+  expect(line.geometry.attributes.position).toBe(buffer)
+  expect(Array.from(buffer.array.slice(0,3))).toEqual([10,2,3])
+  expect(Array.from(buffer.array).every(Number.isFinite)).toBe(true)
+  layer.dispose()
+})

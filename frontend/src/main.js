@@ -2080,7 +2080,7 @@ async function main() {
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
   const zoomVolume = initZoomVolume({ document, scene, canvas, store, api, designRenderer, assemblyRenderer,
-    ensureAtoms: () => _atomSurface.ensureAtoms(), getProteinGeometry: () => proteinSubsystem.getGeometry(), getAssemblyCluster: () => _selectedAssemblyCluster, getRenderCamera, addFrameCallback, removeFrameCallback })
+    ensureAtoms: () => _atomSurface.ensureAtoms(), getAtomisticRenderer: () => atomisticRenderer, getProteinGeometry: () => proteinSubsystem.getGeometry(), getAssemblyCluster: () => _selectedAssemblyCluster, getRenderCamera, addFrameCallback, removeFrameCallback })
   if (DEBUG) window.__NADOC_ZOOM_VOLUME__ = zoomVolume
   // Opt-in field diagnostic for the intermittent atomistic reload loop.
   // It prints one paste-ready JSON line five seconds after the first loading

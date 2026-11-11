@@ -1,6 +1,6 @@
 import { TrajectoryMemoryMap, queueTrajectoryTransfer } from '../scene/trajectory_memory.js'
 /**
- * md_solvent_controls.js — the Visualizations card's Water / Ions / Periodic box
+ * md_solvent_controls.js — the Box and Solvent card's Water / Ions / Periodic box
  * toggles, and the fetch+cache that feeds them.
  * Water is available only in live Display MD; trajectory playback loads ions/cell.
  *

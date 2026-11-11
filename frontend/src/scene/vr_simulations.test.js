@@ -83,6 +83,14 @@ it('keeps shared overlays with the active mode and mirrors native progress value
  expect(simulationControls(document, 'namd').find(c => c.element.id === 'ions').group).toBe('traj')
  expect(simulationProgress(document, 'namd')).toEqual([{label:'Loading ions',fraction:.75,busy:true}])
 })
+it('keeps relocated solvent controls in VR without exposing box setup', () => {
+ document.body.innerHTML = `<div id="md-jobs-viz-body"><input name="md-viz" type="radio" value="traj" checked></div><div id="md-box-solvent-body" style="display:none"><input id="md-box-padding" type="number"><div id="md-jobs-solvent-opts"><label><input id="ions" type="checkbox">Ions</label><progress value="1" max="2" aria-label="Loading ions"></progress></div></div>`
+ const controls=simulationControls(document,'namd')
+ expect(controls.find(c=>c.element.id==='ions')).toMatchObject({enabled:true,group:'traj'})
+ expect(controls.some(c=>c.element.id==='md-box-padding')).toBe(false)
+ expect(simulationProgress(document,'namd')).toEqual([{label:'Loading ions',fraction:.5,busy:true}])
+})
+
 it('disables visualization choices while representation preparation owns an action', async () => {
  mount(); let release, state
  const bridge = createVRSimulations({ jobs: { getSelected: () => ({id:'complete'}) }, engineSelector: {getSelected: () => 'cando'}, ensureFull: () => new Promise(resolve => {release=resolve}), request: async (_,init) => {state=JSON.parse(init.body);return {ok:true}} })

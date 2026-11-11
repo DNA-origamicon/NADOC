@@ -26,20 +26,23 @@ const label = el => {
   return clean(text.join('') || el.getAttribute('aria-label') || el.title || el.textContent || el.id)
 }
 
-/** Visualization card only: never expose launch, delete or simulation setup actions. */
+const solventRoot = (doc, engine) => engine === 'namd' ? doc.getElementById('md-jobs-solvent-opts') : null
+
+/** Visualization controls only: never expose launch, delete or simulation setup actions. */
 export function simulationControls(doc, engine, { trajectoryMode = '' } = {}) {
   const root = doc.getElementById(SIMULATION_CARDS[engine]), result = []
   let group = ''
   const activeGroup = trajectoryMode || root?.querySelector('input[type=radio]:checked')?.value || ''
-  const elements = engine === 'exp' ? [doc.getElementById('exp-viz')].filter(Boolean) : [...(root?.querySelectorAll('input,select,button') ?? [])]
+  const elements = engine === 'exp' ? [doc.getElementById('exp-viz')].filter(Boolean) : [...new Set([...(root?.querySelectorAll('input,select,button') ?? []), ...(solventRoot(doc, engine)?.querySelectorAll('input,select,button') ?? [])])]
   for (const [index, el] of elements.entries()) {
     if (el.type === 'hidden' || /traj-(interval|interpolate|slider|scrubber|speed)/.test(el.id)) continue
     const mode = el.type === 'radio' && modeNames.has(el.name) || el.id === 'exp-viz'
     if (mode) group = el.value || 'prediction'
     if (!mode && isTrajectory(el) && !['checkbox', 'radio', 'number', 'select-one'].includes(el.type)) continue // dedicated range/load/playback inspector
     const inTrajectoryOptions = !!trajectoryMode && isTrajectory(el)
-    if (!mode && !visible(el, root) && !inTrajectoryOptions) continue
-    const base = { id: `v:${index}`, label: label(el), detail: clean(el.title), enabled: !el.disabled && (visible(el, root) || inTrajectoryOptions), active: !!el.checked, element: el,
+    const controlRoot = el.closest('#md-jobs-solvent-opts') || root
+    if (!mode && !visible(el, controlRoot) && !inTrajectoryOptions) continue
+    const base = { id: `v:${index}`, label: label(el), detail: clean(el.title), enabled: !el.disabled && (visible(el, controlRoot) || inTrajectoryOptions), active: !!el.checked, element: el,
       group: el.closest('#md-jobs-solvent-opts') ? activeGroup : el.closest('#md-ion-paths-options') ? activeGroup : group,
       kind: mode ? 'mode' : el.tagName === 'SELECT' ? 'choice' : ['number', 'range'].includes(el.type) ? 'number' : 'toggle',
       value: ['number','range'].includes(el.type) ? Number(el.value) || 0 : 0,
@@ -57,8 +60,9 @@ export function simulationProgress(doc, engine) {
   for (const el of doc.querySelectorAll('#simulate-jobs-toggle [data-panel-loading],.engine-selector-btn[data-engine="' + engine + '"] [data-panel-loading]')) {
     if (visible(el)) rows.push({ label: el.getAttribute('aria-label') || 'Reading simulation data', fraction: -1, busy: true })
   }
-  for (const el of root.querySelectorAll('[role="progressbar"],progress,[id$="progress"],[id$="load-progress"],[id$="status"]')) {
-    if (!visible(el, root)) continue
+  const selector = '[role="progressbar"],progress,[id$="progress"],[id$="load-progress"],[id$="status"]'
+  for (const el of new Set([...root.querySelectorAll(selector), ...(solventRoot(doc, engine)?.querySelectorAll(selector) ?? [])])) {
+    if (!visible(el, el.closest('#md-jobs-solvent-opts') || root)) continue
     const text = clean(el.querySelector('[id$="label"]')?.textContent || el.getAttribute('aria-label') || el.textContent)
     let percent = Number(el.getAttribute('aria-valuenow'))
     if (el.tagName === 'PROGRESS') percent = el.hasAttribute('value') ? 100 * el.value / el.max : -1

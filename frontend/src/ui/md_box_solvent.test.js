@@ -128,6 +128,14 @@ it('shows the saved job box and actual ions without fitting the current design',
   expect(document.getElementById('md-box-solvent-body').textContent).toContain('fixed-volume periodic cell (NVT)')
   expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
   expect(document.getElementById('md-box-padding').disabled).toBe(true)
+  for(const id of ['md-jobs-water-toggle','md-jobs-ions-toggle','md-jobs-box-toggle']){
+   const control=document.getElementById(id)
+   expect(control.closest('#md-box-solvent-body')).not.toBeNull()
+   control.click()
+   expect(document.getElementById('md-box-padding').disabled).toBe(true)
+   expect(document.getElementById('md-box-source').textContent).toContain('Saved job:')
+  }
+  expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
   state.currentGeometry=[2];listeners.forEach(fn=>fn())
   expect(events.at(-1).dimensions).toEqual([6.093,8.3438,12.8142])
   expect(document.getElementById('md-box-clearance').textContent).not.toContain('X−')

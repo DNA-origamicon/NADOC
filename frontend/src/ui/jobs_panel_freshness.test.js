@@ -26,7 +26,7 @@ describe('physical input evidence in shared simulation rows', () => {
     expect(row.querySelector('.job-input-freshness')).toBeNull()
     const changed = { ...input_freshness, status: 'stale', package_match: false }
     const stale = renderJobRow(buildJobRowModel({ ...job, input_freshness: changed }, context))
-    expect(stale.querySelector('.job-input-freshness')?.title).toMatch(/package files changed/)
+    expect(stale.querySelector('.job-input-freshness')).toBeNull()
   })
 
   it.each([undefined, null])('leaves older engine responses without evidence labels', input_freshness => {
@@ -34,7 +34,7 @@ describe('physical input evidence in shared simulation rows', () => {
   })
 
   it.each([
-    [{ status: 'stale' }, 'Inputs changed'],
+    [{ status: 'stale' }, undefined],
     [{ status: 'unknown', reasons: ['saved_inputs_unavailable'] }, 'Saved inputs unavailable'],
     [{ status: 'stale', reasons: ['preparation_options_changed'] }, 'Preparation settings changed'],
     [{ status: 'unknown' }, undefined],
@@ -64,7 +64,7 @@ describe('physical input evidence in shared simulation rows', () => {
     const signature = value => jobListSignature([value], ctx)
     expect(signature(unknown)).toBe(signature(job))
     expect(signature(partial)).toBe(signature(unknown))
-    expect(signature(stale)).not.toBe(signature(partial))
+    expect(signature(stale)).toBe(signature(partial))
     expect(signature({ ...partial, live_metrics: { step: 10 } })).toBe(signature(partial))
   })
 })

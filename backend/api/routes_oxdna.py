@@ -4997,3 +4997,11 @@ async def estimate_oxdna_submodel(job_id: str, selection: SubmodelSelection) -> 
         return {"projection": estimate(recipe, load_stage_specs(job.job_dir(_workspace())))}
     except (ValueError, KeyError) as exc:
         raise HTTPException(422, str(exc)) from exc
+
+@router.get("/oxdna/jobs/{job_id}/submodel-membership")
+async def get_oxdna_submodel_membership(job_id: str) -> dict:
+    from backend.core.submodel_membership import oxdna_membership
+    try:
+        return oxdna_membership(_load_job(job_id).job_dir(_workspace()))
+    except (OSError, ValueError, KeyError) as exc:
+        raise HTTPException(409, str(exc)) from exc

@@ -120,6 +120,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
             const mesh = await api.getRegionSurface(layer.segments, { nucleotideKeys: layer.baseKeys, colorMode: 'strand', signal: entry.abort.signal, suppressBusy: true })
             if (!current()) return
             entry.renderer = initSurfaceRenderer(root)
+            entry.motionMesh = mesh
             entry.renderer.update(mesh, 'strand', `volume-surface-${layer.id}`)
           }
           entry.ready = true; paint(entry, layer)

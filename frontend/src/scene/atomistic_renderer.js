@@ -34,6 +34,7 @@
  */
 
 import * as THREE from 'three'
+import { submodelHiddenKeys, subscribeSubmodelVisibility } from './submodel_visibility.js'
 import { atomBaseKey, baseKey, xbKey } from './base_ref.js'
 
 import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
@@ -469,7 +470,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
     const rowHex = new Float64Array(table.count)
     const resolved = new Uint8Array(table.count)
     const linearColors = new Map()
-    const rowAlpha = _state.nucAlphas.size ? new Float64Array(table.count) : null
+    const useAlpha = _state.nucAlphas.size || submodelHiddenKeys().size || Object.values(_state.elementMeshes).some(m => m._instanceAlpha)
+    const rowAlpha = useAlpha ? new Float64Array(table.count) : null
     const alphaResolved = rowAlpha ? new Uint8Array(table.count) : null
     function colorAt(row) {
       if (!resolved[row]) {
@@ -512,7 +514,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         dirty = writeColor(mesh, i, colorAt(group[i])) || dirty
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-      if (_state.nucAlphas.size) {
+      if (useAlpha) {
         _ensureAtomAlpha(mesh)
         let alphaDirty = false
         for (let i = 0; i < group.length; i++) {
@@ -532,7 +534,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         dirty = writeColor(_state.bondMesh, i, colorAt(bidx[i * 2])) || dirty
       }
       if (dirty) _state.bondMesh.instanceColor.needsUpdate = true
-      if (_state.nucAlphas.size) {
+      if (useAlpha) {
         _ensureAtomAlpha(_state.bondMesh)
         let alphaDirty = false
         for (let i = 0; i < bidx.length / 2; i++) {
@@ -553,6 +555,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   function _alphaOfRow(row) {
     const a = _state.atoms?.get(row)
     if (!a) return 1
+    if (submodelHiddenKeys().has(atomBaseKey(a))) return 0
     // Bare-helix fallback covers geometry on synthetic `__ext_` helices, whose per-bp
     // keys are not enumerable from the design.
     return _state.nucAlphas.get(`${a.helix_id}:${a.bp_index}:${a.direction}`)
@@ -588,6 +591,8 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
+
+  const unsubscribeSubmodel = subscribeSubmodelVisibility(() => _applyColors(_state.lastSel))
 
   return {
     /** Uniform alpha for a dedicated overlay renderer (for example a view volume). */
@@ -705,6 +710,9 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
         }
       }
     },
+
+    /** Changes after either a topology rebuild or an in-place trajectory frame. */
+    positionVersion() { return Object.values(_state.elementMeshes).map(m => `${m.uuid}:${m.instanceMatrix.version}`).join('|') },
 
     /** Stable-order packed positions for the native VR trajectory transport.
      * Ordering is identical to visitAtoms(), which supplies the one-time topology. */
@@ -1016,6 +1024,7 @@ export function initAtomisticRenderer(scene, { independentColors = false } = {})
 
     /** Remove all scene objects and free GPU memory. */
     dispose() {
+      unsubscribeSubmodel()
       _clearScene()
       for (const mat of _state.matCache.values()) mat.dispose()
       _state.matCache.clear()

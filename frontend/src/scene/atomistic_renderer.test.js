@@ -1119,3 +1119,24 @@ it('preserves a scalar map’s zero-value fallback when copying and repainting i
   mesh.getColorAt(0, actual); expect(actual.getHex()).toBe(0x00ff00)
   ar.clearScalarColors(); ar.dispose()
 })
+
+it('hides omitted nucleotide atoms and crossing bonds across rebuilds without losing opacity', async () => {
+  const {setSubmodelHiddenKeys}=await import('./submodel_visibility.js')
+  const scene=new THREE.Scene(), ar=initAtomisticRenderer(scene)
+  try {
+    ar.setMode('ballstick')
+    ar.update({atoms:[{serial:0,element:'P',helix_id:'h',bp_index:0,direction:'FORWARD',x:0,y:0,z:0},
+      {serial:1,element:'P',helix_id:'h',bp_index:1,direction:'FORWARD',x:.15,y:0,z:0}],bonds:[[0,1]]})
+    ar.setClusterDisplay(new Map([['h:0:FORWARD',.3]]))
+    setSubmodelHiddenKeys(['h:1:FORWARD'])
+    const alphas=()=>{const a=[];ar.visitAtoms((atom,pos,{instMesh,id})=>a.push(instMesh._instanceAlpha?.array[id]??1));return a}
+    expect(alphas()[0]).toBeCloseTo(.3)
+    expect(alphas()[1]).toBe(0)
+    expect(_bondMesh(scene)._instanceAlpha.array[0]).toBe(0)
+    ar.setMode('vdw')
+    expect(alphas()[1]).toBe(0)
+    setSubmodelHiddenKeys([])
+    expect(alphas()[0]).toBeCloseTo(.3)
+    expect(alphas()[1]).toBe(1)
+  } finally {setSubmodelHiddenKeys([]);ar.dispose()}
+})

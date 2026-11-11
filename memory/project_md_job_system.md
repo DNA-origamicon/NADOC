@@ -7,6 +7,11 @@ review_after: 2026-10-01
 
 # MD job system
 
+The generic “Inputs changed” job-row label was removed at user request (2026-11-10).
+Prepared-input evidence and execution guards remain intact; the list no longer
+shows this advisory for expected runtime package changes such as resource reports
+and the minimized settle-restraint reference.
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the
@@ -14,6 +19,70 @@ matching detail below. Dated results and old handoffs are not new verification
 or authorization; current user instructions and `CLAUDE.md` take precedence.
 
 Production promotion remains deferred where native qualification failed or plateau criteria remain false. The electrode/PEG evidence and current-state details below retain those limits. Focused development checks are authorized by the task; broad suites and scientific campaigns follow current [repository policy](../CLAUDE.md), superseding the older blanket heavy-test sentence in the retained invariants.
+
+## Zoom Volume trajectory synchronization (2026-11-10)
+
+Zoom subscribes to the main design renderer's physical-display updates and applies
+the latest frame before drawing its inset. This includes interpolated frames from
+the shared NAMD/oxDNA playback path, without a separate clock or per-frame network
+requests. Existing Full/bead meshes and crossover connections move in place;
+selection bounds follow the selected bases while an assigned box stays fixed.
+Stopping the physical display rebuilds the native inset. `main.js` LOC delta: 0.
+
+Atomistic insets copy exact live main-viewport atom coordinates by nucleotide/name
+when available; with a coarse main viewport they instead carry reference atoms by
+rigid nucleotide poses. Independent surfaces use the existing playback skinning
+approximation. The representation tooltip states these distinctions. Reference-axis
+cylinders switch to Full during physical display rather than showing static axes.
+
+Real completed Submodel_tests NAMD playback: 163 selected bases matched the main
+viewport at 25 sampled smooth updates with zero position difference; scrubbing
+and non-smooth playback also passed. The inset and main view were inspected
+visually. Evidence and reusable isolated runner:
+`.development-artifacts/zoom-trajectory-20261110/`; regression:
+`frontend/e2e/zoom_trajectory.spec.js`. No simulation or source-design changes.
+Full frontend: 10,208 passed / 1 skipped; focused: 84 passed; isolated smoke:
+25 passed. The additional atomistic app check remains unverified: its main-view
+NAMD `atomistic-model` analysis worker died without a result before the inset
+could be compared. Exact live-atom copying at intermediate positions passes unit
+tests; do not claim atomistic end-to-end verification from those tests. Both
+failed atomistic attempts are retained in the evidence logs. Temporary job copies
+and captures were removed, with original source hashes verified unchanged.
+
+## Show submodel only (2026-11-10)
+
+The checkbox above Define/Edit submodel filters omitted source nucleotides using
+prepared NAMD residue identities or oxDNA source indices. Retained shell and
+bonded-support nucleotides stay visible even outside the geometric shell; water
+and ions retain their independent display controls. It is enabled after preparation
+establishes exact membership, never guessed from current deformed positions.
+Selection is remembered per job in the current UI session; switching job/engine
+or document restores the appropriate mask. No molecular or persisted Hide/Show
+state changes. The visibility controller composes the temporary mask with user
+visibility, while atomistic instance alpha hides matching atoms and crossing bonds
+through representation rebuilds. Membership is invalidated by region edits.
+
+Verified in an isolated app session using completed Submodel_tests NAMD output:
+408 retained and 726 omitted nucleotides; Full, VDW and ball-and-stick renderings
+hide omitted context, and switching off restores it. Screenshots were visually
+inspected; source files remained unchanged and disposable copies were removed.
+Evidence: `.development-artifacts/submodel-only-20261110/`. Broad smoke remains
+deferred while the user's native NAMD simulation is active.
+
+## Box and Solvent visualization controls (2026-11-10)
+
+Water, Ions and Periodic box live in the Box and Solvent card, above preparation
+settings and Define submodel. They retain the existing live Display MD/trajectory
+transports: water uses Display MD snapshots, while ions and actual cell outlines
+also work in trajectory playback. The actual periodic cell is independent of the
+submodel box/shell overlay. Preparation edits respond only to their own inputs;
+changing display toggles or submodel controls must not clear saved-job context.
+VR mirrors the relocated solvent group without exposing preparation controls.
+Verification: 10,200 frontend tests passed (one skipped), and two isolated real-job
+browser checks passed with visual inspection for full and submodel snapshots.
+Toggles off remove solvent/cell while preserving the submodel shell. Copies and
+images removed; source files unchanged. Broad smoke was blocked by the existing
+active-NAMD guard, which was not overridden.
 
 ## NAMD execution admission and analysis contention (2026-11-10)
 

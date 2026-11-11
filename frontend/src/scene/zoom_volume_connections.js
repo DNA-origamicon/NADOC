@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { partitionExtraBaseUpdates, setExtraBaseInstanceFromSim, simBeadIndex, setExtraBaseConnectors, setExtraBaseSlabConnectors } from './crossover_connections.js'
 import { baseKey } from './base_ref.js'
 import { buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 import { buildVolumeExtras, paintVolumeExtras } from './view_volume_extras.js'
@@ -55,7 +56,7 @@ export function buildZoomConnections({ root, design, entries, selectedKeys, boun
   const strands = computeAtomStrandColors({ ...state, currentDesign: design, coloringMode: coloring }, buildStapleColorMap(geometry, design))
   const arcs = records.filter(r => !r.extra_bases?.length).map(record => {
     const [a, b] = endpoints(record)
-    return { crossover_id: record.id, from: new THREE.Vector3(...a.backbone_position), to: new THREE.Vector3(...b.backbone_position), color: strands.get(a.strand_id) ?? 0x0070bb }
+    return { fromKey: baseKey(a, a.copy_k ?? 0), toKey: baseKey(b, b.copy_k ?? 0), crossover_id: record.id, from: new THREE.Vector3(...a.backbone_position), to: new THREE.Vector3(...b.backbone_position), color: strands.get(a.strand_id) ?? 0x0070bb }
   })
   // Native cross-helix cones have zero radius: their visible connection is an
   // arc, including imported routing with no explicit crossover record. Derive
@@ -70,7 +71,7 @@ export function buildZoomConnections({ root, design, entries, selectedKeys, boun
       const ka = baseKey(a, a.copy_k ?? 0), kb = baseKey(b, b.copy_k ?? 0)
       const va = visibleKeys.get(ka), vb = visibleKeys.get(kb)
       if (!va || !vb || (selectedKeys.has(ka) && selectedKeys.has(kb)) !== selectionOnly) continue
-      arcs.push({ from: new THREE.Vector3(...va.backbone_position), to: new THREE.Vector3(...vb.backbone_position),
+      arcs.push({ fromKey: ka, toKey: kb, from: new THREE.Vector3(...va.backbone_position), to: new THREE.Vector3(...vb.backbone_position),
         color: strands.get(a.strand_id) ?? 0x0070bb })
     }
   }
@@ -83,7 +84,35 @@ export function buildZoomConnections({ root, design, entries, selectedKeys, boun
   // Keep inserted residues and their native curved backbone, including saved poses.
   const extras = buildVolumeExtras(subset, [...geometry, ...records.flatMap(endpoints)], group, representation === 'full' ? 'full' : 'beads')
   paintVolumeExtras(extras, { columns: new Map(geometry.map(n => [`${n.helix_id}:${n.bp_index}`, 'full'])), design, mode: coloring, strands, nucAlphas: new Map() })
-  return { group, count: arcs.length + records.filter(r => r.extra_bases?.length).length, dispose() {
+  return { group, update(live, updates) {
+    const byKey = new Map(live.map(e => [baseKey(e.nuc, e.nuc.copy_k ?? 0), e.pos]))
+    if (lines) {
+      for (const arc of arcs) {
+        const a = byKey.get(arc.fromKey) ?? arc.from, b = byKey.get(arc.toKey) ?? arc.to
+        writeNativeConnectionArc(lines.positions, arc.vertIdx, a, a.clone().add(b).multiplyScalar(.5), b)
+      }
+      lines.geo.attributes.position.needsUpdate = true
+      lines.geo.computeBoundingSphere()
+    }
+    const { simXb } = partitionExtraBaseUpdates(updates)
+    for (const arc of extras?.arcData ?? []) {
+      const simulated = simXb?.get(arc.xoId)
+      if (!simulated) continue
+      for (let k=0;k<arc.beadCount;k++) {
+        const s = simulated.get(k)
+        if (s) setExtraBaseInstanceFromSim(extras.beadsMesh,extras.slabsMesh,arc.beadStartIdx+simBeadIndex(k,arc.beadCount,arc.simReversed),s.pos,s.normal,arc.avgAx,s)
+      }
+      const a = byKey.get(baseKey(arc.nucA,arc.nucA.copy_k ?? 0)), b = byKey.get(baseKey(arc.nucB,arc.nucB.copy_k ?? 0))
+      if (a && b) {
+        const matrix = new THREE.Matrix4(), points = [a]
+        for (let k=0;k<arc.beadCount;k++) { extras.beadsMesh.getMatrixAt(arc.beadStartIdx+k,matrix); points.push(new THREE.Vector3().setFromMatrixPosition(matrix)) }
+        points.push(b)
+        setExtraBaseConnectors(extras.connMesh,arc.connStartIdx,points,points.length-1,null)
+        setExtraBaseSlabConnectors(extras.beadsMesh,extras.slabsMesh,extras.slabConnMesh,arc.beadStartIdx,arc.beadCount,null)
+      }
+      for (const mesh of [extras.beadsMesh,extras.slabsMesh,extras.connMesh,extras.slabConnMesh]) mesh.instanceMatrix.needsUpdate = true
+    }
+  }, count: arcs.length + records.filter(r => r.extra_bases?.length).length, dispose() {
     group.traverse(o => {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose()
       for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) m.dispose()
