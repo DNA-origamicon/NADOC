@@ -1,0 +1,79 @@
+{
+  "source_page_total": 19,
+  "pages_reviewed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "visual_audit_counts": {
+    "1": 4,
+    "2": 11,
+    "3": 11,
+    "4": 12,
+    "5": 7,
+    "6": 8,
+    "7": 9,
+    "8": 12,
+    "9": 11,
+    "10": 12,
+    "11": 11,
+    "12": 10,
+    "13": 7,
+    "14": 11,
+    "15": 7
+  },
+  "transcribed": 143,
+  "distinct_leads": 105,
+  "repeated_appearances": 38,
+  "source_types": {
+    "keynote": 10,
+    "invited_talk": 21,
+    "contributed_talk": 9,
+    "poster": 102,
+    "award_address": 1
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6146,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 12335
+  },
+  "counts": {
+    "publication_versions": 6146,
+    "canonical_work_keys": 6144,
+    "provisional_work_keys_not_reconciled": 6142,
+    "versions_with_explicit_version_relation": 4,
+    "review_stages": {
+      "metadata_screened": 1292,
+      "unreviewed": 4545,
+      "fulltext_reviewed": 74,
+      "design_sources_reviewed": 235
+    },
+    "relevance": {
+      "uncertain": 5810,
+      "background_or_review": 35,
+      "design_bearing": 281,
+      "not_origami": 20
+    },
+    "catalog_eligibility": {
+      "unresolved": 6120,
+      "excluded": 25,
+      "eligible": 1
+    },
+    "design_groups": 142,
+    "design_source_reviews": 65,
+    "discovery_runs": 50
+  }
+}

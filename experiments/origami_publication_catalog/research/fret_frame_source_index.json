@@ -1,0 +1,1136 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/acs-expansion-20261104/20550705-ja9b09093_si_001.pdf",
+    "sha256": "8741edaa856631d58187bc70233af6abb111f182024e41683ce41806d106c788",
+    "url": "https://ndownloader.figshare.com/files/20550705",
+    "locator": "SIcaptions1-6,FigureS14/TableS1 pages16-19,TableS5caption/organization23-29 and references30 inspected. Not fullkinetic results or independent base-level audit."
+  },
+  "rows": [
+    {
+      "kind": "Oligo",
+      "number": 1,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 2,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 3,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 4,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 5,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 6,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 7,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 8,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 9,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 10,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 11,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 12,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 13,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 14,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 15,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 16,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 17,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 18,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 19,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 20,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 21,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 22,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 23,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 24,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 25,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 26,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 27,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 28,
+      "pdf_page": 23
+    },
+    {
+      "kind": "Oligo",
+      "number": 29,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 30,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 31,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 32,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 33,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 34,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 35,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 36,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 37,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 38,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 39,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 40,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 41,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 42,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 43,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 44,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 45,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 46,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 47,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 48,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 49,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 50,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 51,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 52,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 53,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 54,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 55,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 56,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 57,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 58,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 59,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 60,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 61,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 62,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 63,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 64,
+      "pdf_page": 24
+    },
+    {
+      "kind": "Oligo",
+      "number": 65,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 66,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 67,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 68,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 69,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 70,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 71,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 72,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 73,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 74,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 75,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 76,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 77,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 78,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 79,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 80,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 81,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 82,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 83,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 84,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 85,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 86,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 87,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 88,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 89,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 90,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 91,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 92,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 93,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 94,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 95,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 96,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 97,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 98,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 99,
+      "pdf_page": 25
+    },
+    {
+      "kind": "Oligo",
+      "number": 100,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 101,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 102,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 103,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 104,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 105,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 106,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 107,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 108,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 109,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 110,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 111,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 112,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 113,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 114,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 115,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 116,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 117,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 118,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 119,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 120,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 121,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 122,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 123,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 124,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 125,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 126,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 127,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 128,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 129,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 130,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 131,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 132,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 133,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 134,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 135,
+      "pdf_page": 26
+    },
+    {
+      "kind": "Oligo",
+      "number": 136,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 137,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 138,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 139,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 140,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 141,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 142,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 143,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 144,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 145,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 146,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 147,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 148,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 149,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 150,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 151,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 152,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 153,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 154,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 155,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 156,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 157,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 158,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 159,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 160,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 161,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 162,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 163,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 164,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 165,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 166,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 167,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 168,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 169,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 170,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 171,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 172,
+      "pdf_page": 27
+    },
+    {
+      "kind": "Oligo",
+      "number": 173,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 174,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 175,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 176,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 177,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 178,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 179,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 180,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 181,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 182,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 183,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 184,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Oligo",
+      "number": 185,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 1,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 2,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 3,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 4,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 5,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 6,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 7,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 8,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 9,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 11,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 12,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 13,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 14,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 15,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 16,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 17,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 18,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 19,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 20,
+      "pdf_page": 28
+    },
+    {
+      "kind": "Endcap",
+      "number": 21,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 22,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 23,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 24,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 25,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 26,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 27,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 28,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 29,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 30,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 31,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 33,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 34,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 35,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 36,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 37,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 38,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 39,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 40,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 10,
+      "pdf_page": 29
+    },
+    {
+      "kind": "Endcap",
+      "number": 32,
+      "pdf_page": 29
+    }
+  ],
+  "limitations": "Name/page index only. Wrapped DNAsequence rows not reconstructed; endcaps10/32biotin and assaystrandsTableS1 require independent sequence verification."
+}

@@ -165,14 +165,16 @@ export function normalizeWorkspacePath(path) {
 
 /**
  * Jobs to show for the active part. With `showAll`, every job passes. Otherwise
- * only jobs whose `design_source_path` matches the active part's path; if no part
- * path is known we show nothing (rather than leaking other designs' jobs).
+ * match the source path, or exact project ownership for pathless legacy copies.
+ * If no active part path is known we show nothing, avoiding other designs' jobs.
  */
-export function filterJobsForPart(jobs, partPath, showAll) {
+export function filterJobsForPart(jobs, partPath, showAll, projectId = null) {
   if (showAll) return jobs
   const current = normalizeWorkspacePath(partPath)
   if (!current) return []
-  return jobs.filter(j => j.creating || normalizeWorkspacePath(j.design_source_path) === current)
+  return jobs.filter(j => j.creating || normalizeWorkspacePath(j.design_source_path) === current || (
+    !normalizeWorkspacePath(j.design_source_path) && projectId != null && j.project_id === projectId
+  ))
 }
 
 /**
@@ -191,8 +193,14 @@ export function newestCompletedForPart(jobs, partPath) {
 
 /** Preserve an explicit historical selection while another job runs in the background.
  * Active is only the initial default; it never outranks a still-valid user choice. */
-export function preferredMdSelection(jobs, selectedId, userDeselected = false) {
-  if (!jobs?.length || userDeselected) return null
+export function preferredMdSelection(jobs, selectedId, userDeselected = false, allJobs = jobs) {
+  if (userDeselected) return null
+  // Older copies can lack a source path. An explicit selection is still valid;
+  // background filtering must not interrupt its editor. Document switches clear
+  // selection separately through nadoc:workspace-path-change.
+  const selected = selectedId && allJobs?.find(j => j.job_id === selectedId)
+  if (selected && !selected.design_source_path) return selectedId
+  if (!jobs?.length) return null
   if (selectedId && jobs.some(j => j.job_id === selectedId)) return selectedId
   return (jobs.find(j => ['running', 'preparing'].includes(j.status)) ?? jobs[0]).job_id
 }
@@ -1974,13 +1982,13 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
 
   function _selectBestJob() {
     const jobs = _visibleJobs()
-    if (!jobs.length) {
+    const preferred = preferredMdSelection(jobs, _selectedId, _userDeselected, _jobs)
+    if (!jobs.length && !preferred) {
       _clearSelectedJob()
       _userDeselected = false   // nothing to hold a deselection against
       return
     }
     if (_userDeselected) return   // the user deliberately cleared the selection — respect it
-    const preferred = preferredMdSelection(jobs, _selectedId)
     if (preferred && preferred !== _selectedId) _selectJob(preferred, { automatic: true })
   }
 
@@ -2163,7 +2171,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
   }
 
   function _visibleJobs() {
-    return filterJobsForPart(_jobs, _currentPartPath(), _showAllJobs())
+    return filterJobsForPart(_jobs, _currentPartPath(), _showAllJobs(), store.getState().currentDesign?.id)
   }
 
   /**
@@ -3814,6 +3822,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     })
   }
   function _paintRunControl() {
+    const regionJob = _selectedJob()
+    if (regionJob) submodel?.setEditable?.('md', regionJob.job_id, mdJobEditable(regionJob) && !mdIsProductionChild(regionJob))
     if (!runBtn) return
     const rc = _runControl()
     runBtn.textContent = rc.label
@@ -3989,6 +3999,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         // A sequence-deferred job has no package yet.  Let /start perform the sequence
         // gate first; forces can only be attached after preparation has produced confs.
         const forced = awaitingSequence ? '' : await _applyForcesToSelected()
+        await submodel?.flush('md')
         const d = await api.startMdJob(_selectedId)
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
         showToast(
@@ -4020,6 +4031,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       }
       if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
       try {
+        await submodel?.flush('md')
         const d = await api.startMdJob(_selectedId)
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
         showToast('Resume requested', 'ok')
@@ -4162,7 +4174,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     }
 
     try {
-      const submodelBox = submodel?.capture('md')
+      await submodel?.flush('md')
       let d = await api.spawnMdProduction(parentId, full)
       if (!d) {
         const why = api.lastErrorMessage() ?? 'Server error'
@@ -4172,7 +4184,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       }
       const childId = d.job?.job_id
-      if (childId) await submodel?.created('md', childId, submodelBox)
+      if (childId) await submodel?.select('md', childId)
       await _fetchJobs()
       if (childId) _selectJob(childId)
       if (isLocalRun) {
@@ -4334,6 +4346,11 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
 
     _launching = true
     _paintRunControl()
+    let submodelBox
+    try {
+      await submodel?.flush('md')
+      submodelBox = submodel ? submodel.capture('md') : proto.submodel ?? null
+    } catch (error) { _launching = false; _paintRunControl(); showToast(error.message, 'error'); return }
 
     const payload = {
       ...proto,
@@ -4345,6 +4362,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
       ...physicalPayload,
+      submodel: submodelBox ?? null,
       run_dir:        getRunDir('namd'),   // shared run-location: write this run into the chosen folder
     }
 
@@ -4365,12 +4383,14 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       draftId ? 'Sizing the solvated system…' : 'Saving job settings…',
       { indeterminate: true })
 
+    let memoryAdvice = null
     // Gate A — verify that the fully solvated system fits before starting the build.
     // Seeded drafts are sized later because their atomistic model is not available yet.
     if (isLocalRun && draftId) {
       try {
         const adv = await preflightMdVram(payload)
         if (!adv) throw new Error('Memory estimate unavailable')
+        memoryAdvice = adv
         const gate = gateAMessage(adv)
         if (gate) {
           const proceed = await openGateAModal(adv)
@@ -4397,9 +4417,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         if (!archiveRecommendation(fc).show && !(await confirmDiskSpaceOk(fc))) {
           hideOpProgress(); _launching = false; runBtn.disabled = false; return
         }
-        // Independent of whether the disk is tight: a run this big or this long gets
-        // an explicit Proceed/Cancel showing what it will actually cost.
-        if (!(await confirmBigRunOk(fc))) {
+        // Confirm substantial output even when there is ample free disk space.
+        if (!(await confirmBigRunOk(fc ? { ...fc, memory: memoryAdvice } : fc))) {
           hideOpProgress(); _launching = false; runBtn.disabled = false; return
         }
       } catch { /* forecast is best-effort — never block a launch on it */ }
@@ -4413,7 +4432,6 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
       // design from THIS tab's document (without it the default/empty doc is used
       // and prep 404s with "No active design"). Returns null on any HTTP error.
       // A draft prepares in place (seed comes from the draft record, not the payload).
-      const submodelBox = submodel?.capture('md')
       const job = draftId
         ? await api.prepareMdDraft(draftId, payload)
         : await api.createMdJob(payload)
@@ -4428,7 +4446,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         return
       }
 
-      if (!draftId) await submodel?.created('md', job.job_id, submodelBox)
+      if (!draftId) await submodel?.created('md', job.job_id, submodelBox, { persisted: true })
       hideOpProgress()
 
       if (job.status === 'failed') {
@@ -4708,6 +4726,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
         if (action.type === 'extend_equilibration') {
           const extended = await api.extendElectrodeEquilibration(jobId, {duration_ns: 2.4})
           if (!extended) throw new Error(api.lastErrorMessage() ?? 'Could not extend equilibration')
+          await submodel?.flush('md')
           const started = await api.startMdJob(jobId)
           if (!started) throw new Error(api.lastErrorMessage() ?? 'Extension queued; start it from the job list')
           await _fetchJobs()
@@ -4715,6 +4734,7 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
           return
         }
         if (action.type === 'retry') {
+          await submodel?.flush('md')
           const d = await api.startMdJob(jobId)
           if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
           await _fetchJobs()
@@ -4809,7 +4829,8 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
 
   // ── Job selection + WS subscription ───────────────────────────────────────
   function _selectJob(jobId, options = false) {
-    void submodel?.select('md', jobId)
+    const regionJob = _jobs.find(j => j.job_id === jobId)
+    void submodel?.select('md', jobId, { editable: mdJobEditable(regionJob) && !mdIsProductionChild(regionJob) })
     const explicit = options === true || (options && typeof options === 'object' && options.automatic === false)
     _grapheneSelectionId = jobId
     const surfaceJob = _jobs.find(j => j.job_id === jobId) || null
@@ -4971,6 +4992,10 @@ export function initMdJobsPanel({ submodel = null, mdDisplayController = null, g
     _renderList()
     _paintRunControl()   // nothing selected → the control disables with a hint
   }
+
+  if (submodel) window.addEventListener('nadoc:submodel-new-setup', event => {
+    if (event.detail?.engine === 'namd') _deselectJob()
+  })
 
   /** A DRAFT's stored prep params, in the wizard's own vocabulary.
    *

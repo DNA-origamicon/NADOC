@@ -69,7 +69,7 @@ it('retries the exact unsaved selection after a failed write', async () => {
   await x.controller.select('oxdna', 'one')
   x.edit(box)
   await vi.waitFor(() => expect(document.body.textContent).toContain('Could not save submodel'))
-  document.querySelector('#oxdna-submodel button:nth-of-type(2)').click()
+  document.querySelector('#oxdna-submodel > button').click()
   await vi.waitFor(() => expect(document.querySelector('#oxdna-submodel [role=status]').textContent).toBe('Submodel saved to job.'))
   expect(save.mock.calls[1]).toEqual(['oxdna', 'one', box])
   x.controller.dispose()
@@ -92,7 +92,7 @@ it('clears an earlier save error when a newer queued edit succeeds', async () =>
   x.edit(box)
   x.edit({ ...box, min_corner: [-5, -5, -5] })
   await vi.waitFor(() => expect(document.querySelector('#oxdna-submodel [role=status]').textContent).toBe('Submodel saved to job.'))
-  expect(document.querySelector('#oxdna-submodel button:nth-of-type(2)').hidden).toBe(true)
+  expect(document.querySelector('#oxdna-submodel > button').hidden).toBe(true)
   x.controller.dispose()
 })
 
@@ -168,4 +168,96 @@ it('shows native CPU budgets and ignores stale projection responses', async () =
   expect(document.getElementById('oxdna-submodel-projection').textContent).toContain('simulation VRAM 0 MiB')
   expect(document.getElementById('oxdna-submodel-projection').textContent).not.toContain('999')
   x.controller.dispose()
+})
+
+it('keeps region controls closed until Define/Edit is clicked and puts guidance on the button', async () => {
+  const x = setup({ getSimulationSubmodel: vi.fn(async () => ({ box })) })
+  await x.controller.select('md', 'saved')
+  const button = document.getElementById('md-define-submodel')
+  const content = document.getElementById('md-submodel-controls')
+  expect(content.hidden).toBe(true)
+  expect(button.title).toContain('uniform 0.1 kcal/mol/Å²')
+  expect(document.getElementById('md-submodel').textContent).not.toContain('NAMD simulates')
+  button.click()
+  expect(content.hidden).toBe(false)
+  expect(button.getAttribute('aria-expanded')).toBe('true')
+  await x.controller.select('md', 'other')
+  expect(content.hidden).toBe(true)
+  x.controller.dispose()
+})
+
+it('turns an edit of frozen NAMD geometry into a new setup without writing the completed job', async () => {
+  const x = setup({ getSimulationSubmodel: vi.fn(async () => ({ box })) })
+  const events = []; const listen = e => events.push(e.detail)
+  window.addEventListener('nadoc:submodel-new-setup', listen)
+  await x.controller.select('md', 'completed', { editable: true })
+  // A queued job can become running/completed while it stays selected.
+  x.controller.setEditable('md', 'completed', false)
+  window.dispatchEvent(new CustomEvent('nadoc:simulation-engine', { detail: { engine: 'namd' } }))
+  document.getElementById('md-define-submodel').click()
+  x.edit({ ...box, min_corner: [-3,-3,-4] })
+  await x.controller.flush('md')
+  expect(events).toEqual([{ engine: 'namd' }])
+  expect(x.service.saveSimulationSubmodel).not.toHaveBeenCalled()
+  expect(x.controller.capture('md').min_corner).toEqual([-3,-3,-4])
+  expect(document.querySelector('#md-submodel [role=status]').textContent).toBe('Submodel ready for new job.')
+  await x.controller.select('md', 'completed', { editable: false })
+  expect(x.controller.capture('md')).toEqual(box)
+  window.removeEventListener('nadoc:submodel-new-setup', listen)
+  x.controller.dispose()
+})
+
+it('adopts the box already persisted by NAMD creation without a redundant PUT', async () => {
+  const x = setup({ saveSimulationSubmodel: vi.fn(async () => null) })
+  await x.controller.created('md', 'new-draft', box, { persisted: true })
+  await x.controller.flush('md')
+  expect(x.service.saveSimulationSubmodel).not.toHaveBeenCalled()
+  expect(x.controller.capture('md')).toEqual(box)
+  x.controller.dispose()
+})
+
+it('keeps an in-progress shell edit through unrelated sidebar refreshes', async () => {
+  const x = setup({ getSimulationSubmodel: vi.fn(async () => ({ box })) })
+  await x.controller.select('md', 'completed', { editable: false })
+  window.dispatchEvent(new CustomEvent('nadoc:simulation-engine', { detail: { engine: 'namd' } }))
+  const input = document.getElementById('md-submodel-shell')
+  input.value = '2.4'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  window.dispatchEvent(new CustomEvent('nadoc:box-solvent-details'))
+  expect(input.value).toBe('2.4')
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+  await x.controller.flush('md')
+  expect(x.controller.capture('md').shell_nm).toBe(2.4)
+  expect(x.service.saveSimulationSubmodel).not.toHaveBeenCalled()
+  x.controller.dispose()
+})
+
+it('defaults to a 3 nm surrounding shell and explains the NAMD uniform boundary on hover', () => {
+  const x = setup()
+  expect(document.getElementById('md-submodel-shell').value).toBe('3')
+  expect(document.getElementById('md-define-submodel').title).toContain('0.1 kcal/mol/Å²')
+  expect(document.getElementById('md-define-submodel').title).toContain('fixed outer 0.3 nm')
+  expect(document.getElementById('md-submodel-controls').hidden).toBe(true)
+  x.controller.dispose()
+})
+
+it('enables zoom only for a loaded box and sends a detached snapshot for either engine', async () => {
+  const x = setup()
+  const listener = vi.fn()
+  window.addEventListener('nadoc:zoom-volume-box', listener)
+  try {
+    for (const engine of ['md', 'oxdna']) {
+      const button = document.getElementById(`${engine}-submodel-zoom`)
+      expect(button.disabled).toBe(true)
+      await x.controller.created(engine, 'job', box, { persisted: true })
+      expect(button.disabled).toBe(false)
+      button.click()
+      const sent = listener.mock.calls.at(-1)[0].detail
+      expect(sent.min_corner).toEqual(box.min_corner)
+      sent.min_corner[0] = 999
+      expect(x.controller.capture(engine).min_corner).toEqual(box.min_corner)
+      await x.controller.select(engine, null)
+      expect(button.disabled).toBe(true)
+    }
+  } finally { window.removeEventListener('nadoc:zoom-volume-box', listener); x.controller.dispose() }
 })

@@ -1,0 +1,43 @@
+{
+  "first_pass_count": 20,
+  "input_count": 25,
+  "reviewed_keys": [
+    "10.1155/2015/245154",
+    "10.1158/1078-0432.ccr-14-3126",
+    "10.1186/s12896-015-0180-6",
+    "10.1371/journal.pone.0130875",
+    "10.15729/nanocellnews.2015.01.14.002"
+  ],
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6040,
+    "provisional_work_keys_not_reconciled": 6039,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 1176,
+      "unreviewed": 4579,
+      "fulltext_reviewed": 66,
+      "design_sources_reviewed": 220
+    },
+    "relevance": {
+      "uncertain": 5735,
+      "background_or_review": 29,
+      "design_bearing": 263,
+      "not_origami": 14
+    },
+    "catalog_eligibility": {
+      "unresolved": 6021,
+      "excluded": 19,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11955
+  }
+}

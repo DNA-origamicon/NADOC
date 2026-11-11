@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "selected": 25,
+  "first_pass_reviewed": 17,
+  "remaining_first_pass": 8,
+  "truss_paper_not_excluded_wholesale": true,
+  "all_legacy_ids_preserved": true,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5457,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9173
+  }
+}

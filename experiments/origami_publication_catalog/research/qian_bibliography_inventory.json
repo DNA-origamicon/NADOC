@@ -1,0 +1,809 @@
+{
+  "lab_all": [
+    {
+      "section": "Experimental work",
+      "number": 17,
+      "citation": "[17] Heat-rechargeable computation in DNA logic circuits and neural networks. Tianqi Song and Lulu Qian. Nature , 10.1038/s41586-025-09570-2 , 2025. (pdf) (supp info) (source data and code)",
+      "stated_years": [
+        2025
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41586-025-09570-2",
+        "https://rdcu.be/eI3bT",
+        "https://www.qianlab.caltech.edu/41586_2025_9570_MOESM1_ESM.pdf",
+        "https://data.caltech.edu/records/q9350-kvd05"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 16,
+      "citation": "[16] Supervised learning in DNA neural networks. Kevin M. Cherry and Lulu Qian. Nature , 645:639\u2013647 , 2025. (pdf) (supp info) (source data and code)",
+      "stated_years": [
+        2025
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41586-025-09479-w",
+        "https://rdcu.be/eDWZY",
+        "https://www.qianlab.caltech.edu/41586_2025_9479_MOESM1_ESM.pdf",
+        "https://data.caltech.edu/records/5bvkt-r7y16"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 15,
+      "citation": "[15] Modular reconfiguration of DNA origami assemblies using tile displacement. Namita Sarraf, Kellen R. Rodriguez, and Lulu Qian. Science Robotics , 8:eadf1511 , 2023. (pdf) (supp info) (DNA29 slides)",
+      "stated_years": [
+        2023
+      ],
+      "source_links": [
+        "https://www.qianlab.caltech.edu/scirobotics.adf1511.pdf",
+        "https://www.qianlab.caltech.edu/scirobotics.adf1511_sm.pdf",
+        "https://www.qianlab.caltech.edu/Tile_displacement_DNA29.pdf"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 14,
+      "citation": "[14] DNA strand-displacement temporal logic circuits. Anna P. Lapteva, Namita Sarraf, and Lulu Qian. JACS , 144:12443\u221212449 , 2022. (pdf) (supp info)",
+      "stated_years": [
+        2022
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.2c04325",
+        "https://pubs.acs.org/doi/pdf/10.1021/jacs.2c04325",
+        "https://pubs.acs.org/doi/suppl/10.1021/jacs.2c04325/suppl_file/ja2c04325_si_001.pdf"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 13,
+      "citation": "[13] Developmental self-assembly of a DNA ring with stimulus-responsive size and growth direction. Allison T. Glynn, Samuel R. Davidson, and Lulu Qian. JACS , 144:10075\u221210079 , 2022. (pdf) (supp info)",
+      "stated_years": [
+        2022
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.2c03853",
+        "https://pubs.acs.org/doi/pdf/10.1021/jacs.2c03853",
+        "https://pubs.acs.org/doi/suppl/10.1021/jacs.2c03853/suppl_file/ja2c03853_si_001.pdf"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 12,
+      "citation": "[12] A loser-take-all DNA circuit. Kellen R. Rodriguez, Namita Sarraf, and Lulu Qian. ACS Synthetic Biology , 10:2878\u22122885 , 2021. (pdf) (supp info)",
+      "stated_years": [
+        2021
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/full/10.1021/acssynbio.1c00318",
+        "https://pubs.acs.org/doi/pdf/10.1021/acssynbio.1c00318",
+        "https://pubs.acs.org/doi/suppl/10.1021/acssynbio.1c00318/suppl_file/sb1c00318_si_001.pdf"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 11,
+      "citation": "[11] A cooperative DNA catalyst. Dallas N. Taylor, Samuel R. Davidson, and Lulu Qian. JACS , 143:15567\u221215571 , 2021. (pdf) (supp info)",
+      "stated_years": [
+        2021
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.1c07122",
+        "https://pubs.acs.org/doi/pdf/10.1021/jacs.1c07122",
+        "https://pubs.acs.org/doi/suppl/10.1021/jacs.1c07122/suppl_file/ja1c07122_si_001.pdf"
+      ]
+    },
+    {
+      "section": "Experimental work",
+      "number": 10,
+      "citation": "[10] Information-based autonomous reconfiguration in systems of interacting DNA nanostructures. Philip Petersen, Grigory Tikhomirov, and Lulu Qian. Nature Communications , 9:5362 , 2018. (pdf) (supp info) (supp movie)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41467-018-07805-7",
+        "https://rdcu.be/bdLzF",
+        "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-07805-7/MediaObjects/41467_2018_7805_MOESM1_ESM.pdf",
+        "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-07805-7/MediaObjects/41467_2018_7805_MOESM3_ESM.mp4"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:10"
+    },
+    {
+      "section": "Experimental work",
+      "number": 9,
+      "citation": "[9] Triangular DNA Origami Tilings. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. JACS , 140:17361\u221217364 , 2018. (pdf) (supp info)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.8b10609",
+        "https://pubs.acs.org/doi/pdf/10.1021/jacs.8b10609",
+        "https://pubs.acs.org/doi/suppl/10.1021/jacs.8b10609/suppl_file/ja8b10609_si_001.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:9"
+    },
+    {
+      "section": "Experimental work",
+      "number": 8,
+      "citation": "[8] Scaling up molecular pattern recognition with DNA-based winner-take-all neural networks. Kevin M. Cherry and Lulu Qian. Nature , 559:370\u2013376 , 2018. (pdf)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41586-018-0289-6",
+        "https://rdcu.be/2s7m"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:8"
+    },
+    {
+      "section": "Experimental work",
+      "number": 7,
+      "citation": "[7] Probabilistic switching circuits in DNA. Daniel Wilhelm, Jehoshua Bruck, and Lulu Qian. PNAS , 115:903\u2013908 , 2018. (pdf) (supp info)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "http://www.pnas.org/content/115/5/903",
+        "https://www.qianlab.caltech.edu/PNAS-2018-Wilhelm-1715926115.pdf",
+        "https://www.qianlab.caltech.edu/pnas.1715926115.sapp.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:7"
+    },
+    {
+      "section": "Experimental work",
+      "number": 6,
+      "citation": "[6] Fractal assembly of micrometre-scale DNA origami arrays with arbitrary patterns. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. Nature , 552:67\u201371 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/nature24655",
+        "http://rdcu.be/AAx1",
+        "https://www.qianlab.caltech.edu/nature24655-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:6"
+    },
+    {
+      "section": "Experimental work",
+      "number": 5,
+      "citation": "[5] A cargo-sorting DNA robot. Anupama J. Thubagere, Wei Li, Robert F. Johnson, Zibo Chen, Shayan Doroudi, Yae Lim Lee, Gregory Izatt, Sarah Wittman, Niranjan Srinivas, Damien Woods, Erik Winfree, and Lulu Qian. Science , 357:eaan6558 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "http://science.sciencemag.org/content/sci/suppl/2017/09/14/357.6356.eaan6558.DC1/aan6558_Thubagere_SM_Rev.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:5"
+    },
+    {
+      "section": "Experimental work",
+      "number": 4,
+      "citation": "[4] Compiler-aided systematic construction of large-scale DNA strand displacement circuits using unpurified components. Anupama J. Thubagere, Chris Thachuk, Joseph Berleant, Robert F. Johnson, Diana A. Ardelean, Kevin M. Cherry, and Lulu Qian. Nature Communications , 8:14373 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "http://www.nature.com/articles/ncomms14373",
+        "https://www.qianlab.caltech.edu/ncomms14373.pdf",
+        "https://www.qianlab.caltech.edu/ncomms14373-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:4"
+    },
+    {
+      "section": "Experimental work",
+      "number": 3,
+      "citation": "[3] Programmable disorder in random DNA tilings. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. Nature Nanotechnology , 12:251\u2013259 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/nnano.2016.256",
+        "https://www.qianlab.caltech.edu/nnano.2016.256.pdf",
+        "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:3"
+    },
+    {
+      "section": "Experimental work",
+      "number": 2,
+      "citation": "[2] Neural network computation with DNA strand displacement cascades. Lulu Qian, Erik Winfree, and Jehoshua Bruck. Nature , 475:368\u2013372 , 2011. (pdf) (supp info)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.nature.com/nature/journal/v475/n7356/full/nature10262.html",
+        "https://www.qianlab.caltech.edu/nature10262.pdf",
+        "https://www.qianlab.caltech.edu/nature10262-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:2"
+    },
+    {
+      "section": "Experimental work",
+      "number": 1,
+      "citation": "[1] Scaling up digital circuit computation with DNA strand displacement cascades. Lulu Qian and Erik Winfree. Science , 332:1196\u20131201 , 2011. (pdf) (supp info)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.sciencemag.org/content/332/6034/1196.abstract",
+        "https://www.qianlab.caltech.edu/seesaw_digital_circuits2011.pdf",
+        "https://www.qianlab.caltech.edu/seesaw_digital_circuits2011_SI.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:1"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 6,
+      "citation": "[6] Two-dimensional tile displacement can simulate cellular automata. Erik Winfree and Lulu Qian. arXiv , arXiv:2301.01929 , 2023. (pdf)",
+      "stated_years": [
+        2023
+      ],
+      "source_links": [
+        "https://arxiv.org/abs/2301.01929",
+        "https://arxiv.org/pdf/2301.01929.pdf"
+      ]
+    },
+    {
+      "section": "Theoretical work",
+      "number": 5,
+      "citation": "[5] Simplifying chemical reaction network implementations with two-stranded DNA building blocks. Robert F. Johnson and Lulu Qian. In C. Geary and M. J. Patitz, editors, DNA Computing and Molecular Programming, LIPIcs , 174:2:1\u20132:14 , 2020. (pdf)",
+      "stated_years": [
+        2020
+      ],
+      "source_links": [
+        "https://drops.dagstuhl.de/opus/volltexte/2020/12955",
+        "https://drops.dagstuhl.de/opus/volltexte/2020/12955/pdf/LIPIcs-DNA-2020-2.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:5"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 4,
+      "citation": "[4] Programming and simulating chemical reaction networks on a surface. Samuel Clamons, Lulu Qian, and Erik Winfree. Journal of the Royal Society Interface , 17:20190790 , 2020. (pdf)",
+      "stated_years": [
+        2020
+      ],
+      "source_links": [
+        "https://royalsocietypublishing.org/doi/10.1098/rsif.2019.0790",
+        "https://royalsocietypublishing.org/doi/pdf/10.1098/rsif.2019.0790"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:4"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 3,
+      "citation": "[3] Parallel and scalable computation and spatial dynamics with DNA-based chemical reaction networks on a surface. Lulu Qian and Erik Winfree. In S. Murata and S. Kobayashi, editors, DNA Computing and Molecular Programming, LNCS , 8727:114\u2013131 , 2014. (pdf)",
+      "stated_years": [
+        2014
+      ],
+      "source_links": [
+        "http://link.springer.com/chapter/10.1007/978-3-319-11295-4_8",
+        "https://www.qianlab.caltech.edu/Surface_CRNs_DNA20.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:3"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 2,
+      "citation": "[2] Efficient Turing-universal computation with DNA polymers. Lulu Qian, David Soloveichik, and Erik Winfree. In Y. Sakakibara and Y. Mi, editors, DNA Computing and Molecular Programming, LNCS , 6518:123\u2013140 , 2011. (pdf)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.springerlink.com/content/l35415v031r1w021/",
+        "https://www.qianlab.caltech.edu/DNA_stack_machines2011_LNCS.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:2"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 1,
+      "citation": "[1] A simple DNA gate motif for synthesizing large-scale circuits. Lulu Qian and Erik Winfree. Journal of the Royal Society Interface , 8:1281\u20131297 , 2011. (pdf) Conference version in A. Goel, F. C. Simmel and P. Sosik, editors, DNA Computing and Molecular Programming, LNCS , 5347:70\u201389 , 2009. (pdf)",
+      "stated_years": [
+        2011,
+        2009
+      ],
+      "source_links": [
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.short",
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.full.pdf",
+        "http://www.springerlink.com/content/x62w6487288467h6/",
+        "https://www.qianlab.caltech.edu/seesaw_theory2009lncs.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:1"
+    }
+  ],
+  "lab_pre2020_and_boundary": [
+    {
+      "section": "Experimental work",
+      "number": 10,
+      "citation": "[10] Information-based autonomous reconfiguration in systems of interacting DNA nanostructures. Philip Petersen, Grigory Tikhomirov, and Lulu Qian. Nature Communications , 9:5362 , 2018. (pdf) (supp info) (supp movie)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41467-018-07805-7",
+        "https://rdcu.be/bdLzF",
+        "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-07805-7/MediaObjects/41467_2018_7805_MOESM1_ESM.pdf",
+        "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-018-07805-7/MediaObjects/41467_2018_7805_MOESM3_ESM.mp4"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:10"
+    },
+    {
+      "section": "Experimental work",
+      "number": 9,
+      "citation": "[9] Triangular DNA Origami Tilings. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. JACS , 140:17361\u221217364 , 2018. (pdf) (supp info)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.8b10609",
+        "https://pubs.acs.org/doi/pdf/10.1021/jacs.8b10609",
+        "https://pubs.acs.org/doi/suppl/10.1021/jacs.8b10609/suppl_file/ja8b10609_si_001.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:9"
+    },
+    {
+      "section": "Experimental work",
+      "number": 8,
+      "citation": "[8] Scaling up molecular pattern recognition with DNA-based winner-take-all neural networks. Kevin M. Cherry and Lulu Qian. Nature , 559:370\u2013376 , 2018. (pdf)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/s41586-018-0289-6",
+        "https://rdcu.be/2s7m"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:8"
+    },
+    {
+      "section": "Experimental work",
+      "number": 7,
+      "citation": "[7] Probabilistic switching circuits in DNA. Daniel Wilhelm, Jehoshua Bruck, and Lulu Qian. PNAS , 115:903\u2013908 , 2018. (pdf) (supp info)",
+      "stated_years": [
+        2018
+      ],
+      "source_links": [
+        "http://www.pnas.org/content/115/5/903",
+        "https://www.qianlab.caltech.edu/PNAS-2018-Wilhelm-1715926115.pdf",
+        "https://www.qianlab.caltech.edu/pnas.1715926115.sapp.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:7"
+    },
+    {
+      "section": "Experimental work",
+      "number": 6,
+      "citation": "[6] Fractal assembly of micrometre-scale DNA origami arrays with arbitrary patterns. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. Nature , 552:67\u201371 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/nature24655",
+        "http://rdcu.be/AAx1",
+        "https://www.qianlab.caltech.edu/nature24655-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:6"
+    },
+    {
+      "section": "Experimental work",
+      "number": 5,
+      "citation": "[5] A cargo-sorting DNA robot. Anupama J. Thubagere, Wei Li, Robert F. Johnson, Zibo Chen, Shayan Doroudi, Yae Lim Lee, Gregory Izatt, Sarah Wittman, Niranjan Srinivas, Damien Woods, Erik Winfree, and Lulu Qian. Science , 357:eaan6558 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "http://science.sciencemag.org/content/sci/suppl/2017/09/14/357.6356.eaan6558.DC1/aan6558_Thubagere_SM_Rev.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:5"
+    },
+    {
+      "section": "Experimental work",
+      "number": 4,
+      "citation": "[4] Compiler-aided systematic construction of large-scale DNA strand displacement circuits using unpurified components. Anupama J. Thubagere, Chris Thachuk, Joseph Berleant, Robert F. Johnson, Diana A. Ardelean, Kevin M. Cherry, and Lulu Qian. Nature Communications , 8:14373 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "http://www.nature.com/articles/ncomms14373",
+        "https://www.qianlab.caltech.edu/ncomms14373.pdf",
+        "https://www.qianlab.caltech.edu/ncomms14373-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:4"
+    },
+    {
+      "section": "Experimental work",
+      "number": 3,
+      "citation": "[3] Programmable disorder in random DNA tilings. Grigory Tikhomirov, Philip Petersen, and Lulu Qian. Nature Nanotechnology , 12:251\u2013259 , 2017. (pdf) (supp info)",
+      "stated_years": [
+        2017
+      ],
+      "source_links": [
+        "https://www.nature.com/articles/nnano.2016.256",
+        "https://www.qianlab.caltech.edu/nnano.2016.256.pdf",
+        "https://www.qianlab.caltech.edu/nnano.2016.256-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:3"
+    },
+    {
+      "section": "Experimental work",
+      "number": 2,
+      "citation": "[2] Neural network computation with DNA strand displacement cascades. Lulu Qian, Erik Winfree, and Jehoshua Bruck. Nature , 475:368\u2013372 , 2011. (pdf) (supp info)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.nature.com/nature/journal/v475/n7356/full/nature10262.html",
+        "https://www.qianlab.caltech.edu/nature10262.pdf",
+        "https://www.qianlab.caltech.edu/nature10262-s1.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:2"
+    },
+    {
+      "section": "Experimental work",
+      "number": 1,
+      "citation": "[1] Scaling up digital circuit computation with DNA strand displacement cascades. Lulu Qian and Erik Winfree. Science , 332:1196\u20131201 , 2011. (pdf) (supp info)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.sciencemag.org/content/332/6034/1196.abstract",
+        "https://www.qianlab.caltech.edu/seesaw_digital_circuits2011.pdf",
+        "https://www.qianlab.caltech.edu/seesaw_digital_circuits2011_SI.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:experimental:1"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 5,
+      "citation": "[5] Simplifying chemical reaction network implementations with two-stranded DNA building blocks. Robert F. Johnson and Lulu Qian. In C. Geary and M. J. Patitz, editors, DNA Computing and Molecular Programming, LIPIcs , 174:2:1\u20132:14 , 2020. (pdf)",
+      "stated_years": [
+        2020
+      ],
+      "source_links": [
+        "https://drops.dagstuhl.de/opus/volltexte/2020/12955",
+        "https://drops.dagstuhl.de/opus/volltexte/2020/12955/pdf/LIPIcs-DNA-2020-2.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:5"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 4,
+      "citation": "[4] Programming and simulating chemical reaction networks on a surface. Samuel Clamons, Lulu Qian, and Erik Winfree. Journal of the Royal Society Interface , 17:20190790 , 2020. (pdf)",
+      "stated_years": [
+        2020
+      ],
+      "source_links": [
+        "https://royalsocietypublishing.org/doi/10.1098/rsif.2019.0790",
+        "https://royalsocietypublishing.org/doi/pdf/10.1098/rsif.2019.0790"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:4"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 3,
+      "citation": "[3] Parallel and scalable computation and spatial dynamics with DNA-based chemical reaction networks on a surface. Lulu Qian and Erik Winfree. In S. Murata and S. Kobayashi, editors, DNA Computing and Molecular Programming, LNCS , 8727:114\u2013131 , 2014. (pdf)",
+      "stated_years": [
+        2014
+      ],
+      "source_links": [
+        "http://link.springer.com/chapter/10.1007/978-3-319-11295-4_8",
+        "https://www.qianlab.caltech.edu/Surface_CRNs_DNA20.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:3"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 2,
+      "citation": "[2] Efficient Turing-universal computation with DNA polymers. Lulu Qian, David Soloveichik, and Erik Winfree. In Y. Sakakibara and Y. Mi, editors, DNA Computing and Molecular Programming, LNCS , 6518:123\u2013140 , 2011. (pdf)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.springerlink.com/content/l35415v031r1w021/",
+        "https://www.qianlab.caltech.edu/DNA_stack_machines2011_LNCS.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:2"
+    },
+    {
+      "section": "Theoretical work",
+      "number": 1,
+      "citation": "[1] A simple DNA gate motif for synthesizing large-scale circuits. Lulu Qian and Erik Winfree. Journal of the Royal Society Interface , 8:1281\u20131297 , 2011. (pdf) Conference version in A. Goel, F. C. Simmel and P. Sosik, editors, DNA Computing and Molecular Programming, LNCS , 5347:70\u201389 , 2009. (pdf)",
+      "stated_years": [
+        2011,
+        2009
+      ],
+      "source_links": [
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.short",
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.full.pdf",
+        "http://www.springerlink.com/content/x62w6487288467h6/",
+        "https://www.qianlab.caltech.edu/seesaw_theory2009lncs.pdf"
+      ],
+      "lead_key": "authorlead:qian:lab:theoretical:1"
+    }
+  ],
+  "cv_refereed": [
+    {
+      "number": 1,
+      "citation": "P. Petersen, G. Tikhomirov, and L. Qian. Information-based autonomous reconfiguration in systems of interacting DNA nanostructures. Nature Communications 9, 5362 (2018).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:1"
+    },
+    {
+      "number": 2,
+      "citation": "G. Tikhomirov, P. Petersen, and L. Qian. Triangular DNA origami tilings. JACS 140,17361\u201317364 (2018).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:2"
+    },
+    {
+      "number": 3,
+      "citation": "K. M. Cherry, and L. Qian. Scaling up molecular pattern recognition with DNA-based winner-take-all neural networks. Nature 559, 370\u2013376 (2018).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:3"
+    },
+    {
+      "number": 4,
+      "citation": "D. Wilhelm, J. Bruck, and L. Qian. Probabilistic switching circuits in DNA. PNAS 115, 903\u2013908 (2018).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:4"
+    },
+    {
+      "number": 5,
+      "citation": "G. Tikhomirov, P. Petersen, and L. Qian. Fractal assembly of micrometre-scale DNA origami arrays with arbitrary patterns. Nature 552, 67\u201371 (2017). News and Views: \u201cDNA self-assembly scaled up\u201d by Fei Zhang and Hao Yan, Nature 552, 34\u201335.",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:5"
+    },
+    {
+      "number": 6,
+      "citation": "A. J. Thubagere, W. Li, R. F. Johnson, Z. Chen, S. Doroudi, Y. L. Lee, G. Izatt, S. Wittman, N. Srinivas, D. Woods, E. Winfree, and L. Qian. A cargo-sorting DNA robot. Science 357, eaan6558 (2017). Perspective: \u201cDNA robots sort as they walk\u201d by John Reif, Science 357, 1095\u20131096.",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:6"
+    },
+    {
+      "number": 7,
+      "citation": "A. J. Thubagere, C. Thachuk, J. Berleant, R. F. Johnson, D. A. Ardelean, K. M. Cherry, and L. Qian. Compiler-aided systematic construction of large-scale DNA strand displacement circuits using unpurified components. Nature Communications 8, 14373 (2017).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:7"
+    },
+    {
+      "number": 8,
+      "citation": "G. Tikhomirov, P. Petersen, and L. Qian. Programmable disorder in random DNA tilings. Nature Nanotechnology 12, 251\u2013259 (2017). News and Views: \u201cDNA origami tiles: Nanoscale mazes\u201d by Fei Zhang, Fan Hong and Hao Yan, Nature Nanotechnology 12, 189\u2013190.",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:8"
+    },
+    {
+      "number": 9,
+      "citation": "L. Qian and E. Winfree. Parallel and scalable computation and spatial dynamics with DNA-based chemical reaction networks on a surface. DNA Computing and Molecular Programming, LNCS 8727, 114\u2013131 (2014).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:9"
+    },
+    {
+      "number": 10,
+      "citation": "L. Qian, E. Winfree, and J. Bruck. Neural network computation with DNA strand displacement cascades. Nature 475, 368\u2013372 (2011). News and Views: \u201cDNA and the brain\u201d by Anne Condon, Nature 475, 304\u2013305.",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:10"
+    },
+    {
+      "number": 11,
+      "citation": "L. Qian and E. Winfree. Scaling up digital circuit computation with DNA strand displacement cascades. Science 332, 1196\u20131201 (2011). Perspective: \u201cScaling up DNA computation\u201d by John Reif, Science 332, 1156\u20131167. News and Views: \u201cDNA computes a square root\u201d by Yaakov Benenson, Nat. Nanotechnol. 6, 465\u2013467.",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:11"
+    },
+    {
+      "number": 12,
+      "citation": "L. Qian and E. Winfree. A simple DNA gate motif for synthesizing large-scale circuits. Journal of the Royal Society Interface 8, 1281\u20131297 (2011).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:12"
+    },
+    {
+      "number": 13,
+      "citation": "L. Qian, D. Soloveichik, and E. Winfree. Efficient Turing-universal computation with DNA polymers. DNA Computing and Molecular Programming, LNCS 6518, 123\u2013140 (2011).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:13"
+    },
+    {
+      "number": 14,
+      "citation": "Z. Zhang, Y. Wang, C. Fan, C. Li, Y. Li, L. Qian, Y. Fu, Y. Shi, J. Hu, and L. He. Asymmetric DNA origami for spatially addressable and index-free solution-phase DNA chips. Advanced Materials 22, 2672\u2013 2675 (2010).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:14",
+      "target_key": "10.1002/adma.201000151",
+      "identity_status": "primary_article_verified",
+      "review_status": "main_text_reviewed_supplement_pending"
+    },
+    {
+      "number": 15,
+      "citation": "L. Qian, J. Zhao, Y. Shi, X. Zhao, G. Feng, F. Xu, S. Zhu, and L. He. Brain-derived neurotrophic factor and risk of schizophrenia: an association study and meta-analysis. Biochemical and biophysical research communications 353, 738\u2013743 (2007).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:15",
+      "target_key": "10.1016/j.bbrc.2006.12.121",
+      "identity_status": "primary_article_verified",
+      "review_status": "fulltext_non_origami"
+    },
+    {
+      "number": 16,
+      "citation": "J. Zhao, L. Qian, Q. Liu, Z. Zhang, and L. He. DNA addition using linear self-assembly. Chinese Science Bulletin 52, 1462\u20131467 (2007).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:16",
+      "target_key": "10.1007/s11434-007-0230-0",
+      "identity_status": "primary_article_verified",
+      "review_status": "fulltext_non_origami"
+    },
+    {
+      "number": 17,
+      "citation": "L. Qian, Y. Wang, Z. Zhang, J. Zhao, D. Pan, Y. Zhang, Q. Liu, C. Fan, J. Hu, and L. He. Analogic China map constructed by DNA. Chinese Science Bulletin 51, 2973\u20132976 (2006).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:17",
+      "target_key": "10.1007/s11434-006-2223-9",
+      "identity_status": "primary_article_verified",
+      "review_status": "main_text_reviewed_supplement_pending"
+    },
+    {
+      "number": 18,
+      "citation": "J. Xie, Y. Bai, L. Qian, L. Cui, X. Sun, and Z. Lu. A computer simulation system of DNA-binding protein experiment based on dsDNA microarray. Acta Biophysica Sinica 19, 156\u2013160 (2003).",
+      "note": "CV citation may include commentary references; preserve and reconcile separately",
+      "lead_key": "authorlead:qian:cv2019:18"
+    }
+  ],
+  "evidence": [
+    {
+      "local_file": "assets/research-20261105/qian-publications.html",
+      "sha256": "da698f1e74b271a7e2a0178108675e5e0350a881d8d26505786b19ce2d159f4f",
+      "url": "https://www.qianlab.caltech.edu/publications.html",
+      "locator": "All23 numbered paragraphs: experimental17\u20131,theoretical6\u20131;15 paragraphs include pre2020 or2020 boundary dates"
+    },
+    {
+      "local_file": "assets/research-20261105/qian-cv-sep2019.pdf",
+      "sha256": "3e2babc2092ff3cb74c922c4b7b4b1f970ef521fad7fce43874a611efc79d6a6",
+      "url": "https://www.qianlab.caltech.edu/Qian_CV_Sep2019.pdf",
+      "locator": "Refereed Publications pp2\u20133 entries1\u201318; talks not enumerated as publications"
+    },
+    {
+      "local_file": "assets/research-20261105/qian-historical-publications.html",
+      "sha256": "8f48b52bd12bf42372d3260ef06cdec175289f439ca0ca7f3a89bac33d80cf9c",
+      "url": "https://www.dna.caltech.edu/~lulu/publications.html",
+      "locator": "All nine numbered bibliography paragraphs; embedded commentaries and conference versions retained pending reconciliation"
+    }
+  ],
+  "source_occurrences": 42,
+  "not_unique_publications": true,
+  "historical_entries": [
+    {
+      "section": null,
+      "number": 1,
+      "citation": "[1] Neural network computation with DNA strand displacement cascades. Lulu Qian, Erik Winfree, and Jehoshua Bruck. Nature , 475:368-372 , 2011. (pdf) (supp info) News and Views: \"DNA and the brain\" by Anne Condon, 475:304-305 . (pdf)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.nature.com/nature/journal/v475/n7356/full/nature10262.html",
+        "https://www.dna.caltech.edu/~lulu/nature10262.pdf",
+        "https://www.dna.caltech.edu/~lulu/nature10262-s1.pdf",
+        "http://www.nature.com/nature/journal/v475/n7356/full/475304a.html",
+        "https://www.dna.caltech.edu/~lulu/475304a.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:1",
+      "target_key": "authorlead:qian:historical:1"
+    },
+    {
+      "section": null,
+      "number": 2,
+      "citation": "[2] Scaling up digital circuit computation with DNA strand displacement cascades. Lulu Qian and Erik Winfree. Science , 332:1196-1201 , 2011. (pdf) (supp info) Perspective: \"Scaling up DNA computation\" by John Reif, 332:1156-1167 . (pdf) News and Views: \"DNA computes a square root\" by Yaakov Benenson, Nature Nanotechnology , 6:465-467 . (pdf)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.sciencemag.org/content/332/6034/1196.abstract",
+        "https://www.dna.caltech.edu/~lulu/seesaw_digital_circuits2011.pdf",
+        "https://www.dna.caltech.edu/~lulu/seesaw_digital_circuits2011_SI.pdf",
+        "http://www.sciencemag.org/content/332/6034/1156.short",
+        "https://www.dna.caltech.edu/~lulu/scaling_up_DNA_computing.pdf",
+        "http://www.nature.com/nnano/journal/v6/n8/full/nnano.2011.128.html",
+        "https://www.dna.caltech.edu/~lulu/DNA_computes_a_square_root.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:2",
+      "target_key": "authorlead:qian:historical:2"
+    },
+    {
+      "section": null,
+      "number": 3,
+      "citation": "[3] A simple DNA gate motif for synthesizing large-scale circuits. Lulu Qian and Erik Winfree. Journal of the Royal Society Interface , 8:1281-1297 , 2011. (pdf) Conference version in A. Goel, F. C. Simmel and P. Sosik, editors, DNA Computing and Molecular Programming , LNCS 5347:70-89 , 2009. (pdf)",
+      "stated_years": [
+        2011,
+        2009
+      ],
+      "source_links": [
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.short",
+        "http://rsif.royalsocietypublishing.org/content/early/2011/02/03/rsif.2010.0729.full.pdf",
+        "http://www.springerlink.com/content/x62w6487288467h6/",
+        "http://www.dna.caltech.edu/Papers/seesaw_theory2009lncs.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:3",
+      "target_key": "authorlead:qian:historical:3"
+    },
+    {
+      "section": null,
+      "number": 4,
+      "citation": "[4] Efficient Turing-universal computation with DNA polymers. Lulu Qian, David Soloveichik, and Erik Winfree. In Y. Sakakibara and Y. Mi, editors, DNA Computing and Molecular Programming , LNCS 6518:123-140 , 2011. (pdf)",
+      "stated_years": [
+        2011
+      ],
+      "source_links": [
+        "http://www.springerlink.com/content/l35415v031r1w021/",
+        "http://www.dna.caltech.edu/Papers/DNA_stack_machines2011_LNCS.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:4",
+      "target_key": "authorlead:qian:historical:4"
+    },
+    {
+      "section": null,
+      "number": 5,
+      "citation": "[5] Asymmetric DNA origami for spatially addressable and index-free solution-phase DNA chips. Zhao Zhang, Yin Wang, Lulu Qian et al. Advanced Materials , 22:2672-2675 , 2010. (pdf)",
+      "stated_years": [
+        2010
+      ],
+      "source_links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/adma.201000151/abstract",
+        "https://www.dna.caltech.edu/~lulu/2010930111910467.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:5",
+      "target_key": "10.1002/adma.201000151"
+    },
+    {
+      "section": null,
+      "number": 6,
+      "citation": "[6] Brain-derived neurotrophic factor and risk of schizophrenia: an association study and meta-analysis. Lulu Qian, Jian Zhao, Lin He, et al. Biochemical and biophysical research communications , 353:738-743 , 2007. (pdf)",
+      "stated_years": [
+        2007
+      ],
+      "source_links": [
+        "http://www.sciencedirect.com/science/article/pii/S0006291X06027550",
+        "https://www.dna.caltech.edu/~lulu/S0006291X06027550.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:6",
+      "target_key": "10.1016/j.bbrc.2006.12.121",
+      "identity_status": "primary_article_verified",
+      "review_status": "fulltext_non_origami"
+    },
+    {
+      "section": null,
+      "number": 7,
+      "citation": "[7] DNA addition using linear self-assembly. Jian Zhao, Lulu Qian, Lin He et al. Chinese Science Bulletin , 52:1462-1467 , 2007. (pdf)",
+      "stated_years": [
+        2007
+      ],
+      "source_links": [
+        "http://www.springerlink.com/content/504k5w57g3666372/",
+        "http://www.springerlink.com/content/504k5w57g3666372/fulltext.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:7",
+      "target_key": "10.1007/s11434-007-0230-0",
+      "identity_status": "primary_article_verified",
+      "review_status": "fulltext_non_origami"
+    },
+    {
+      "section": null,
+      "number": 8,
+      "citation": "[8] Analogic China map constructed by DNA. Lulu Qian, Yin Wang, Lin He, et al. Chinese Science Bulletin , 51:2973-2976 , 2006. (pdf)",
+      "stated_years": [
+        2006
+      ],
+      "source_links": [
+        "http://www.springerlink.com/content/t5p53060254h2151/",
+        "http://www.springerlink.com/content/t5p53060254h2151/fulltext.pdf"
+      ],
+      "lead_key": "authorlead:qian:historical:8",
+      "target_key": "10.1007/s11434-006-2223-9"
+    },
+    {
+      "section": null,
+      "number": 9,
+      "citation": "[9] A computer simulation system of DNA-binding protein experiment based on dsDNA microarray. Jianmin Xie, Yunfei Bai, Lulu Qian et al. Acta Biophysica Sinica , 19:156-160 , 2003.",
+      "stated_years": [
+        2003
+      ],
+      "source_links": [
+        "http://www.cjb.org.cn/EN/abstract/abstract14187.shtml"
+      ],
+      "lead_key": "authorlead:qian:historical:9",
+      "target_key": "authorlead:qian:historical:9"
+    }
+  ]
+}

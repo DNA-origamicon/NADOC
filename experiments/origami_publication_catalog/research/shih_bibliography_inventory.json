@@ -1,0 +1,3221 @@
+{
+  "audit": {
+    "all_paragraphs": 83,
+    "selected_pre2020_or_boundary": 65,
+    "heading_year_counts": {
+      "2026": 5,
+      "2025": 4,
+      "2024": 4,
+      "2023": 2,
+      "2022": 1,
+      "2021": 2,
+      "2020": 6,
+      "2019": 3,
+      "2018": 5,
+      "2017": 4,
+      "2016": 6,
+      "2015": 6,
+      "2014": 6,
+      "2013": 4,
+      "2012": 6,
+      "2011": 3,
+      "2010": 2,
+      "2009": 5,
+      "2008": 2,
+      "2007": 1,
+      "2004": 6
+    },
+    "selected_registry_matches": 40,
+    "selected_source_links": 65,
+    "not_unique_new_publications": true
+  },
+  "entries": [
+    {
+      "ordinal": 19,
+      "heading_year": 2020,
+      "citation": "Wickham SFJ, Auer A, Min J, Ponnuswamy N, Woehrstein JB, Schueder F, Strauss MT, Schnitzbauer J, Nathwani B, Zhao Z, Perrault SD, Hahn J, Lee S, Bastings MM, Helmig SW, Kodal AL, Yin P, Jungmann R*, Shih WM*. Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard . Nat Commun. 11, 5768, 2020. [ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1038/s41467-020-18910-x"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s41467-020-18910-x",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_5f76c3f51a014856b0a7eef99c73a90e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_5f76c3f51a014856b0a7eef99c73a90e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:19",
+      "target_key": "authorlead:shih:lab:19",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 20,
+      "heading_year": 2020,
+      "citation": "Krieg E, Gupta K, Dahl A, Lesche M, Boye S, Lederer A, Shih WM. A smart polymer for sequence-selective binding, pulldown, and release of DNA targets . Commun Biol . 3, 369, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1038/s42003-020-1082-2"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s42003-020-1082-2",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a039207fd23c454ab69f84114998ee6b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a039207fd23c454ab69f84114998ee6b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:20",
+      "target_key": "authorlead:shih:lab:20",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 21,
+      "heading_year": 2020,
+      "citation": "Padmanabha Das KM, Shih WM, Wagner G, Nasr ML. Large Nanodiscs: A Potential Game Changer in Structural Biology of Membrane Protein Complexes and Virus Entry . Front Bioeng Biotechnol . 8, 539, 2020 [ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.3389/fbioe.2020.00539"
+      ],
+      "links": [
+        "http://doi.org/10.3389/fbioe.2020.00539",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f2b1bb3585724639b6644a267d949e61.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f2b1bb3585724639b6644a267d949e61.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:21",
+      "target_key": "authorlead:shih:lab:21",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 22,
+      "heading_year": 2020,
+      "citation": "Sun W, Shen J, Zhao Z, Arellano N, Rettner C, Tang J, Cao T, Zhou Z, Ta T, Streit JK, Fagan JA, Schaus T, Zheng M, Han SJ, Shih WM, Maune HT, Yin P. Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches . Science . 68, 874-877, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1126/science.aaz7440"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.aaz7440",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a3261f94ee244da08200e22e9f8efa62.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a3261f94ee244da08200e22e9f8efa62.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:22",
+      "target_key": "authorlead:shih:lab:22",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 23,
+      "heading_year": 2020,
+      "citation": "Anastassacos FM*, Zhao Z*, Zeng Y, Shih WM. Glutaraldehyde Cross-Linking of Oligolysines Coating DNA Origami Greatly Reduces Susceptibility to Nuclease Degradation . J Am Chem Soc. 142, 3311\u20133315, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1021/jacs.9b11698"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.9b11698",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_97fc18843a864ee69ffd772b78000b37.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_97fc18843a864ee69ffd772b78000b37.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:23",
+      "target_key": "authorlead:shih:lab:23",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 24,
+      "heading_year": 2020,
+      "citation": "Hahn J, Chou LYT, S\u00f8rensen RS, Guerra RM, Shih WM. Extrusion of RNA from a DNA-Origami-Based Nanofactory . ACS Nano. 14, 1550\u20131559, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1021/acsnano.9b06466"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acsnano.9b06466",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_31f15e21dfb44e4cb70ad80c108f6afa.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_31f15e21dfb44e4cb70ad80c108f6afa.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:24",
+      "target_key": "authorlead:shih:lab:24",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 25,
+      "heading_year": 2019,
+      "citation": "Minev D, Guerra R, Kishi JY, Smith C, Krieg E, Said K, Hornick A, Sasaki HM, Filsinger G, Beliveau BJ, Yin P, Church GM, Shih WM. Rapid in vitro production of single-stranded DNA . Nucleic Acids Res . 47, 11956\u201311962, 2019. [ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1093/nar/gkz998"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkz998",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_657bda2bb5be453fae7d23b28bbb3177.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_657bda2bb5be453fae7d23b28bbb3177.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:25",
+      "target_key": "10.1093/nar/gkz998",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 26,
+      "heading_year": 2019,
+      "citation": "Hahn J, Shih WM. Thermal cycling of DNA devices via associative strand displacement . Nucleic Acids Res . 47, 10968\u201310975, 2019. [ ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1093/nar/gkz844"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkz844",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:26",
+      "target_key": "10.1093/nar/gkz844",
+      "identity_status": "primary_title_authors_doi_date_verified",
+      "review_status": "non_origami_scope_verified",
+      "source_acquisition": {
+        "local_file": "assets/research-20261105/shih-source-26.zip",
+        "sha256": "807b33e5f7e21ed0a10180844e5033978e92d2dac286a9966124ee4ceba9615e",
+        "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip",
+        "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+      },
+      "source_content_status": "scientific_files_present_unreviewed",
+      "scientific_files": 2
+    },
+    {
+      "ordinal": 27,
+      "heading_year": 2019,
+      "citation": "Chou LYT, Shih WM. In Vitro Transcriptional Regulation via Nucleic-Acid-Based Transcription Factors . ACS Synth Biol . 8, 2558\u20132565, 2019. [ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1021/acssynbio.9b00242"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acssynbio.9b00242",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_96ad7cdf5d034584831e2bba21821c41.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_96ad7cdf5d034584831e2bba21821c41.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:27",
+      "target_key": "authorlead:shih:lab:27",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 28,
+      "heading_year": 2018,
+      "citation": "Nathwani B, Shih WM, Wong WP. Force Spectroscopy and Beyond: Innovations and Opportunities . Biophys J . 115, 2279-2285, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1016/j.bpj.2018.10.021"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.bpj.2018.10.021",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a95a4bd418e946c7a45960fb63984c6a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a95a4bd418e946c7a45960fb63984c6a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:28",
+      "target_key": "10.1016/j.bpj.2018.10.021",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 29,
+      "heading_year": 2018,
+      "citation": "Zhao Z, Zhang M, Hogle JM, Shih WM, Wagner G, Nasr ML. DNA-Corralled Nanodiscs for the Structural and Functional Characterization of Membrane Proteins and Viral Entry . J Am Chem Soc . 140, 10639\u201310643, 2018. [ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1021/jacs.8b04638"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.8b04638",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_0915918a0cb346d09caaa35c4fbcc69b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_0915918a0cb346d09caaa35c4fbcc69b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:29",
+      "target_key": "10.1021/jacs.8b04638",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 30,
+      "heading_year": 2018,
+      "citation": "Bastings MMC*, Anastassacos FM*, Ponnuswamy N*, Leifer FG, Cuneo G, Lin C, Ingber DE, Ryu JH, Shih WM. Modulation of the Cellular Uptake of DNA Origami through Control over Mass and Shape . Nano Lett . 18, 3557\u20133564, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.8b00660"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acs.nanolett.8b00660",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7f3e9590f1b743ffbeb4756ab03e4c58.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7f3e9590f1b743ffbeb4756ab03e4c58.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:30",
+      "target_key": "10.1021/acs.nanolett.8b00660",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 31,
+      "heading_year": 2018,
+      "citation": "Li J, Johnson-Buck A, Yang YR, Shih WM, Yan H, Walter NG. Exploring the speed limit of toehold exchange with a cartwheeling DNA acrobat . Nat Nanotechnol . 13, 723\u2013729, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1038/s41565-018-0130-2"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s41565-018-0130-2",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33d05184229c41e0b343f0be4d0ef559.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33d05184229c41e0b343f0be4d0ef559.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:31",
+      "target_key": "authorlead:shih:lab:31",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 32,
+      "heading_year": 2018,
+      "citation": "Krieg E, Shih WM. Selective Nascent Polymer Catch-and-Release Enables Scalable Isolation of Multi-Kilobase Single-Stranded DNA . Angew Chem Int Ed Engl . 57, 714\u2013718, 2018. [ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1002/anie.201710469"
+      ],
+      "links": [
+        "http://doi.org/10.1002/anie.201710469",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:32",
+      "target_key": "10.1002/anie.201710469",
+      "identity_status": "primary_title_authors_doi_date_verified",
+      "review_status": "three_origami_objects_source_reviewed; completeness_pending",
+      "source_acquisition": {
+        "local_file": "assets/research-20261105/shih-source-32.zip",
+        "sha256": "cb1e2ba73f7e5e86c16ef1b2e8b95cb55efefd079b2629a5c35d0b57f7d1c90a",
+        "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip",
+        "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+      },
+      "source_content_status": "scientific_files_present_unreviewed",
+      "scientific_files": 2
+    },
+    {
+      "ordinal": 33,
+      "heading_year": 2017,
+      "citation": "Johnson-Buck A, Shih WM. Single-Molecule Clocks Controlled by Serial Chemical Reactions . Nano Lett . 17, 7940\u20137944, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.7b04336"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acs.nanolett.7b04336",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ae75c41ef4c04283ae191642fc8e93e7.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ae75c41ef4c04283ae191642fc8e93e7.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:33",
+      "target_key": "authorlead:shih:lab:33",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 34,
+      "heading_year": 2017,
+      "citation": "Ponnuswamy N, Bastings MMC, Nathwani B, Ryu JH, Chou LYT, Vinther M, Li WA, Anastassacos FM, Mooney DJ, Shih WM. Oligolysine-based coating protects DNA nanostructures from low-salt denaturation and nuclease degradation . Nat Commun . 8, 15654, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1038/ncomms15654"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms15654",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:34",
+      "target_key": "10.1038/ncomms15654",
+      "identity_status": "primary_title_doi_date_verified",
+      "review_status": "main_SI_two_routing_panels_and_ten_workbooks_reviewed; source_completeness_unverified",
+      "source_acquisition": {
+        "local_file": "assets/research-20261105/shih-source-34.zip",
+        "sha256": "8e954e1faf70849d45a808875c057e5d9bfe0ffdb18208347fd230257a69f155",
+        "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip",
+        "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+      },
+      "source_content_status": "scientific_files_present_unreviewed",
+      "scientific_files": 12
+    },
+    {
+      "ordinal": 35,
+      "heading_year": 2017,
+      "citation": "Min J, Shih WM, Bellot G. Designing DNA Nanotube Liquid Crystals as a Weak-Alignment Medium for NMR Structure Determination of Membrane Proteins . Methods Mol Biol . 1500, 203\u2013215, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1007/978-1-4939-6454-3_14"
+      ],
+      "links": [
+        "http://doi.org/10.1007/978-1-4939-6454-3_14",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f870303b3ecc4f8b90d06c9d4a731be6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f870303b3ecc4f8b90d06c9d4a731be6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:35",
+      "target_key": "10.1007/978-1-4939-6454-3_14",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 36,
+      "heading_year": 2017,
+      "citation": "Perrault SD, Shih WM. Lipid Membrane Encapsulation of a 3D DNA Nano Octahedron . Methods Mol Biol . 1500, 165\u2013184, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1007/978-1-4939-6454-3_12"
+      ],
+      "links": [
+        "http://doi.org/10.1007/978-1-4939-6454-3_12",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c215f2ddf2064da6927b1a32278c5216.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c215f2ddf2064da6927b1a32278c5216.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:36",
+      "target_key": "10.1007/978-1-4939-6454-3_12",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 37,
+      "heading_year": 2016,
+      "citation": "Iwaki M, Wickham SF, Ikezaki K, Yanagida T, Shih WM. A programmable DNA origami nanospring that reveals force-induced adjacent binding of myosin VI heads . Nat Commun . 7, 13715, 2016. [ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/ncomms13715"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms13715",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9f24556974af479fadca6bddb54147e6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9f24556974af479fadca6bddb54147e6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:37",
+      "target_key": "10.1038/ncomms13715",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 38,
+      "heading_year": 2016,
+      "citation": "Wang P, Gaitanaros S, Lee S, Bathe M, Shih WM, Ke Y. Programming Self-Assembly of DNA Origami Honeycomb Two-Dimensional Lattices and Plasmonic Metamaterials . J. Am. Chem. Soc . 138, 7733\u20137740, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1021/jacs.6b03966"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.6b03966",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_19a7360547b04fcab63cbec2a30c41ee.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_19a7360547b04fcab63cbec2a30c41ee.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:38",
+      "target_key": "10.1021/jacs.6b03966",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 39,
+      "heading_year": 2016,
+      "citation": "Xu W, Nathwani B, Lin C, Wang J, Karatekin E, Pincet F, Shih W*, Rothman JE*. A programmable DNA origami platform to organize SNAREs for membrane fusion . J. Am. Chem. Soc . 138, 4439\u20134447, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1021/jacs.5b13107"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.5b13107",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e95366a308434733aa4e64b3a3f3095d.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e95366a308434733aa4e64b3a3f3095d.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:39",
+      "target_key": "10.1021/jacs.5b13107",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 40,
+      "heading_year": 2016,
+      "citation": "Yang Y, Wang J, Shigematsu H, Xu W, Shih WM*, Rothman JE*, Lin C*. Self-assembly of size-controlled liposomes on DNA nanotemplates . Nat Chem. 8, 476\u2013483, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/nchem.2472"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.2472",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_47583b130ba7468d914f80405776e400.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_47583b130ba7468d914f80405776e400.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:40",
+      "target_key": "10.1038/nchem.2472",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 41,
+      "heading_year": 2016,
+      "citation": "Ke Y, Meyer T, Shih WM, Bellot G. Regulation-at-a-Distance of Biomolecular Interactions Using a DNA Origami Nanoactuator . Nat Commun. 7, 10935, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/ncomms10935"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms10935",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9a35c76d69f34259b46eb5b3713bc575.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9a35c76d69f34259b46eb5b3713bc575.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:41",
+      "target_key": "10.1038/ncomms10935",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 42,
+      "heading_year": 2016,
+      "citation": "W. Benjamin Rogers WB, Shih WM, Manoharan VN. Using DNA to program the self-assembly of colloidal nanoparticles and microparticles . Nat Rev Mater . volume 1, 1\u201314, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/natrevmats.2016.8"
+      ],
+      "links": [
+        "http://doi.org/10.1038/natrevmats.2016.8",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ea09c3cf449c49feb867f6f4ae37a990.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ea09c3cf449c49feb867f6f4ae37a990.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:42",
+      "target_key": "authorlead:shih:lab:42",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 43,
+      "heading_year": 2015,
+      "citation": "Schmidt TL, Beliveau BJ, Uca YO, Theilmann M, Da Cruz F, Wu CT, Shih WM . Scalable amplification of strand subsets from chip-synthesized oligonucleotide libraries . Nat Commun. 6, 8634, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/ncomms9634"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms9634",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e6b65f13d2c94644a6affc12bd0d27a6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e6b65f13d2c94644a6affc12bd0d27a6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:43",
+      "target_key": "10.1038/ncomms9634",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 44,
+      "heading_year": 2015,
+      "citation": "Tellechea A, Silva EA, Min J, Leal EC, Auster ME, Pradhan-Nabzdyk L, Shih W, Mooney DJ, Veves A. Alginate and DNA Gels Are Suitable Delivery Systems for Diabetic Wound Healing . Int J Low Extrem Wounds . 14, 146\u2013153, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1177/1534734615580018"
+      ],
+      "links": [
+        "http://doi.org/10.1177/1534734615580018",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:44",
+      "target_key": "authorlead:shih:lab:44",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration",
+      "source_acquisition": {
+        "local_file": "assets/research-20261105/shih-source-44.zip",
+        "sha256": "a0558ec5e989f56e168a08eadf86cc6c456d7a6a1e5c31386ae888936131c2ce",
+        "url": "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip",
+        "locator": "Author-linked ZIP; content inventory does not certify design completeness"
+      },
+      "source_content_status": "empty_scientific_content",
+      "scientific_files": 0
+    },
+    {
+      "ordinal": 45,
+      "heading_year": 2015,
+      "citation": "Tian Y, Wang T, Liu W, Xin HL, Li H, Ke Y, Shih WM, Gang O. Prescribed nanoparticle cluster architectures and low-dimensional arrays built using octahedral DNA origami frames . Nat Nanotechnol . 10, 637\u2013644, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/nnano.2015.105"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2015.105",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_95d5df6fdc0b47d89277c155b6f6a28e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_95d5df6fdc0b47d89277c155b6f6a28e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:45",
+      "target_key": "10.1038/nnano.2015.105",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 46,
+      "heading_year": 2015,
+      "citation": "Beliveau BJ, Boettiger AN, Avenda\u00f1o MS, Jungmann R, McCole RB, Joyce EF, Kim-Kiselak C, Bantignies F, Fonseka CY, Erceg J, Hannan MA, Hoang HG, Colognori D, Lee JT, Shih WM, Yin P, Zhuang X, Wu CT. Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes . Nat Comm . 6, 7147, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/ncomms8147"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms8147",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_bb63c02638bd42b3b76caf583c299c92.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_bb63c02638bd42b3b76caf583c299c92.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:46",
+      "target_key": "authorlead:shih:lab:46",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 47,
+      "heading_year": 2015,
+      "citation": "Shih WM. Materials Science. Exploiting weak interactions in DNA self-assembly . Science . 347, 1417\u20131418, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1126/science.aaa9483"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.aaa9483",
+        "https://www.shih.hms.harvard.edu/_files/ugd/495212_24195078bc054ba085b6af0fc61eae75.pdf"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/ugd/495212_24195078bc054ba085b6af0fc61eae75.pdf"
+      ],
+      "lead_key": "authorlead:shih:lab:47",
+      "target_key": "authorlead:shih:lab:47",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 48,
+      "heading_year": 2015,
+      "citation": "Kocabey S, Kempter S, List J, Xing Y, Bae W, Schiffels D, Shih WM, Simmel FC, Liedl T. Membrane-assisted growth of DNA origami nanostructure arrays . ACS Nano . 9, 3530\u20133539, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1021/acsnano.5b00161"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acsnano.5b00161",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d851b96f0fe94dff8345a62732cb8af3.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d851b96f0fe94dff8345a62732cb8af3.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:48",
+      "target_key": "10.1021/acsnano.5b00161",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 49,
+      "heading_year": 2014,
+      "citation": "Ke Y, Ong LL, Sun W, Song J, Dong M, Shih WM, Yin P. DNA brick crystals with prescribed depths . Nat Chem . 6, 994\u20131002, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1038/nchem.2083"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.2083",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_274dbeef354f47eca61cf1e65bf541d4.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_274dbeef354f47eca61cf1e65bf541d4.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:49",
+      "target_key": "authorlead:shih:lab:49",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 50,
+      "heading_year": 2014,
+      "citation": "Hahn J, Wickham SF, Shih WM, Perrault SD. Addressing the instability of DNA nanostructures in tissue culture . ACS Nano . 8, 8765\u20138775, 2014. [ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1021/nn503513p"
+      ],
+      "links": [
+        "http://doi.org/10.1021/nn503513p",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9c4a1a57d4ed490581f76566d06c2e4a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9c4a1a57d4ed490581f76566d06c2e4a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:50",
+      "target_key": "10.1021/nn503513p",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 51,
+      "heading_year": 2014,
+      "citation": "Perrault SD, Shih WM. Virus-Inspired Membrane Encapsulation of DNA Nanostructures To Achieve In Vivo Stability . ACS Nano. 8, 5132\u20135140, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1021/nn5011914"
+      ],
+      "links": [
+        "http://doi.org/10.1021/nn5011914",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_1ef5f44cdb5344108405488bb09df07a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_1ef5f44cdb5344108405488bb09df07a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:51",
+      "target_key": "10.1021/nn5011914",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 52,
+      "heading_year": 2014,
+      "citation": "Nickels PC, Ke Y, Jungmann R, Smith DM, Leichsenring M, Shih WM, Liedl T, H\u00f6gberg B. DNA Origami Structures Directly Assembled from Intact Bacteriophages . Small. 10, 1765\u20131769, 2014. [ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1002/smll.201303442"
+      ],
+      "links": [
+        "http://doi.org/10.1002/smll.201303442",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3ef17c3a4b7b4299983bc4261744a753.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3ef17c3a4b7b4299983bc4261744a753.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:52",
+      "target_key": "10.1002/smll.201303442",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 53,
+      "heading_year": 2014,
+      "citation": "Jungmann R*, Avendano MS*, Woehrstein JB*, Dai M, Shih WM, Yin P. Multiplexed 3D Cellular Super-Resolution Imaging with DNA-PAINT and Exchange-PAINT . Nat Methods. 11, 313\u2013318, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1038/nmeth.2835"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth.2835",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fd8259849a264bb2827c40b365fc2335.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fd8259849a264bb2827c40b365fc2335.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:53",
+      "target_key": "10.1038/nmeth.2835",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 54,
+      "heading_year": 2014,
+      "citation": "Sun ZY, Cheng Y, Kim M, Song L, Choi J, Kudahl UJ, Brusic V, Chowdhury B, Yu L, Seaman MS, Bellot G, Shih WM, Wagner G, Reinherz EL. Disruption of Helix-Capping Residues 671 and 674 Reveals a Role in HIV-1 Entry for a Specialized Hinge Segment of the Membrane Proximal External Region of gp41 . J Mol Biol . 426, 1095\u20131108, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1016/j.jmb.2013.09.030"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.jmb.2013.09.030",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_756ae6d2f97545748dff862156b8854e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_756ae6d2f97545748dff862156b8854e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:54",
+      "target_key": "authorlead:shih:lab:54",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 55,
+      "heading_year": 2013,
+      "citation": "Pfitzner E, Wachauf C, Kilchherr F, Pelz B, Shih WM, Rief M, Dietz H. Rigid DNA Beams for High-Resolution Single-Molecule Mechanics . Angew Chem Intl Ed Engl . 52, 1\u20137, 2013. [ ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1002/anie.201302727"
+      ],
+      "links": [
+        "http://doi.org/10.1002/anie.201302727",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7de1137941604a8bb73e8106864078c0.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7de1137941604a8bb73e8106864078c0.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:55",
+      "target_key": "10.1002/anie.201302727",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 56,
+      "heading_year": 2013,
+      "citation": "Ducani C, Kaul C, Moche M, Shih WM, H\u00f6gberg B. Enzymatic production of 'monoclonal stoichiometric' single-stranded DNA oligonucleotides . Nat Methods . 10, 647\u2013652, 2013. [ ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1038/nmeth.2503"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth.2503",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7185ffe2e1d14a96b4cedc545bb3eb6e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7185ffe2e1d14a96b4cedc545bb3eb6e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:56",
+      "target_key": "10.1038/nmeth.2503",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 57,
+      "heading_year": 2013,
+      "citation": "Bellot G, McClintock MA, Chou JJ, Shih WM. DNA nanotubes for NMR structure determination of membrane proteins . Nat Protoc . 8, 755\u2013770, 2013. [ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1038/nprot.2013.03"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nprot.2013.03",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4b1241aded3b4418b96169786575c4f6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4b1241aded3b4418b96169786575c4f6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:57",
+      "target_key": "authorlead:shih:lab:57",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 58,
+      "heading_year": 2013,
+      "citation": "Lin C, Perrault SD, Kwak M, Graf F, Shih WM. Purification of DNA-origami nanostructures by rate-zonal centrifugation . Nucl Acids Res . 41, e40, 2013. [ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1093/nar/gks1070"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gks1070",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f132d659c4fa451ba8f16325142e80cc.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f132d659c4fa451ba8f16325142e80cc.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:58",
+      "target_key": "10.1093/nar/gks1070",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 59,
+      "heading_year": 2012,
+      "citation": "Ke Y, Ong LL, Shih WM, Yin P. Three-dimensional structures self-assembled from DNA bricks . Science . 338, 1177\u20131183, 2012. (cover) [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1126/science.1227268"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1227268",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f90d7db0199940f0a44855f10ec6d55f.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f90d7db0199940f0a44855f10ec6d55f.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:59",
+      "target_key": "10.1126/science.1227268",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 60,
+      "heading_year": 2012,
+      "citation": "Derr ND, Goodman BS, Jungmann R, Leschziner AE, Shih WM, Reck-Peterson SL, Tug of War in Motor Protein Ensembles Revealed with a Programmable DNA Origami Scaffold , Science . 338, 662\u2013665, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1126/science.1226734"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1226734",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4219380e2e2b46258b4b76ef5f8e3bc1.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4219380e2e2b46258b4b76ef5f8e3bc1.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:60",
+      "target_key": "10.1126/science.1226734",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 61,
+      "heading_year": 2012,
+      "citation": "Lin C, Jungmann R, Leifer AM, Li C, Levner D, Church GM, Shih WM*, Peng Yin*. Sub-micrometer Geometrically Encoded Fluorescent Barcodes Self-Assembled from DNA . Nat Chem . 4, 832\u2013839, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1038/nchem.1451"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.1451",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a49c69cb468f46e482811ce57c1975fa.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a49c69cb468f46e482811ce57c1975fa.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:61",
+      "target_key": "10.1038/nchem.1451",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 62,
+      "heading_year": 2012,
+      "citation": "Ke Y, Bellot G, Voigt NV, Fradkov E, Shih WM. Two design strategies for enhancement of multilayer\u2013DNA-origami folding: underwinding for specific intercalator rescue and staple-break positioning . Chem Sci . 3, 2587\u20132597, 2012. [ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1039/c2sc20446k"
+      ],
+      "links": [
+        "http://doi.org/10.1039/C2SC20446K",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_edabcb8f5ba64c6c913e4db968ed941f.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_edabcb8f5ba64c6c913e4db968ed941f.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:62",
+      "target_key": "10.1039/c2sc20446k",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 63,
+      "heading_year": 2012,
+      "citation": "Ke Y, Voigt NV, Gothelf K, Shih WM. Multilayer DNA Origami Packed on Hexagonal and Hybrid Lattices . J Am Chem Soc . 134, 1770\u20131774, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1021/ja209719k"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja209719k",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4e82cb84d34141cc81a0d1c8e5fc3596.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4e82cb84d34141cc81a0d1c8e5fc3596.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:63",
+      "target_key": "10.1021/ja209719k",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 64,
+      "heading_year": 2012,
+      "citation": "Qiu W, Derr ND, Goodman BS, Villa E, Wu D, Shih W, Reck-Peterson SL. Dynein achieves processive motion using both stochastic and coordinated stepping . Nat Struct Mol Biol . 19, 193-200, 2012. [ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1038/nsmb.2205"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nsmb.2205",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ff83b9a5abd488383d533a379e452ea.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ff83b9a5abd488383d533a379e452ea.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:64",
+      "target_key": "authorlead:shih:lab:64",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 65,
+      "heading_year": 2011,
+      "citation": "Berardi M, Shih WM, Harrison SC, Chou JJ. Mitochondrial uncoupling protein 2 structure determined by NMR molecular fragment searching . Nature. 476, 109\u2013113, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nature10257"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature10257",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e139e70951a9471ba337c76647972d02.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e139e70951a9471ba337c76647972d02.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:65",
+      "target_key": "10.1038/nature10257",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 66,
+      "heading_year": 2011,
+      "citation": "Bellot G, McClintock MA, Lin CX, Shih WM. Recovery of intact DNA nanostructures after agarose gel-based separation . Nat Methods. 8, 192\u2013194, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nmeth0311-192"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth0311-192",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c79d7001bf604c9ab30eb4b457c651a4.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c79d7001bf604c9ab30eb4b457c651a4.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:66",
+      "target_key": "10.1038/nmeth0311-192",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 67,
+      "heading_year": 2011,
+      "citation": "Pinheiro AV, Han D, *Shih WM, *Yan H. Challenges and opportunities for structural DNA nanotechnology . Nat Nanotechnol. 6, 763\u2013772, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nnano.2011.187"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2011.187",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_cf3533734c5d4cd6a5d9689224851c8c.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_cf3533734c5d4cd6a5d9689224851c8c.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:67",
+      "target_key": "10.1038/nnano.2011.187",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 68,
+      "heading_year": 2010,
+      "citation": "Liedl T, H\u00f6gberg B, Tytell J, Ingber DE, Shih WM. Self-assembly of 3D prestressed tensegrity structures from DNA . Nat Nanotechnol . 5, 520\u2013524, 2010. [ZIP ]",
+      "citation_years": [
+        2010
+      ],
+      "doi_links": [
+        "10.1038/nnano.2010.107"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2010.107",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e039ebcd213b4df48ef522ac95d0f299.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e039ebcd213b4df48ef522ac95d0f299.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:68",
+      "target_key": "10.1038/nnano.2010.107",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 69,
+      "heading_year": 2010,
+      "citation": "Shih WM, Lin C. Knitting complex weaves with DNA origami . Curr Opin Struct Biol . 20, 276\u2013282, 2010. [ ZIP ]",
+      "citation_years": [
+        2010
+      ],
+      "doi_links": [
+        "10.1016/j.sbi.2010.03.009"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.sbi.2010.03.009",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a1a872a06f43477190da810511d38f40.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a1a872a06f43477190da810511d38f40.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:69",
+      "target_key": "10.1016/j.sbi.2010.03.009",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 70,
+      "heading_year": 2009,
+      "citation": "Ke Y, Douglas SM, Liu MH, Sharma J, Cheng A, Leung A, Liu Y, Shih W*, Yan H. Multilayer DNA origami packed on a square lattice . J Am Chem Soc . 131, 15903\u201315908, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1021/ja906381y"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja906381y",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e57d38b4f409459ea05b6abfa78a1528.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e57d38b4f409459ea05b6abfa78a1528.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:70",
+      "target_key": "10.1021/ja906381y",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 71,
+      "heading_year": 2009,
+      "citation": "Dietz H, Douglas SM, Shih WM. Folding DNA into twisted and curved nanoscale shapes . Science. 325, 725\u2013730, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1126/science.1174251"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1174251",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_994903868d934b7a9c719472d9f44ea9.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_994903868d934b7a9c719472d9f44ea9.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:71",
+      "target_key": "10.1126/science.1174251",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 72,
+      "heading_year": 2009,
+      "citation": "H\u00f6gberg B, Liedl T, Shih WM. Folding DNA origami from a double-stranded source of scaffold . J Am Chem Soc . 131, 9154\u20139155, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1021/ja902569x"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja902569x",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_40204389f4af4f3f9e84a699a37c6bcc.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_40204389f4af4f3f9e84a699a37c6bcc.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:72",
+      "target_key": "10.1021/ja902569x",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 73,
+      "heading_year": 2009,
+      "citation": "Douglas SM, Marblestone AH, Teerapittayanon S, Vazquez A, Church GM, Shih WM. Rapid prototyping of three-dimensional DNA-origami shapes with caDNAno . Nucl Acids Res . 37, 5001\u20135006, 2009. [ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1093/nar/gkp436"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkp436",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_263205d8a8c5411cb270ebf931235cec.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_263205d8a8c5411cb270ebf931235cec.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:73",
+      "target_key": "10.1093/nar/gkp436",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 74,
+      "heading_year": 2009,
+      "citation": "Douglas SM, Dietz H, Liedl T, H\u00f6gberg B, Graf F, Shih WM. Self-assembly of DNA into nanoscale shapes . Nature. 459, 414\u2013418, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1038/nature08016"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature08016",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3e40dbcecde14a1ea374bc261ade853a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3e40dbcecde14a1ea374bc261ade853a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:74",
+      "target_key": "10.1038/nature08016",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 75,
+      "heading_year": 2008,
+      "citation": "Jungmann R, Liedl T, Sobey TL, Shih W, Simmel FC. Isothermal assembly of DNA origami structures using denaturing agents . J Am Chem Soc . 130, 10062-10063, 2008. [ZIP ]",
+      "citation_years": [
+        2008
+      ],
+      "doi_links": [
+        "10.1021/ja8030196"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja8030196",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_569828222e9240d0ad47014555349e66.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_569828222e9240d0ad47014555349e66.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:75",
+      "target_key": "10.1021/ja8030196",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 76,
+      "heading_year": 2008,
+      "citation": "Shih W. Biomolecular self-assembly: dynamic DNA . Nat Materials. 7, 98\u2013100, 2008. [ZIP ]",
+      "citation_years": [
+        2008
+      ],
+      "doi_links": [
+        "10.1038/nmat2110"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmat2110",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dde22bf5fa3b485194c41d0780b744e5.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dde22bf5fa3b485194c41d0780b744e5.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:76",
+      "target_key": "authorlead:shih:lab:76",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 77,
+      "heading_year": 2007,
+      "citation": "Douglas SM, Chou JJ, Shih WM. DNA-nanotube-induced alignment of membrane proteins for NMR structure determination . Proc Natl Acad Sci USA. 104, 6644\u20136648, 2007. [ ZIP ]",
+      "citation_years": [
+        2007
+      ],
+      "doi_links": [
+        "10.1073/pnas.0700930104"
+      ],
+      "links": [
+        "http://doi.org/10.1073/pnas.0700930104",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_758fe1d46ba0480dacbbb40931c92332.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_758fe1d46ba0480dacbbb40931c92332.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:77",
+      "target_key": "10.1073/pnas.0700930104",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 78,
+      "heading_year": 2004,
+      "citation": "Shih WM, Quispe, JD, Joyce GF. A 1.7-kilobase single-stranded DNA that folds into a nanoscale octahedron . Nature. 427, 618\u2013621, 2004. (cover) [ ZIP ]",
+      "citation_years": [
+        2004
+      ],
+      "doi_links": [
+        "10.1038/nature02307"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature02307",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d8520f3cb0364e5fa0120c33d0465f57.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d8520f3cb0364e5fa0120c33d0465f57.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:78",
+      "target_key": "authorlead:shih:lab:78",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 79,
+      "heading_year": 2004,
+      "citation": "Shih WM, Spudich JA. The myosin relay helix to converter interface remains intact throughout the actomyosin ATPase cycle . J Biol Chem . 276, 19491\u201319494, 2001. [ ZIP ]",
+      "citation_years": [
+        2001
+      ],
+      "doi_links": [
+        "10.1074/jbc.m010887200"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.M010887200",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_af6d6f1da0514e94b60b894656ffecd5.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_af6d6f1da0514e94b60b894656ffecd5.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:79",
+      "target_key": "authorlead:shih:lab:79",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 80,
+      "heading_year": 2004,
+      "citation": "Shih WM, Gryczynski Z, Lakowicz JR, Spudich JA. A FRET-based sensor reveals ATP hydrolysis-induced large conformational changes and three distinct states of the molecular motor myosin . Cell. 102, 683\u2013694, 2000. [ ZIP ]",
+      "citation_years": [
+        2000
+      ],
+      "doi_links": [
+        "10.1016/s0092-8674(00)00090-8"
+      ],
+      "links": [
+        "http://doi.org/10.1016/s0092-8674(00)00090-8",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_628b127b9c9c4f3fb1687ac6cee4dae9.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_628b127b9c9c4f3fb1687ac6cee4dae9.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:80",
+      "target_key": "authorlead:shih:lab:80",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 81,
+      "heading_year": 2004,
+      "citation": "Shih W, Gallusser A, Kirchhausen T. A clathrin-binding site in the hinge of the \u03b22 chain of mammalian AP-2 complexes . J Biol Chem . 270, 31083\u201331090, 1995. [ ZIP ]",
+      "citation_years": [
+        1995
+      ],
+      "doi_links": [
+        "10.1074/jbc.270.52.31083"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.270.52.31083",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_741ce670d1b243af97acb90e076c71b0.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_741ce670d1b243af97acb90e076c71b0.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:81",
+      "target_key": "authorlead:shih:lab:81",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 82,
+      "heading_year": 2004,
+      "citation": "Sorkin, A., McKinsey, T., Shih W, Kirchhausen T, Carpenter G. Stoichiometric interaction of the epidermal growth factor receptor with the clathrin-associated protein complex AP-2 . J Biol Chem . 270, 619\u2013625, 1995. [ ZIP ]",
+      "citation_years": [
+        1995
+      ],
+      "doi_links": [
+        "10.1074/jbc.270.2.619"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.270.2.619",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_381b445198ee46d0996e5e21787e3165.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_381b445198ee46d0996e5e21787e3165.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:82",
+      "target_key": "authorlead:shih:lab:82",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 83,
+      "heading_year": 2004,
+      "citation": "Baier G, Coggeshall KM, Baier-Bitterlich G, Giampa, L, Telford D, Herbert E, Shih W, Altman A. Construction and characterization of lck- and fyn-specific tRNA: ribozyme chimeras . Mol Immunol . 31, 923\u2013932, 1994. [ ZIP ]",
+      "citation_years": [
+        1994
+      ],
+      "doi_links": [
+        "10.1016/0161-5890(94)90012-4"
+      ],
+      "links": [
+        "http://doi.org/10.1016/0161-5890(94)90012-4",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9d7208879dca47bdb4e7885b99a3e732.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9d7208879dca47bdb4e7885b99a3e732.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:83",
+      "target_key": "authorlead:shih:lab:83",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    }
+  ],
+  "all_entries": [
+    {
+      "ordinal": 1,
+      "heading_year": 2026,
+      "citation": "Aquilina M, Katzmeier F, Nijenhuis MAD, Wang SY, Becker C, Zhao YC, Seok SH, Finkel J, Cui HC, Lee JW, Lee SW, Shih WM. A computational framework for designing micron-scale crisscross DNA megastructures . https://www.biorxiv.org/content/10.64898/2026.01.23.701435v1",
+      "citation_years": [],
+      "doi_links": [],
+      "links": [
+        "https://www.biorxiv.org/content/10.64898/2026.01.23.701435v1"
+      ],
+      "source_links": []
+    },
+    {
+      "ordinal": 2,
+      "heading_year": 2026,
+      "citation": "Rajwar A, Dembele H, Graveline AR, Vernet A, Sanchez M, Bardales S, Kwon IC, Ryu JH, Shih WM*, Zeng YC*. Validation of DoriVac (DNA origami vaccine) efficacy in a metastatic melanoma model . ACS Applied Materials and Interfaces . 2026. doi: 10.1021/acsami.5c25024. [ ZIP ]",
+      "citation_years": [
+        2026
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsami.5c25024",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_edac900432e8495a9dcd36f8aac356b1.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_edac900432e8495a9dcd36f8aac356b1.zip"
+      ]
+    },
+    {
+      "ordinal": 3,
+      "heading_year": 2026,
+      "citation": "Zeng YC*, Young OJ, Xiong Q, Si L, Ku MW, Bernier SG, Dembele H, Isinelli G, Gilboa T, Swank ZN, Seok SH, Rajwar A, Jiang A, Zhai Y, Williams LD, Hellman CA, Wintersinger CM, Graveline AR, Vernet A, Sanchez M, Bardales S, Tomaras GD, Ryu JH, Kwon IC, Goyal G*, Ingber DE*, Shih WM*. DNA origami vaccine nanoparticles improve humoral and cellular immune responses to infectious diseases . Nature Biomedical Engineering . 2026. doi: 10.1038/s41551-026-01614-w. [ ZIP ]",
+      "citation_years": [
+        2026
+      ],
+      "doi_links": [],
+      "links": [
+        "https://www.nature.com/articles/s41551-026-01614-w",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_ffc37eb9ecb44971adb866fe91892acc.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_ffc37eb9ecb44971adb866fe91892acc.zip"
+      ]
+    },
+    {
+      "ordinal": 4,
+      "heading_year": 2026,
+      "citation": "Choi Y, Song Y, Cho BK, Baek SJ, Wang JM, Seok SH, Shih WM, Doh J, Jung Y, Ryu JH. Enhanced stability and sustained delivery of structurally dense DNA nanostructures via a biodegradable hydrogel platform . Nanoscale Horizons 11, 1035-1047, 2026. [ ZIP ]",
+      "citation_years": [
+        2026
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.rsc.org/en/content/articlelanding/2026/nh/d5nh00846h",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_47aaeb8f68cb41b39e2cf52effd6a726.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_47aaeb8f68cb41b39e2cf52effd6a726.zip"
+      ]
+    },
+    {
+      "ordinal": 5,
+      "heading_year": 2026,
+      "citation": "Shrestha P, Bergal HT, Shih WM, Wong WP. Single-molecule mechanostructural fingerprinting of nucleic acid conformations . Nucleic Acids Research 54, gkaf1465, 2026. [ ZIP ]",
+      "citation_years": [
+        2026
+      ],
+      "doi_links": [],
+      "links": [
+        "https://academic.oup.com/nar/article/54/1/gkaf1465/8415839",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_b93c15770d5446a7b25faf0333d93a82.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_b93c15770d5446a7b25faf0333d93a82.zip"
+      ]
+    },
+    {
+      "ordinal": 6,
+      "heading_year": 2025,
+      "citation": "Choi Y, Park SJ, Cho BK, Lee J, Sung Y, Zeng YC, Choi N, Shih WM, Kim SH, Kim DH, Cho SW, Jung Y, Ryu JH. DNA Nanostructures for Modular Growth Factor Delivery and Peripheral Nerve Repair . Nano Letters 25, 14859-14871, 2025. [ ZIP ]",
+      "citation_years": [
+        2025
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.5c03151",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_fe1b895d82d040d3803db77d7110b675.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_fe1b895d82d040d3803db77d7110b675.zip"
+      ]
+    },
+    {
+      "ordinal": 7,
+      "heading_year": 2025,
+      "citation": "Isinelli G, Wintersinger CM, Aquilina M, Lill P, Young OJ, Deng J, Shih WM*, Zeng YC*. Reusing excess staple oligonucleotides for economical production of DNA origami . Nucleic Acids Research 53, gka527, 2025. *co-corresponding authors [ ZIP ]",
+      "citation_years": [
+        2025
+      ],
+      "doi_links": [],
+      "links": [
+        "https://academic.oup.com/nar/article/53/11/gkaf527/8166789",
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_f937aa445b4d41aab369075a0e0184d8.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/b14b90_f937aa445b4d41aab369075a0e0184d8.zip"
+      ]
+    },
+    {
+      "ordinal": 8,
+      "heading_year": 2025,
+      "citation": "Lee J, Kim J, Posnjak G, Ershova A, Hayakawa D, Shih WM, Rogers WB, Ke Y, Liedl T, Lee S. DNA Origami Colloidal Crystals: Opportunities and Challenges . Nano Letters 25, 16\u201317, 2025. [ZIP]",
+      "citation_years": [
+        2025
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.nanolett.4c05041",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fa3056169ae749abb3cf9b7785383691.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fa3056169ae749abb3cf9b7785383691.zip"
+      ]
+    },
+    {
+      "ordinal": 9,
+      "heading_year": 2025,
+      "citation": "Young OJ, Dembele H, Rajwar A, Kwon IC, Ryu JH, Shih WM*, Zeng YC*. Cargo Quantification of Functionalized DNA Origami for Therapeutic Application . Small Methods 9, e2401376, 2025. *co-corresponding authors [ZIP]",
+      "citation_years": [
+        2025
+      ],
+      "doi_links": [],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/smtd.202401376",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9e4b903f4ba047fd8925e88968f107a2.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9e4b903f4ba047fd8925e88968f107a2.zip"
+      ]
+    },
+    {
+      "ordinal": 10,
+      "heading_year": 2024,
+      "citation": "Deng J, Minev D, Ershova A, Shih WM. Branching Crisscross Polymerization of Single-Stranded DNA Slats . J Am Chem Soc . 146, 9216-9223, 2024. [ZIP]",
+      "citation_years": [
+        2024
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.4c00097",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_30a733eef4c14c3fbe8b3eb84bdeea2a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_30a733eef4c14c3fbe8b3eb84bdeea2a.zip"
+      ]
+    },
+    {
+      "ordinal": 11,
+      "heading_year": 2024,
+      "citation": "Zeng YC, Young OJ, Wintersinger CM, Anastassacos FM, MacDonald JI, Isinelli G, Dellacherie MO, Sobral M, Bai H, Graveline AR, Vernet A, Sanchez M, Mulligan K, Choi Y, Ferrante TC, Keskin DB, Fell GG, Neuberg D, Wu CJ, Mooney DJ, Kwon IC, Ryu JH*, Shih WM*. Fine tuning of CpG spatial distribution with DNA origami for improved cancer vaccination . Nat Nanotechnol . 19, 1055-1065, 2024. [ZIP]",
+      "citation_years": [
+        2024
+      ],
+      "doi_links": [],
+      "links": [
+        "https://www.nature.com/articles/s41565-024-01615-3",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_80cebd1fac534fc2859656ea6a09e550.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_80cebd1fac534fc2859656ea6a09e550.zip"
+      ]
+    },
+    {
+      "ordinal": 12,
+      "heading_year": 2024,
+      "citation": "Ershova A, Minev D, Corea-Dilbert FE, Yu D, Deng J, Fontana W, Shih WM. Enzyme-Free Exponential Amplification via Growth and Scission of Crisscross Ribbons from Single-Stranded DNA Components . J Am Chem Soc . 146, 218-227, 2024. [ZIP]",
+      "citation_years": [
+        2024
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.3c08205",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c8fde5077d9045b9a817d76edaafb161.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c8fde5077d9045b9a817d76edaafb161.zip"
+      ]
+    },
+    {
+      "ordinal": 13,
+      "heading_year": 2024,
+      "citation": "Kilwing L, Lill P, Nathwani B, Guerra R, Benson E, Liedl T, Shih WM. Multilayer DNA Origami with Terminal Interfaces That Are Flat and Wide-Area . ACS Nano 18, 885-893, 2024. [ZIP]",
+      "citation_years": [
+        2024
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.3c09522",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_abd244b46ca14864acea8c5c5aedbd78.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_abd244b46ca14864acea8c5c5aedbd78.zip"
+      ]
+    },
+    {
+      "ordinal": 14,
+      "heading_year": 2023,
+      "citation": "Shrestha P, Yang D, Ward A, Shih WM, Wong WP. Mapping Single-Molecule Protein Complexes in 3D with DNA Nanoswitch Calipers . J Am Chem Soc . 145, 27916-27921, 2023. [ZIP]",
+      "citation_years": [
+        2023
+      ],
+      "doi_links": [],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/jacs.3c10262",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_b5707368f06c417699af70485da3b8de.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_b5707368f06c417699af70485da3b8de.zip"
+      ]
+    },
+    {
+      "ordinal": 15,
+      "heading_year": 2023,
+      "citation": "Wintersinger CM, Minev D, Ershova A, Sasaki HM, Gowri G, Berengut JF, Corea-Dilbert FE, Yin P, Shih WM. Multi-micron crisscross structures grown from DNA-origami slats . Nat Nanotechnol . 18, 281-289, 2023. [ZIP]",
+      "citation_years": [
+        2023
+      ],
+      "doi_links": [],
+      "links": [
+        "https://www.nature.com/articles/s41565-022-01283-1",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ab4fb7bfa3345f69727190cc4fc923f.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ab4fb7bfa3345f69727190cc4fc923f.zip"
+      ]
+    },
+    {
+      "ordinal": 16,
+      "heading_year": 2022,
+      "citation": "Kilwing L, Lill P, Nathwani B, Singh JKD, Liedl T, Shih WM. Three-phase DNA-origami stepper mechanism based on multi-leg interactions . Biophys J . 121, 4860-4866, 2022. [ZIP]",
+      "citation_years": [
+        2022
+      ],
+      "doi_links": [],
+      "links": [
+        "https://www.cell.com/biophysj/fulltext/S0006-3495(22)00709-3",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_b17824504a9949499f5cd0a434c3647d.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_b17824504a9949499f5cd0a434c3647d.zip"
+      ]
+    },
+    {
+      "ordinal": 17,
+      "heading_year": 2021,
+      "citation": "Shrestha P, Yang D, Tomov TE, MacDonald JI, Ward A, Bergal HT, Krieg E, Cabi S, Luo Y, Nathwani B, Johnson-Buck A, Shih WM*, Wong WP*. Single-molecule mechanical fingerprinting with DNA nanoswitch calipers. Nat Nanotechnol . 16, 1362-1370, 2021. [ZIP]",
+      "citation_years": [
+        2021
+      ],
+      "doi_links": [],
+      "links": [
+        "https://www.nature.com/articles/s41565-021-00979-0",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dfcf86d66fa546ea9bb5907ee3925c4c.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dfcf86d66fa546ea9bb5907ee3925c4c.zip"
+      ]
+    },
+    {
+      "ordinal": 18,
+      "heading_year": 2021,
+      "citation": "Minev D*, Wintersinger CM*, Ershova A, Shih WM. Robust nucleation control via crisscross polymerization of DNA slats . Nat Commun. 12, 1741, 2021. [ZIP ]",
+      "citation_years": [
+        2021
+      ],
+      "doi_links": [
+        "10.1038/s41467-021-21755-7"
+      ],
+      "links": [
+        "https://doi.org/10.1038/s41467-021-21755-7",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c0110cfc9c804b0fa4114466b398578d.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c0110cfc9c804b0fa4114466b398578d.zip"
+      ]
+    },
+    {
+      "ordinal": 19,
+      "heading_year": 2020,
+      "citation": "Wickham SFJ, Auer A, Min J, Ponnuswamy N, Woehrstein JB, Schueder F, Strauss MT, Schnitzbauer J, Nathwani B, Zhao Z, Perrault SD, Hahn J, Lee S, Bastings MM, Helmig SW, Kodal AL, Yin P, Jungmann R*, Shih WM*. Complex multicomponent patterns rendered on a 3D DNA-barrel pegboard . Nat Commun. 11, 5768, 2020. [ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1038/s41467-020-18910-x"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s41467-020-18910-x",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_5f76c3f51a014856b0a7eef99c73a90e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_5f76c3f51a014856b0a7eef99c73a90e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:19",
+      "target_key": "authorlead:shih:lab:19",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 20,
+      "heading_year": 2020,
+      "citation": "Krieg E, Gupta K, Dahl A, Lesche M, Boye S, Lederer A, Shih WM. A smart polymer for sequence-selective binding, pulldown, and release of DNA targets . Commun Biol . 3, 369, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1038/s42003-020-1082-2"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s42003-020-1082-2",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a039207fd23c454ab69f84114998ee6b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a039207fd23c454ab69f84114998ee6b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:20",
+      "target_key": "authorlead:shih:lab:20",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 21,
+      "heading_year": 2020,
+      "citation": "Padmanabha Das KM, Shih WM, Wagner G, Nasr ML. Large Nanodiscs: A Potential Game Changer in Structural Biology of Membrane Protein Complexes and Virus Entry . Front Bioeng Biotechnol . 8, 539, 2020 [ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.3389/fbioe.2020.00539"
+      ],
+      "links": [
+        "http://doi.org/10.3389/fbioe.2020.00539",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f2b1bb3585724639b6644a267d949e61.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f2b1bb3585724639b6644a267d949e61.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:21",
+      "target_key": "authorlead:shih:lab:21",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 22,
+      "heading_year": 2020,
+      "citation": "Sun W, Shen J, Zhao Z, Arellano N, Rettner C, Tang J, Cao T, Zhou Z, Ta T, Streit JK, Fagan JA, Schaus T, Zheng M, Han SJ, Shih WM, Maune HT, Yin P. Precise pitch-scaling of carbon nanotube arrays within three-dimensional DNA nanotrenches . Science . 68, 874-877, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1126/science.aaz7440"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.aaz7440",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a3261f94ee244da08200e22e9f8efa62.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a3261f94ee244da08200e22e9f8efa62.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:22",
+      "target_key": "authorlead:shih:lab:22",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 23,
+      "heading_year": 2020,
+      "citation": "Anastassacos FM*, Zhao Z*, Zeng Y, Shih WM. Glutaraldehyde Cross-Linking of Oligolysines Coating DNA Origami Greatly Reduces Susceptibility to Nuclease Degradation . J Am Chem Soc. 142, 3311\u20133315, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1021/jacs.9b11698"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.9b11698",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_97fc18843a864ee69ffd772b78000b37.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_97fc18843a864ee69ffd772b78000b37.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:23",
+      "target_key": "authorlead:shih:lab:23",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 24,
+      "heading_year": 2020,
+      "citation": "Hahn J, Chou LYT, S\u00f8rensen RS, Guerra RM, Shih WM. Extrusion of RNA from a DNA-Origami-Based Nanofactory . ACS Nano. 14, 1550\u20131559, 2020. [ ZIP ]",
+      "citation_years": [
+        2020
+      ],
+      "doi_links": [
+        "10.1021/acsnano.9b06466"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acsnano.9b06466",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_31f15e21dfb44e4cb70ad80c108f6afa.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_31f15e21dfb44e4cb70ad80c108f6afa.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:24",
+      "target_key": "authorlead:shih:lab:24",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 25,
+      "heading_year": 2019,
+      "citation": "Minev D, Guerra R, Kishi JY, Smith C, Krieg E, Said K, Hornick A, Sasaki HM, Filsinger G, Beliveau BJ, Yin P, Church GM, Shih WM. Rapid in vitro production of single-stranded DNA . Nucleic Acids Res . 47, 11956\u201311962, 2019. [ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1093/nar/gkz998"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkz998",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_657bda2bb5be453fae7d23b28bbb3177.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_657bda2bb5be453fae7d23b28bbb3177.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:25",
+      "target_key": "10.1093/nar/gkz998",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 26,
+      "heading_year": 2019,
+      "citation": "Hahn J, Shih WM. Thermal cycling of DNA devices via associative strand displacement . Nucleic Acids Res . 47, 10968\u201310975, 2019. [ ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1093/nar/gkz844"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkz844",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_169515a16796406299d139ce731a39dd.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:26",
+      "target_key": "authorlead:shih:lab:26",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 27,
+      "heading_year": 2019,
+      "citation": "Chou LYT, Shih WM. In Vitro Transcriptional Regulation via Nucleic-Acid-Based Transcription Factors . ACS Synth Biol . 8, 2558\u20132565, 2019. [ZIP ]",
+      "citation_years": [
+        2019
+      ],
+      "doi_links": [
+        "10.1021/acssynbio.9b00242"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acssynbio.9b00242",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_96ad7cdf5d034584831e2bba21821c41.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_96ad7cdf5d034584831e2bba21821c41.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:27",
+      "target_key": "authorlead:shih:lab:27",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 28,
+      "heading_year": 2018,
+      "citation": "Nathwani B, Shih WM, Wong WP. Force Spectroscopy and Beyond: Innovations and Opportunities . Biophys J . 115, 2279-2285, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1016/j.bpj.2018.10.021"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.bpj.2018.10.021",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a95a4bd418e946c7a45960fb63984c6a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a95a4bd418e946c7a45960fb63984c6a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:28",
+      "target_key": "10.1016/j.bpj.2018.10.021",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 29,
+      "heading_year": 2018,
+      "citation": "Zhao Z, Zhang M, Hogle JM, Shih WM, Wagner G, Nasr ML. DNA-Corralled Nanodiscs for the Structural and Functional Characterization of Membrane Proteins and Viral Entry . J Am Chem Soc . 140, 10639\u201310643, 2018. [ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1021/jacs.8b04638"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.8b04638",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_0915918a0cb346d09caaa35c4fbcc69b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_0915918a0cb346d09caaa35c4fbcc69b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:29",
+      "target_key": "10.1021/jacs.8b04638",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 30,
+      "heading_year": 2018,
+      "citation": "Bastings MMC*, Anastassacos FM*, Ponnuswamy N*, Leifer FG, Cuneo G, Lin C, Ingber DE, Ryu JH, Shih WM. Modulation of the Cellular Uptake of DNA Origami through Control over Mass and Shape . Nano Lett . 18, 3557\u20133564, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.8b00660"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acs.nanolett.8b00660",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7f3e9590f1b743ffbeb4756ab03e4c58.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7f3e9590f1b743ffbeb4756ab03e4c58.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:30",
+      "target_key": "10.1021/acs.nanolett.8b00660",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 31,
+      "heading_year": 2018,
+      "citation": "Li J, Johnson-Buck A, Yang YR, Shih WM, Yan H, Walter NG. Exploring the speed limit of toehold exchange with a cartwheeling DNA acrobat . Nat Nanotechnol . 13, 723\u2013729, 2018. [ ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1038/s41565-018-0130-2"
+      ],
+      "links": [
+        "http://doi.org/10.1038/s41565-018-0130-2",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33d05184229c41e0b343f0be4d0ef559.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33d05184229c41e0b343f0be4d0ef559.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:31",
+      "target_key": "authorlead:shih:lab:31",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 32,
+      "heading_year": 2018,
+      "citation": "Krieg E, Shih WM. Selective Nascent Polymer Catch-and-Release Enables Scalable Isolation of Multi-Kilobase Single-Stranded DNA . Angew Chem Int Ed Engl . 57, 714\u2013718, 2018. [ZIP ]",
+      "citation_years": [
+        2018
+      ],
+      "doi_links": [
+        "10.1002/anie.201710469"
+      ],
+      "links": [
+        "http://doi.org/10.1002/anie.201710469",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a76c9809873045b892b62a95addb6e0b.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:32",
+      "target_key": "10.1002/anie.201710469",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 33,
+      "heading_year": 2017,
+      "citation": "Johnson-Buck A, Shih WM. Single-Molecule Clocks Controlled by Serial Chemical Reactions . Nano Lett . 17, 7940\u20137944, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1021/acs.nanolett.7b04336"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acs.nanolett.7b04336",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ae75c41ef4c04283ae191642fc8e93e7.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ae75c41ef4c04283ae191642fc8e93e7.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:33",
+      "target_key": "authorlead:shih:lab:33",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 34,
+      "heading_year": 2017,
+      "citation": "Ponnuswamy N, Bastings MMC, Nathwani B, Ryu JH, Chou LYT, Vinther M, Li WA, Anastassacos FM, Mooney DJ, Shih WM. Oligolysine-based coating protects DNA nanostructures from low-salt denaturation and nuclease degradation . Nat Commun . 8, 15654, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1038/ncomms15654"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms15654",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_33c5a9222515464caa3671d5a6564002.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:34",
+      "target_key": "10.1038/ncomms15654",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 35,
+      "heading_year": 2017,
+      "citation": "Min J, Shih WM, Bellot G. Designing DNA Nanotube Liquid Crystals as a Weak-Alignment Medium for NMR Structure Determination of Membrane Proteins . Methods Mol Biol . 1500, 203\u2013215, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1007/978-1-4939-6454-3_14"
+      ],
+      "links": [
+        "http://doi.org/10.1007/978-1-4939-6454-3_14",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f870303b3ecc4f8b90d06c9d4a731be6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f870303b3ecc4f8b90d06c9d4a731be6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:35",
+      "target_key": "10.1007/978-1-4939-6454-3_14",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 36,
+      "heading_year": 2017,
+      "citation": "Perrault SD, Shih WM. Lipid Membrane Encapsulation of a 3D DNA Nano Octahedron . Methods Mol Biol . 1500, 165\u2013184, 2017. [ ZIP ]",
+      "citation_years": [
+        2017
+      ],
+      "doi_links": [
+        "10.1007/978-1-4939-6454-3_12"
+      ],
+      "links": [
+        "http://doi.org/10.1007/978-1-4939-6454-3_12",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c215f2ddf2064da6927b1a32278c5216.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c215f2ddf2064da6927b1a32278c5216.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:36",
+      "target_key": "10.1007/978-1-4939-6454-3_12",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 37,
+      "heading_year": 2016,
+      "citation": "Iwaki M, Wickham SF, Ikezaki K, Yanagida T, Shih WM. A programmable DNA origami nanospring that reveals force-induced adjacent binding of myosin VI heads . Nat Commun . 7, 13715, 2016. [ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/ncomms13715"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms13715",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9f24556974af479fadca6bddb54147e6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9f24556974af479fadca6bddb54147e6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:37",
+      "target_key": "10.1038/ncomms13715",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 38,
+      "heading_year": 2016,
+      "citation": "Wang P, Gaitanaros S, Lee S, Bathe M, Shih WM, Ke Y. Programming Self-Assembly of DNA Origami Honeycomb Two-Dimensional Lattices and Plasmonic Metamaterials . J. Am. Chem. Soc . 138, 7733\u20137740, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1021/jacs.6b03966"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.6b03966",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_19a7360547b04fcab63cbec2a30c41ee.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_19a7360547b04fcab63cbec2a30c41ee.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:38",
+      "target_key": "10.1021/jacs.6b03966",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 39,
+      "heading_year": 2016,
+      "citation": "Xu W, Nathwani B, Lin C, Wang J, Karatekin E, Pincet F, Shih W*, Rothman JE*. A programmable DNA origami platform to organize SNAREs for membrane fusion . J. Am. Chem. Soc . 138, 4439\u20134447, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1021/jacs.5b13107"
+      ],
+      "links": [
+        "http://doi.org/10.1021/jacs.5b13107",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e95366a308434733aa4e64b3a3f3095d.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e95366a308434733aa4e64b3a3f3095d.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:39",
+      "target_key": "10.1021/jacs.5b13107",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 40,
+      "heading_year": 2016,
+      "citation": "Yang Y, Wang J, Shigematsu H, Xu W, Shih WM*, Rothman JE*, Lin C*. Self-assembly of size-controlled liposomes on DNA nanotemplates . Nat Chem. 8, 476\u2013483, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/nchem.2472"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.2472",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_47583b130ba7468d914f80405776e400.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_47583b130ba7468d914f80405776e400.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:40",
+      "target_key": "10.1038/nchem.2472",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 41,
+      "heading_year": 2016,
+      "citation": "Ke Y, Meyer T, Shih WM, Bellot G. Regulation-at-a-Distance of Biomolecular Interactions Using a DNA Origami Nanoactuator . Nat Commun. 7, 10935, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/ncomms10935"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms10935",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9a35c76d69f34259b46eb5b3713bc575.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9a35c76d69f34259b46eb5b3713bc575.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:41",
+      "target_key": "10.1038/ncomms10935",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 42,
+      "heading_year": 2016,
+      "citation": "W. Benjamin Rogers WB, Shih WM, Manoharan VN. Using DNA to program the self-assembly of colloidal nanoparticles and microparticles . Nat Rev Mater . volume 1, 1\u201314, 2016. [ ZIP ]",
+      "citation_years": [
+        2016
+      ],
+      "doi_links": [
+        "10.1038/natrevmats.2016.8"
+      ],
+      "links": [
+        "http://doi.org/10.1038/natrevmats.2016.8",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ea09c3cf449c49feb867f6f4ae37a990.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_ea09c3cf449c49feb867f6f4ae37a990.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:42",
+      "target_key": "authorlead:shih:lab:42",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 43,
+      "heading_year": 2015,
+      "citation": "Schmidt TL, Beliveau BJ, Uca YO, Theilmann M, Da Cruz F, Wu CT, Shih WM . Scalable amplification of strand subsets from chip-synthesized oligonucleotide libraries . Nat Commun. 6, 8634, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/ncomms9634"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms9634",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e6b65f13d2c94644a6affc12bd0d27a6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e6b65f13d2c94644a6affc12bd0d27a6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:43",
+      "target_key": "10.1038/ncomms9634",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 44,
+      "heading_year": 2015,
+      "citation": "Tellechea A, Silva EA, Min J, Leal EC, Auster ME, Pradhan-Nabzdyk L, Shih W, Mooney DJ, Veves A. Alginate and DNA Gels Are Suitable Delivery Systems for Diabetic Wound Healing . Int J Low Extrem Wounds . 14, 146\u2013153, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1177/1534734615580018"
+      ],
+      "links": [
+        "http://doi.org/10.1177/1534734615580018",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7e7722f6f2674368889d3571241a5ad7.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:44",
+      "target_key": "authorlead:shih:lab:44",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 45,
+      "heading_year": 2015,
+      "citation": "Tian Y, Wang T, Liu W, Xin HL, Li H, Ke Y, Shih WM, Gang O. Prescribed nanoparticle cluster architectures and low-dimensional arrays built using octahedral DNA origami frames . Nat Nanotechnol . 10, 637\u2013644, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/nnano.2015.105"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2015.105",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_95d5df6fdc0b47d89277c155b6f6a28e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_95d5df6fdc0b47d89277c155b6f6a28e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:45",
+      "target_key": "10.1038/nnano.2015.105",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 46,
+      "heading_year": 2015,
+      "citation": "Beliveau BJ, Boettiger AN, Avenda\u00f1o MS, Jungmann R, McCole RB, Joyce EF, Kim-Kiselak C, Bantignies F, Fonseka CY, Erceg J, Hannan MA, Hoang HG, Colognori D, Lee JT, Shih WM, Yin P, Zhuang X, Wu CT. Single-molecule super-resolution imaging of chromosomes and in situ haplotype visualization using Oligopaint FISH probes . Nat Comm . 6, 7147, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1038/ncomms8147"
+      ],
+      "links": [
+        "http://doi.org/10.1038/ncomms8147",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_bb63c02638bd42b3b76caf583c299c92.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_bb63c02638bd42b3b76caf583c299c92.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:46",
+      "target_key": "authorlead:shih:lab:46",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 47,
+      "heading_year": 2015,
+      "citation": "Shih WM. Materials Science. Exploiting weak interactions in DNA self-assembly . Science . 347, 1417\u20131418, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1126/science.aaa9483"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.aaa9483",
+        "https://www.shih.hms.harvard.edu/_files/ugd/495212_24195078bc054ba085b6af0fc61eae75.pdf"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/ugd/495212_24195078bc054ba085b6af0fc61eae75.pdf"
+      ],
+      "lead_key": "authorlead:shih:lab:47",
+      "target_key": "authorlead:shih:lab:47",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 48,
+      "heading_year": 2015,
+      "citation": "Kocabey S, Kempter S, List J, Xing Y, Bae W, Schiffels D, Shih WM, Simmel FC, Liedl T. Membrane-assisted growth of DNA origami nanostructure arrays . ACS Nano . 9, 3530\u20133539, 2015. [ ZIP ]",
+      "citation_years": [
+        2015
+      ],
+      "doi_links": [
+        "10.1021/acsnano.5b00161"
+      ],
+      "links": [
+        "http://doi.org/10.1021/acsnano.5b00161",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d851b96f0fe94dff8345a62732cb8af3.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d851b96f0fe94dff8345a62732cb8af3.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:48",
+      "target_key": "10.1021/acsnano.5b00161",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 49,
+      "heading_year": 2014,
+      "citation": "Ke Y, Ong LL, Sun W, Song J, Dong M, Shih WM, Yin P. DNA brick crystals with prescribed depths . Nat Chem . 6, 994\u20131002, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1038/nchem.2083"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.2083",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_274dbeef354f47eca61cf1e65bf541d4.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_274dbeef354f47eca61cf1e65bf541d4.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:49",
+      "target_key": "authorlead:shih:lab:49",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 50,
+      "heading_year": 2014,
+      "citation": "Hahn J, Wickham SF, Shih WM, Perrault SD. Addressing the instability of DNA nanostructures in tissue culture . ACS Nano . 8, 8765\u20138775, 2014. [ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1021/nn503513p"
+      ],
+      "links": [
+        "http://doi.org/10.1021/nn503513p",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9c4a1a57d4ed490581f76566d06c2e4a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9c4a1a57d4ed490581f76566d06c2e4a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:50",
+      "target_key": "10.1021/nn503513p",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 51,
+      "heading_year": 2014,
+      "citation": "Perrault SD, Shih WM. Virus-Inspired Membrane Encapsulation of DNA Nanostructures To Achieve In Vivo Stability . ACS Nano. 8, 5132\u20135140, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1021/nn5011914"
+      ],
+      "links": [
+        "http://doi.org/10.1021/nn5011914",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_1ef5f44cdb5344108405488bb09df07a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_1ef5f44cdb5344108405488bb09df07a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:51",
+      "target_key": "10.1021/nn5011914",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 52,
+      "heading_year": 2014,
+      "citation": "Nickels PC, Ke Y, Jungmann R, Smith DM, Leichsenring M, Shih WM, Liedl T, H\u00f6gberg B. DNA Origami Structures Directly Assembled from Intact Bacteriophages . Small. 10, 1765\u20131769, 2014. [ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1002/smll.201303442"
+      ],
+      "links": [
+        "http://doi.org/10.1002/smll.201303442",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3ef17c3a4b7b4299983bc4261744a753.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3ef17c3a4b7b4299983bc4261744a753.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:52",
+      "target_key": "10.1002/smll.201303442",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 53,
+      "heading_year": 2014,
+      "citation": "Jungmann R*, Avendano MS*, Woehrstein JB*, Dai M, Shih WM, Yin P. Multiplexed 3D Cellular Super-Resolution Imaging with DNA-PAINT and Exchange-PAINT . Nat Methods. 11, 313\u2013318, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1038/nmeth.2835"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth.2835",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fd8259849a264bb2827c40b365fc2335.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_fd8259849a264bb2827c40b365fc2335.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:53",
+      "target_key": "10.1038/nmeth.2835",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 54,
+      "heading_year": 2014,
+      "citation": "Sun ZY, Cheng Y, Kim M, Song L, Choi J, Kudahl UJ, Brusic V, Chowdhury B, Yu L, Seaman MS, Bellot G, Shih WM, Wagner G, Reinherz EL. Disruption of Helix-Capping Residues 671 and 674 Reveals a Role in HIV-1 Entry for a Specialized Hinge Segment of the Membrane Proximal External Region of gp41 . J Mol Biol . 426, 1095\u20131108, 2014. [ ZIP ]",
+      "citation_years": [
+        2014
+      ],
+      "doi_links": [
+        "10.1016/j.jmb.2013.09.030"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.jmb.2013.09.030",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_756ae6d2f97545748dff862156b8854e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_756ae6d2f97545748dff862156b8854e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:54",
+      "target_key": "authorlead:shih:lab:54",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 55,
+      "heading_year": 2013,
+      "citation": "Pfitzner E, Wachauf C, Kilchherr F, Pelz B, Shih WM, Rief M, Dietz H. Rigid DNA Beams for High-Resolution Single-Molecule Mechanics . Angew Chem Intl Ed Engl . 52, 1\u20137, 2013. [ ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1002/anie.201302727"
+      ],
+      "links": [
+        "http://doi.org/10.1002/anie.201302727",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7de1137941604a8bb73e8106864078c0.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7de1137941604a8bb73e8106864078c0.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:55",
+      "target_key": "10.1002/anie.201302727",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 56,
+      "heading_year": 2013,
+      "citation": "Ducani C, Kaul C, Moche M, Shih WM, H\u00f6gberg B. Enzymatic production of 'monoclonal stoichiometric' single-stranded DNA oligonucleotides . Nat Methods . 10, 647\u2013652, 2013. [ ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1038/nmeth.2503"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth.2503",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7185ffe2e1d14a96b4cedc545bb3eb6e.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_7185ffe2e1d14a96b4cedc545bb3eb6e.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:56",
+      "target_key": "10.1038/nmeth.2503",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 57,
+      "heading_year": 2013,
+      "citation": "Bellot G, McClintock MA, Chou JJ, Shih WM. DNA nanotubes for NMR structure determination of membrane proteins . Nat Protoc . 8, 755\u2013770, 2013. [ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1038/nprot.2013.03"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nprot.2013.03",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4b1241aded3b4418b96169786575c4f6.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4b1241aded3b4418b96169786575c4f6.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:57",
+      "target_key": "authorlead:shih:lab:57",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 58,
+      "heading_year": 2013,
+      "citation": "Lin C, Perrault SD, Kwak M, Graf F, Shih WM. Purification of DNA-origami nanostructures by rate-zonal centrifugation . Nucl Acids Res . 41, e40, 2013. [ZIP ]",
+      "citation_years": [
+        2013
+      ],
+      "doi_links": [
+        "10.1093/nar/gks1070"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gks1070",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f132d659c4fa451ba8f16325142e80cc.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f132d659c4fa451ba8f16325142e80cc.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:58",
+      "target_key": "10.1093/nar/gks1070",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 59,
+      "heading_year": 2012,
+      "citation": "Ke Y, Ong LL, Shih WM, Yin P. Three-dimensional structures self-assembled from DNA bricks . Science . 338, 1177\u20131183, 2012. (cover) [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1126/science.1227268"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1227268",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f90d7db0199940f0a44855f10ec6d55f.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_f90d7db0199940f0a44855f10ec6d55f.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:59",
+      "target_key": "10.1126/science.1227268",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 60,
+      "heading_year": 2012,
+      "citation": "Derr ND, Goodman BS, Jungmann R, Leschziner AE, Shih WM, Reck-Peterson SL, Tug of War in Motor Protein Ensembles Revealed with a Programmable DNA Origami Scaffold , Science . 338, 662\u2013665, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1126/science.1226734"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1226734",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4219380e2e2b46258b4b76ef5f8e3bc1.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4219380e2e2b46258b4b76ef5f8e3bc1.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:60",
+      "target_key": "10.1126/science.1226734",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 61,
+      "heading_year": 2012,
+      "citation": "Lin C, Jungmann R, Leifer AM, Li C, Levner D, Church GM, Shih WM*, Peng Yin*. Sub-micrometer Geometrically Encoded Fluorescent Barcodes Self-Assembled from DNA . Nat Chem . 4, 832\u2013839, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1038/nchem.1451"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nchem.1451",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a49c69cb468f46e482811ce57c1975fa.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a49c69cb468f46e482811ce57c1975fa.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:61",
+      "target_key": "10.1038/nchem.1451",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 62,
+      "heading_year": 2012,
+      "citation": "Ke Y, Bellot G, Voigt NV, Fradkov E, Shih WM. Two design strategies for enhancement of multilayer\u2013DNA-origami folding: underwinding for specific intercalator rescue and staple-break positioning . Chem Sci . 3, 2587\u20132597, 2012. [ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1039/c2sc20446k"
+      ],
+      "links": [
+        "http://doi.org/10.1039/C2SC20446K",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_edabcb8f5ba64c6c913e4db968ed941f.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_edabcb8f5ba64c6c913e4db968ed941f.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:62",
+      "target_key": "10.1039/c2sc20446k",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 63,
+      "heading_year": 2012,
+      "citation": "Ke Y, Voigt NV, Gothelf K, Shih WM. Multilayer DNA Origami Packed on Hexagonal and Hybrid Lattices . J Am Chem Soc . 134, 1770\u20131774, 2012. [ ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1021/ja209719k"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja209719k",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4e82cb84d34141cc81a0d1c8e5fc3596.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_4e82cb84d34141cc81a0d1c8e5fc3596.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:63",
+      "target_key": "10.1021/ja209719k",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 64,
+      "heading_year": 2012,
+      "citation": "Qiu W, Derr ND, Goodman BS, Villa E, Wu D, Shih W, Reck-Peterson SL. Dynein achieves processive motion using both stochastic and coordinated stepping . Nat Struct Mol Biol . 19, 193-200, 2012. [ZIP ]",
+      "citation_years": [
+        2012
+      ],
+      "doi_links": [
+        "10.1038/nsmb.2205"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nsmb.2205",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ff83b9a5abd488383d533a379e452ea.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_2ff83b9a5abd488383d533a379e452ea.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:64",
+      "target_key": "authorlead:shih:lab:64",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 65,
+      "heading_year": 2011,
+      "citation": "Berardi M, Shih WM, Harrison SC, Chou JJ. Mitochondrial uncoupling protein 2 structure determined by NMR molecular fragment searching . Nature. 476, 109\u2013113, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nature10257"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature10257",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e139e70951a9471ba337c76647972d02.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e139e70951a9471ba337c76647972d02.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:65",
+      "target_key": "10.1038/nature10257",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 66,
+      "heading_year": 2011,
+      "citation": "Bellot G, McClintock MA, Lin CX, Shih WM. Recovery of intact DNA nanostructures after agarose gel-based separation . Nat Methods. 8, 192\u2013194, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nmeth0311-192"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmeth0311-192",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c79d7001bf604c9ab30eb4b457c651a4.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_c79d7001bf604c9ab30eb4b457c651a4.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:66",
+      "target_key": "10.1038/nmeth0311-192",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 67,
+      "heading_year": 2011,
+      "citation": "Pinheiro AV, Han D, *Shih WM, *Yan H. Challenges and opportunities for structural DNA nanotechnology . Nat Nanotechnol. 6, 763\u2013772, 2011. [ ZIP ]",
+      "citation_years": [
+        2011
+      ],
+      "doi_links": [
+        "10.1038/nnano.2011.187"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2011.187",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_cf3533734c5d4cd6a5d9689224851c8c.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_cf3533734c5d4cd6a5d9689224851c8c.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:67",
+      "target_key": "10.1038/nnano.2011.187",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 68,
+      "heading_year": 2010,
+      "citation": "Liedl T, H\u00f6gberg B, Tytell J, Ingber DE, Shih WM. Self-assembly of 3D prestressed tensegrity structures from DNA . Nat Nanotechnol . 5, 520\u2013524, 2010. [ZIP ]",
+      "citation_years": [
+        2010
+      ],
+      "doi_links": [
+        "10.1038/nnano.2010.107"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nnano.2010.107",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e039ebcd213b4df48ef522ac95d0f299.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e039ebcd213b4df48ef522ac95d0f299.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:68",
+      "target_key": "10.1038/nnano.2010.107",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 69,
+      "heading_year": 2010,
+      "citation": "Shih WM, Lin C. Knitting complex weaves with DNA origami . Curr Opin Struct Biol . 20, 276\u2013282, 2010. [ ZIP ]",
+      "citation_years": [
+        2010
+      ],
+      "doi_links": [
+        "10.1016/j.sbi.2010.03.009"
+      ],
+      "links": [
+        "http://doi.org/10.1016/j.sbi.2010.03.009",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a1a872a06f43477190da810511d38f40.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_a1a872a06f43477190da810511d38f40.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:69",
+      "target_key": "10.1016/j.sbi.2010.03.009",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 70,
+      "heading_year": 2009,
+      "citation": "Ke Y, Douglas SM, Liu MH, Sharma J, Cheng A, Leung A, Liu Y, Shih W*, Yan H. Multilayer DNA origami packed on a square lattice . J Am Chem Soc . 131, 15903\u201315908, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1021/ja906381y"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja906381y",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e57d38b4f409459ea05b6abfa78a1528.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_e57d38b4f409459ea05b6abfa78a1528.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:70",
+      "target_key": "10.1021/ja906381y",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 71,
+      "heading_year": 2009,
+      "citation": "Dietz H, Douglas SM, Shih WM. Folding DNA into twisted and curved nanoscale shapes . Science. 325, 725\u2013730, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1126/science.1174251"
+      ],
+      "links": [
+        "http://doi.org/10.1126/science.1174251",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_994903868d934b7a9c719472d9f44ea9.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_994903868d934b7a9c719472d9f44ea9.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:71",
+      "target_key": "10.1126/science.1174251",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 72,
+      "heading_year": 2009,
+      "citation": "H\u00f6gberg B, Liedl T, Shih WM. Folding DNA origami from a double-stranded source of scaffold . J Am Chem Soc . 131, 9154\u20139155, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1021/ja902569x"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja902569x",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_40204389f4af4f3f9e84a699a37c6bcc.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_40204389f4af4f3f9e84a699a37c6bcc.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:72",
+      "target_key": "10.1021/ja902569x",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 73,
+      "heading_year": 2009,
+      "citation": "Douglas SM, Marblestone AH, Teerapittayanon S, Vazquez A, Church GM, Shih WM. Rapid prototyping of three-dimensional DNA-origami shapes with caDNAno . Nucl Acids Res . 37, 5001\u20135006, 2009. [ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1093/nar/gkp436"
+      ],
+      "links": [
+        "http://doi.org/10.1093/nar/gkp436",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_263205d8a8c5411cb270ebf931235cec.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_263205d8a8c5411cb270ebf931235cec.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:73",
+      "target_key": "10.1093/nar/gkp436",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 74,
+      "heading_year": 2009,
+      "citation": "Douglas SM, Dietz H, Liedl T, H\u00f6gberg B, Graf F, Shih WM. Self-assembly of DNA into nanoscale shapes . Nature. 459, 414\u2013418, 2009. [ ZIP ]",
+      "citation_years": [
+        2009
+      ],
+      "doi_links": [
+        "10.1038/nature08016"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature08016",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3e40dbcecde14a1ea374bc261ade853a.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_3e40dbcecde14a1ea374bc261ade853a.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:74",
+      "target_key": "10.1038/nature08016",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 75,
+      "heading_year": 2008,
+      "citation": "Jungmann R, Liedl T, Sobey TL, Shih W, Simmel FC. Isothermal assembly of DNA origami structures using denaturing agents . J Am Chem Soc . 130, 10062-10063, 2008. [ZIP ]",
+      "citation_years": [
+        2008
+      ],
+      "doi_links": [
+        "10.1021/ja8030196"
+      ],
+      "links": [
+        "http://doi.org/10.1021/ja8030196",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_569828222e9240d0ad47014555349e66.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_569828222e9240d0ad47014555349e66.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:75",
+      "target_key": "10.1021/ja8030196",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 76,
+      "heading_year": 2008,
+      "citation": "Shih W. Biomolecular self-assembly: dynamic DNA . Nat Materials. 7, 98\u2013100, 2008. [ZIP ]",
+      "citation_years": [
+        2008
+      ],
+      "doi_links": [
+        "10.1038/nmat2110"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nmat2110",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dde22bf5fa3b485194c41d0780b744e5.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_dde22bf5fa3b485194c41d0780b744e5.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:76",
+      "target_key": "authorlead:shih:lab:76",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 77,
+      "heading_year": 2007,
+      "citation": "Douglas SM, Chou JJ, Shih WM. DNA-nanotube-induced alignment of membrane proteins for NMR structure determination . Proc Natl Acad Sci USA. 104, 6644\u20136648, 2007. [ ZIP ]",
+      "citation_years": [
+        2007
+      ],
+      "doi_links": [
+        "10.1073/pnas.0700930104"
+      ],
+      "links": [
+        "http://doi.org/10.1073/pnas.0700930104",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_758fe1d46ba0480dacbbb40931c92332.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_758fe1d46ba0480dacbbb40931c92332.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:77",
+      "target_key": "10.1073/pnas.0700930104",
+      "identity_status": "explicit_doi_registry_match",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 78,
+      "heading_year": 2004,
+      "citation": "Shih WM, Quispe, JD, Joyce GF. A 1.7-kilobase single-stranded DNA that folds into a nanoscale octahedron . Nature. 427, 618\u2013621, 2004. (cover) [ ZIP ]",
+      "citation_years": [
+        2004
+      ],
+      "doi_links": [
+        "10.1038/nature02307"
+      ],
+      "links": [
+        "http://doi.org/10.1038/nature02307",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d8520f3cb0364e5fa0120c33d0465f57.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_d8520f3cb0364e5fa0120c33d0465f57.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:78",
+      "target_key": "authorlead:shih:lab:78",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 79,
+      "heading_year": 2004,
+      "citation": "Shih WM, Spudich JA. The myosin relay helix to converter interface remains intact throughout the actomyosin ATPase cycle . J Biol Chem . 276, 19491\u201319494, 2001. [ ZIP ]",
+      "citation_years": [
+        2001
+      ],
+      "doi_links": [
+        "10.1074/jbc.m010887200"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.M010887200",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_af6d6f1da0514e94b60b894656ffecd5.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_af6d6f1da0514e94b60b894656ffecd5.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:79",
+      "target_key": "authorlead:shih:lab:79",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 80,
+      "heading_year": 2004,
+      "citation": "Shih WM, Gryczynski Z, Lakowicz JR, Spudich JA. A FRET-based sensor reveals ATP hydrolysis-induced large conformational changes and three distinct states of the molecular motor myosin . Cell. 102, 683\u2013694, 2000. [ ZIP ]",
+      "citation_years": [
+        2000
+      ],
+      "doi_links": [
+        "10.1016/s0092-8674(00)00090-8"
+      ],
+      "links": [
+        "http://doi.org/10.1016/s0092-8674(00)00090-8",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_628b127b9c9c4f3fb1687ac6cee4dae9.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_628b127b9c9c4f3fb1687ac6cee4dae9.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:80",
+      "target_key": "authorlead:shih:lab:80",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 81,
+      "heading_year": 2004,
+      "citation": "Shih W, Gallusser A, Kirchhausen T. A clathrin-binding site in the hinge of the \u03b22 chain of mammalian AP-2 complexes . J Biol Chem . 270, 31083\u201331090, 1995. [ ZIP ]",
+      "citation_years": [
+        1995
+      ],
+      "doi_links": [
+        "10.1074/jbc.270.52.31083"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.270.52.31083",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_741ce670d1b243af97acb90e076c71b0.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_741ce670d1b243af97acb90e076c71b0.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:81",
+      "target_key": "authorlead:shih:lab:81",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 82,
+      "heading_year": 2004,
+      "citation": "Sorkin, A., McKinsey, T., Shih W, Kirchhausen T, Carpenter G. Stoichiometric interaction of the epidermal growth factor receptor with the clathrin-associated protein complex AP-2 . J Biol Chem . 270, 619\u2013625, 1995. [ ZIP ]",
+      "citation_years": [
+        1995
+      ],
+      "doi_links": [
+        "10.1074/jbc.270.2.619"
+      ],
+      "links": [
+        "http://doi.org/10.1074/jbc.270.2.619",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_381b445198ee46d0996e5e21787e3165.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_381b445198ee46d0996e5e21787e3165.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:82",
+      "target_key": "authorlead:shih:lab:82",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    },
+    {
+      "ordinal": 83,
+      "heading_year": 2004,
+      "citation": "Baier G, Coggeshall KM, Baier-Bitterlich G, Giampa, L, Telford D, Herbert E, Shih W, Altman A. Construction and characterization of lck- and fyn-specific tRNA: ribozyme chimeras . Mol Immunol . 31, 923\u2013932, 1994. [ ZIP ]",
+      "citation_years": [
+        1994
+      ],
+      "doi_links": [
+        "10.1016/0161-5890(94)90012-4"
+      ],
+      "links": [
+        "http://doi.org/10.1016/0161-5890(94)90012-4",
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9d7208879dca47bdb4e7885b99a3e732.zip"
+      ],
+      "source_links": [
+        "https://www.shih.hms.harvard.edu/_files/archives/495212_9d7208879dca47bdb4e7885b99a3e732.zip"
+      ],
+      "lead_key": "authorlead:shih:lab:83",
+      "target_key": "authorlead:shih:lab:83",
+      "identity_status": "pending_identity",
+      "review_status": "not_changed_by_bibliography_enumeration"
+    }
+  ],
+  "evidence": [
+    {
+      "local_file": "assets/research-20261105/shih-publications.html",
+      "sha256": "759fd9ba5cc16369485f0f44ac3404cff723d5e039c08fbd651774fa1f5dbec9",
+      "url": "https://www.shih.hms.harvard.edu/publications",
+      "locator": "All publication paragraphs between PUBLICATIONS heading and next h2; preserve citation years independently of section heading"
+    }
+  ]
+}

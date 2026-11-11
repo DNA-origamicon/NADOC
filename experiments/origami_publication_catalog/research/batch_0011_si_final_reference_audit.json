@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "source": "10.1021/acssensors.7b00628",
+      "expected": 8,
+      "saved": 8
+    },
+    {
+      "source": "10.1021/acsnano.7b08044",
+      "expected": 11,
+      "saved": 11
+    }
+  ],
+  "total_references": 19,
+  "unique_targets": 19,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5732,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10882
+  }
+}

@@ -1,0 +1,20 @@
+"""Primary section review of four rotated low-keyword B0010 records."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+NOTES=[
+('10.12703/p5-14','PMC3643079','background_or_review',['review_article'],'Abstract; Introduction; Functional DNA nanostructures; Future perspectives','Article reviews applications and attributes nanotube NMR, robots, drug delivery and channels to earlier papers. No new origami core or experiment is established in the inspected sections. Attributed designs remain discovery targets, not new designs of this review.'),
+('10.1186/1556-276x-8-119','PMC3599551','background_or_review',['review_article'],'Abstract; Review/Introduction; Conclusion','Body explicitly labels itself a Review and discusses prior nanotechnology applications; Conclusion calls for future developments. Generic XML research-article type is inconsistent with this content and does not establish original origami work.'),
+('10.1371/journal.pone.0074932','PMC3789703','not_origami',['journal_article'],'Abstract; Introduction; Results and Discussion opening experimental description; entire Conclusion; ref10','Original study of developable ribbon geometry and macroscopic twisted18mm-wide overhead-transparency ribbons. Origami/Mobius DNA structures are cited in Introduction(ref10); Conclusion discusses possible applicability at molecular scales, without executing a DNA-origami design/model. Exclusion is grounded in experiment and conclusion, not title keywords.'),
+('10.1371/journal.pone.0063550','PMC3655178','not_origami',['journal_article'],'Abstract; Materials and Methods AuNP/CpG synthesis and CpG1826 sequence designs; Discussion; ref37','Original experiment modifies CpG oligonucleotides directly on citrate gold nanoparticles with thiol/polyT/TEG spacers. The three stated designs are oligonucleotide-conjugation variants, not origami cores. Discussion attributes CpG-origami delivery to Schuller2011ref37, as background comparator; no origami construct is executed in reviewed Methods/Discussion.')]
+def main():
+ pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ for doi,pmc,rel,types,loc,note in NOTES:
+  p=pubs[doi];ev=evidence(L.ROOT/'assets/sources/pre2020-expansion'/(pmc+'.xml'),'https://pmc.ncbi.nlm.nih.gov/articles/'+pmc+'/',loc)
+  p.update(review_stage='fulltext_reviewed',relevance=rel,publication_type=types,design_contributions=[],catalog_eligibility='excluded' if rel=='not_origami' else 'unresolved',access='partial',evidence=[ev],rationale=note,unresolved_questions=['Enumerate full bibliography and reconcile primary targets; source-local exclusion does not exclude its citation neighborhood.'],reviewer='Codex primary XML named-section inspection',run_id='B0010',date=L.DATE)
+  L.upsert('publication_reviews',p,'Inspect actual low-keyword primary content and preserve article-type correction')
+ b=next(b for b in L.read('batches') if b['batch_id']=='B0010');b.setdefault('completed_actions',[]).append('Reviewed4local XML records:2reviews and2original studies with background-only origami references.')
+ b.update(after_counts=L.counts(),validation=[L.validate()],exclusion_audit={'sample':['10.1371/journal.pone.0074932','10.1371/journal.pone.0063550'],'denominator':'Both2 catalog exclusions in this partial batch','reason':'Same-agent second inspection: ribbon experiment uses transparency sheet and Conclusion only proposes molecular applications; CpG Methods gives direct oligo-AuNP conjugation and Discussion attributes origami to ref37. Not independent review.'},next_queue=['Review15selected ACS source sets and6remaining low/broad B0010 records','Reconcile all bibliography leads; preserve broad versus narrow scope','Continue FNANO2013 and author/forward routes'])
+ L.upsert('batches',b,'Checkpoint4/25 balanced first-pass reviews with exclusion audit')
+ L.atomic(L.HERE/'batch_0010_local_audit.json',json.dumps(dict(batch_id='B0010',first_pass_count=4,input_count=25,validation=L.validate(),counts=L.counts()),indent=2)+'\n');print(L.validate())
+if __name__=='__main__':main()

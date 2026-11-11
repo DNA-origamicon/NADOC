@@ -2739,6 +2739,14 @@ def _persist_topology_health_registry(
             if key not in seen:
                 seen.add(key)
                 psf_rows.append(key)
+    submodel_path = psf_path.parent / "submodel.json"
+    if submodel_path.exists():
+        receipt = json.loads(submodel_path.read_text())
+        original = receipt["source_residues"]
+        if len(original) != len(model_rows):
+            raise RuntimeError("Submodel source residue registry differs from Design")
+        by_identity = {tuple(key): row for key, row in zip(original, model_rows)}
+        model_rows = [by_identity[key] for key in psf_rows]
     if len(model_rows) != len(psf_rows):
         raise RuntimeError(
             "Cannot author WC registry: atomistic/PSF DNA residue counts differ "
@@ -4505,6 +4513,9 @@ def prepare_mgh_slow_release(
     manifest_text = json.dumps(manifest, indent=2)
     (package_dir / "manifest.json").write_text(manifest_text)
     (package_dir / "nadoc_md_run.json").write_text(manifest_text)
+
+    from backend.core.namd_submodel import finalize_package
+    finalize_package(package_dir, name_stem)
 
     # Relative subdir for MdJob
     package_subdir = str(package_dir.relative_to(job_dir))

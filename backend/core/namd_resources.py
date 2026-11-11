@@ -204,6 +204,7 @@ def configuration_memory(path, *, threads=16, fallback_box=None, resident_overri
     known_directives = set('''set structure coordinates parameters paratypecharmm
         bincoordinates binvelocities extendedsystem binaryrestart outputname restartname
         cellbasisvector1 cellbasisvector2 cellbasisvector3 cellorigin
+        fixedatoms fixedatomsfile fixedatomscol fixedatomsforces
         gpuresident pme pmegridspacing pairlistdist margin twoawayx twoawayy twoawayz
         cutoff switchdist switching exclude onefourscaling
         extrabonds extrabondsfile constraints conskcol conskfile consref constraintscaling
@@ -279,6 +280,9 @@ def configuration_memory(path, *, threads=16, fallback_box=None, resident_overri
         pme_spacing=float(options.get('pmegridspacing',1.5)), box_angstrom=box,
         margin=float(options.get('margin',3)), threads=threads,
         two_away=two_away_options(options),shared_bytes=shared_bytes,check_patch=cuda_patch)
+    if options.get('fixedatoms', 'off').lower() in ('on', 'yes', 'true', '1'):
+        from backend.core.namd_submodel import fixed_shell_memory
+        result = fixed_shell_memory(path.parent, options, result)
     if detailed and cuda_patch and box is not None and result.supported:
         from backend.core.namd_allocation_model import prepared_allocation
         result=replace(result,expected=prepared_allocation(path,options,box,result,
@@ -320,3 +324,26 @@ def prepared_resource_summary(package, *, threads=16, devices='0'):
     return dict(supported=supported,expected_engine_peak=expected,
         expected_health_peak_ram_mib=expected_health,admission=admission,stages=stages,
         confidence=None,policy='Expected engine usage is descriptive. Admission includes the conservative engine envelope plus health RAM; OS/application reserves are additional.')
+
+
+def prepared_forecast_context(package, *, threads=16, devices='0'):
+    """Advisory saved-package bounds and memory ceilings, without changing inputs."""
+    import json
+    package = Path(package)
+    manifest = json.loads((package / 'manifest.json').read_text())
+    result = {}
+    if manifest.get('box_ang'):
+        result['box_nm'] = [v / 10 for v in manifest['box_ang']]
+    if manifest.get('submodel'):
+        from backend.core.namd_submodel import selection_summary
+        result['submodel'] = selection_summary(manifest['submodel'])
+    try:
+        summary = prepared_resource_summary(package, threads=threads, devices=devices)
+        admission = summary.get('admission')
+        if admission:
+            result['memory'] = dict(current_host_mb=admission['workflow_ram_mib'],
+                current_vram_mb=admission['gpu_mib'],
+                scope='Maximum prepared-package stage budget; production settings are checked again before launch.')
+    except (OSError, ValueError, KeyError):
+        pass  # Exact launch admission remains mandatory even when this quote is unavailable.
+    return result

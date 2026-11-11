@@ -1,0 +1,993 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/pre2020-expansion/supplements/PMC4740900-41467_2016_BFncomms10591_MOESM891_ESM.pdf",
+    "sha256": "265385f7e3d7eab11b434fd6e1600966fa3655a7a53530f6c6e8f2442faacfd5",
+    "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms10591/MediaObjects/41467_2016_BFncomms10591_MOESM891_ESM.pdf",
+    "locator": "Table1 PDF18-22; annealing Table2 PDF23; template/azobenzene/folding methods PDF24. Figure3 PDF3 visually inspected. Whole routing Figure1 not independently audited."
+  },
+  "core_rows": [
+    {
+      "section": "shared",
+      "start": "4[202]",
+      "end": "7[202]",
+      "pdf_page": 18,
+      "literal_line": "AACGAGCGTCTTTCGCCATATTTGTTTAGAAGCGCATTAGAC                               42        \"core\" staple   4[202]    7[202]"
+    },
+    {
+      "section": "shared",
+      "start": "22[62]",
+      "end": "22[63]",
+      "pdf_page": 18,
+      "literal_line": "AGGTTTAACGTCGACACCGCCTGGAAGGGTTAGAAGATTTTC                               42        \"core\" staple   22[62]    22[63]"
+    },
+    {
+      "section": "shared",
+      "start": "15[196]",
+      "end": "25[202]",
+      "pdf_page": 18,
+      "literal_line": "TACTTTTTCTAATCTATTTACAGAAAGGTGCCTGAAACAGTGAGGCCAC                        49        \"core\" staple   15[196]   25[202]"
+    },
+    {
+      "section": "shared",
+      "start": "4[118]",
+      "end": "13[118]",
+      "pdf_page": 18,
+      "literal_line": "AAGAAGTCCAAAATTAGAGAGCTTAATT                                             28        \"core\" staple   4[118]    13[118]"
+    },
+    {
+      "section": "shared",
+      "start": "19[196]",
+      "end": "23[195]",
+      "pdf_page": 18,
+      "literal_line": "TTTGAGATGTTTTTATAATCGCATTCGC                                             28        \"core\" staple   19[196]   23[195]"
+    },
+    {
+      "section": "shared",
+      "start": "26[146]",
+      "end": "16[133]",
+      "pdf_page": 18,
+      "literal_line": "AATTTTAATTTTCAGCAAGGCAAAGAAT                                             28        \"core\" staple   26[146]   16[133]"
+    },
+    {
+      "section": "shared",
+      "start": "25[119]",
+      "end": "14[112]",
+      "pdf_page": 18,
+      "literal_line": "TCGACAAATTATCAGTCAATATAGGTCTGAGAGACGTGAATTACGAATA                        49        \"core\" staple   25[119]   14[112]"
+    },
+    {
+      "section": "shared",
+      "start": "14[132]",
+      "end": "22[126]",
+      "pdf_page": 18,
+      "literal_line": "ACTCGTCAATCGGAGAGTAACCTCGTATGAGCACTGGAAGGTAACCTCA                        49        \"core\" staple   14[132]   22[126]"
+    },
+    {
+      "section": "shared",
+      "start": "5[84]",
+      "end": "9[90]",
+      "pdf_page": 18,
+      "literal_line": "CTCATAATGTTTAGACACCCCCAGCGATAAGAGGA                                      35        \"core\" staple    5[84]     9[90]"
+    },
+    {
+      "section": "shared",
+      "start": "2[97]",
+      "end": "13[97]",
+      "pdf_page": 18,
+      "literal_line": "CATAACCTTATTACCCCTCAGAACCGCCCCAGGTCATTTTTG                               42        \"core\" staple    2[97]    13[97]"
+    },
+    {
+      "section": "shared",
+      "start": "16[97]",
+      "end": "25[90]",
+      "pdf_page": 18,
+      "literal_line": "CCGGCTTAGACGCTCGGCTGACGCATTTCCCAAATGAGCGGATGGAGGA                        49        \"core\" staple   16[97]    25[90]"
+    },
+    {
+      "section": "shared",
+      "start": "25[217]",
+      "end": "22[224]",
+      "pdf_page": 18,
+      "literal_line": "TGTCCATCACGCAAATTAACTTTTAGACAATAGGAACCCGTCGGCAAAT                        49        \"core\" staple   25[217]   22[224]"
+    },
+    {
+      "section": "shared",
+      "start": "15[42]",
+      "end": "27[48]",
+      "pdf_page": 18,
+      "literal_line": "AATTAATTTTCCCTCTCCTGGTTGGTGTGTGGACT                                      35        \"core\" staple   15[42]    27[48]"
+    },
+    {
+      "section": "shared",
+      "start": "27[140]",
+      "end": "15[153]",
+      "pdf_page": 18,
+      "literal_line": "AGGGAGCGCCATCTAAAGCCTCAGAGCA                                             28        \"core\" staple   27[140]   15[153]"
+    },
+    {
+      "section": "shared",
+      "start": "24[104]",
+      "end": "21[118]",
+      "pdf_page": 18,
+      "literal_line": "GTCAATACTAACTTTTTCAAATTAACACGCAAATGAAAAATC                               42        \"core\" staple   24[104]   21[118]"
+    },
+    {
+      "section": "shared",
+      "start": "0[261]",
+      "end": "9[258]",
+      "pdf_page": 18,
+      "literal_line": "TATTCTGAAATAAAGGTGGAATAAATTGAGGTTAAAGGTAGCAAG                            45        \"core\" staple   0[261]    9[258]"
+    },
+    {
+      "section": "shared",
+      "start": "18[139]",
+      "end": "21[139]",
+      "pdf_page": 18,
+      "literal_line": "TATACTTAGATACATTTCATCACAGAGGTCACCTTGCAGACA                               42        \"core\" staple   18[139]   21[139]"
+    },
+    {
+      "section": "shared",
+      "start": "25[63]",
+      "end": "18[49]",
+      "pdf_page": 18,
+      "literal_line": "GGCAATTTTCTGAATAATGGCAGTTACAAAAATTAATTACAT                               42        \"core\" staple   25[63]    18[49]"
+    },
+    {
+      "section": "shared",
+      "start": "10[55]",
+      "end": "2[49]",
+      "pdf_page": 18,
+      "literal_line": "GAGATTTACCTAAAACGAAAGGCCACTAAATCATTTTGGGAAGAATTCC                        49        \"core\" staple   10[55]     2[49]"
+    },
+    {
+      "section": "shared",
+      "start": "11[224]",
+      "end": "0[217]",
+      "pdf_page": 18,
+      "literal_line": "CCAAAGAAGAAAATACAAACAACTGGTAATAAGTTCAGTGCCTCAAGAG                        49        \"core\" staple   11[224]   0[217]"
+    },
+    {
+      "section": "shared",
+      "start": "15[252]",
+      "end": "17[265]",
+      "pdf_page": 18,
+      "literal_line": "GTGGTTGTGGGAAGGGAAACCAGGCAAA                                             28        \"core\" staple   15[252]   17[265]"
+    },
+    {
+      "section": "shared",
+      "start": "16[153]",
+      "end": "21[153]",
+      "pdf_page": 18,
+      "literal_line": "CATACAGTTTGGGGAGTATCATAATGGTGAACCACTGAATGG                               42        \"core\" staple   16[153]   21[153]"
+    },
+    {
+      "section": "shared",
+      "start": "5[224]",
+      "end": "5[223]",
+      "pdf_page": 18,
+      "literal_line": "AACCGCCGAGGCAGGTCAGACGATTGACCACGCCACCCTCAG                               42        \"core\" staple   5[224]    5[223]"
+    },
+    {
+      "section": "shared",
+      "start": "25[25]",
+      "end": "16[24]",
+      "pdf_page": 18,
+      "literal_line": "GTTTGATGGTGGTTCCGTAGCCCGTGTTATCCTGTAAATCTCCCCGGGT                        49        \"core\" staple   25[25]    16[24]"
+    },
+    {
+      "section": "shared",
+      "start": "13[35]",
+      "end": "1[48]",
+      "pdf_page": 18,
+      "literal_line": "AACGGCTAGGGATAAAACTACAACGCCT                                             28        \"core\" staple   13[35]     1[48]"
+    },
+    {
+      "section": "shared",
+      "start": "4[237]",
+      "end": "9[244]",
+      "pdf_page": 18,
+      "literal_line": "GGAGGTTACCCTCAACCACCGTAGCGCGTTTTCATATCGATAAGCACCA                        49        \"core\" staple   4[237]    9[244]"
+    },
+    {
+      "section": "shared",
+      "start": "25[203]",
+      "end": "16[196]",
+      "pdf_page": 18,
+      "literal_line": "CGAGTAAGTAATAAAGGGTGATATTTTAAATGCAA                                      35        \"core\" staple   25[203]   16[196]"
+    },
+    {
+      "section": "shared",
+      "start": "24[216]",
+      "end": "20[196]",
+      "pdf_page": 18,
+      "literal_line": "AGAATCCAAATCAGTTGTAAACGTTAATCCCCAAAAACTAGCATGTCAA                        49        \"core\" staple   24[216]   20[196]"
+    },
+    {
+      "section": "shared",
+      "start": "27[77]",
+      "end": "16[84]",
+      "pdf_page": 18,
+      "literal_line": "ACCATCACACATAAGATAGCTTAGATTAAGGTTGG                                      35        \"core\" staple   27[77]    16[84]"
+    },
+    {
+      "section": "shared",
+      "start": "2[202]",
+      "end": "13[195]",
+      "pdf_page": 18,
+      "literal_line": "GAGGTTTTTTTAGCGCGGGGTTTTGCTCAGAACTG                                      35        \"core\" staple   2[202]    13[195]"
+    },
+    {
+      "section": "shared",
+      "start": "22[125]",
+      "end": "18[119]",
+      "pdf_page": 18,
+      "literal_line": "AATATCAAACCCTCTTGAAAGGAATTGAAACAACTTAGTTAATTTCGCA                        49        \"core\" staple   22[125]   18[119]"
+    },
+    {
+      "section": "shared",
+      "start": "4[62]",
+      "end": "5[48]",
+      "pdf_page": 18,
+      "literal_line": "GAAACACCAGAACGAGTAGTAGTGAGAA                                             28        \"core\" staple    4[62]     5[48]"
+    },
+    {
+      "section": "shared",
+      "start": "24[265]",
+      "end": "22[252]",
+      "pdf_page": 18,
+      "literal_line": "AGCTAAACAGGAGGAATTCGCATTAAAT                                             28        \"core\" staple   24[265]   22[252]"
+    },
+    {
+      "section": "shared",
+      "start": "12[104]",
+      "end": "6[105]",
+      "pdf_page": 18,
+      "literal_line": "AATTGCTGACGACGATAAAAATTTGCCAAGCGTCCACAGTTC                               42        \"core\" staple   12[104]   6[105]"
+    },
+    {
+      "section": "shared",
+      "start": "18[244]",
+      "end": "25[244]",
+      "pdf_page": 18,
+      "literal_line": "CTTGATATTCAACCTGAGAGTCTGGACCAAGGGATTTGACGA                               42        \"core\" staple   18[244]   25[244]"
+    },
+    {
+      "section": "shared",
+      "start": "22[83]",
+      "end": "22[84]",
+      "pdf_page": 18,
+      "literal_line": "AAAGAAATTACATCGGGAGACGCTGAGACATAAAACAGAAAT                               42        \"core\" staple   22[83]    22[84]"
+    },
+    {
+      "section": "shared",
+      "start": "2[181]",
+      "end": "13[181]",
+      "pdf_page": 18,
+      "literal_line": "AAGATTAGTATTCTGGCGGATAAGTGCCACTAATAACGGAAT                               42        \"core\" staple   2[181]    13[181]"
+    },
+    {
+      "section": "shared",
+      "start": "25[140]",
+      "end": "18[140]",
+      "pdf_page": 18,
+      "literal_line": "TTTGCCCGAACGCCCTGAAATGGATTTACTAAATTTATGCGT                               42        \"core\" staple   25[140]   18[140]"
+    },
+    {
+      "section": "shared",
+      "start": "0[216]",
+      "end": "2[203]",
+      "pdf_page": 19,
+      "literal_line": "AAGGATTCCTTATTGTCAGATAGCCGAACTGAATCCTTGCGG          42   \"core\" staple   0[216]    2[203]"
+    },
+    {
+      "section": "shared",
+      "start": "3[238]",
+      "end": "1[251]",
+      "pdf_page": 19,
+      "literal_line": "CCTCATTTTGTCACAGAAAATACATACACATGAAAAACAGTT          42   \"core\" staple   3[238]    1[251]"
+    },
+    {
+      "section": "shared",
+      "start": "2[118]",
+      "end": "12[105]",
+      "pdf_page": 19,
+      "literal_line": "GCATAGTATCAGTTTCAGGAGGTTTAGTCTTAGAGTACCTTT          42   \"core\" staple   2[118]    12[105]"
+    },
+    {
+      "section": "shared",
+      "start": "22[223]",
+      "end": "18[224]",
+      "pdf_page": 19,
+      "literal_line": "ATTTAAACTCATTTTTTAACCAGGAACGCATTGCCGTTCTAG          42   \"core\" staple   22[223]   18[224]"
+    },
+    {
+      "section": "shared",
+      "start": "8[230]",
+      "end": "11[223]",
+      "pdf_page": 19,
+      "literal_line": "CGTAATCAGTAGCGAGAGCCAGCAAAATTTGAGCCATTTGGGACCAGCG   49   \"core\" staple   8[230]    11[223]"
+    },
+    {
+      "section": "shared",
+      "start": "8[90]",
+      "end": "6[77]",
+      "pdf_page": 19,
+      "literal_line": "ATTAACGAGGCGCAAACGGTGATCAAGA                        28   \"core\" staple    8[90]     6[77]"
+    },
+    {
+      "section": "shared",
+      "start": "0[237]",
+      "end": "8[231]",
+      "pdf_page": 19,
+      "literal_line": "GAGGCTGCAAACGTAATCAATCAAAAGGCACCGACCACCAGTGCAGCAC   49   \"core\" staple   0[237]    8[231]"
+    },
+    {
+      "section": "shared",
+      "start": "7[182]",
+      "end": "9[174]",
+      "pdf_page": 19,
+      "literal_line": "AAACAGGACGTCAAAAATGAATTACAAATAGCCATATTTAACCGGAGCG   49   \"core\" staple   7[182]    9[174]"
+    },
+    {
+      "section": "shared",
+      "start": "22[146]",
+      "end": "22[147]",
+      "pdf_page": 19,
+      "literal_line": "AATACGTGGCACTGTATCTAAAAATTTACATTGGCGCGTAAG          42   \"core\" staple   22[146]   22[147]"
+    },
+    {
+      "section": "shared",
+      "start": "2[216]",
+      "end": "13[223]",
+      "pdf_page": 19,
+      "literal_line": "TTAACGATTGCCTTGATATTCTCATATGACGCAGT                 35   \"core\" staple   2[216]    13[223]"
+    },
+    {
+      "section": "shared",
+      "start": "8[41]",
+      "end": "11[34]",
+      "pdf_page": 19,
+      "literal_line": "TTCGAGGAATTGTAAGGAATTGCGAATAACAGTTTACCATCGGCTTGCA   49   \"core\" staple    8[41]    11[34]"
+    },
+    {
+      "section": "shared",
+      "start": "15[22]",
+      "end": "14[18]",
+      "pdf_page": 19,
+      "literal_line": "AAGACGGAGGAGTAAACAGGGCTTAAGCTA                      30   \"core\" staple   15[22]    14[18]"
+    },
+    {
+      "section": "shared",
+      "start": "12[181]",
+      "end": "12[182]",
+      "pdf_page": 19,
+      "literal_line": "GAGGAAACGCAAGGTAATTGAGAATCGCTATCTTAGGAAACC          42   \"core\" staple   12[181]   12[182]"
+    },
+    {
+      "section": "shared",
+      "start": "2[48]",
+      "end": "13[55]",
+      "pdf_page": 19,
+      "literal_line": "ACAGACATTAATTTCAACTTTCGAAGGCCTTTGAG                 35   \"core\" staple    2[48]    13[55]"
+    },
+    {
+      "section": "shared",
+      "start": "13[224]",
+      "end": "3[237]",
+      "pdf_page": 19,
+      "literal_line": "ATGTTAGAGACTCCTTGAGTAACAGTGCGGAGTGTAATAAAT          42   \"core\" staple   13[224]   3[237]"
+    },
+    {
+      "section": "shared",
+      "start": "17[238]",
+      "end": "15[251]",
+      "pdf_page": 19,
+      "literal_line": "CAATATCCTATGGTGTGTAGCGGTCACGGTGCTGACCTCTAA          42   \"core\" staple   17[238]   15[251]"
+    },
+    {
+      "section": "shared",
+      "start": "10[125]",
+      "end": "10[126]",
+      "pdf_page": 19,
+      "literal_line": "AATAAATTCGAGCTCAGGTCAGGACGAGTAGATTTAGCCAGT          42   \"core\" staple   10[125]   10[126]"
+    },
+    {
+      "section": "shared",
+      "start": "17[217]",
+      "end": "36[226]",
+      "pdf_page": 19,
+      "literal_line": "CGGAGACTACTTCTCGGGCGCTAGGGCGGACAATGACGCAAGATGTG     47   \"core\" staple   17[217]   36[226]"
+    },
+    {
+      "section": "shared",
+      "start": "25[161]",
+      "end": "16[161]",
+      "pdf_page": 19,
+      "literal_line": "TATTACCGCCTTGCTGAAAAGAACATCC                        28   \"core\" staple   25[161]   16[161]"
+    },
+    {
+      "section": "shared",
+      "start": "27[98]",
+      "end": "16[98]",
+      "pdf_page": 19,
+      "literal_line": "TTTGGGGCTTGAATGAGAAGAGTCAATATACCTTTTTAACCT          42   \"core\" staple   27[98]    16[98]"
+    },
+    {
+      "section": "shared",
+      "start": "24[90]",
+      "end": "23[104]",
+      "pdf_page": 19,
+      "literal_line": "CATTTATATTATTTGCACGGTTGGCAAA                        28   \"core\" staple   24[90]    23[104]"
+    },
+    {
+      "section": "shared",
+      "start": "6[46]",
+      "end": "6[47]",
+      "pdf_page": 19,
+      "literal_line": "ACTAATCGGTTTATTGACCAACTTTGAACCGGATAAGGAACA          42   \"core\" staple    6[46]     6[47]"
+    },
+    {
+      "section": "shared",
+      "start": "20[69]",
+      "end": "23[76]",
+      "pdf_page": 19,
+      "literal_line": "TGATTGCAGTAACAGTACCTTTTGCGTACCTACCA                 35   \"core\" staple   20[69]    23[76]"
+    },
+    {
+      "section": "shared",
+      "start": "25[245]",
+      "end": "17[237]",
+      "pdf_page": 19,
+      "literal_line": "GCACGTAGCGCGTATGGTGCCGGCGATCGGTGCGGGCCTCTATCACCAT   49   \"core\" staple   25[245]   17[237]"
+    },
+    {
+      "section": "shared",
+      "start": "12[195]",
+      "end": "8[182]",
+      "pdf_page": 19,
+      "literal_line": "ACCAGAACCGAAGCCAATGAAATAACCCACCCTGAACAAAGT          42   \"core\" staple   12[195]   8[182]"
+    },
+    {
+      "section": "shared",
+      "start": "21[238]",
+      "end": "18[245]",
+      "pdf_page": 19,
+      "literal_line": "GGGAACAAGTAACAACGCCATCAAAAATCCGATTAAGTTTGAGGCACCG   49   \"core\" staple   21[238]   18[245]"
+    },
+    {
+      "section": "shared",
+      "start": "13[182]",
+      "end": "3[195]",
+      "pdf_page": 19,
+      "literal_line": "ACCCAAAAGTACCAAAGAACGCGAGGCGTGAAGCCGCTACAA          42   \"core\" staple   13[182]   3[195]"
+    },
+    {
+      "section": "shared",
+      "start": "7[140]",
+      "end": "7[139]",
+      "pdf_page": 19,
+      "literal_line": "TTATCAATCCCATCCTCATTGAATCCCCAGGTCTTTACCTGT          42   \"core\" staple   7[140]    7[139]"
+    },
+    {
+      "section": "shared",
+      "start": "23[175]",
+      "end": "19[195]",
+      "pdf_page": 19,
+      "literal_line": "AGTAATAAAAGGGACTCATGGGCGTTAAATAAGTT                 35   \"core\" staple   23[175]   19[195]"
+    },
+    {
+      "section": "shared",
+      "start": "18[48]",
+      "end": "25[62]",
+      "pdf_page": 19,
+      "literal_line": "TTAACCTGCCTAATGAGTGCACCTGAGACAAAATCCCATGAT          42   \"core\" staple   18[48]    25[62]"
+    },
+    {
+      "section": "shared",
+      "start": "21[154]",
+      "end": "18[161]",
+      "pdf_page": 19,
+      "literal_line": "CTATTAGCCTGAAAAGATTCACCAGTCATGACGCTACCGACCGAAAAAG   49   \"core\" staple   21[154]   18[161]"
+    },
+    {
+      "section": "shared",
+      "start": "0[62]",
+      "end": "4[63]",
+      "pdf_page": 19,
+      "literal_line": "AGAGCCAAATCTACGTTAATACAGGACGGTGAATTCTGACGA          42   \"core\" staple    0[62]     4[63]"
+    },
+    {
+      "section": "shared",
+      "start": "11[35]",
+      "end": "4[28]",
+      "pdf_page": 19,
+      "literal_line": "GGGAGTTAAAGGCAGTATCATCGCCTCACAGCGGAAATTGGGCTCTGTA   49   \"core\" staple   11[35]     4[28]"
+    },
+    {
+      "section": "shared",
+      "start": "16[83]",
+      "end": "26[63]",
+      "pdf_page": 19,
+      "literal_line": "GTTATTACATAAATACATAGCATCATTTCTCCGAAGGCCCACCCTGATT   49   \"core\" staple   16[83]    26[63]"
+    },
+    {
+      "section": "shared",
+      "start": "14[265]",
+      "end": "25[258]",
+      "pdf_page": 19,
+      "literal_line": "CTTAAGTGTCCTTACTGCGCGCTACAGGTAACGTG                 35   \"core\" staple   14[265]   25[258]"
+    },
+    {
+      "section": "shared",
+      "start": "12[41]",
+      "end": "0[21]",
+      "pdf_page": 19,
+      "literal_line": "TTTGCGGAGATGGTGCCCTCATAGTTAGCCAGTACGCAAGCCCAATAGG   49   \"core\" staple   12[41]     0[21]"
+    },
+    {
+      "section": "shared",
+      "start": "19[168]",
+      "end": "22[168]",
+      "pdf_page": 19,
+      "literal_line": "GTGTGATTCGCCATTGCGCGAACTGATAACAGAGATAGAACC          42   \"core\" staple   19[168]   22[168]"
+    },
+    {
+      "section": "shared",
+      "start": "1[252]",
+      "end": "4[252]",
+      "pdf_page": 19,
+      "literal_line": "AATGCCCTACATGGGAATGGAGAGCCGC                        28   \"core\" staple   1[252]    4[252]"
+    },
+    {
+      "section": "shared",
+      "start": "27[119]",
+      "end": "14[133]",
+      "pdf_page": 19,
+      "literal_line": "AGCACTAGGTGGGCTATCAAAATAAATTAAGCAATGTAAGCA          42   \"core\" staple   27[119]   14[133]"
+    },
+    {
+      "section": "shared",
+      "start": "8[181]",
+      "end": "7[181]",
+      "pdf_page": 19,
+      "literal_line": "CAGAGGGTAATTACAATAAACTGTACAGAGAGAATAACATAA          42   \"core\" staple   8[181]    7[181]"
+    },
+    {
+      "section": "shared",
+      "start": "17[49]",
+      "end": "15[62]",
+      "pdf_page": 19,
+      "literal_line": "CATTTGAATAAATCCCAACGTGGGCGATCTCTGACTAGAATC          42   \"core\" staple   17[49]    15[62]"
+    },
+    {
+      "section": "shared",
+      "start": "6[153]",
+      "end": "9[160]",
+      "pdf_page": 19,
+      "literal_line": "AATAATACAATAGATAAGTCCAACATGTTTCTGTC                 35   \"core\" staple   6[153]    9[160]"
+    },
+    {
+      "section": "shared",
+      "start": "13[119]",
+      "end": "3[132]",
+      "pdf_page": 20,
+      "literal_line": "GCTGAATACCGTACGAGATTTAGGAATAAAAGGAAGGGCACT          42   \"core\" staple   13[119]   3[132]"
+    },
+    {
+      "section": "shared",
+      "start": "23[77]",
+      "end": "20[77]",
+      "pdf_page": 20,
+      "literal_line": "TATCAAATGTTTGGCGAATTATTCATTTCCAAACAATAACGG          42   \"core\" staple   23[77]    20[77]"
+    },
+    {
+      "section": "shared",
+      "start": "7[203]",
+      "end": "11[202]",
+      "pdf_page": 20,
+      "literal_line": "GGGAGAGTAAGAAACGATTTTTATTTATCAAGAAACCTTTTT          42   \"core\" staple   7[203]    11[202]"
+    },
+    {
+      "section": "shared",
+      "start": "23[196]",
+      "end": "17[202]",
+      "pdf_page": 20,
+      "literal_line": "ATTAAATTTTTGTTTGAGAAGGATCTACCCGGAGAGGGTAGCATTCAAA   49   \"core\" staple   23[196]   17[202]"
+    },
+    {
+      "section": "shared",
+      "start": "1[49]",
+      "end": "12[42]",
+      "pdf_page": 20,
+      "literal_line": "GTAGCAACCACCCTCATTTTCACAGAGGACCCGCT                 35   \"core\" staple    1[49]    12[42]"
+    },
+    {
+      "section": "shared",
+      "start": "8[251]",
+      "end": "11[244]",
+      "pdf_page": 20,
+      "literal_line": "TGAAACCCGGCATTCCGGAACCAGAGCCGAGCCACTCACCGTGCGACAT   49   \"core\" staple   8[251]    11[244]"
+    },
+    {
+      "section": "shared",
+      "start": "2[139]",
+      "end": "0[126]",
+      "pdf_page": 20,
+      "literal_line": "AACGCCACCACATTGGAATAGGTGTATC                        28   \"core\" staple   2[139]    0[126]"
+    },
+    {
+      "section": "shared",
+      "start": "24[111]",
+      "end": "20[98]",
+      "pdf_page": 20,
+      "literal_line": "TAGAGCCTCAACAGAATCAATATCTGGTGCCAGCACGCCTGC          42   \"core\" staple   24[111]   20[98]"
+    },
+    {
+      "section": "shared",
+      "start": "6[104]",
+      "end": "8[91]",
+      "pdf_page": 20,
+      "literal_line": "AGAAAAGGCTGGCTGACCTTCTACAGACCAGGCGCCAAAAAG          42   \"core\" staple   6[104]     8[91]"
+    },
+    {
+      "section": "shared",
+      "start": "4[160]",
+      "end": "11[160]",
+      "pdf_page": 20,
+      "literal_line": "ATCATTCTTTTATTAAGTTTCATTCCATCCAACGCTCAACAG          42   \"core\" staple   4[160]    11[160]"
+    },
+    {
+      "section": "shared",
+      "start": "4[76]",
+      "end": "13[76]",
+      "pdf_page": 20,
+      "literal_line": "GCTTGCCACCTTATGTAAAATTCATGAG                        28   \"core\" staple    4[76]    13[76]"
+    },
+    {
+      "section": "shared",
+      "start": "4[97]",
+      "end": "11[104]",
+      "pdf_page": 20,
+      "literal_line": "TAATAGTTTTACCACCTTTTGATAAGATCACTCATCTTTGCGGAAGCAA   49   \"core\" staple    4[97]    11[104]"
+    },
+    {
+      "section": "shared",
+      "start": "9[161]",
+      "end": "6[154]",
+      "pdf_page": 20,
+      "literal_line": "CAGACGAAACGCCAATCAATAATCGGAGAATAGCAGCCTTAACAAGAAA   49   \"core\" staple   9[161]    6[154]"
+    },
+    {
+      "section": "shared",
+      "start": "26[62]",
+      "end": "17[48]",
+      "pdf_page": 20,
+      "literal_line": "ATCAGTTATTACCTTGTGAGTGAATAACCTTGCTTCGAATTT          42   \"core\" staple   26[62]    17[48]"
+    },
+    {
+      "section": "shared",
+      "start": "5[49]",
+      "end": "7[69]",
+      "pdf_page": 20,
+      "literal_line": "TAGAATTCATTACCCAAATCATGACAAGAAAGAGG                 35   \"core\" staple    5[49]     7[69]"
+    },
+    {
+      "section": "shared",
+      "start": "1[154]",
+      "end": "13[160]",
+      "pdf_page": 20,
+      "literal_line": "CAGATATGGGTTGATATAAGTTTTTAAATATGCAA                 35   \"core\" staple   1[154]    13[160]"
+    },
+    {
+      "section": "shared",
+      "start": "20[48]",
+      "end": "20[49]",
+      "pdf_page": 20,
+      "literal_line": "ACTCACAACGCGCGGGAGATGAATATACTTTGAATACAGCTA          42   \"core\" staple   20[48]    20[49]"
+    },
+    {
+      "section": "shared",
+      "start": "7[21]",
+      "end": "8[42]",
+      "pdf_page": 20,
+      "literal_line": "CAAAAGGAGCCTTTTGAATTTCAATGACAAGATAAATTGTGTGCTTGCT   49   \"core\" staple    7[21]     8[42]"
+    },
+    {
+      "section": "shared",
+      "start": "11[245]",
+      "end": "0[238]",
+      "pdf_page": 20,
+      "literal_line": "TCAACCGGTTTATTAAAGCCACTTTTGATGATACACCGTATAGTATTAA   49   \"core\" staple   11[245]   0[238]"
+    },
+    {
+      "section": "shared",
+      "start": "3[133]",
+      "end": "1[153]",
+      "pdf_page": 20,
+      "literal_line": "CATCGAGTTGATTCTGTAGCTCAACATGATAGCCCCAACTAATGCAAAT   49   \"core\" staple   3[133]    1[153]"
+    },
+    {
+      "section": "shared",
+      "start": "3[196]",
+      "end": "1[216]",
+      "pdf_page": 20,
+      "literal_line": "TTTTATCCAAAGTTGCATGATTAAGACTAGGATTAGAACCTCCCGGGGT   49   \"core\" staple   3[196]    1[216]"
+    },
+    {
+      "section": "shared",
+      "start": "21[196]",
+      "end": "21[195]",
+      "pdf_page": 20,
+      "literal_line": "AGAAAAGATTTTGTTAAAATTCTGGCCAGCCGGTTGATAATC          42   \"core\" staple   21[196]   21[195]"
+    },
+    {
+      "section": "shared",
+      "start": "9[147]",
+      "end": "9[146]",
+      "pdf_page": 20,
+      "literal_line": "AAAGTAATCAGCTAATGCAGAACGCGCCTACCGACAAAAGGT          42   \"core\" staple   9[147]    9[146]"
+    },
+    {
+      "section": "shared",
+      "start": "26[48]",
+      "end": "21[39]",
+      "pdf_page": 20,
+      "literal_line": "AAAAGAAAAATCGGGAGTTGCTGCCCTTGAGGCGGTTTGCGTTCGGC     47   \"core\" staple   26[48]    21[39]"
+    },
+    {
+      "section": "shared",
+      "start": "23[35]",
+      "end": "18[24]",
+      "pdf_page": 20,
+      "literal_line": "AGCTGATAGCAAGCCTGGGGTCACAATTCCACACAACAT             39   \"core\" staple   23[35]    18[24]"
+    },
+    {
+      "section": "shared",
+      "start": "11[105]",
+      "end": "7[111]",
+      "pdf_page": 20,
+      "literal_line": "ACTCCAATCAAAGCCAAATATAAAGCGGATTGCATATACGAGAATGACC   49   \"core\" staple   11[105]   7[111]"
+    },
+    {
+      "section": "shared",
+      "start": "7[112]",
+      "end": "8[126]",
+      "pdf_page": 20,
+      "literal_line": "ATAAATCCAGAAGCCGCGTTTTAGAGAATATAAAGCTGACTA          42   \"core\" staple   7[112]    8[126]"
+    },
+    {
+      "section": "shared",
+      "start": "18[258]",
+      "end": "21[265]",
+      "pdf_page": 20,
+      "literal_line": "GCTTTCCGGGGACGCGTAACCGATTGACCGTAATG                 35   \"core\" staple   18[258]   21[265]"
+    },
+    {
+      "section": "shared",
+      "start": "7[70]",
+      "end": "5[83]",
+      "pdf_page": 20,
+      "literal_line": "ACAGATGGACGGTCTGTTACTTAGCCGGTATACCAAAAGCTG          42   \"core\" staple    7[70]     5[83]"
+    },
+    {
+      "section": "shared",
+      "start": "11[203]",
+      "end": "4[203]",
+      "pdf_page": 20,
+      "literal_line": "AAGAAAAGTAAGTTAACAATAATAAGAGCCCAATCCAACGCT          42   \"core\" staple   11[203]   4[203]"
+    },
+    {
+      "section": "shared",
+      "start": "7[224]",
+      "end": "7[223]",
+      "pdf_page": 20,
+      "literal_line": "CAGACTGGAACCGCCTCCCTCAGAGCAATTTGCCTTTAGCGT          42   \"core\" staple   7[224]    7[223]"
+    },
+    {
+      "section": "shared",
+      "start": "5[252]",
+      "end": "7[265]",
+      "pdf_page": 20,
+      "literal_line": "AGAGCCGAAAATCATTCGGTCATAGCCC                        28   \"core\" staple   5[252]    7[265]"
+    },
+    {
+      "section": "shared",
+      "start": "9[245]",
+      "end": "4[238]",
+      "pdf_page": 20,
+      "literal_line": "TTACCATTGAATTACACCCTCCGCCAGCATTGACA                 35   \"core\" staple   9[245]    4[238]"
+    },
+    {
+      "section": "shared",
+      "start": "4[139]",
+      "end": "5[139]",
+      "pdf_page": 20,
+      "literal_line": "AAACCAAGTACCCTGTCATAAATATTAA                        28   \"core\" staple   4[139]    5[139]"
+    },
+    {
+      "section": "shared",
+      "start": "25[77]",
+      "end": "18[84]",
+      "pdf_page": 20,
+      "literal_line": "ATAATCCATTATCAAGATAACTATATGTAAGATGA                 35   \"core\" staple   25[77]    18[84]"
+    },
+    {
+      "section": "shared",
+      "start": "21[21]",
+      "end": "23[34]",
+      "pdf_page": 20,
+      "literal_line": "GCTGCATTAATGAAATTGGGCGGGCAAC                        28   \"core\" staple   21[21]    23[34]"
+    },
+    {
+      "section": "shared",
+      "start": "13[19]",
+      "end": "10[18]",
+      "pdf_page": 20,
+      "literal_line": "TCGGAACGAACCCTCACGCTGAGCCCACGCATA                   33   \"core\" staple   13[19]    10[18]"
+    },
+    {
+      "section": "shared",
+      "start": "2[76]",
+      "end": "0[63]",
+      "pdf_page": 20,
+      "literal_line": "TACCAGTAAACGAAGAACCGCCACCCTC                        28   \"core\" staple    2[76]     0[63]"
+    },
+    {
+      "section": "shared",
+      "start": "21[119]",
+      "end": "24[112]",
+      "pdf_page": 20,
+      "literal_line": "TAAAGCATGAGGCGGTCAGTATATATTTAATAGAT                 35   \"core\" staple   21[119]   24[112]"
+    },
+    {
+      "section": "shared",
+      "start": "17[28]",
+      "end": "15[41]",
+      "pdf_page": 20,
+      "literal_line": "GTGAAATAGATAGGCACTATTAAAGAACAATGAGTCGCTATT          42   \"core\" staple   17[28]    15[41]"
+    },
+    {
+      "section": "shared",
+      "start": "14[244]",
+      "end": "37[249]",
+      "pdf_page": 20,
+      "literal_line": "ATTGTCACCAGGGTTTTCCCATGTAAAACCAGG                   33   \"core\" staple   14[244]   37[249]"
+    },
+    {
+      "section": "shared",
+      "start": "22[251]",
+      "end": "21[237]",
+      "pdf_page": 20,
+      "literal_line": "GTGAGCGAACGGCGGTGCATCTGGCAAACAAGAGATCTCCGT          42   \"core\" staple   22[251]   21[237]"
+    },
+    {
+      "section": "shared",
+      "start": "6[76]",
+      "end": "12[77]",
+      "pdf_page": 21,
+      "literal_line": "GTAATCTACGTAACAGCGCGAAGAATACACTAAAATAAACGG                  42         \"core\" staple    6[76]    12[77]"
+    },
+    {
+      "section": "shared",
+      "start": "15[63]",
+      "end": "19[69]",
+      "pdf_page": 21,
+      "literal_line": "CTTGAAACAATATATTTTTAAAGAAAACAAATCGC                         35         \"core\" staple   15[63]    19[69]"
+    },
+    {
+      "section": "shared",
+      "start": "2[160]",
+      "end": "10[154]",
+      "pdf_page": 21,
+      "literal_line": "CCCAATAGCAAGCAAAGCCGTCAAGAACGCATGTAGAAACCAACATGTA           49         \"core\" staple   2[160]    10[154]"
+    },
+    {
+      "section": "shared",
+      "start": "21[40]",
+      "end": "24[21]",
+      "pdf_page": 21,
+      "literal_line": "CATTAATTGCGTTGCGGTAAAGCGGTCCACGCTGGTT                       37         \"core\" staple   21[40]    24[21]"
+    },
+    {
+      "section": "shared",
+      "start": "16[160]",
+      "end": "26[147]",
+      "pdf_page": 21,
+      "literal_line": "AATAAATTAAAGCTGACAGTGCGGCCCTCCCCGATATTTATT                  42         \"core\" staple   16[160]   26[147]"
+    },
+    {
+      "section": "shared",
+      "start": "21[217]",
+      "end": "24[217]",
+      "pdf_page": 21,
+      "literal_line": "AGATTGTATAAGATATCGATGAACGGTAATCAGGTGTACGCC                  42         \"core\" staple   21[217]   24[217]"
+    },
+    {
+      "section": "shared",
+      "start": "27[182]",
+      "end": "16[189]",
+      "pdf_page": 21,
+      "literal_line": "CGTGGCGGCTCGCCTTATGACCCTGTAATGCCTGA                         35         \"core\" staple   27[182]   16[189]"
+    },
+    {
+      "section": "shared",
+      "start": "25[182]",
+      "end": "18[189]",
+      "pdf_page": 21,
+      "literal_line": "CAGGAAAGTAGAAGACGTGTAGGTAAAGTAAATAA                         35         \"core\" staple   25[182]   18[189]"
+    },
+    {
+      "section": "shared",
+      "start": "26[230]",
+      "end": "17[216]",
+      "pdf_page": 21,
+      "literal_line": "GTAGCAAAGTCAAAAAAATTTTTAGAACCCTCATAGAAAGGC                  42         \"core\" staple   26[230]   17[216]"
+    },
+    {
+      "section": "shared",
+      "start": "14[174]",
+      "end": "23[174]",
+      "pdf_page": 21,
+      "literal_line": "GACTCTAGGAAAGCACTATCGGCCAGCCTACATTTCACGACC                  42         \"core\" staple   14[174]   23[174]"
+    },
+    {
+      "section": "shared",
+      "start": "27[161]",
+      "end": "18[168]",
+      "pdf_page": 21,
+      "literal_line": "TTGACGGTGATACCAAATCGGTTGTACCTAGCATTGTGGCATATTACTA           49         \"core\" staple   27[161]   18[168]"
+    },
+    {
+      "section": "shared",
+      "start": "36[249]",
+      "end": "38[238]",
+      "pdf_page": 21,
+      "literal_line": "TCTAGCTGGCGAGGAGAAGCGACGGC                                  26         \"core\" staple   36[249]   38[238]"
+    },
+    {
+      "section": "shared",
+      "start": "3[21]",
+      "end": "13[34]",
+      "pdf_page": 21,
+      "literal_line": "TAAATGAATTTTTGGATCGTCGGGTAGC                                28         \"core\" staple    3[21]    13[34]"
+    },
+    {
+      "section": "shared",
+      "start": "16[188]",
+      "end": "14[175]",
+      "pdf_page": 21,
+      "literal_line": "GTAATTAATAGTAGAAAAACACTGGAGT                                28         \"core\" staple   16[188]   14[175]"
+    },
+    {
+      "section": "shared",
+      "start": "37[226]",
+      "end": "15[244]",
+      "pdf_page": 21,
+      "literal_line": "CGAGCTTTCTCAAAGGGGGGATTCGCTATTACG                           33         \"core\" staple   37[226]   15[244]"
+    },
+    {
+      "section": "shared",
+      "start": "38[237]",
+      "end": "26[231]",
+      "pdf_page": 21,
+      "literal_line": "CAGTGCCGGTAACGACCTTATCTGGCAATGCCGTT                         35         \"core\" staple   38[237]   26[231]"
+    },
+    {
+      "section": "right-handed only",
+      "start": "15[210]",
+      "end": "25[216]",
+      "pdf_page": 21,
+      "literal_line": "AAGCCTTTATTTCATCCCGCCAAAATAAAAAGGAGTTGATTAAAGAGTC           49         \"core\" staple   15[210]   25[216]"
+    },
+    {
+      "section": "left-handed only",
+      "start": "8[62]",
+      "end": "10[56]",
+      "pdf_page": 21,
+      "literal_line": "AGGGAACCGAACCACGAAATCCGCGACCTACAACG                         35         \"core\" staple    8[62]    10[56]"
+    }
+  ],
+  "nanorod_handle_entries": 24,
+  "modified_strand_source_text": "    CTTCTGATCTTTAATAAAAATACCGAACTTGAAATCAATCGTAGAACAA\n    AAAAAAAAAA                                                                     59   nanorod handle   22[167]   25[160]\n    ACACCGGAATCATACAATTCTAACTCAACGGCGAA AAAAAAAAAA                                 45   nanorod handle   18[188]   27[181]\n    ATTTTCGAGACCAGTATAAAGATAACAGAACAAGCGATACAT AAAAAAAAAA                          52   nanorod handle   10[139]   2[140]\n    ATTTAGGCAGAGGCTTTACGAGGGTATT AAAAAAAAAA                                        38   nanorod handle   10[153]   4[140]\n    TAGGGGCTCGAGGTGAACAAAACTTTACAAACAAT AAAAAAAAAA                                 45   nanorod handle   14[111]   25[118]\n    ATAATGCCCAATTCTGCGAATAGCGAGATTACGAG AAAAAAAAAA                                 45   nanorod handle   13[126]   2[119]\n    ATATTTTCAGCAGAAGATAAATTCTGACTCTTTAGTAAATCC AAAAAAAAAA                          52   nanorod handle   21[140]   25[139]\n\n\n    Right handed\n    GACTAAAGACTTTTACGTAATAGGCAAAAACAAAGTGCTCCAAATCATA\u2013\n    \u2013tt GCATGTTCGCTCGCTAGGTT                                                       71                    13[56]     8[63]\n    CTGATAAATTAATGAAAGGCTATCGTAAAACAGGA\u2013\n    \u2013ttt\u2013S\u2013S\u2013CGTXTAXGTXTCA                                                              RH Azo-ODN 1     18[223]   21[216]\n    TGXAAXCTXAAXCG \u2013S\u2013S\u2013ttt AAC CTA GCG AGC GAA CAT GC                                  RH Azo-ODN 2\n    Left handed\n    CATCACTAAGGGAAGAAAGCGCCCCGCTGCGGGAG\u2013\n     \u2013tt CACACAGTAGATCAGAATTG                                                      57                    26[202]   15[209]\n    CAAATTAACTGAACACAAGAATTGAGTTAAGCCTTACAGAAT\u2013                                         LH Azo-ODN 1\n    \u2013ttt\u2013S\u2013S\u2013CGTXTAXGTXTCA                                                                               8[209]    8[210]\n    TGXAAXCTXAAXCG \u2013S\u2013S\u2013ttt CAA TTC TGA TCT ACT GTG TG                                  LH Azo- ODN 2\n\n1\n Modifications introduced to the staple strands are highlighted with bold fonts.\nThymines used as spacers are highlighted with the lowercase font, t.\n\n\n\n\n                                                                                                              22\n",
+  "limitations": "Core label inventory only. 138shared plus one RH-only and one LH-only are not140simultaneous staples. Wrapped handle sequences, X azobenzene and disulfide bonds must not be stripped to ACGT. Published p7650 scaffold designation retained literally, not corrected by assumption."
+}

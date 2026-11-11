@@ -1,0 +1,1185 @@
+[
+  [
+    1,
+    "11",
+    "invited",
+    "Chengde Mao",
+    "TBA"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Erik Winfree",
+    "The Computer Science of Molecular Programming"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Hao Yan",
+    "Designer DNA Architectures for Nanobiotechnology"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Paul Rothemund",
+    "Stacking bonds: programming molecular recogniRon using the geometry of DNA nanostructures"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Bernard Yurke",
+    "Using DNA nanotubes to invesRgate hydrodynamics"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "William Shih",
+    "Self‐assembly of DNA into nanoscale three‐dimensional shapes"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Hanadi Sleiman",
+    "Dynamic Three‐Dimensional DNA Nanostructures: Loading and SelecRve Release of Cargo for Biological and Materials ApplicaRons"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Hongzhou Gu",
+    "A proximity‐based programmable DNA nanoscale assembly line"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Andrew Turberﬁeld",
+    "DNA Molecular Machinery"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Kurt Vesterager Gothelf",
+    "A DNA Tile Actuator with 11 Discrete States"
+  ],
+  [
+    1,
+    "11",
+    "invited",
+    "Friedrich Simmel",
+    "On the relaRon of DNA nanotechnology and (bio)physics"
+  ],
+  [
+    1,
+    "12",
+    "keynote",
+    "Richard Berry",
+    "Co‐operaRve switching, Turnover, and Mechanochemistry in a biological macromolecular complex"
+  ],
+  [
+    1,
+    "12",
+    "contributed",
+    "Ken Komiya",
+    "Autonomous RestoraRon of a DNA Track for a Sustained Walk of a DNA Walking Device Driven by Nicking ReacRon"
+  ],
+  [
+    2,
+    "12",
+    "invited",
+    "Bradley Nelson",
+    "Self‐Scrolling ArRﬁcial Bacterial Flagella, Their CharacterizaRon, and PotenRal ApplicaRons"
+  ],
+  [
+    2,
+    "12",
+    "contributed",
+    "Shelley Wickham",
+    "A burnt‐bridges DNA motor on a DNA origami substrate"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Damian Ackermann",
+    "A double‐standed DNA rotaxane"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Albert Fahrenbach",
+    "The Violenes: Building Blocks for ArRﬁcial Molecular Machines"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Hao Li",
+    "A Light‐SRmulated Molecular Machine Driven by Radical Pairing InteracRons in Water"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Jessie Minick",
+    "OperaRon of a DNA‐Based Nanomachine in Human Blood"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Richard Muscat",
+    "A Programmable Molecular Robot"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Thomas Ouldridge",
+    "Coarse‐grained modelling of DNA nanotechnology"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Mehmet Cagatay Tarhan",
+    "Molecular SorRng Based on Motor Protein Powered Direct Transport"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Thomas Tøring",
+    "Reversible pH‐Regulated Control of PhotosensiRzed Singlet Oxygen ProducRon Using a DNA i‐MoRf"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Jaroslav Vacek",
+    "Molecular Rotors: EvaluaRon of FricRon"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Ryuji Yokokawa",
+    "Experimental and Numerical Analysis of Polar Oriented Microtubule Array in Nanotracks"
+  ],
+  [
+    2,
+    "12",
+    "invited",
+    "Caroline Ross",
+    "Templated self‐assembly of block copolymer thin ﬁlms using topographical features"
+  ],
+  [
+    2,
+    "12",
+    "invited",
+    "Steve Whitelam",
+    "Dynamic pathways of self‐assembly driven by compeRng nonspeciﬁc and speciﬁc interacRons"
+  ],
+  [
+    2,
+    "12",
+    "invited",
+    "Mark Alber",
+    "Role reversals in bacterial self‐organizaRon"
+  ],
+  [
+    2,
+    "12",
+    "contributed",
+    "Jennifer Padilla",
+    "Programmed Hierarchical Self Assembly of a Quasiperiodic Tiling Pagern"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "Harish Chandran",
+    "Speeding up DNA Circuits using Localized HybridizaRon"
+  ],
+  [
+    2,
+    "12",
+    "poster",
+    "David Doty",
+    "Parallelism and Time in Hierarchical Self‐Assembly"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Shogo Hamada",
+    "Theory of Substrate‐Assisted Self‐Assembly of DNA Nanostructures"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Henry Hess",
+    "A Thermodynamic Model for CooperaRve Self‐Assembly"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Maghew PaRtz",
+    "Self‐Assembly with Geometric Tiles"
+  ],
+  [
+    3,
+    "12",
+    "keynote",
+    "John Rogers",
+    "TBA"
+  ],
+  [
+    3,
+    "12",
+    "invited",
+    "Nicholas Abbog",
+    "Ordering of Liquid Crystalline Materials on Self‐Assembled Surfaces"
+  ],
+  [
+    3,
+    "12",
+    "invited",
+    "Robert Blick",
+    "TBA"
+  ],
+  [
+    3,
+    "12",
+    "contributed",
+    "Tao Ye",
+    "Nanoscale pagerning of individual DNA molecules using a scanning probe microscope"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Jana Chocholousova",
+    "Self‐Assembly of Azahelicenes on Ag(1,1,1): STM and ComputaRonal Study"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Eric Josephs",
+    "Assembling complex and dynamic structures from single‐molecule pagerns of DNA"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "John Kulp",
+    "Surface AdsorpRon and Assembly of GG‐X‐GG, X5, X10, and beta‐Helical PepRdes"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Todd Monson",
+    "Self‐Assembled Manganese Oxide Nanocomposite Supercapacitor Electrodes"
+  ],
+  [
+    3,
+    "12",
+    "poster",
+    "Risheng Wang",
+    "DNA Nanostructures Assembly on Pagerned Surfaces"
+  ],
+  [
+    3,
+    "12",
+    "keynote",
+    "Jeﬀrey Zink",
+    "MulRfuncRonal Mechanized Inorganic NanoparRcles for Imaging, TargeRng and Drug Delivery"
+  ],
+  [
+    3,
+    "12",
+    "invited",
+    "Alshakim Nelson",
+    "Magnetoresponsive Materials Via Self‐Assembly"
+  ],
+  [
+    3,
+    "12",
+    "invited",
+    "Alexander Star",
+    "Building and Destroying Carbon Nanostructures"
+  ],
+  [
+    3,
+    "12",
+    "invited",
+    "Amar Flood",
+    "Bioinspired design of molecular devices: Photodriven foldamers for anion regulaRon"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Michael Ambrogio",
+    "Controlled Release from Mesoporous Silica NanoparRcles"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Gokhan Barin",
+    "Copper‐Complexed Rotaxane Struts in a Metal–Organic Framework"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Dennis Cao",
+    "Dynamic Synthesis of Interlocked Structures and Probing Co‐ConformaRonal Changes in Desymmetrized [2]Catenanes"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Jeremiah Gassensmith",
+    "Metal‐Organic Frameworks from &#947;‐Cyclodextrin"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "David Haniﬁ",
+    "Novel n‐type C3‐symmetricDiscoRc Materials: Synthesis, Self Assembly and Physical ProperRes"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Deepak K. Prusty",
+    "A ﬂuorogenic reacRon based on heavy‐atom removal for ultrasensiRve DNA detecRon"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Nathan Strug",
+    "Host‐Guest Complexes of FuncRonalized Pillar[5]arene"
+  ],
+  [
+    4,
+    "12",
+    "poster",
+    "Yong Zhao",
+    "Exploring the Chemical ReacRvity of Nitrogen‐doped Carbon Nanotube Cups"
+  ],
+  [
+    4,
+    "12",
+    "award_address",
+    "Nadiran C. Seeman",
+    "DNA: Not Merely the Secret of Life"
+  ],
+  [
+    4,
+    "13",
+    "keynote",
+    "Nicole Steinmetz",
+    "GREEN NANOMEDICINES: FROM BLACK‐‐EYED PEAS TO PLATFORM DEVELOPMENT"
+  ],
+  [
+    4,
+    "13",
+    "invited",
+    "Jim De Yoreo",
+    "The EnergeRcs of ConformaRonal TransiRons Force 2D S‐layer Assembly to Follow MulRstage Pathways"
+  ],
+  [
+    4,
+    "13",
+    "contributed",
+    "Amy Blum",
+    "Novel self‐assembly properRes in an engineered tobacco mosaic virus coat protein"
+  ],
+  [
+    5,
+    "13",
+    "invited",
+    "Ann‐Marie Broome",
+    "Building targeted‐split enzyme nanomolecule complexes using directed self‐assembly"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "Tais Doll",
+    "Design and biophysical analysis of self‐assembling polypepRde nanoparRcles"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "John Kulp",
+    "SELF‐REPORTING AND ACTUATION OF CYCLIC BETA TRIPEPTIDE POLYMERS"
+  ],
+  [
+    5,
+    "13",
+    "keynote",
+    "Rhiju Das",
+    "Can videogaming uncover new bioengineering rules? Preliminary results from the EteRNA project"
+  ],
+  [
+    5,
+    "13",
+    "invited",
+    "Shawn Douglas",
+    "Programming Mager for Molecular Biomimicry"
+  ],
+  [
+    5,
+    "13",
+    "invited",
+    "Niles Pierce",
+    "NUPACK: Analysis and design of nucleic acid systems"
+  ],
+  [
+    5,
+    "13",
+    "invited",
+    "Mark Bathe",
+    "CanDo: Computer‐aided engineering for DNA origami"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "Harish Chandran",
+    "Domain Based Thermodynamic and KineRc SimulaRon of DNA Nanosystems"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "Scog Dunham",
+    "HIERARCHICAL MODELING FOR ORDERED BINDING OF PEPTIDES TO SOLID SURFACES"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "William Sherman",
+    "Nucleic Acid Tube Grapher (NATuG) 2"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "Niels Vinther Voigt",
+    "PredicRon of 3D DNA Origami Structures and TEM Images"
+  ],
+  [
+    5,
+    "13",
+    "keynote",
+    "Craig Hawker",
+    "Tricking Nature: GeneraRng Complex Nanoscale Pagerns through Bogom‐up Self‐Assembly"
+  ],
+  [
+    5,
+    "13",
+    "contributed",
+    "Serdar Onses",
+    "Pagerning MulRple DNA Sequences with Registry and Speciﬁcity at Nanoscale"
+  ],
+  [
+    5,
+    "13",
+    "invited",
+    "Robert McLeod",
+    "TBA"
+  ],
+  [
+    5,
+    "13",
+    "poster",
+    "Mark Stoykovich",
+    "Enhanced stability of self‐assembled polymer nanostructures by molecular crosslinking"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Jerzy Szablowski",
+    "Microscale integraRon of nanobreadboards: placement and orientaRon of DNA origami and their interconnecRon on lithographically pagerned silicon."
+  ],
+  [
+    6,
+    "13",
+    "keynote",
+    "Oleg Gang",
+    "Nanoscale systems assembled with DNA: from structures to funcRonaliRes"
+  ],
+  [
+    6,
+    "13",
+    "invited",
+    "Ebbe Sloth Andersen",
+    "Opening the DNA box ‐ studied by FRET spectroscopy and microscopy"
+  ],
+  [
+    6,
+    "13",
+    "invited",
+    "Hendrik Dietz",
+    "Exploring the mulR‐layer DNA origami folding process"
+  ],
+  [
+    6,
+    "13",
+    "invited",
+    "Paul Paukstelis",
+    "A raRonally designed 3D DNA crystal with non‐canonical base pairs: successes and surprises"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Jean‐michel Arbona",
+    "DNA origamis: mechanisms of formaRon and melRng, structure ﬂuctuaRons."
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Hieu Bui",
+    "Nanoscale Photonic Devices Fabricated Using DNA Origami Nanotubes"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Carlos Castro",
+    "A DNA Origami Caliper Device for the Study of Single Molecule ConformaRonal Dynamics"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Petr Cigler",
+    "DNA‐programmable crystallizaRon of viral capsid‐gold alloy structures"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "JusRn Conway",
+    "Assembly Of Three Dimensional DNA Super‐Structures"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Zhengtao Deng",
+    "Stain Free High‐ResoluRon Imaging of DNA Origami Based Nanostructures Using Scanning Transmission Electron Microscopy"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "PALASH DUTTA",
+    "DNA Directed ArRﬁcial Light HarvesRng Antenna"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Ans‐Pekka Eskelinen",
+    "Assembly of Single‐Walled Carbon Nanotubes on DNA Origami Templates through Streptavidin‐BioRn InteracRon"
+  ],
+  [
+    6,
+    "13",
+    "poster",
+    "Sarah Goldberg",
+    "ConnecRng the nanodots: programmable nanofabricaRon of fused metal shapes on DNA templates"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Dongran Han",
+    "Toward Designing and ConstrucRng Complex and funcRonalized"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Rasmus Schøler Sørensen",
+    "FuncRonal pagerning of DNA origami by parallel enzymaRc modiﬁcaRon"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Yousuke Katsuda",
+    "Direct observaRon of the movement of DNA modifying enzymes in the DNA nanostructure"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Fabian Kilchherr",
+    "Toward studying equilibrium unbinding/binding transiRons of single protein complexes under force ‐ enabled by DNA Origami"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Anton Kuzyk",
+    "DNA origami for assembly of metal nanoparRcles clusters"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Phillip Milnes",
+    "Synthesis of materials by mulR‐step DNA templated chemistry"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Suchetan Pal",
+    "Discrete Gold Nanorod Architectures Scaﬀolded by DNA Origami for Nanophotonic ApplicaRons"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Robert Schreiber",
+    "General Route to MetallizaRon of Arbitrarily‐shaped DNA Origami Structures"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Max Scheible",
+    "Assembly and CharacterizaRon of DNA Origami‐based Nanoribbons"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Verena Schueller",
+    "Rigid DNA Origami Breadboard Model for Single‐Molecule FRET CalibraRon"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Danielle Schultz",
+    "StabilizaRon of ﬂuorescent silver clusters by RNA homopolymers and their DNA analogs: C,G vs A,T(U) Dichotomy"
+  ],
+  [
+    7,
+    "13",
+    "poster",
+    "Ruojie Sha",
+    "A DNA Crystal Designed to Contain Two Molecules per Asymmetric Unit"
+  ],
+  [
+    8,
+    "13",
+    "poster",
+    "Ngo Yin Wong",
+    "Novel FuncRonalizaRon Allows Directed and Reversible Protein Assembly on 1D, 2D, and 3D DNA Nanostructures"
+  ],
+  [
+    8,
+    "13",
+    "poster",
+    "David Zhang",
+    "IntegraRng Strand Displacement Circuitry with DNA Tile Self‐assembly"
+  ],
+  [
+    8,
+    "14",
+    "keynote",
+    "Chongwu Zhou",
+    "Carbon Nanotube Nanoelectronics and Macroelectronics"
+  ],
+  [
+    8,
+    "14",
+    "invited",
+    "Philip Collins",
+    "Self‐Assembly of Robust Single Molecule Circuits"
+  ],
+  [
+    8,
+    "14",
+    "invited",
+    "Stefano Curtarolo",
+    "Viscous State Eﬀect on the AcRvity of Fe Nanocatalysts"
+  ],
+  [
+    8,
+    "14",
+    "invited",
+    "Yuegang Zhang",
+    "Graphene Pagern formaRon guided by catalyst self‐assembly"
+  ],
+  [
+    8,
+    "14",
+    "poster",
+    "Bruce Hinds",
+    "ElectrophoreRc and electroosmoRc ﬂow through carbon nanotube membranes as protein channel mimeRc pumps"
+  ],
+  [
+    8,
+    "14",
+    "poster",
+    "Robert Davis",
+    "Carbon Nanotube LocalizaRon by FloaRng PotenRal Dielectrophoresis: ElucidaRng the Shutoﬀ Mechanism"
+  ],
+  [
+    8,
+    "14",
+    "poster",
+    "Si‐ping Han",
+    "DNA Linker Enforced Surface Assembly of Ultradense Parallel CNT Arrays"
+  ],
+  [
+    8,
+    "14",
+    "poster",
+    "julien iehl",
+    "New funcRonalized hexakisadducts of C60 as dodecareceptors"
+  ],
+  [
+    8,
+    "14",
+    "poster",
+    "Adam Whalley",
+    "Toroidal Carbon Nanotubes"
+  ],
+  [
+    9,
+    "14",
+    "keynote",
+    "A. P. De Silva",
+    "2011: A Small Space Odyssey with CompuRng Molecules"
+  ],
+  [
+    9,
+    "14",
+    "contributed",
+    "Lulu Qian",
+    "Debugging DNA strand displacement circuits: a detecRve story"
+  ],
+  [
+    9,
+    "14",
+    "contributed",
+    "Takahiro Nishimura",
+    "Prototype demonstraRon of a photonic DNA processor: a photonically‐controlled DNA nanomachine of sensing, compuRng, and actuaRng"
+  ],
+  [
+    9,
+    "14",
+    "invited",
+    "Milan Stojanovic",
+    "TBA"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Eugen Czeizler",
+    "A Design Framework for Carbon Nanotube Circuits aﬃxed on DNA Origami Tiles"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "YANLI GENG",
+    "MetallizaRon of DNA origami structures for nanocircuits"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Mohammad Mogaghi",
+    "A Review of OpRcal Techniques for Memory Address MulRplexing"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Jun Pang",
+    "Modeling and Experimental VeriﬁcaRon of an OpRcal CompuRng System"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Viresh Thusu",
+    "Markov Model Analysis of Self‐Assembled, Label‐Free Biomolecular Sensors using Resonance Energy Transfer Logic"
+  ],
+  [
+    9,
+    "14",
+    "keynote",
+    "Hiroyuki Fujita",
+    "Role of Self‐Assembly for Heterogeneous IntegraRon Technology"
+  ],
+  [
+    9,
+    "14",
+    "invited",
+    "Roya Maboudian",
+    "Self Assembled Monolayers: Fundamental Aspects and ApplicaRons to M/NEMS Technology"
+  ],
+  [
+    9,
+    "14",
+    "invited",
+    "Juergen Brugger",
+    "TBA"
+  ],
+  [
+    9,
+    "14",
+    "invited",
+    "Schwartz",
+    "TBA"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Peter Allen",
+    "Pagern generaRon with engineered DNA chemical reacRon networks"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "David Gracias",
+    "Self‐folding across length scales"
+  ],
+  [
+    9,
+    "14",
+    "poster",
+    "Sergio Grunder",
+    "MOFs with Extended Struts: Designing the Pore Size of Self‐Assembled Frameworks"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Ji Hoo",
+    "PROGRAMMABLE BATCH ASSEMBLY OF SILICON MICRO‐COMPONENTS AND 01005 SMT DEVICES WITH 100% YIELD"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Pramod Mathai",
+    "Simultaneous PosiRoning and OrienRng of a Single Nano‐object Using Flow Control"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Kwang Soon Park",
+    "ANALYSIS OF SELF‐ASSEMBLY OF THIN PART AT FLUIDIC INTERFACE AND ITS MODIFICATION FOR ORIENTATION‐SPECIFIC ASSEMBLY"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Adam Woolley",
+    "FormaRon, surface assembly and metallizaRon of thin, branched DNA origami nanostructures for nanoelectronics applicaRons"
+  ],
+  [
+    10,
+    "14",
+    "invited",
+    "HIROSHI SUGIYAMA",
+    "VisualizaRon of DNA structural change in the DNA nanostructure"
+  ],
+  [
+    10,
+    "14",
+    "invited",
+    "Ingo Stein",
+    "Single‐Molecule Four‐Color FRET Visualizes Energy‐Transfer Paths on DNA Origami"
+  ],
+  [
+    10,
+    "14",
+    "invited",
+    "Tim Liedl",
+    "General Route to MetallizaRon of Arbitrarily‐shaped DNA Origami Structures"
+  ],
+  [
+    10,
+    "14",
+    "invited",
+    "Thorsten Schmidt",
+    "Polyamide and G‐Quadruplex Controlled Assembly of DNA"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Hieu Bui",
+    "Nanoscale Photonic Devices Fabricated Using DNA Origami Nanotubes"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Petr Cigler",
+    "DNA‐programmable crystallizaRon of viral capsid‐gold alloy structures"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Masayuki Endo",
+    "Programmed assembly of DNA nanostructures using designed DNA origami Rles"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Amethist Finch",
+    "DNA Architectures for Templated Materials Growth"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Elton Graugnard",
+    "DNA Strand Invasion as an OpRcal Switch in Fluorescence Resonance Energy Transfer Transmission Lines"
+  ],
+  [
+    10,
+    "14",
+    "poster",
+    "Graham Hamblin",
+    "Programming Curvature in DNA Nanotubes"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Ali Hashemi",
+    "PAMAM Dendrimers ComplexaRon With DNA Wrapped SWCNT As Novel Drug Delivery Agent: A Molecular Dynamics SimulaRon"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Ralf Jungmann",
+    "Study of KineRc Processes and Super‐ResoluRon Fluorescence Microscopy on DNA Origami"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Yonggang Ke",
+    "Compact 3D DNA‐origami Packed on a Hexagonal Lasce"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Seung Hyeon Ko",
+    "Factors AﬀecRng the Speed and Yield of Qdot Binding to DNA Origami"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Wenyan Liu",
+    "Crystalline Two‐Dimensional DNA‐Origami Arrays"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Philip Lukeman",
+    "Photocleavage Controlled DNA Switches and Nanochemistry for Noobs"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Richard Muscat",
+    "Programmable DNA Templated Synthesis"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Anthony Pearson",
+    "Alignment of DNA Origami to Block Copolymer Pagerned Arrays of Gold NanoparRcles"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Rasmus Schøler Sørensen",
+    "Modular and automated producRon of DNA Origami"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Zhen‐Gang Wang",
+    "Signal‐Triggered DNA Machines"
+  ],
+  [
+    11,
+    "14",
+    "poster",
+    "Sungwook Woo",
+    "Stacking bonds: programming molecular recogniRon using the geometry of DNA nanostructures"
+  ],
+  [
+    11,
+    "15",
+    "keynote",
+    "James Lee",
+    "TBA"
+  ],
+  [
+    11,
+    "15",
+    "invited",
+    "Abhijit Rangnekar",
+    "TBA"
+  ],
+  [
+    11,
+    "15",
+    "invited",
+    "Jiwook Shim",
+    "The Prospects for 3rd GeneraRon DNA Sequencing with a Nanopore"
+  ],
+  [
+    11,
+    "15",
+    "poster",
+    "Ali Hashemi",
+    "EnanRoselecRve Synthesis Based on DNA Wrapped Carbon Nanotubes: Can They Induce Chirality?"
+  ],
+  [
+    11,
+    "15",
+    "poster",
+    "Luc Jaeger",
+    "Self‐assembling RNA nanorings as siRNA delivery systems"
+  ],
+  [
+    11,
+    "15",
+    "contributed",
+    "Yevgeniy Kalinin",
+    "Three‐Dimensional Chemical Pagerning for Cellular Self‐Assembly"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Minseok Kwak",
+    "DNA‐funcRonalized blend micelles: mix and ﬁx polymeric hybrid nanostructures"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Daniel Lubrich",
+    "Bead Microarray on Holey Substrate with Non‐Physical Encoding"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Daniel Lubrich",
+    "Highly Scalable DNA Nano‐Barcodes for MulRplexed Bio‐AnalyRcs"
+  ],
+  [
+    12,
+    "15",
+    "keynote",
+    "Luc Brunsveld",
+    "TBA"
+  ],
+  [
+    12,
+    "15",
+    "contributed",
+    "Faisal Aldaye",
+    "The engineering of an arRﬁcial enzymaRc pathway using in vivo RNA scaﬀolding"
+  ],
+  [
+    12,
+    "15",
+    "invited",
+    "Indraneel Ghosh",
+    "Supramolecular Architectures for Sensors and Inhibitors"
+  ],
+  [
+    12,
+    "15",
+    "invited",
+    "Kevin Plaxo",
+    "TBA"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Alexander Deiters",
+    "Light‐RegulaRon of DNA Assembly and DNA FuncRon with ApplicaRons to Biological Systems"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Camille Delebecque",
+    "In vivo nucleic acid assemblies for spaRal organizaRon in SyntheRc Biology"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Ofer Idan",
+    "AcRve self‐assembly of millimeter‐long nanowires and nanospools by biomolecular motors"
+  ],
+  [
+    12,
+    "15",
+    "poster",
+    "Maximilian Weitz",
+    "StochasRc Dynamics in RNA TranscripRonal Circuits"
+  ]
+]

@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-05",
+  "reinitialize_byte_identical": true,
+  "ledger_hashes": {
+    "publication_reviews": "a71ed6a93e2ddce1e4db4fe87d6a3300a5b431d27d1cf8c123ab36c68ea48551",
+    "design_evidence": "cef5f1c27b4be073ce189d7a910d7f241bb914bb436c5f2fd8822b8bddb4e0f3",
+    "discovery_runs": "38c88225f1c63d715f626b047cc512d9f6a99220d44fcb090753086e21ef9af0",
+    "discovery_edges": "6e5454f35c699e223319a2b17c1550c4ff46c490e55ae1a3f966eadd6057d4bd",
+    "batches": "17468888a8919266c5eb16fd5fa28294998ddb96ac400705c1bb7c4947087f33"
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5063,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 7845
+  },
+  "tests_passed": 16,
+  "counts": {
+    "publication_versions": 5063,
+    "provisional_work_keys_not_reconciled": 5063,
+    "review_stages": {
+      "metadata_screened": 158,
+      "unreviewed": 4808,
+      "fulltext_reviewed": 21,
+      "design_sources_reviewed": 76
+    },
+    "relevance": {
+      "uncertain": 4964,
+      "background_or_review": 5,
+      "design_bearing": 93,
+      "not_origami": 1
+    },
+    "catalog_eligibility": {
+      "unresolved": 5057,
+      "excluded": 5,
+      "eligible": 1
+    },
+    "design_groups": 107,
+    "design_source_reviews": 21,
+    "discovery_runs": 25
+  }
+}

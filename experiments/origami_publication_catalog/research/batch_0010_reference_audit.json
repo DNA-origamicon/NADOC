@@ -1,0 +1,27 @@
+{
+  "sources": [
+    {
+      "doi": "10.12703/p5-14",
+      "source_refs": 29,
+      "saved_edges": 29
+    },
+    {
+      "doi": "10.1186/1556-276x-8-119",
+      "source_refs": 98,
+      "saved_edges": 98
+    },
+    {
+      "doi": "10.1371/journal.pone.0074932",
+      "source_refs": 41,
+      "saved_edges": 41
+    },
+    {
+      "doi": "10.1371/journal.pone.0063550",
+      "source_refs": 42,
+      "saved_edges": 42
+    }
+  ],
+  "total_edges": 210,
+  "distinct_target_keys": 205,
+  "closure": "Only complete reference-list extraction; target identity/relevance and recursion pending"
+}

@@ -1,0 +1,201 @@
+{
+  "run_id": "SEQ0003",
+  "records": [
+    {
+      "registry_key": "10.1038/srep12257",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved DOCX word/document.xml inspected: Supplementary TableS1 concerns topographic cues and magnets, not DNA staples. No qualifying sequence list found. Embedded media not exhaustively transcribed; no design/relevance exclusion inferred.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4520187-41598_2015_BFsrep12257_MOESM1_ESM.docx",
+          "sha256": "aae06cb0f2381785ef132d9151ee471200178f49f762faed2d0ae908be802d41",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep12257/MediaObjects/41598_2015_BFsrep12257_MOESM1_ESM.docx",
+          "locator": "Saved DOCX word/document.xml inspected: Supplementary TableS1 concerns topographic cues and magnets, not DNA staples. No qualifying sequence list found. Embedded media not exhaustively transcribed; no design/relevance exclusion inferred."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/srep15634",
+      "run_id": "SEQ0003",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "SI PDF6-8 TableS3 explicitly lists 163 double-triangle staples; 163 start/end-position rows confirmed. TableS4 PDF10-12 separately lists141 staples for60HB. No combined-table count used.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4616047-41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+          "sha256": "4a573a97b2f67e1a7636d1755ab98be8c572e9deae885bb83579c64c93903871",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep15634/MediaObjects/41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+          "locator": "SI PDF6-8 TableS3 explicitly lists 163 double-triangle staples; 163 start/end-position rows confirmed. TableS4 PDF10-12 separately lists141 staples for60HB. No combined-table count used."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/ncomms9634",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved16-page SI: only Supplementary Table1, PDF8-9, contains amplification/nicking primers, not a100-entry origami staple table. PDF9 primer rows inspected;26long candidate strings are not a complete staple list. Other sources not exhausted; move on.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4660042-41467_2015_BFncomms9634_MOESM545_ESM.pdf",
+          "sha256": "09a8e21cf0e312fee32f3d9384bb82d69141c86ebb17580976bdaef2baeac0ac",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms9634/MediaObjects/41467_2015_BFncomms9634_MOESM545_ESM.pdf",
+          "locator": "Saved16-page SI: only Supplementary Table1, PDF8-9, contains amplification/nicking primers, not a100-entry origami staple table. PDF9 primer rows inspected;26long candidate strings are not a complete staple list. Other sources not exhausted; move on."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/ncomms10591",
+      "run_id": "SEQ0003",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "SI PDF18-22 Supplementary Table1 is the origami-template staple list. 140 core-staple rows alone meet threshold; separate handles and azobenzene-modified strands retain their chemistry. Source gate only, no complete-set claim.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4740900-41467_2016_BFncomms10591_MOESM891_ESM.pdf",
+          "sha256": "265385f7e3d7eab11b434fd6e1600966fa3655a7a53530f6c6e8f2442faacfd5",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms10591/MediaObjects/41467_2016_BFncomms10591_MOESM891_ESM.pdf",
+          "locator": "SI PDF18-22 Supplementary Table1 is the origami-template staple list. 140 core-staple rows alone meet threshold; separate handles and azobenzene-modified strands retain their chemistry. Source gate only, no complete-set claim."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/ncomms10619",
+      "run_id": "SEQ0003",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "SI Supplementary Note4 PDF69-74: SH Full-Cage-Left section contains210position-labelled strand rows before SH-right section begins. Other cage lists not summed. Source gate only; full/half-cage naming and variants await review.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/supplements/PMC4749968-41467_2016_BFncomms10619_MOESM965_ESM.pdf",
+          "sha256": "984bc6cb34a3e0d9aeca5ec3b3bc8c0d34356b9c5990cc61f1047f91806dcac7",
+          "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms10619/MediaObjects/41467_2016_BFncomms10619_MOESM965_ESM.pdf",
+          "locator": "SI Supplementary Note4 PDF69-74: SH Full-Cage-Left section contains210position-labelled strand rows before SH-right section begins. Other cage lists not summed. Source gate only; full/half-cage naming and variants await review."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1039/b902484k",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1039/b902484k: No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1007/978-3-642-13523-1_9",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1007/978-3-642-13523-1_9: No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1039/c1jm11932j",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1039/c1jm11932j: No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1016/j.bpj.2011.11.2301",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1016/j.bpj.2011.11.2301: No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1016/j.bpj.2012.11.2859",
+      "run_id": "SEQ0003",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1016/j.bpj.2012.11.2859: No qualifying table found in saved source inventory: no downloaded supplements, supplement links, fulltext XML, repositories or publication evidence recorded. Availability unknown, not proven absence. Move on without rescue retrieval."
+        }
+      ],
+      "source_coverage": "Inspected readily available saved sources and registry links only; not an exhaustive publisher/repository search.",
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    }
+  ],
+  "summary": {
+    "no_qualifying_table_found": 7,
+    "prioritize": 3
+  },
+  "selection": "Five available-source and five low-signal year-rotated records; not a representative corpus sample.",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6158,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 16257
+  },
+  "limitations": "Counts are source-screen decisions, not article reviews or verified designs. No measured end-to-end speedup; parser time excludes manual inspection. DOCX inspected outside PDF-only index.",
+  "exclusion_audit": {
+    "final_scientific_exclusions": 0,
+    "same_agent_second_pass": "ncomms9634 PDF9 primer identities and16-page SI scope rechecked; no qualifying staple list in inspected file. Retain relevant-design uncertainty."
+  }
+}

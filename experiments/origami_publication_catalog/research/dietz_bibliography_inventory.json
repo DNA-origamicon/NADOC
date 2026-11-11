@@ -1,0 +1,2288 @@
+{
+  "entries": [
+    {
+      "printed_number": "107",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(107) M.T. Pinner, H. Dietz,",
+        "'Programmable DNA shell scaffolds for directional membrane budding',",
+        "Nature Communications (2025), doi 10.1138/s41467-025-64298-x"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 1,
+      "explicit_doi_candidates": [
+        "10.1138/s41467-025-64298-x"
+      ],
+      "target_key": "author_bibliography:dietz:b41db8dc73367d14"
+    },
+    {
+      "printed_number": "106",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(106) Muge Molbay, Benjamin Kick, Shan Zhao, Mihail Ivilinov Todorov, Tzu-Lun Ohn, Stefan Roth, Alba Simats, Vikramjeet Singh, Igor Khalin, Chenchen Pan, Harsharan Singh Bhatia, Farida Hellal, Reinhard Zeidler, Arthur Liesz, Nikolaus Plesnila, Hendrik Dietz°, Ali Erturk°,",
+        "'Nanocarrier imaging at single-cell resolution across entire mouse bodies with deep learning',",
+        "Nature Biotechnology (2025), doi 10.1038/s41587-024-02528-1"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 2,
+      "explicit_doi_candidates": [
+        "10.1038/s41587-024-02528-1"
+      ],
+      "target_key": "author_bibliography:dietz:de9507048285299e"
+    },
+    {
+      "printed_number": "105",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(105) S. Nitsch, A.E. Coraor, T. Schauer, Y. Wu, J. Sun, N. Möritz, J. Funke, H. Nagpal, G. Chua, F. Battistini, S.M. Lauberth, E. Richard, M. Orozco, S. Liu, L. Desviat, B. Fierz, H. Dietz, R. Roeder, J. de Pablo, R. Schneider,",
+        "'H4K16 acylations destabilize chromatin architecture and facilitate",
+        "transcriptional response during metabolic perturbations',",
+        "Molecular Cell (2025), doi 10.1016/j.molcel.2025.11.030"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 3,
+      "explicit_doi_candidates": [
+        "10.1016/j.molcel.2025.11.030"
+      ],
+      "target_key": "author_bibliography:dietz:e167eb79d128ded8"
+    },
+    {
+      "printed_number": "104",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(104) C. Wang, N. İyisan, P. Harder, V. HK Fell, V. Kozina, H. Dietz, O.M. Merkel, B. Özkale-Edelmann,",
+        "'Photothermally Powered 3D Microgels Mechanically Regulate Mesenchymal Stem Cells Under",
+        "Anisotropic Force',",
+        "Advanced Materials (2025), doi 10.1002/adma.202506769"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 4,
+      "explicit_doi_candidates": [
+        "10.1002/adma.202506769"
+      ],
+      "target_key": "author_bibliography:dietz:9c92667acc597f46"
+    },
+    {
+      "printed_number": "100",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(100) P. Fraga-García, S. Haßelt, C. Díaz-Cano, L. Abarca-Cabrera, Y. Kaveh-Baghbaderani, S.P.",
+        "Schwaminger, M. Kube, H. Dietz,",
+        "'Bio Meets Nano: Protein Exchange in Saline Biocoronae on Magnetic Nanoparticles'",
+        "International Journal of Molecular Sciences (2025), doi 10.3390/ijms26188995"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 5,
+      "explicit_doi_candidates": [
+        "10.3390/ijms26188995"
+      ],
+      "target_key": "author_bibliography:dietz:51ab2e6804e64ba0"
+    },
+    {
+      "printed_number": "102",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(102) B. Kriebisch, C. Kriebisch, H. Swanson, D. Bublitz, M. Kube, A. Bergmann, A. van Teijlingen,",
+        "Z. MacPherson, A. Kartouzian, H. Dietz, M. Rief, T. Tuttle, J. Boekhoven,",
+        "'Synthetic flagella spin and contract at the expense of chemical fuel,",
+        "Chem (2025), doi 10.1016/j.chempr.2024.08.016"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 6,
+      "explicit_doi_candidates": [
+        "10.1016/j.chempr.2024.08.016"
+      ],
+      "target_key": "author_bibliography:dietz:4ecb818a2c2bfa8e"
+    },
+    {
+      "printed_number": "101",
+      "stated_year_heading": 2025,
+      "text_parts": [
+        "(101) B. De Chiara, F. Del Duca, M.Z. Hussain, T. Kratky, P. Banerjee, S.V. Dummert, A. Khoshouei, N. Chanut, H. Peng, G. Boustani, L. Hiendlmeier, J. Jinschek, R. Ameloot, H. Dietz, B. Wolfrum,",
+        "'Laser-Induced Metal–Organic Framework-Derived Flexible Electrodes for Electrochemical",
+        "Sensing',",
+        "ACS Applied Materials & Interfaces (2025), doi 10.1021/acsami.4c18243"
+      ],
+      "links": [],
+      "stated_bibliographic_year": 2025,
+      "source": "dietz-publications.html",
+      "ordinal": 7,
+      "explicit_doi_candidates": [
+        "10.1021/acsami.4c18243"
+      ],
+      "target_key": "author_bibliography:dietz:741540af68482c3b"
+    },
+    {
+      "printed_number": "100",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(100) C. Frank, A. Khoshouei, L. Fuss, D. Schiewetz, D. Putz, L. Weber, Z. Zhao, M. Hattori, S. Feng, Y. De Stigter, S. Ovchinnikov°, and H . Dietz°,",
+        "'Scalable protein design using optimization in a relaxed sequence space',",
+        "Science (2024), doi 10.1126/science.adq1741",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.science.org/doi/10.1126/science.adq1741"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 8,
+      "explicit_doi_candidates": [
+        "10.1126/science.adq1741"
+      ],
+      "target_key": "author_bibliography:dietz:6699b4fc4a0ade5a"
+    },
+    {
+      "printed_number": "99",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(99) M. Pinner and H . Dietz,",
+        "'Programmable DNA shell scaffolds for directional membrane budding',",
+        "bioRxiv (2024), doi 10.1101/2024.01.18.576181",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.biorxiv.org/content/10.1101/2024.01.18.576181v1.abstract"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 9,
+      "explicit_doi_candidates": [
+        "10.1101/2024.01.18.576181",
+        "10.1101/2024.01.18.576181v1.abstract"
+      ],
+      "target_key": "author_bibliography:dietz:5156f452158cdd78"
+    },
+    {
+      "printed_number": "98",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(98) D. Chryssikos, J. Fereiro, J. Rojas, S. Bera, D. Tüzün, E. Kounoupioti, R. Pereira, C. Pfeiffer, A. Khoshouei, H. Dietz, M. Sheves, D. Cahen, and M. Tornow,",
+        "'Mono‐Exponential Current Attenuation with Distance Across 16 nm Thick Bacteriorhodopsin Multilayers',",
+        "Advanced Functional Materials (2024), doi 10.1002/adfm.202408110",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/full/10.1002/adfm.202408110"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 10,
+      "explicit_doi_candidates": [
+        "10.1002/adfm.202408110"
+      ],
+      "target_key": "author_bibliography:dietz:6585246d3833adda"
+    },
+    {
+      "printed_number": "97",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(97) S. Abdin, F. Mansel, A. Hashtchin, M. Ackermann, G. Hansen, B. Becker, B. Kick, N. Pham, H. Dietz, C. Schaniel, U. Martin, I. Spreitzer, and N. Lachmann,",
+        "'Sensor macrophages derived from human induced pluripotent stem cells to assess pyrogenic contaminations in parenteral drugs',",
+        "Biofabrication (2024), doi 10.1088/1758-5090/ad4744",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://iopscience.iop.org/article/10.1088/1758-5090/ad4744/meta"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 11,
+      "explicit_doi_candidates": [
+        "10.1088/1758-5090/ad4744",
+        "10.1088/1758-5090/ad4744/meta"
+      ],
+      "target_key": "author_bibliography:dietz:58d459729c7192a2"
+    },
+    {
+      "printed_number": "96",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(96) M. Macher, A. Obermeier, S. Fabritz, M.Kube, H. Kempf, H. Dietz, I. Platzmann, and J. Spatz,",
+        "'An Efficient Method for the Production of High-Purity Bioinspired Large Unilamellar Vesicles',",
+        "ACS Synthetic Biology (2024), doi 10.1021/acssynbio.3c00540",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acssynbio.3c00540"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 12,
+      "explicit_doi_candidates": [
+        "10.1021/acssynbio.3c00540"
+      ],
+      "target_key": "author_bibliography:dietz:2f16171d99eda0e5"
+    },
+    {
+      "printed_number": "95",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(95) W. Wei, A. Trubiano, C. Sigl, S. Paquay, H. Dietz, M. Hagan, and S. Fraden,",
+        "'Hierarchical assembly is more robust than egalitarian assembly in synthetic capsids',",
+        "Proc Natl Acad Sci USA (2024), doi 10.1073/pnas.2312775121",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.pnas.org/doi/abs/10.1073/pnas.2312775121"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 13,
+      "explicit_doi_candidates": [
+        "10.1073/pnas.2312775121"
+      ],
+      "target_key": "author_bibliography:dietz:7ddceb57d960e987"
+    },
+    {
+      "printed_number": "94",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(94) E. Willner, F. Kolbe, F. Momburg, U. Protzer, and H. Dietz,",
+        "'Hepatitis B virus neutralization with DNA origami nanoshells',",
+        "ACS Applied Materials & Interfaces (2024), doi 10.1021/acsami.4c03700",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acsami.4c03700"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 14,
+      "explicit_doi_candidates": [
+        "10.1021/acsami.4c03700"
+      ],
+      "target_key": "author_bibliography:dietz:0b7e43891be14758"
+    },
+    {
+      "printed_number": "93",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(93) A. Khoshouei, G. Kempf, V. Mykhailiuk, J. Grießing, M.N. Honemann, W. Zhao, D. Verschueren, R. Golestanian, A. Aksimentiev°, H. Dietz°, and C. Dekker°,",
+        "'Designing Rigid DNA Origami Templates for Molecular Visualization Using Cryo-EM',",
+        "Nano Letters (2024), doi 10.1021/acs.nanolett.4c00915",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acs.nanolett.4c00915"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 15,
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.4c00915"
+      ],
+      "target_key": "author_bibliography:dietz:0f081ceae8ff838a"
+    },
+    {
+      "printed_number": "92",
+      "stated_year_heading": 2024,
+      "text_parts": [
+        "(92) X. Shi, A.K. Pumm, C. Maffeo, F. Kohler, E. Feigl, W. Zhao, D. Verschueren, R. Golestanian, A. Aksimentiev°, H. Dietz°, and C. Dekker°,",
+        "'A DNA turbine powered by a transmembrane potential across a nanopore',",
+        "Nature Nanotechnology (2024), doi 10.1038/s41565-023-01527-8",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41565-023-01527-8"
+      ],
+      "stated_bibliographic_year": 2024,
+      "source": "dietz-publications.html",
+      "ordinal": 16,
+      "explicit_doi_candidates": [
+        "10.1038/s41565-023-01527-8"
+      ],
+      "target_key": "author_bibliography:dietz:621b103f3ee52046"
+    },
+    {
+      "printed_number": "91",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(91) K.F. Wagenbauer*, N. Pham*, A. Gottschlich*, B. Kick, V. Kozina, C. Frank, D. Trninic, P. Stömmer, R. Grünmeier, E. Carlini, C.A. Tsiverioti, S. Kobold°, J.J. Funke°, and H. Dietz°, 'Programmable multispecific DNA-origami-based T-cell engagers',",
+        "Nature Nanotechnology (2023), doi 10.1038/s41565-023-01471-7",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41565-023-01471-7"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 17,
+      "explicit_doi_candidates": [
+        "10.1038/s41565-023-01471-7"
+      ],
+      "target_key": "author_bibliography:dietz:745edeed9a905e70"
+    },
+    {
+      "printed_number": "90",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(90) F. Ricci and H. Dietz, 'The harmony of form and function in DNA nanotechnology',",
+        "Nature Nanotechnology (2023), doi 10.1038/s41565-023-01362-x",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41565-023-01362-x"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 18,
+      "explicit_doi_candidates": [
+        "10.1038/s41565-023-01362-x"
+      ],
+      "target_key": "author_bibliography:dietz:a9cc68b33f009e9f"
+    },
+    {
+      "printed_number": "89",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(89) K. Sachenbacher, A.Khoshouei, M.N. Honemann, W. Engelen, E. Feigl and H. Dietz°, 'Triple-stranded DNA as a structural element in DNA origami',",
+        "ACS nano (2023), doi 10.1021/acsnano.2c11402",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acsnano.2c11402"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 19,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.2c11402"
+      ],
+      "target_key": "author_bibliography:dietz:42bd6cf2f3796c4f"
+    },
+    {
+      "printed_number": "88",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(88) A. Liedl, J. Grießing, J.A. Kretzmann°, and H. Dietz°, 'Active Nuclear Import of Mammalian Cell-Expressible DNA Origami',",
+        "J. Am. Chem. Soc. (2023), doi 10.1021/jacs.2c12733",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/jacs.2c12733"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 20,
+      "explicit_doi_candidates": [
+        "10.1021/jacs.2c12733"
+      ],
+      "target_key": "author_bibliography:dietz:50f559fca475d3e5"
+    },
+    {
+      "printed_number": "87",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(87) J.A. Kretzmann, A. Liedl, A. Monferrer, V. Mykhailiuk, S. Beerkens, and H. Dietz, 'Gene-encoding DNA origami for mammalian cell expression',",
+        "Nature Communications (2023), doi 10.1038/s41467-023-36601-1",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-023-36601-1"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 21,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-023-36601-1"
+      ],
+      "target_key": "author_bibliography:dietz:1dfb2e6a63f4a1f9"
+    },
+    {
+      "printed_number": "86",
+      "stated_year_heading": 2023,
+      "text_parts": [
+        "(86) A. Monferrer, F. Kohler, C. Sigl, M. Schachtner, D. Peterhoff, B. Asbach, R. Wagner, and H. Dietz, 'Broad-Spectrum Virus Trapping with Heparan Sulfate-Modified DNA Origami Shells',",
+        "Cell Reports Phys Sci (2023), doi 10.1016/j.xcrp.2022.101237",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.cell.com/cell-reports-physical-science/fulltext/S2666-3864(22)00563-X"
+      ],
+      "stated_bibliographic_year": 2023,
+      "source": "dietz-publications.html",
+      "ordinal": 22,
+      "explicit_doi_candidates": [
+        "10.1016/j.xcrp.2022.101237"
+      ],
+      "target_key": "author_bibliography:dietz:ee1f8bff45b8fd7a"
+    },
+    {
+      "printed_number": "85",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(85) A. Monferrer, J.A. Kretzmann, C. Sigl, P. Sapelza, A. Liedl, B. Wittmann, and H. Dietz, 'Broad-Spectrum Virus Trapping with Heparan Sulfate-Modified DNA Origami Shells',",
+        "ACS Nano (2022), doi 10.1021/acsnano.1c11328",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/acsnano.1c11328"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 23,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.1c11328"
+      ],
+      "target_key": "author_bibliography:dietz:06d794ea9062b4a6"
+    },
+    {
+      "printed_number": "84",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(84) M. Stasi, A. Monferrer, L. Babl, S. Wunnava, C.F. Dirscherl, D. Braun, P. Schwille, H. Dietz, and J. Boekhoven, 'Regulating DNA-hybridization using a chemically fueled reactioj',",
+        "J. Am. Chem. Soc. (2022), doi 10.1021/jacs.2c08463",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/full/10.1021/jacs.2c08463"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 24,
+      "explicit_doi_candidates": [
+        "10.1021/jacs.2c08463"
+      ],
+      "target_key": "author_bibliography:dietz:0ee3e5e56f98f1ec"
+    },
+    {
+      "printed_number": "83",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(83) D. Hayakawa, T.E. Videbaek, D.M. Hall, H. Fang, C. Sigl, E. Feigl, H. Dietz, S. Fraden, M.F. Hagan, G.M. Grason, and W.B. Rogers, 'Geometrically programmed self-limited assembly of tubules using DNA origami colloids',",
+        "Proc Natl Acad Sci USA (2022), doi 10.1073./pnas.2207902119",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.pnas.org/doi/10.1073/pnas.2207902119"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 25,
+      "explicit_doi_candidates": [
+        "10.1073/pnas.2207902119"
+      ],
+      "target_key": "author_bibliography:dietz:b1771a7df31132b0"
+    },
+    {
+      "printed_number": "82",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(82) X. Shi, A.K. Pumm, J. Isensee, W. Zhao, D. Verschueren, A. Martin-Gonzalez, R. Golestanian°, H. Dietz°, C. Dekker°, ‘Sustained unidirectional rotation of a self-organized DNA rotor on a nanopore',",
+        "Nature Physics (2022), doi 10.1038/s41567-022-01683-z",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41567-022-01683-z"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 26,
+      "explicit_doi_candidates": [
+        "10.1038/s41567-022-01683-z"
+      ],
+      "target_key": "author_bibliography:dietz:0cd144d6f11d6f1a"
+    },
+    {
+      "printed_number": "81",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(81) A.K. Pumm. W. Engelen, E. Kopperger, J. Isensee, M. Vogt, V. Kozina, M. Kube, M.N. Honemann, E. Bertosin, M. Langecker, R. Golestanian°, F.C. Simmel°, and H. Dietz, ‘A DNA origami rotary ratchet motor',",
+        "Nature (2022), doi 10.1038/s41586-022-04910-y",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41586-022-04910-y"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 27,
+      "explicit_doi_candidates": [
+        "10.1038/s41586-022-04910-y"
+      ],
+      "target_key": "author_bibliography:dietz:f7701cf31d2ab99f"
+    },
+    {
+      "printed_number": "80",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(80) K.L. Behler, M.N. Honemann, A.R. Silva-Santos, H. Dietz, D. Weuster-Botz, ‘Phage-free production of artifical ssDNA with Escherichia coli',",
+        "Biotechnology and Bioengineering (2022), doi 10.1002/bit28171",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/bit.28171"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 28,
+      "explicit_doi_candidates": [
+        "10.1002/bit.28171",
+        "10.1002/bit28171"
+      ],
+      "target_key": "author_bibliography:dietz:3a47c754b6c48b66"
+    },
+    {
+      "printed_number": "79",
+      "stated_year_heading": 2022,
+      "text_parts": [
+        "(79) O. Staufer. K. Gupta, J.E. Hernandez-Bücher, F. Kohler, C. Sigl, G. Singh, K. Vasileiou, A.Y. Relimpio, M. Macher, S. Fabritz, H. Dietz, E.A. Cavalcanti-Adam, C. Schaffitzel, A. Ruggieri, I. Platzmann, I. Berger, J.P. Spatz, ‘Synthetic virions reveal fatty acid-coupled adaptive immunogenicity of SARS-CoV-2 spike glycoprotein',",
+        "Nature Communications (2022), doi 10.1038/s41467-022-28446-x",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-022-28446-x"
+      ],
+      "stated_bibliographic_year": 2022,
+      "source": "dietz-publications.html",
+      "ordinal": 29,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-022-28446-x"
+      ],
+      "target_key": "author_bibliography:dietz:b487d9d39d353bea"
+    },
+    {
+      "printed_number": "78",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(78) W. Engelen, C. Sigl, K. Kadletz, E.M. Willner, and H. Dietz, ‘Antigen-Triggered Logic-Gating of DNA Nanodevices',",
+        "Journal of the American Chemical Society (2021), doi 10.1021/jacs.1c09967",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/jacs.1c09967"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 30,
+      "explicit_doi_candidates": [
+        "10.1021/jacs.1c09967"
+      ],
+      "target_key": "author_bibliography:dietz:68f61f3b1f74a325"
+    },
+    {
+      "printed_number": "77",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(77) E. Bertosin, C.M. Maffeo, T. Drexler, M.N. Honemann, A. Aksimentiev, and H. Dietz, ‘A nanoscale reciprocating rotary mechanism with coordinated mobility control',",
+        "Nature Communications (2021), doi 10.1038/s41467-021-27230-7",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-021-27230-7"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 31,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-021-27230-7"
+      ],
+      "target_key": "author_bibliography:dietz:347be9080bf62651"
+    },
+    {
+      "printed_number": "76",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(76) S. Schmid, P. Stömmer, H. Dietz, and C. Dekker, ‘Nanopore electro-osmotic trap for the label-free study of single proteins and their conformations',",
+        "Nature Nanotechnology (2021), doi 10.1038/s41565-021-00958-5",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41565-021-00958-5"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 32,
+      "explicit_doi_candidates": [
+        "10.1038/s41565-021-00958-5"
+      ],
+      "target_key": "author_bibliography:dietz:15ee0065d31d9a48"
+    },
+    {
+      "printed_number": "75",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(75) P. Stömmer, H. Kiefer, E. Kopperger, M.N. Honemann, M. Kube, F.C. Simmel, R.R. Netz, and H. Dietz, ‘A synthetic tubular molecular transport system',",
+        "Nature Communications (2021), doi 10.1038/s41467-021-24675-8",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-021-24675-8"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 33,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-021-24675-8"
+      ],
+      "target_key": "author_bibliography:dietz:90a0d06a399d58fc"
+    },
+    {
+      "printed_number": "74",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(74) C. Sigl, E.M. Willner, W. Engelen, J. Kretzmann, K. Sachenbacher, A. Liedl, F. Kolbe, F. Wilsch, S. Ali Aghvami, U. Protzer, M.F. Hagan, S. Fraden, and H. Dietz, ‘Programmable icosahedral shell system for virus trapping',",
+        "Nature Materials (2021), doi 10.1038/s41563-021-01020-4",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41563-021-01020-4"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 34,
+      "explicit_doi_candidates": [
+        "10.1038/s41563-021-01020-4"
+      ],
+      "target_key": "author_bibliography:dietz:8e3a11b33f7f683c"
+    },
+    {
+      "printed_number": "73",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(73) A. Fragasso*, N. De Franceschi*, P. Stömmer*, E.O. van der Sluis, H. Dietz°, and C. Dekker°, ‘Reconstitution of ultrawide DNA origami pores in liposomes for transmembrane transport of macromolecules',",
+        "ACS Nano (2021), doi 10.1021/acsnano.1c01669",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.1c01669"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 35,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.1c01669"
+      ],
+      "target_key": "author_bibliography:dietz:753d1dc78f332960"
+    },
+    {
+      "printed_number": "72",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(72) E. Bertosin*, P. Stömmer*, E. Feigl, M. Wenig, M.N. Honemann, and H. Dietz, ‘Cryo-Electron Microscopy and Mass Analysis of Oligolysine-Coated DNA Nanostructures',",
+        "ACS Nano (2021), doi 10.1021/acsnano.0c10137",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.0c10137"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 36,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.0c10137"
+      ],
+      "target_key": "author_bibliography:dietz:6e9e22c87e182a4e"
+    },
+    {
+      "printed_number": "71",
+      "stated_year_heading": 2021,
+      "text_parts": [
+        "(71) W. Engelen and H. Dietz, ‘Advancing biophysics using DNA origami',",
+        "Annual Review of Biophysics (2021), doi 10.1146/annurev-biophys-110520-125739",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.annualreviews.org/doi/abs/10.1146/annurev-biophys-110520-125739"
+      ],
+      "stated_bibliographic_year": 2021,
+      "source": "dietz-publications.html",
+      "ordinal": 37,
+      "explicit_doi_candidates": [
+        "10.1146/annurev-biophys-110520-125739"
+      ],
+      "target_key": "author_bibliography:dietz:de285eeb07a5f044"
+    },
+    {
+      "printed_number": "70",
+      "stated_year_heading": 2020,
+      "text_parts": [
+        "(70) M. Kube*, F. Kohler*, E. Feigl*, B. Nagel-Yüksel, E.M. Willner, J.J. Funke, T. Gerling, P. Stömmer, M.N. Honemann, T.G. Martin, S.H.W. Scheres, and H. Dietz, ‘Revealing the structures of megadalton-scale DNA complexes with nucleotide resolution',",
+        "Nature Communications (2020), doi 10.1038/s41467-020-20020-7",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-020-20020-7"
+      ],
+      "stated_bibliographic_year": 2020,
+      "source": "dietz-publications.html",
+      "ordinal": 38,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-020-20020-7"
+      ],
+      "target_key": "author_bibliography:dietz:e9bb3453f3845ec1"
+    },
+    {
+      "printed_number": "69",
+      "stated_year_heading": 2020,
+      "text_parts": [
+        "(69) B.A.K Kriebisch, A. Jussupow, A.M. Bergmann, F. Kohler, H. Dietz, V.R.I. Kaila, J. Boekhoven, ‘Reciprocal Coupling in Chemically Fueled Assembly: A Reaction Cycle Regulates Self-Assembly and Vice Versa',",
+        "Journal of the American Chemical Society (2020), doi 10.1021/jacs.0c10486",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/jacs.0c10486"
+      ],
+      "stated_bibliographic_year": 2020,
+      "source": "dietz-publications.html",
+      "ordinal": 39,
+      "explicit_doi_candidates": [
+        "10.1021/jacs.0c10486"
+      ],
+      "target_key": "author_bibliography:dietz:b5c4173a998b6714"
+    },
+    {
+      "printed_number": "68",
+      "stated_year_heading": 2020,
+      "text_parts": [
+        "(68) W. Wu, N. Cheng, L.W. Black, H. Dietz, and A.C. Steven, ‘Biphasic Packing of DNA and Internal Proteins in Bacteriophage T4 Heads Revealed by Bubblegram Imaging',",
+        "Viruses (2020), doi 10.103390/v12111282",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.mdpi.com/1999-4915/12/11/1282"
+      ],
+      "stated_bibliographic_year": 2020,
+      "source": "dietz-publications.html",
+      "ordinal": 40,
+      "explicit_doi_candidates": [
+        "10.103390/v12111282"
+      ],
+      "target_key": "author_bibliography:dietz:6a74fafd23309a50"
+    },
+    {
+      "printed_number": "67",
+      "stated_year_heading": 2020,
+      "text_parts": [
+        "(67) H.J. Kang, F.A. Jung, C.H. Ko, K. Shehu, L.C. Barnsley, F. Kohler, H. Dietz, J. Zhao, S. Pispas, C.M. Papadakis, ‘Thermoresponsive Molecular Brushes with Propylene Oxide/Ethylene Oxide Copolymer Side Chains in Aqueous Solution',",
+        "Macromolecules (2020), doi 10.1021/acs.macromol.0c00263",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acs.macromol.0c00263"
+      ],
+      "stated_bibliographic_year": 2020,
+      "source": "dietz-publications.html",
+      "ordinal": 41,
+      "explicit_doi_candidates": [
+        "10.1021/acs.macromol.0c00263"
+      ],
+      "target_key": "author_bibliography:dietz:5001bc46b7512e4a"
+    },
+    {
+      "printed_number": "66",
+      "stated_year_heading": 2020,
+      "text_parts": [
+        "(66) H. Franquelim, H. Dietz and P. Schwille, ‘Reversible membrane deformations by straight DNA origami filaments',",
+        "Soft Matter (2020), doi 10.1039/D0SM00150C",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.rsc.org/en/content/articlehtml/2020/sm/d0sm00150c"
+      ],
+      "stated_bibliographic_year": 2020,
+      "source": "dietz-publications.html",
+      "ordinal": 42,
+      "explicit_doi_candidates": [
+        "10.1039/d0sm00150c"
+      ],
+      "target_key": "author_bibliography:dietz:b0594604f5520f95"
+    },
+    {
+      "printed_number": "65",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(65) H. Ramezani and H. Dietz, ‘Building Machines with DNA Molecules',",
+        "Nature Reviews Genetics (2019), doi 10.1038/s41576-019-0175-6",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41576-019-0175-6"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 43,
+      "explicit_doi_candidates": [
+        "10.1038/s41576-019-0175-6"
+      ],
+      "target_key": "10.1038/s41576-019-0175-6"
+    },
+    {
+      "printed_number": "64",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(64) F. Sigmund, S. Pettinger, M. Kube, F. Schneider, M. Schifferer, S. Schneider, M. Efremova, J. Pujol-Martí, M. Aichler, A. Walch, T. Misgeld, H. Dietz, and G. Westmeyer, ‘Iron-Sequestering Nanocompartments as Multiplexed Electron Microscopy Gene Reporters',",
+        "ACS Nano (2019), doi 10.1021/acsnano.9b03140",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.9b03140"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 44,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.9b03140"
+      ],
+      "target_key": "author_bibliography:dietz:add0ce961e27b8ac"
+    },
+    {
+      "printed_number": "63",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(63) L. Rodrigues, F. Schneider, X. Zhang, E. Larsson, L. Moodie, H. Dietz, C. Papadakis, G. Winter, R. Lundmark, and M. Hubert, ‘Cellular uptake of self-assembled phytantriol-based hexosomes is independent of major endocytic machineries',",
+        "Journal of Colloid and Interface Science (2019), doi 10.1016/j.jcis.2019.06.045",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.sciencedirect.com/science/article/pii/S0021979719307180"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 45,
+      "explicit_doi_candidates": [
+        "10.1016/j.jcis.2019.06.045"
+      ],
+      "target_key": "author_bibliography:dietz:7efa86b5a9a7294e"
+    },
+    {
+      "printed_number": "62",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(62) F. Schneider, N. Moeritz, and H. Dietz, ‘The sequence of events during folding of a DNA origami',",
+        "Science Advances (2019), doi 10.1126/sciadv.aaw1412",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://advances.sciencemag.org/content/5/5/eaaw1412/tab-article-info"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 46,
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.aaw1412"
+      ],
+      "target_key": "10.1126/sciadv.aaw1412"
+    },
+    {
+      "printed_number": "61",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(61) F.A.S. Engelhardt, F. Praetorius, C.H. Wachauf, G. Brüggenthies, F. Kohler, B. Kick, K.L. Kadletz, P. N. Pham, K. L. Behler, T. Gerling, and H. Dietz, ‘Custom-Size, Functional, and Durable DNA Origami with Design-Specific Scaffolds’,",
+        "ACS Nano (2019), doi 10.1021/acsnano.9b01025",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/10.1021/acsnano.9b01025"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 47,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.9b01025"
+      ],
+      "target_key": "10.1021/acsnano.9b01025"
+    },
+    {
+      "printed_number": "60",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(60) K. Häussermann, G. Young, P. Kukura, and H. Dietz, ‘Dissecting FOXP2 oligomerization and DNA binding’,",
+        "Angewandte Chemie Intl. Edition (2019), doi 10.1002/anie.201901734",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201901734"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 48,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201901734"
+      ],
+      "target_key": "author_bibliography:dietz:95b31c2cbb9e74b9"
+    },
+    {
+      "printed_number": "59",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(59) M. Lakemeyer, E. Bertosin, F. Möller, D. Balogh, R. Strasser, H. Dietz, and S.A. Sieber, ‘Tailored Peptide Phenyl Esters Block ClpXP Proteolysis by an Unusual Breakdown into a Heptamer–Hexamer Assembly’,",
+        "Angewandte Chemie Intl. Edition (2019), doi 10.1002/anie.201901056",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201901056"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 49,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201901056"
+      ],
+      "target_key": "author_bibliography:dietz:b6184330912cf0aa"
+    },
+    {
+      "printed_number": "58",
+      "stated_year_heading": 2019,
+      "text_parts": [
+        "(58) T. Gerling and H. Dietz, ‘Reversible covalent stabilization of stacking contacts in DNA assemblies’,",
+        "Angewandte Chemie Intl. Edition (2019), doi 10.1002/anie.201812463",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.201812463"
+      ],
+      "stated_bibliographic_year": 2019,
+      "source": "dietz-publications.html",
+      "ordinal": 50,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201812463"
+      ],
+      "target_key": "10.1002/anie.201812463"
+    },
+    {
+      "printed_number": "57",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(57) T. Gerling, M. Kube, B. Kick, and H. Dietz, 'Sequence-programmable covalent bonding of designed DNA assemblies',",
+        "Science Advances (2018), vol 4, doi 10.1126/sciadv.aau1157",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://advances.sciencemag.org/content/4/8/eaau1157"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 51,
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.aau1157"
+      ],
+      "target_key": "10.1126/sciadv.aau1157"
+    },
+    {
+      "printed_number": "56",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(56) M. Schickinger, M. Zacharias, and H. Dietz, 'Tethered multi-fluorophore motion reveals equilibrium transition kinetics of single DNA double-helices',",
+        "Proc Natl Acad Sci USA (2018), E7512-E7521, doi 10.1073/pnas.1800585115",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/content/115/32/E7512"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 52,
+      "explicit_doi_candidates": [
+        "10.1073/pnas.1800585115"
+      ],
+      "target_key": "10.1073/pnas.1800585115"
+    },
+    {
+      "printed_number": "55",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(55) L. Bruetzel, P. Walker, T. Gerling, H. Dietz, and J. Lipfert, 'Time-Resolved Small-Angle X-Ray Scattering Reveals Millisecond Transitions of a DNA Origami Switch',",
+        "Nano Letters (2018), vol 18, p2672-2676, doi 10.1021/acs.nanolett.8b00592",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://pubs.acs.org/doi/abs/10.1021/acs.nanolett.8b00592"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 53,
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.8b00592"
+      ],
+      "target_key": "10.1021/acs.nanolett.8b00592"
+    },
+    {
+      "printed_number": "54",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(54) B. Bräuning*, E. Bertosin*, F. Praetorius, C. Ihling, A. Schatt, A. Adler, K. Richter, A. Sinz, H. Dietz, and M. Groll, 'Structure and mechanism of the two-component α-helical pore-forming toxin YaxAB',",
+        "Nature Communications (2018), vol 9, article #1806, doi 10.1038/s41467-018-04139-2",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-018-04139-2"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 54,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-018-04139-2"
+      ],
+      "target_key": "author_bibliography:dietz:89088585a811f4fc"
+    },
+    {
+      "printed_number": "53",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(53) P. Ketterer*, A.N. Ananth*, D.S. Laman, A. Mishra, E. Bertosin, M. Ganji, J. van der Torre, P. Onck, H. Dietz°, and C. Dekker°, 'DNA origami scaffold for studying intrinsically disordered proteins of the nuclear pore complex',",
+        "Nature Communications (2018), vol 9, article #902, doi 10.1038/s41467-018-03313-w",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-018-03313-w"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 55,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-018-03313-w"
+      ],
+      "target_key": "10.1038/s41467-018-03313-w"
+    },
+    {
+      "printed_number": "52",
+      "stated_year_heading": 2018,
+      "text_parts": [
+        "(52) H. Franquelim, A. Khmelinskaia, J.P. Sobczak, H. Dietz, and P. Schwille, 'Membrane sculpting by curved DNA origami scaffolds',",
+        "Nature Communications (2018), vol 9, article #811, doi 10.1038/s41467-018-03198-9",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/s41467-018-03198-9"
+      ],
+      "stated_bibliographic_year": 2018,
+      "source": "dietz-publications.html",
+      "ordinal": 56,
+      "explicit_doi_candidates": [
+        "10.1038/s41467-018-03198-9"
+      ],
+      "target_key": "10.1038/s41467-018-03198-9"
+    },
+    {
+      "printed_number": "51",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(51) K. Wagenbauer, C. Sigl, and H. Dietz, 'Gigadalton-scale shape-programmable DNA assemblies',",
+        "Nature (2017), vol 552, p78-83, doi: 10.1038/nature24651",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/nature24651"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 57,
+      "explicit_doi_candidates": [
+        "10.1038/nature24651"
+      ],
+      "target_key": "10.1038/nature24651"
+    },
+    {
+      "printed_number": "50",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(50) F. Praetorius, B. Kick, K.L. Behler, M.N. Honemann, D. Weuster-Botz, and H. Dietz, 'Biotechnological mass-production of DNA origami',",
+        "Nature (2017), vol 552, p84-87, doi: 10.1038/nature24650",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/articles/nature24650"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 58,
+      "explicit_doi_candidates": [
+        "10.1038/nature24650"
+      ],
+      "target_key": "10.1038/nature24650"
+    },
+    {
+      "printed_number": "49",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(49) M. Endo, E.M. Willner, Y. Kamada, Y. Suzuki, T. Emura, K. Hidaka, H. Dietz, H. Sugiyama, 'Single-molecule observation of the photoregulated conformational dynamics of DNA origami nanoscissors',",
+        "Angewandte Chemie Intl. Edition (2017), vol 56, p15324-15328",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201708722/abstract"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 59,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201708722"
+      ],
+      "target_key": "10.1002/anie.201708722"
+    },
+    {
+      "printed_number": "48",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(48) K. Wagenbauer, F. Engelhardt, E. Stahl, V. Hechtl, P. Stoemmer, F. Seebacher, L. Meregalli, P. Ketterer, T. Gerling, and H. Dietz, 'How we make DNA origami',",
+        "ChemBioChem (2017), doi 10.1002/cbic.201700377",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/cbic.201700377/abstract"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 60,
+      "explicit_doi_candidates": [
+        "10.1002/cbic.201700377"
+      ],
+      "target_key": "10.1002/cbic.201700377"
+    },
+    {
+      "printed_number": "47",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(47) M. Siavashpouri, C. Wachauf, M. Zakhary, F. Praetorius, H. Dietz°, and Z. Dogic°, 'Molecular engineering of chiral colloidal liquid crystals using DNA origami',",
+        "Nature Materials , (2017), doi 10.1138/nmat4909",
+        "[publisher website]"
+      ],
+      "links": [
+        "https://www.nature.com/nmat/journal/vaop/ncurrent/full/nmat4909.html"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 61,
+      "explicit_doi_candidates": [
+        "10.1138/nmat4909"
+      ],
+      "target_key": "author_bibliography:dietz:3c7a8a43051ede88"
+    },
+    {
+      "printed_number": "46",
+      "stated_year_heading": 2017,
+      "text_parts": [
+        "(46) F. Praetorius and H. Dietz, 'Self-assembly of genetically encoded DNA-protein hybrid nanoscale shapes',",
+        "Science , (2017), vol 355, doi 10.1126/science.aam5488",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://science.sciencemag.org/content/355/6331/eaam5488"
+      ],
+      "stated_bibliographic_year": 2017,
+      "source": "dietz-publications.html",
+      "ordinal": 62,
+      "explicit_doi_candidates": [
+        "10.1126/science.aam5488"
+      ],
+      "target_key": "author_bibliography:dietz:66716e2c97459ae2"
+    },
+    {
+      "printed_number": "45",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(45) J. Funke, P. Ketterer, C. Lieleg, P. Korber, and H. Dietz,",
+        "'Exploring nucleosome unwrapping using DNA origami',",
+        "Nano Letters , (2016), doi 10.1021/acs.nanolett.6b04169",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/full/10.1021/acs.nanolett.6b04169"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 63,
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.6b04169"
+      ],
+      "target_key": "10.1021/acs.nanolett.6b04169"
+    },
+    {
+      "printed_number": "44",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(44) J. Funke*, P. Ketterer*, C. Lieleg*, S. Schunter, P. Korber°, and H. Dietz°, 'Uncovering the forces between nucleosomes using DNA origami',",
+        "Science Advances , (2016), doi 10.1126/sciadv.1600974",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://advances.sciencemag.org/content/2/11/e1600974.figures-only"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 64,
+      "explicit_doi_candidates": [
+        "10.1126/sciadv.1600974"
+      ],
+      "target_key": "10.1126/sciadv.1600974"
+    },
+    {
+      "printed_number": "43",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(43) T. Martin, T. Bharat, A. Joerger, X. Bai, F. Praetorius, A. Fersht, H. Dietz°, and S. Scheres°, 'The design of a molecular support for cryo-EM structure determination',",
+        "Proc Natl Acad Sci USA , (2016), doi 10.1073/pnas.1612720113",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/content/early/2016/11/04/1612720113.full"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 65,
+      "explicit_doi_candidates": [
+        "10.1073/pnas.1612720113"
+      ],
+      "target_key": "10.1073/pnas.1612720113"
+    },
+    {
+      "printed_number": "42",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(42) B. Kick, S. Hensler, F. Praetorius, H. Dietz, and D. Weuster-Botz, 'Specific growth rate and multiplicity of infection affect high-cell-density fermentation with bacteriophage M13 for ssDNA production',",
+        "Biotechnology and Bioengineering , (2016), doi 10.1002/bit.26200",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/bit.26200/full"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 66,
+      "explicit_doi_candidates": [
+        "10.1002/bit.26200"
+      ],
+      "target_key": "10.1002/bit.26200"
+    },
+    {
+      "printed_number": "41",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(41) F. Kilchherr, C. Wachauf, B. Pelz, M. Rief, M. Zacharias, and H. Dietz, 'Single-molecule dissection of stacking forces in DNA'",
+        "Science , (2016), doi 10.1126/science.aaf5508",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://science.sciencemag.org/content/353/6304/aaf5508"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 67,
+      "explicit_doi_candidates": [
+        "10.1126/science.aaf5508"
+      ],
+      "target_key": "10.1126/science.aaf5508"
+    },
+    {
+      "printed_number": "40",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(40) S. Krishnan, D. Ziegler, V. Arnaut, T. Martin, K. Kapsner, K. Henneberg, A. Bausch, H. Dietz, and F. Simmel, ' Molecular transport through large-diameter DNA nanopores',",
+        "Nature Communications , (2016), doi 10.1038/ncomms12787,",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/ncomms/2016/160923/ncomms12787/full/ncomms12787.html"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 68,
+      "explicit_doi_candidates": [
+        "10.1038/ncomms12787"
+      ],
+      "target_key": "10.1038/ncomms12787"
+    },
+    {
+      "printed_number": "39",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(39) E. Stahl, F. Praetorius, C. de Oliveira-Mann, K. Hopfner, and H. Dietz, 'Impact of heterogeneity and lattice bond strength of DNA triangle crystallization',",
+        "ACS Nano , (2016), doi 10.1021/acsnano.6b04787",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/full/10.1021/acsnano.6b04787"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 69,
+      "explicit_doi_candidates": [
+        "10.1021/acsnano.6b04787"
+      ],
+      "target_key": "10.1021/acsnano.6b04787"
+    },
+    {
+      "printed_number": "38",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(38) L. Rodrigues, K. Kyriakos, F. Schneider, H. Dietz, G. Winter, C. Papadakis, and M. Hubert, 'Characterization of lipid-based hexosomes as versatile vaccine carriers',",
+        "Mol. Pharmaceutics , (2016), doi 10.1021/acs.molpharmaceut.6b00716",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acs.molpharmaceut.6b00716"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 70,
+      "explicit_doi_candidates": [
+        "10.1021/acs.molpharmaceut.6b00716"
+      ],
+      "target_key": "author_bibliography:dietz:3fcc65e0beae982e"
+    },
+    {
+      "printed_number": "37",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(37) L. Bruetzel, T. Gerling, S. Sedlak, P. Walker, W. Zheng, H. Dietz, and J. Lipfert, 'Conformational changes and flexibility of DNA devices observed by small-angle X‐ray scattering',",
+        "Nano Letters , vol 16 (2016), p4871-4879,",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/acs.nanolett.6b01338"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 71,
+      "explicit_doi_candidates": [
+        "10.1021/acs.nanolett.6b01338"
+      ],
+      "target_key": "10.1021/acs.nanolett.6b01338"
+    },
+    {
+      "printed_number": "36",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(36) H. Dietz, 'Toward Applications for DNA Nanotechnology - More Bricks to Build with',",
+        "ChemBioChem , vol 17 (2016), p1046-1047",
+        "[publisher website] - editorial"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/cbic.201600289/abstract"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 72,
+      "explicit_doi_candidates": [
+        "10.1002/cbic.201600289"
+      ],
+      "target_key": "author_bibliography:dietz:3dcc73c3dd1a6074"
+    },
+    {
+      "printed_number": "35",
+      "stated_year_heading": 2016,
+      "text_parts": [
+        "(35) P. Ketterer, E. Willner, and H. Dietz,",
+        "'Nanoscale rotary apparatus formed from tight-fitting 3D DNA components',",
+        "Science Advances , vol 2 (2016), e1501209",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://advances.sciencemag.org/content/2/2/e1501209"
+      ],
+      "stated_bibliographic_year": 2016,
+      "source": "dietz-publications.html",
+      "ordinal": 73,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:8a6a8bbef9ae08db"
+    },
+    {
+      "printed_number": "34",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(34) J. Funke and H. Dietz, 'Placing molecules with Bohr radius resolution using DNA origami',",
+        "Nature Nanotechnology , (2015), doi 10.1038/nnano.2015.240",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/nnano/journal/vaop/ncurrent/full/nnano.2015.240.html"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 74,
+      "explicit_doi_candidates": [
+        "10.1038/nnano.2015.240"
+      ],
+      "target_key": "10.1038/nnano.2015.240"
+    },
+    {
+      "printed_number": "33",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(33) H. Dietz, 'Nanoscale cable tacking'",
+        "Nature Nanotechnology , vol 10 (2015), p829-830,",
+        "[publisher website] - comment on work by Gothelf and colleagues"
+      ],
+      "links": [
+        "http://www.nature.com/nnano/journal/v10/n10/full/nnano.2015.223.html"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 75,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:cfbfcde485ac3ab4"
+    },
+    {
+      "printed_number": "32",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(32) J. Sobczak and H. Dietz",
+        "'DNA-nanoparticle crystals: Exploiting shape complementarity',",
+        "Nature Materials , vol 14 (2015), p752-754,",
+        "[publisher website] - comment on work by Mirkin and Gang"
+      ],
+      "links": [
+        "http://www.nature.com/nmat/journal/v14/n8/fig_tab/nmat4372_ft.html"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 76,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:4c0ecf1e641dd17b"
+    },
+    {
+      "printed_number": "31",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(31) B. Kick, F. Praetorius, H. Dietz, and D. Weuster-Botz",
+        "'Efficient production of single-stranded DNA as scaffolds for DNA origami',",
+        "Nano Letters , vol 15 (2015), p4672-4676",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/journal/nalefd"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 77,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:959f845730c17749"
+    },
+    {
+      "printed_number": "30",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(30) T. Gerling, K. Wagenbauer, A. Neuner, and H. Dietz",
+        "'Dynamic DNA devices and assemblies formed by shape-complementary, non-basepairing 3D components'",
+        "Science , vol 347 (2015), p1446-1452",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.sciencemag.org/content/347/6229/1446.full"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 78,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:1c2a4fdd83503d54"
+    },
+    {
+      "printed_number": "29",
+      "stated_year_heading": 2015,
+      "text_parts": [
+        "(29) C. Lieleg, P. Ketterer, J. Nuebler, J. Ludwigsen, U. Gerland, H. Dietz, F. Mueller-Planitz, and P. Korber",
+        "'Nucleosome spacing generated by ISWI and CHD1 remodelers is constant regardless of nucleosome density'",
+        "Molecular and Cellular Biology , vol 35 (2015), 1588-1605",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://mcb.asm.org/content/early/2015/03/02/MCB.01070-14.full.pdf+html"
+      ],
+      "stated_bibliographic_year": 2015,
+      "source": "dietz-publications.html",
+      "ordinal": 79,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:21df85fe2b1463fc"
+    },
+    {
+      "printed_number": "28",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(28) C. Plesa, N. van Loo, P. Ketterer, H. Dietz, and C. Dekker",
+        "'Velocity of DNA during translocation through a solid state nanopore'",
+        "Nano Letters , (2014), doi 10.1021/nl504375c",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nl504375c"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 80,
+      "explicit_doi_candidates": [
+        "10.1021/nl504375c"
+      ],
+      "target_key": "10.1021/nl504375c"
+    },
+    {
+      "printed_number": "27",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(27) E. Stahl, T. Martin, F. Praetorius, and H. Dietz, 'Facile and scalable preparation of pure and dense DNA origami solutions',",
+        "Angewandte Chemie Intl. Edn., vol 53 (2014), p12735",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201405991/abstract"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 81,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201405991"
+      ],
+      "target_key": "10.1002/anie.201405991"
+    },
+    {
+      "printed_number": "26",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(26) H. Cui, B. Seubert, E. Stahl, H. Dietz, U. Reuning, L. Moreno-Leon, M. Ilie, P. Hofman, H. Nagase, B. Mari, and A. Krüger, 'Tissue inhibitor of metalloproteinases-1 induces a pro-tumourigenic increase of miR-210 in lung adenocarcinoma cells and their exosomes',",
+        "Oncogene , vol 34 (2014), p3640-3650",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/onc/journal/vaop/ncurrent/full/onc2014300a.html"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 82,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:ab5a207233608c40"
+    },
+    {
+      "printed_number": "25",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(25) B. Shen, V. Linko, H. Dietz, and J. Toppari",
+        "'Dielectrophoretic trapping of multilayer DNA origami nanostructures and DNA origami -induced local destruction of silicon dioxide'",
+        "Electrophoresis , (2014), doi: 10.1002/elps.201400323",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/elps.201400323/abstract"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 83,
+      "explicit_doi_candidates": [
+        "10.1002/elps.201400323"
+      ],
+      "target_key": "10.1002/elps.201400323"
+    },
+    {
+      "printed_number": "24",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(24) K. Wagenbauer*, C. Wachauf*, and H. Dietz",
+        "'Quantifying Quality in DNA Self-Assembly'",
+        "Nature Communications , 5:3691 (2014), doi: 10.1038/ncomms4691",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/ncomms/index.html"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 84,
+      "explicit_doi_candidates": [
+        "10.1038/ncomms4691"
+      ],
+      "target_key": "10.1038/ncomms4691"
+    },
+    {
+      "printed_number": "23",
+      "stated_year_heading": 2014,
+      "text_parts": [
+        "(23) C. Plesa, A. Adithya, V. Linko, C. Gulcher, A. Katan, H. Dietz, and C. Dekker, 'Ionic Permeability and Mechanical Properties of DNA Origami Nanoplates on Solid-State Nanopores'",
+        "ACS Nano , vol 8 (2014), p35",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://pubs.acs.org/doi/abs/10.1021/nn405045x"
+      ],
+      "stated_bibliographic_year": 2014,
+      "source": "dietz-publications.html",
+      "ordinal": 85,
+      "explicit_doi_candidates": [
+        "10.1021/nn405045x"
+      ],
+      "target_key": "10.1021/nn405045x"
+    },
+    {
+      "printed_number": "22",
+      "stated_year_heading": 2013,
+      "text_parts": [
+        "(22) E. Pfitzner*, C. Wachauf*, F. Kilchherr*, B. Pelz, W. Shih, M. Rief, and H. Dietz, 'Rigid DNA beams for high-resolution single-molecule mechanics',",
+        "Angewandte Chemie Intl. Edn., vol 52 (2013), p7766",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201302727/abstract"
+      ],
+      "stated_bibliographic_year": 2013,
+      "source": "dietz-publications.html",
+      "ordinal": 86,
+      "explicit_doi_candidates": [
+        "10.1002/anie.201302727"
+      ],
+      "target_key": "10.1002/anie.201302727"
+    },
+    {
+      "printed_number": "21",
+      "stated_year_heading": 2013,
+      "text_parts": [
+        "(21) V. Linko and H. Dietz, 'The enabled state of DNA nanotechnology',",
+        "Curr Opin Biotechnol , (2013), doi: 10.1016/j.copbio.2013.02.001",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.sciencedirect.com/science/article/pii/S0958166913000153"
+      ],
+      "stated_bibliographic_year": 2013,
+      "source": "dietz-publications.html",
+      "ordinal": 87,
+      "explicit_doi_candidates": [
+        "10.1016/j.copbio.2013.02.001"
+      ],
+      "target_key": "author_bibliography:dietz:f687189ae4d15fd1"
+    },
+    {
+      "printed_number": "20",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(20) J. Sobczak, T. Martin, T. Gerling, and H. Dietz, 'Rapid folding of DNA into nanoscale shapes at constant temperature',",
+        "Science , vol 338 (2012), p1458",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.sciencemag.org/content/338/6113/1458"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 88,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:7f1e626adbbab3d7"
+    },
+    {
+      "printed_number": "19",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(19) X. Bai, T. Martin, S. Scheres°, and H. Dietz°",
+        "'Cryo-EM structure of a 3D DNA-origami object'",
+        "P Natl Acad Sci USA , vol 109 (2012), 20012",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/content/109/49/20012.long"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 89,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:28fc7980b9043b84"
+    },
+    {
+      "printed_number": "18",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(18) M. Langecker*, V. Arnaut*, T. Martin*, J. List, S. Renner, M. Mayer, H. Dietz°, and F. Simmel° 'Synthetic lipid membrane channels formed by designed DNA nanostructures'",
+        "Science , vol 338 (2012), p932",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.sciencemag.org/content/338/6109/932.full"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 90,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:6bdeb9c6cb32e8b6"
+    },
+    {
+      "printed_number": "17",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(17) T. Martin and H. Dietz",
+        "'Magnesium-free self-assembly of multi-layer DNA objects'",
+        "Nature Communications , vol 3 (2012), #1103",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/ncomms/journal/v3/n10/full/ncomms2095.html"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 91,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:508d34845502134d"
+    },
+    {
+      "printed_number": "16",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(16) R. Wei*, T. Martin*, U. Rant°, and H. Dietz°",
+        "'DNA origami gatekeepers for solid-state nanopores'",
+        "Angewandte Chemie Intl. Edn., vol 51 (2012), p4864",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1521-3773/"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 92,
+      "explicit_doi_candidates": [
+        "10.1002/(issn)1521-3773/"
+      ],
+      "target_key": "author_bibliography:dietz:29529d50fa0fc155"
+    },
+    {
+      "printed_number": "15",
+      "stated_year_heading": 2012,
+      "text_parts": [
+        "(15) D. Kim, F. Kilchherr, H. Dietz°, and M. Bathe°, 'Quantitative prediction of 3D solution shape and flexibility of nucleic acid nanostructures',",
+        "Nucleic Acids Research , vol 40 (2012), p2862",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://nar.oxfordjournals.org/"
+      ],
+      "stated_bibliographic_year": 2012,
+      "source": "dietz-publications.html",
+      "ordinal": 93,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:8b6cb9cf133bb786"
+    },
+    {
+      "printed_number": "14",
+      "stated_year_heading": 2011,
+      "text_parts": [
+        "(14) M. Vukajlovic, H. Dietz, M. Schliwa, and Z. Ökten",
+        "'How kinesin-2 forms a stalk'",
+        "Molecular Biology of the Cell , vol 22 (2011), p4279",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.molbiolcell.org/"
+      ],
+      "stated_bibliographic_year": 2011,
+      "source": "dietz-publications.html",
+      "ordinal": 94,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:cfdbbe6a90d5997f"
+    },
+    {
+      "printed_number": "13",
+      "stated_year_heading": 2011,
+      "text_parts": [
+        "(13) C. Castro, F. Kilchherr, D. Kim, E. Shiao, T. Wauer, P. Wortmann, M. Bathe, and H. Dietz, 'A primer to scaffolded DNA origami',",
+        "Nature Methods , vol 8 (2011), p221",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/nmeth/index.html"
+      ],
+      "stated_bibliographic_year": 2011,
+      "source": "dietz-publications.html",
+      "ordinal": 95,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:044bab6981503da6"
+    },
+    {
+      "printed_number": "12",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(12) H. Dietz, S.M. Douglas, and W.M. Shih",
+        "'Folding DNA into twisted and curved nanoscale shapes'",
+        "Science , vol 325 (2009), p725",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.sciencemag.org/"
+      ],
+      "stated_bibliographic_year": 2009,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 1,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:af82d338a681b9f0"
+    },
+    {
+      "printed_number": "11",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(11) S.M. Douglas, H. Dietz, T. Liedl, B. Hogberg, F. Graf, and W.M. Shih, 'Self-assembly of DNA into nanoscale three-dimensional shapes',",
+        "Nature , vol 459 (2009), p414",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/nature/index.html"
+      ],
+      "stated_bibliographic_year": 2009,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 2,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:a9750f652667f050"
+    },
+    {
+      "printed_number": "10",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(10) H. Dietz and M. Rief",
+        "'Elastic bond network model for protein unfolding mechanics'",
+        "Phys Rev Lett , vol 100 (2008), 098101",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://prl.aps.org/"
+      ],
+      "stated_bibliographic_year": 2008,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 3,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:788f3b095dc6fb84"
+    },
+    {
+      "printed_number": "9",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(9) M. Mickler, R. Dima, H. Dietz, C. Hyeon, D. Thirumalai, and M. Rief",
+        "'Revealing the bifurcation in the unfolding pathway of GFP by using single-molecule experiments and simulations'",
+        "P Natl Acad Sci USA , vol 104 (2007), p20268",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/cgi/search"
+      ],
+      "stated_bibliographic_year": 2007,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 4,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:9a55ab35d0a041e1"
+    },
+    {
+      "printed_number": "8",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(8) H. Dietz*, T. Bornschlögl*, R. Heym, F. König, and M. Rief",
+        "'Programming protein self-assembly with coiled coils'",
+        "New J Phys , vol 9 (2007), p424",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.iop.org/EJ/abstract/1367-2630/9/11/424"
+      ],
+      "stated_bibliographic_year": 2007,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 5,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:041fed19e00b447f"
+    },
+    {
+      "printed_number": "7",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(7) T. Liedl, H. Dietz, B. Yurke, and F. Simmel",
+        "'Controlled Trapping and Release of Quantum Dots in a DNA-linked Hydrogel'",
+        "Small , vol 3/10 (2007), p1688",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www3.interscience.wiley.com/cgi-bin/abstract/116311948/ABSTRACT"
+      ],
+      "stated_bibliographic_year": 2007,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 6,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:6e56f9be9424a69b"
+    },
+    {
+      "printed_number": "6",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(6) H. Dietz and M. Rief",
+        "'Detecting molecular fingerprints in single molecule force spectroscopy using pattern recognition'",
+        "Jap J Appl Phys , vol 46-8B (2007), p5540",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://jjap.ipap.jp/link"
+      ],
+      "stated_bibliographic_year": 2007,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 7,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:47fd75b01e2fc8e2"
+    },
+    {
+      "printed_number": "5",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(5) H. Dietz, F. Berkemeier, M. Bertz, and M. Rief",
+        "'Anisotropic deformation response of single protein molecules'",
+        "P Natl Acad Sci USA , vol 103 (2006), p12724",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/cgi/search"
+      ],
+      "stated_bibliographic_year": 2006,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 8,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:af7c10be93dbb763"
+    },
+    {
+      "printed_number": "4",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(4) H. Dietz and M. Rief",
+        "'Protein structure by mechanical triangulation'",
+        "P Natl Acad Sci USA , vol 103 (2006), p1244",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/cgi/search"
+      ],
+      "stated_bibliographic_year": 2006,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 9,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:662070957db8dac1"
+    },
+    {
+      "printed_number": "3",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(3) H. Dietz, M. Bertz, M. Schlierf, F. Berkemeier, T. Bornschlögl, J. Junker, and M. Rief, 'Cysteine engineering of polyproteins for single molecule force spectroscopy',",
+        "Nature Protocols , vol 1 (2006), p80",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.nature.com/nprot/index.html"
+      ],
+      "stated_bibliographic_year": 2006,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 10,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:20cd8842a1a5581c"
+    },
+    {
+      "printed_number": "2",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(2) S. Kufer, H. Dietz, C. Albrecht, K. Blank, A. Kardinal, M. Rief, and H. Gaub, 'Covalent immobilization of recombinant fusion proteins with hAGT for single molecule force spectroscopy'",
+        "Eur Biophys J , vol 35 (2005), p72",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://springerlink.metapress.com/content/1432-1017/"
+      ],
+      "stated_bibliographic_year": 2005,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 11,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:1ed8bf3006e3ef7a"
+    },
+    {
+      "printed_number": "1",
+      "stated_year_heading": null,
+      "text_parts": [
+        "(1) H. Dietz and M. Rief, 'Exploring the energy landscape of Green Fluorescent Protein by single-molecule mechanical experiments'",
+        "P Natl Acad Sci USA , vol 101 (2004), p16192",
+        "[publisher website]"
+      ],
+      "links": [
+        "http://www.pnas.org/cgi/search"
+      ],
+      "stated_bibliographic_year": 2004,
+      "source": "dietz-publications-pre2010.html",
+      "ordinal": 12,
+      "explicit_doi_candidates": [],
+      "target_key": "author_bibliography:dietz:140bbde9b12fb1ad"
+    }
+  ],
+  "unnumbered_sections_and_source_links": [
+    {
+      "source": "dietz-publications.html",
+      "unnumbered_patent_book_thesis_paragraphs": [
+        {
+          "text": "J.J. Funke, K. Wagenbauer, H. Dietz, B. Kick, J.-P. Sobczak, P. Ketterer",
+          "links": []
+        },
+        {
+          "text": "'Conditionally switchable nanostructure'",
+          "links": []
+        },
+        {
+          "text": "PCT/EP2020/067329",
+          "links": []
+        },
+        {
+          "text": "T. Gerling and H. Dietz",
+          "links": []
+        },
+        {
+          "text": "'Novel method for stabilizing nucleic acid nanostructures'",
+          "links": []
+        },
+        {
+          "text": "PCT/EP2019/064707",
+          "links": []
+        },
+        {
+          "text": "F. Praetorius and H. Dietz.",
+          "links": []
+        },
+        {
+          "text": "'Scalable biotechnological production of DNA single strand molecules of defined sequence and length'",
+          "links": []
+        },
+        {
+          "text": "JP KR CN WO EP US (e.g. US20190203242A1)",
+          "links": []
+        },
+        {
+          "text": "M. Langecker, V. Arnaut, T. Martin, F.C. Simmel, and H. Dietz.",
+          "links": []
+        },
+        {
+          "text": "'Nucleic acid based nanopores or transmembrane channels and their uses'",
+          "links": []
+        },
+        {
+          "text": "EP 2695949 A1 (granted)",
+          "links": []
+        },
+        {
+          "text": "M. Bathe, D.N. Kim, H. Dietz",
+          "links": []
+        },
+        {
+          "text": "'Method and Apparatus for Controlling Properties of Nucleic Acid Nanostructures'",
+          "links": []
+        },
+        {
+          "text": "US Patent No. 12/976,737 (granted)",
+          "links": []
+        },
+        {
+          "text": "H. Dietz and T. Liedl",
+          "links": []
+        },
+        {
+          "text": "'Modifying structures, preferably biocompatible three-dimensional microstructures in a matrix comprises providing matrix made of liquid matrix material, adding a liquid crosslinking agent using injection pipette and moving the pipette'",
+          "links": []
+        },
+        {
+          "text": "DE102008020665-A1 (pending decision)",
+          "links": []
+        }
+      ],
+      "all_source_links": [
+        "http://advances.sciencemag.org/content/2/11/e1600974.figures-only",
+        "http://advances.sciencemag.org/content/2/2/e1501209",
+        "http://advances.sciencemag.org/content/4/8/eaau1157",
+        "http://mcb.asm.org/content/early/2015/03/02/MCB.01070-14.full.pdf+html",
+        "http://nar.oxfordjournals.org/",
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201302727/abstract",
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201405991/abstract",
+        "http://onlinelibrary.wiley.com/doi/10.1002/anie.201708722/abstract",
+        "http://onlinelibrary.wiley.com/doi/10.1002/bit.26200/full",
+        "http://onlinelibrary.wiley.com/doi/10.1002/cbic.201600289/abstract",
+        "http://onlinelibrary.wiley.com/doi/10.1002/cbic.201700377/abstract",
+        "http://onlinelibrary.wiley.com/doi/10.1002/elps.201400323/abstract",
+        "http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1521-3773/",
+        "http://pubs.acs.org/doi/abs/10.1021/acs.molpharmaceut.6b00716",
+        "http://pubs.acs.org/doi/abs/10.1021/acs.nanolett.6b01338",
+        "http://pubs.acs.org/doi/abs/10.1021/nl504375c",
+        "http://pubs.acs.org/doi/abs/10.1021/nn405045x",
+        "http://pubs.acs.org/doi/full/10.1021/acs.nanolett.6b04169",
+        "http://pubs.acs.org/doi/full/10.1021/acsnano.6b04787",
+        "http://pubs.acs.org/journal/nalefd",
+        "http://science.sciencemag.org/content/353/6304/aaf5508",
+        "http://science.sciencemag.org/content/355/6331/eaam5488",
+        "http://www.molbiolcell.org/",
+        "http://www.nature.com/ncomms/2016/160923/ncomms12787/full/ncomms12787.html",
+        "http://www.nature.com/ncomms/index.html",
+        "http://www.nature.com/ncomms/journal/v3/n10/full/ncomms2095.html",
+        "http://www.nature.com/nmat/journal/v14/n8/fig_tab/nmat4372_ft.html",
+        "http://www.nature.com/nmeth/index.html",
+        "http://www.nature.com/nnano/journal/v10/n10/full/nnano.2015.223.html",
+        "http://www.nature.com/nnano/journal/vaop/ncurrent/full/nnano.2015.240.html",
+        "http://www.nature.com/onc/journal/vaop/ncurrent/full/onc2014300a.html",
+        "http://www.pnas.org/content/109/49/20012.long",
+        "http://www.pnas.org/content/115/32/E7512",
+        "http://www.pnas.org/content/early/2016/11/04/1612720113.full",
+        "http://www.sciencedirect.com/science/article/pii/S0958166913000153",
+        "http://www.sciencemag.org/content/338/6109/932.full",
+        "http://www.sciencemag.org/content/338/6113/1458",
+        "http://www.sciencemag.org/content/347/6229/1446.full",
+        "https://a.jimdo.com/app/auth/signin/jumpcms/",
+        "https://advances.sciencemag.org/content/5/5/eaaw1412/tab-article-info",
+        "https://cms.e.jimdo.com/app/cms/logout.php",
+        "https://iopscience.iop.org/article/10.1088/1758-5090/ad4744/meta",
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201901056",
+        "https://onlinelibrary.wiley.com/doi/10.1002/anie.201901734",
+        "https://onlinelibrary.wiley.com/doi/10.1002/bit.28171",
+        "https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.201812463",
+        "https://onlinelibrary.wiley.com/doi/full/10.1002/adfm.202408110",
+        "https://pubs.acs.org/doi/10.1021/acs.macromol.0c00263",
+        "https://pubs.acs.org/doi/10.1021/acsnano.0c10137",
+        "https://pubs.acs.org/doi/10.1021/acsnano.1c01669",
+        "https://pubs.acs.org/doi/10.1021/acsnano.9b01025",
+        "https://pubs.acs.org/doi/10.1021/acsnano.9b03140",
+        "https://pubs.acs.org/doi/10.1021/jacs.0c10486",
+        "https://pubs.acs.org/doi/abs/10.1021/acs.nanolett.8b00592",
+        "https://pubs.acs.org/doi/abs/10.1021/jacs.1c09967",
+        "https://pubs.acs.org/doi/full/10.1021/acs.nanolett.4c00915",
+        "https://pubs.acs.org/doi/full/10.1021/acsami.4c03700",
+        "https://pubs.acs.org/doi/full/10.1021/acsnano.1c11328",
+        "https://pubs.acs.org/doi/full/10.1021/acsnano.2c11402",
+        "https://pubs.acs.org/doi/full/10.1021/acssynbio.3c00540",
+        "https://pubs.acs.org/doi/full/10.1021/jacs.2c08463",
+        "https://pubs.acs.org/doi/full/10.1021/jacs.2c12733",
+        "https://pubs.rsc.org/en/content/articlehtml/2020/sm/d0sm00150c",
+        "https://www.annualreviews.org/doi/abs/10.1146/annurev-biophys-110520-125739",
+        "https://www.biorxiv.org/content/10.1101/2024.01.18.576181v1.abstract",
+        "https://www.cell.com/cell-reports-physical-science/fulltext/S2666-3864(22)00563-X",
+        "https://www.dietzlab.org/",
+        "https://www.dietzlab.org/about/",
+        "https://www.dietzlab.org/contact/",
+        "https://www.dietzlab.org/goals/",
+        "https://www.dietzlab.org/j/privacy",
+        "https://www.dietzlab.org/people/",
+        "https://www.dietzlab.org/people/bio-dietz/",
+        "https://www.dietzlab.org/publications/",
+        "https://www.dietzlab.org/publications/2010/",
+        "https://www.dietzlab.org/research/",
+        "https://www.dietzlab.org/research/bionanotech/",
+        "https://www.dietzlab.org/research/resources/",
+        "https://www.dietzlab.org/teaching/",
+        "https://www.mdpi.com/1999-4915/12/11/1282",
+        "https://www.nature.com/articles/nature24650",
+        "https://www.nature.com/articles/nature24651",
+        "https://www.nature.com/articles/s41467-018-03198-9",
+        "https://www.nature.com/articles/s41467-018-03313-w",
+        "https://www.nature.com/articles/s41467-018-04139-2",
+        "https://www.nature.com/articles/s41467-020-20020-7",
+        "https://www.nature.com/articles/s41467-021-24675-8",
+        "https://www.nature.com/articles/s41467-021-27230-7",
+        "https://www.nature.com/articles/s41467-022-28446-x",
+        "https://www.nature.com/articles/s41467-023-36601-1",
+        "https://www.nature.com/articles/s41563-021-01020-4",
+        "https://www.nature.com/articles/s41565-021-00958-5",
+        "https://www.nature.com/articles/s41565-023-01362-x",
+        "https://www.nature.com/articles/s41565-023-01471-7",
+        "https://www.nature.com/articles/s41565-023-01527-8",
+        "https://www.nature.com/articles/s41567-022-01683-z",
+        "https://www.nature.com/articles/s41576-019-0175-6",
+        "https://www.nature.com/articles/s41586-022-04910-y",
+        "https://www.nature.com/nmat/journal/vaop/ncurrent/full/nmat4909.html",
+        "https://www.pnas.org/doi/10.1073/pnas.2207902119",
+        "https://www.pnas.org/doi/abs/10.1073/pnas.2312775121",
+        "https://www.science.org/doi/10.1126/science.adq1741",
+        "https://www.sciencedirect.com/science/article/pii/S0021979719307180",
+        "javascript:void(0)"
+      ]
+    },
+    {
+      "source": "dietz-publications-pre2010.html",
+      "unnumbered_patent_book_thesis_paragraphs": [
+        {
+          "text": "M. Rief and H. Dietz",
+          "links": []
+        },
+        {
+          "text": "'Single molecule force spectroscopy of proteins'",
+          "links": []
+        },
+        {
+          "text": "Contributed to 'Soft condensed matter physics in Molecular and Cell biology'",
+          "links": []
+        },
+        {
+          "text": "(2006), ISBN 0-7503-1023-5",
+          "links": []
+        },
+        {
+          "text": "H. Dietz",
+          "links": []
+        },
+        {
+          "text": "'Mechanische Anisotropie einer Proteinstruktur in Einzelmolekülexperimenten'",
+          "links": []
+        },
+        {
+          "text": "Doctoral Thesis, TU Munich (2007)",
+          "links": []
+        },
+        {
+          "text": "H. Dietz",
+          "links": []
+        },
+        {
+          "text": "'Mechanik des Grün Fluoreszierenden Proteins'",
+          "links": []
+        },
+        {
+          "text": "Diploma Thesis, LMU Munich (2004)",
+          "links": []
+        }
+      ],
+      "all_source_links": [
+        "http://jjap.ipap.jp/link",
+        "http://prl.aps.org/",
+        "http://springerlink.metapress.com/content/1432-1017/",
+        "http://www.iop.org/EJ/abstract/1367-2630/9/11/424",
+        "http://www.nature.com/nature/index.html",
+        "http://www.nature.com/nprot/index.html",
+        "http://www.pnas.org/cgi/search",
+        "http://www.sciencemag.org/",
+        "http://www3.interscience.wiley.com/cgi-bin/abstract/116311948/ABSTRACT",
+        "https://a.jimdo.com/app/auth/signin/jumpcms/",
+        "https://cms.e.jimdo.com/app/cms/logout.php",
+        "https://www.dietzlab.org/",
+        "https://www.dietzlab.org/about/",
+        "https://www.dietzlab.org/app/download/8873040885/curvature_dietz_et_al.pdf",
+        "https://www.dietzlab.org/app/download/8873041685/curvature_supporting_info.pdf",
+        "https://www.dietzlab.org/app/download/8873042685/curvature_perspectives.pdf",
+        "https://www.dietzlab.org/app/download/8873045885/smd_hd_tl_bh_fg_wms.pdf",
+        "https://www.dietzlab.org/app/download/8873046985/news_and_views_LaBean.pdf",
+        "https://www.dietzlab.org/app/download/8873059785/nature08016-s1.pdf",
+        "https://www.dietzlab.org/app/download/8873062385/bond_network.pdf",
+        "https://www.dietzlab.org/app/download/8873065685/mickler_dietz.pdf",
+        "https://www.dietzlab.org/app/download/8873067985/controlled_trapping.pdf",
+        "https://www.dietzlab.org/app/download/8873069185/anisotropy.pdf",
+        "https://www.dietzlab.org/app/download/8873070685/triangulation.pdf",
+        "https://www.dietzlab.org/app/download/8873071385/hAGTPaper.pdf",
+        "https://www.dietzlab.org/app/download/8873071985/GFP_NCterm.pdf",
+        "https://www.dietzlab.org/app/download/8873072685/hendrik_dietz.pdf",
+        "https://www.dietzlab.org/app/download/8873118585/coiledcoils.pdf",
+        "https://www.dietzlab.org/app/download/8873119585/cysteine_engineering.pdf",
+        "https://www.dietzlab.org/app/download/8873124385/diplom_dietz.pdf",
+        "https://www.dietzlab.org/contact/",
+        "https://www.dietzlab.org/goals/",
+        "https://www.dietzlab.org/j/privacy",
+        "https://www.dietzlab.org/people/",
+        "https://www.dietzlab.org/people/bio-dietz/",
+        "https://www.dietzlab.org/publications/",
+        "https://www.dietzlab.org/publications/2010/",
+        "https://www.dietzlab.org/research/",
+        "https://www.dietzlab.org/research/bionanotech/",
+        "https://www.dietzlab.org/research/resources/",
+        "https://www.dietzlab.org/teaching/",
+        "javascript:void(0)"
+      ]
+    }
+  ],
+  "caveats": [
+    "Public page DOI typography retained as candidates, not corrected silently.",
+    "Patents retained as separate paragraphs for subsequent record reconciliation; not journal papers.",
+    "Year headings are bibliography placement, not verified first-publication dates."
+  ]
+}

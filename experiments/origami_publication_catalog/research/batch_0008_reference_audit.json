@@ -1,0 +1,36 @@
+{
+  "sources": [
+    {
+      "run_id": "backward-liu-fan-2013-20261105",
+      "references_saved": 73,
+      "matched_existing_explicit_doi": 58,
+      "unresolved_targets": 15,
+      "last_reference": {
+        "number": 73,
+        "dois": [
+          "10.1021/nl200306w"
+        ],
+        "text": "Pearson AC, Pound E, Woolley AT, Linford MR, Harb JN, Davis RC (2011) Chemical alignment of DNA origami to block copolymer patterned arrays of 5 nm gold nanoparticles. Nano Lett 11(5):1981\u20131987Article CAS Google Scholar"
+      }
+    },
+    {
+      "run_id": "backward-jin-graphene-2013-20261105",
+      "references_saved": 60,
+      "matched_existing_explicit_doi": 12,
+      "unresolved_targets": 48,
+      "last_reference": {
+        "number": 60,
+        "dois": [
+          "10.1021/nl0617033"
+        ],
+        "text": "Barone, V., Hod, O. & Scuseria, G. E. . Electronic structure and stability of semiconducting graphene nanoribbons. Nano Lett. 6, 2748\u20132754 (2006)."
+      }
+    }
+  ],
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5457,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9323
+  }
+}

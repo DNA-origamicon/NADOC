@@ -1,0 +1,205 @@
+[
+  {
+    "source": "assets/sources/acs-expansion-20261104/3717940-nn5b05972_si_002.zip",
+    "sha256": "de0354b6db3d18471c295aa75cfa1da328ea88596fabfca9e09906392607cdd9",
+    "members": [
+      {
+        "name": "segmentation_procedure/align_origami_particles_from_overlay.m",
+        "bytes": 12182,
+        "sha256": "007cbeda29ac1a87519c33464c08d34c9e6d99cba993e29f2063b8c4eb5505e5"
+      },
+      {
+        "name": "__MACOSX/segmentation_procedure/._align_origami_particles_from_overlay.m",
+        "bytes": 120,
+        "sha256": "812a49dcca93168d48b33192d1d2058cea0185ffbdb15bd770a55cb828abda3f"
+      },
+      {
+        "name": "segmentation_procedure/convert_origami_csv_results_into_mat.m",
+        "bytes": 2039,
+        "sha256": "f64109267503efcca092dc20c5f9e2b3174908d6bbf3312b8e8a6786a3668f21"
+      },
+      {
+        "name": "__MACOSX/segmentation_procedure/._convert_origami_csv_results_into_mat.m",
+        "bytes": 120,
+        "sha256": "812a49dcca93168d48b33192d1d2058cea0185ffbdb15bd770a55cb828abda3f"
+      },
+      {
+        "name": "segmentation_procedure/origami_32bit_find_particles_in_dir.ijm",
+        "bytes": 3625,
+        "sha256": "15358f540205e9fc18ed88c33d8bbc3a3ab67a13b98ccfa00db1ab83d65a025e"
+      },
+      {
+        "name": "segmentation_procedure/origami_32bit_find_particles_in_dir_test_thresholds.ijm",
+        "bytes": 3110,
+        "sha256": "97c53d76c03210e0f8cd5c8500cac726a6af03ce610916933f92bc347168801b"
+      },
+      {
+        "name": "segmentation_procedure/origami_histograms_and_gauss_fit.m",
+        "bytes": 23164,
+        "sha256": "b588d2d0067f7677b292a2198f050139a59317bbd49d509823288eeee7831153"
+      },
+      {
+        "name": "__MACOSX/segmentation_procedure/._origami_histograms_and_gauss_fit.m",
+        "bytes": 120,
+        "sha256": "812a49dcca93168d48b33192d1d2058cea0185ffbdb15bd770a55cb828abda3f"
+      },
+      {
+        "name": "segmentation_procedure/origami_image_registration.m",
+        "bytes": 5462,
+        "sha256": "26565a7bd43c5c7afd61646b35d7fea65c4baab8bfe11a3c315c3a804e4970e1"
+      },
+      {
+        "name": "__MACOSX/segmentation_procedure/._origami_image_registration.m",
+        "bytes": 120,
+        "sha256": "812a49dcca93168d48b33192d1d2058cea0185ffbdb15bd770a55cb828abda3f"
+      },
+      {
+        "name": "segmentation_procedure/results_property_name.mat",
+        "bytes": 682,
+        "sha256": "0aff5c8044b78ad2798a43ee879ad947291812a30db266f073f0a87b4a163b9c"
+      },
+      {
+        "name": "__MACOSX/segmentation_procedure/._results_property_name.mat",
+        "bytes": 120,
+        "sha256": "92190c2b2c0e1fb900a48ac8485f501bba8e38a0b4f356338b981871466b850e"
+      }
+    ],
+    "inspection": "Archive inventory only; no molecular authoring or topology verification"
+  },
+  {
+    "source": "assets/sources/acs-expansion-20261104/4339651-nl6b00381_si_004.zip",
+    "sha256": "027108865ba988e7995ad400bd5c8ac0db2515860a36630d641f4604814d9453",
+    "members": [
+      {
+        "name": "dodecahedral truss.json",
+        "bytes": 757211,
+        "sha256": "80177bb9f166560bc00f3695a109b8fb4f47f8053173c6933efddcae9ee942eb"
+      },
+      {
+        "name": "flat truss.json",
+        "bytes": 757665,
+        "sha256": "71f61f9e9d2f9372c8f04467841268e939519ec577d59c63236e77b9c3d57658"
+      },
+      {
+        "name": "octahedral truss.json",
+        "bytes": 757144,
+        "sha256": "8a5864536bf3e9fa4a8c33773cf698fbbc810537e01fe1e449bdf9c67b527f7a"
+      },
+      {
+        "name": "tetrahedral truss.json",
+        "bytes": 757130,
+        "sha256": "70dd4ce3eaa8e7313e154d1633cefba01f69df7d057782fd9d19e8f8d3b2ded1"
+      }
+    ],
+    "inspection": "Archive inventory only; no molecular authoring or topology verification"
+  },
+  {
+    "source": "assets/sources/acs-expansion-20261104/4816912-ja5b10502_si_002.xlsx",
+    "sha256": "1a2ed1f8eb0e7f93cb8e51355bc19a87f0542299f438effa43892e997f9bb9ef",
+    "members": [
+      {
+        "name": "[Content_Types].xml",
+        "bytes": 1934,
+        "sha256": "070c1e6e4e165f9bedcfd31b3700dfee6d73dbf0c4936b93389f958d2a6e1ec5"
+      },
+      {
+        "name": "_rels/.rels",
+        "bytes": 733,
+        "sha256": "941e47d639bd3c29b65532e7f6a03f94e1dbd6633ff87a774a737f65cbd0552c"
+      },
+      {
+        "name": "xl/_rels/workbook.xml.rels",
+        "bytes": 1262,
+        "sha256": "b58a44f96938ee8d8f2b7e64281838c8709593859f75a5c6b4e0570e1c79d220"
+      },
+      {
+        "name": "xl/workbook.xml",
+        "bytes": 1461,
+        "sha256": "14398a0b0cfc1d8b36114d53dcd25b7ddb3027b236b467d8d00ba22aaec64f67"
+      },
+      {
+        "name": "xl/worksheets/sheet4.xml",
+        "bytes": 18301,
+        "sha256": "214ac6fc2d19b6e660fe81c690ad23b1e191aaaa4e53e3c00314172d5c7ac84d"
+      },
+      {
+        "name": "xl/worksheets/sheet3.xml",
+        "bytes": 4678,
+        "sha256": "78b3e83f2f4c6f5dba4a760ad8539b0ed00565988bac64541ac81bfb5a6c1168"
+      },
+      {
+        "name": "xl/worksheets/sheet2.xml",
+        "bytes": 24354,
+        "sha256": "a6eb4e88f751f045e00f06e504c44c11457818f6459e12548df2be1ab32d645e"
+      },
+      {
+        "name": "xl/worksheets/_rels/sheet5.xml.rels",
+        "bytes": 299,
+        "sha256": "ee9fa12d10c5ee0ae23c711aad3be36f1d99d87934a588aac4ecaf1028bdef16"
+      },
+      {
+        "name": "xl/drawings/_rels/drawing1.xml.rels",
+        "bytes": 292,
+        "sha256": "15a140b2ab9e3d49a7b49f824413744cc4959bc34c427cf50f7d6016697293c0"
+      },
+      {
+        "name": "xl/worksheets/sheet1.xml",
+        "bytes": 23167,
+        "sha256": "c6130f93e328b712c6124379febc1355a04e0cd37eb66ef1a6e82acb1c15c6f8"
+      },
+      {
+        "name": "docProps/thumbnail.jpeg",
+        "bytes": 29996,
+        "sha256": "b421920050db29a63f24dd5b12b915126115a619edab250697f624345c1dce0d"
+      },
+      {
+        "name": "xl/drawings/drawing1.xml",
+        "bytes": 979,
+        "sha256": "7d49b95318926f566cfe7f2a174bdc1b1370a173aeff71e295c2aa4a0c677e77"
+      },
+      {
+        "name": "xl/worksheets/sheet5.xml",
+        "bytes": 719,
+        "sha256": "9589531c2b352c3ef0fceb3ce569e9c37eda2306ba9bebb6fecb719cbc08467e"
+      },
+      {
+        "name": "xl/theme/theme1.xml",
+        "bytes": 7646,
+        "sha256": "af2fb29aa44e18757cbc03afd5c6ddf60deef78419009b6d07367fff46136fb1"
+      },
+      {
+        "name": "xl/styles.xml",
+        "bytes": 49507,
+        "sha256": "49bc9fa1ca5dbfedba570019f12dae7d7617c5f4929c69611c53d246971aff42"
+      },
+      {
+        "name": "xl/sharedStrings.xml",
+        "bytes": 48346,
+        "sha256": "21a344c8a0340310758975db5b1243b4e2d5d40a0c63b30ff94649e8232af7b3"
+      },
+      {
+        "name": "xl/media/image1.png",
+        "bytes": 466493,
+        "sha256": "d13f5852f378d0752c7aa7e91f48bcd1f03bf69e9841e9799dcfdcee43b4b713"
+      },
+      {
+        "name": "docProps/app.xml",
+        "bytes": 926,
+        "sha256": "f159bab0047af544d58962d26c336ac4d3f9931fc46b98a68511a212bb0fdc25"
+      },
+      {
+        "name": "docProps/core.xml",
+        "bytes": 623,
+        "sha256": "d17791cc46303600292322b15cda18543fa3a5e6a4dc06e2a270e295593ca5c8"
+      }
+    ],
+    "inspection": "Archive inventory only; no molecular authoring or topology verification",
+    "sheet_names": [
+      "staples",
+      "hairpin",
+      "blockers",
+      "Linkers",
+      "CaDNAno Origami Snapshot"
+    ]
+  }
+]

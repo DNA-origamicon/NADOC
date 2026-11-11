@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "source": "10.1021/jacs.7b09323",
+      "expected": 11,
+      "saved": 11
+    },
+    {
+      "source": "10.1021/acs.nanolett.7b04283",
+      "expected": 15,
+      "saved": 15
+    }
+  ],
+  "total_references": 26,
+  "unique_targets": 26,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5732,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10857
+  }
+}

@@ -116,7 +116,7 @@ it('shows the saved job box and actual ions without fitting the current design',
  const source=new DOMParser().parseFromString(readFileSync('index.html','utf8'),'text/html')
  for(const id of ['md-box-solvent-toggle','md-box-solvent-body','md-surface-body'])document.body.append(source.getElementById(id))
  const state={currentDesign:{id:'control',metadata:{}},currentGeometry:[1]},listeners=[]
- const api={getMdSolventMeta:vi.fn(async()=>({ready:true,box_nm:[6.093,8.3438,12.8142],species:{MG:52,CL:11,NA:0}})),fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[14.093,16.344,20.659]}}))}
+ const api={getMdSolventMeta:vi.fn(async()=>({ready:true,npt_allowed:false,source_cell_center_nm:[2,3,4],box_nm:[6.093,8.3438,12.8142],species:{MG:52,CL:11,NA:0}})),fetchProtocolBoxPreview:vi.fn(async()=>({box_preview:{selected_nm:[14.093,16.344,20.659]}}))}
  ui=initBoxSolvent({api,store:{getState:()=>state,subscribe:fn=>{listeners.push(fn);return()=>{}}}})
  const events=[],listen=e=>events.push(e.detail)
  window.addEventListener('nadoc:box-solvent-details',listen)
@@ -124,7 +124,8 @@ it('shows the saved job box and actual ions without fitting the current design',
   ui.selectJob({job_id:'control',design_name:'2hb_1xT',created_at:1792944569,status:'completed'},{padding_nm:2,box_mode:'bbox'})
   document.getElementById('md-box-solvent-toggle').click()
   document.getElementById('md-box-view-details').click()
-  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,estimated:false,dimensions:[6.093,8.3438,12.8142],numbers:{mg:52,cl:11,na:0}}))
+  await vi.waitFor(()=>expect(events.at(-1)).toMatchObject({enabled:true,estimated:false,nptAllowed:false,sourceCellCenter:true,center:[2,3,4],dimensions:[6.093,8.3438,12.8142],numbers:{mg:52,cl:11,na:0}}))
+  expect(document.getElementById('md-box-solvent-body').textContent).toContain('fixed-volume periodic cell (NVT)')
   expect(api.fetchProtocolBoxPreview).not.toHaveBeenCalled()
   expect(document.getElementById('md-box-padding').disabled).toBe(true)
   state.currentGeometry=[2];listeners.forEach(fn=>fn())

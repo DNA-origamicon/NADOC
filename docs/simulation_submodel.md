@@ -3,8 +3,243 @@
 2026-11-10. Normal local oxDNA Run now extracts and simulates the boxed region
 plus the fixed shell. The source design and full job topology remain intact;
 a full-order display projection restores omitted context for existing visualizers.
-NAMD still stores/displays the selection only. The dated experiments below are
-historical evidence, not descriptions of the current managed execution path.
+NAMD now prepares cropped explicit-solvent DNA packages with a uniformly restrained shell
+for relaxation and production. The dated experiments below are historical evidence,
+not descriptions of the current managed execution path.
+
+## Launch estimates and confirmations (2026-11-10)
+
+Duration alone never opens a launch confirmation: relaxation stages can be skip
+accelerated. The shared NAMD/oxDNA confirmation now triggers only for predicted
+output above 10 GiB, titled “Large output”. RAM/VRAM admission and low-disk checks
+remain independent. ETA is still descriptive wherever displayed.
+
+NAMD relaxation captures and saves the selected submodel before either estimator
+runs. Sizing uses the preparation crop, including whole residues and bonded
+support; solvent, ions and fixed-shell buffers count toward resource budgets.
+Cache identity includes box pose and shell width. Submodels quote offload, and
+preparation RAM also budgets the full source topology transient. Production
+forecasts use the prepared PSF/cell and expose saved-package memory ceilings;
+actual production admission is checked again at launch.
+
+Read-only R1 comparison: full 505,099 vs cropped 172,522 solvated atom upper bound,
+with cropped RAM 1,705 MiB, VRAM 1,171 MiB and output 1.592 GiB. These are planning
+budgets, not measured usage; no dynamics were run for this estimator check.
+
+## NAMD submodels (2026-11-10)
+
+New packages use a **3 nm shell by default** and **uniform k=0.1 kcal/mol/Å²**
+on mobile shell DNA heavy atoms (native NAMD convention U=k·r²). The outer
+0.3 nm, measured at the nucleotide P/C1′ representative, and whole retained
+residues participating in cut bonded terms remain fixed. The core is free in
+production; all water and ions remain mobile. This is the uniform treatment
+selected after the matched-start gradient comparison, not a convergence claim.
+
+The version-2 `submodel.json` records fixed and restrained indices and the
+boundary recipe. Existing version-1 jobs retain their entirely fixed shell,
+including continuations. Relaxation keeps its scheduled core restraints, while
+shell heavy-atom coefficients stay at 0.1 independently of stage scaling.
+Production shell references are reset to the parent's native checkpoint;
+checkpoint coordinates and velocity continuation are preserved. NVT and GPU
+offload remain required, with 4 fs HMR and 1 ps⁻¹ production damping.
+
+
+Managed uniform-shell verification: a new central-box `Submodel_tests.nadoc`
+relaxation completed minimization plus all 21 shortened stages (1,000 steps
+at 2 fs each), then a separate 5,000-step production child completed at **4 fs
+HMR**, 1 ps⁻¹. The emitted markers contain 3,948 restrained heavy shell atoms,
+1,458 fixed boundary atoms, and 5,363 unrestrained production core atoms;
+all solvent markers are zero. Native fixed-atom displacement was exactly zero.
+The isolated evidence is `.development-artifacts/namd-uniform-default-20261110/`.
+An initial production request inherited 2 fs from relaxation; the qualified
+production request explicitly pins 4 fs/HMR. This is workflow verification,
+not an equilibrated trajectory or another full-reference comparison.
+
+Browser verification exercised job creation, saved box/shell restoration, native
+playback, RMSF, occupancy/density, T–T propensity, water/ions and periodic-box
+views. Water is deliberately available in Display MD snapshots, not full
+trajectory playback. Nanopore-specific views are disabled for this DNA-only job.
+Visual inspection found and fixed atomistic scalar-map cloning dropping the
+zero-value fallback for unscored bases. The follow-up checked all 8,349 rendered
+heavy-atom colors against the map and visually confirmed the corrected view.
+Browser copies/captures were removed; source design bytes were unchanged.
+Final software checks: FAST 20,691 passed / 90 skipped, with the pre-existing
+CPD packet-contract failure; frontend 10,192 passed / one skipped; smoke 25
+passed; lint passed. FULL remains deferred by the test-session gate. The FAST
+suite exceeded its aggregate backstop with zero individual timing violations.
+
+New NAMD production requests default to **1 ps⁻¹**, including submodels and
+continuations of a job that explicitly used another coefficient. Explicit new
+production overrides remain supported; historical jobs retain their original
+protocol. Relaxation-stage damping is unchanged.
+
+Changing a completed/preparing job's box or shell now starts a fresh setup and
+clears its job selection, preserving the historical job's immutable region.
+Creating a NAMD job saves its box atomically with the creation request; the UI
+adopts that saved region without an unnecessary second PUT. Visibility changes
+can still be saved on completed jobs. Shell inputs retain in-progress edits
+through unrelated sidebar refreshes; committing the value saves the intended
+radius rather than a value repainted from the old job.
+
+The submodel controls sit at the bottom of the Box / Box and solvent card.
+**Use as zoom volume** is enabled when a box is loaded and copies its inner bounds
+and rotation into the existing Zoom Volume inset (excluding the shell). The
+zoom is an independent snapshot; click again to update it after editing the box.
+
+The submodel controls now open only after clicking Define/Edit submodel; guidance
+is on the button's hover tooltip. When a NAMD region exists, the viewport hides
+the larger solvent-cell/margin overlay and labels the oriented mobile box instead.
+The surrounding-shell preview remains available. This changes visualization, not the
+actual solvent cell used by the engine.
+
+The user-requested completed trial copies are now in the normal workspace job list:
+
+| Source | Relaxation job | Production child |
+| --- | --- | --- |
+| `duplex.nadoc` | `0200c9e048cc` | `de6b538207cb` |
+| `Submodel_tests.nadoc` | `063b14bd09aa` | `bb93e0db63bd` |
+
+The published copies preserve the source snapshots, native inputs, trajectories
+and parent links. Their import receipts identify the original isolated evidence;
+known preparation settings are restored in job metadata so the cards show the
+actual custom 150 mM NaCl, zero Mg and 2 nm solvent padding.
+
+Both trials used explicit TIP3P water, CHARMM DNA parameters, periodic PME and
+300 K NVT. The duplex contains 45,144 waters, 165 sodium and 123 chloride ions;
+the specimen contains 41,933 waters, 307 sodium and 115 chloride ions. The ion
+imbalance neutralizes the retained DNA. Inspection of the fixed-atom marker
+confirms **no water or ions were fixed**, even inside the geometric shell. Only
+DNA outside the mobile region was fixed. Mobile non-hydrogen atoms use Langevin
+damping of 5 ps⁻¹ during relaxation and 1 ps⁻¹ during production.
+
+A restrained, thermostatted DNA buffer is a sensible next comparison against
+the fixed shell. Harmonic restraints allow limited mechanical response; Langevin
+friction plus noise exchanges heat with a bath. Friction alone neither anchors
+the boundary nor repairs steric clashes. A graded buffer with an outer fixed
+layer must preserve complete bonded support for every newly mobile atom. Compare
+shell widths, base pairing, local RMSF, boundary strain, temperature and solvent
+density against full-model runs before selecting defaults. The classic
+[Brooks–Brünger–Karplus stochastic-boundary study](https://doi.org/10.1002/bip.360240509)
+supports harmonically constrained Langevin buffer atoms in a protein example;
+it does not establish DNA-specific parameters. NAMD supports
+[per-atom Langevin coefficients](https://www.ks.uiuc.edu/Research/namd/cvs/ug/node38.html).
+The published trials retain their original fixed-shell protocol; no buffered-shell
+simulation has yet been qualified.
+
+The subsequent [central-shell damping pilot](../experiments/namd_submodel_damping/README.md)
+completed ten native 50 ps production runs: two seeds each for full, fixed-shell,
+and restrained buffers at 0.1/1/5 ps⁻¹. All used 4 fs HMR production. A 1 ps⁻¹
+buffer brought core RMSF closer to full (0.684 vs 0.712 Å; fixed shell 0.605 Å),
+but did not restore full-reference pairing. RMSD still drifted, and the full and
+crop preparations differed before production. This is a feasibility pilot, not
+a qualified replacement for the fixed-shell default. See the protocol, seed
+ranges, hydration/bond/temperature checks, pressure caveat and retained evidence
+in that report.
+
+The [3 nm graded-boundary follow-up](../experiments/namd_submodel_gradient/README.md)
+starts cropped DNA from the same full-relax checkpoint and compares fixed,
+uniform, and smoothstep restraints at 1 ps⁻¹ damping. Six new native runs passed.
+The gradient produces decreasing shell motion toward its fixed outer layer,
+with core RMSF close to full; pairing and RMSD remain imperfect. These isolated
+results motivated the user-selected uniform-shell default; they do not establish
+a minimum shell width. The report includes spatial profiles, matched-start verification,
+resource measurements, seed ranges, and the retained native evidence.
+
+UI/publication follow-up: 10,187 frontend tests passed (883 files, one skipped),
+16 focused UI/overlay tests passed, all 25 smoke checks passed, and lint passed.
+The real browser check verified source-filtered job rows, initially collapsed
+controls, the tooltip, box/shell editing and trajectory playback; final screenshots
+were inspected. Published snapshots and topology files match the original trials.
+Temporary publication/browser workspaces and isolated bridge credentials were
+removed. `main.js` LOC delta remains zero. Evidence:
+`.development-artifacts/namd-submodel-20261110/controls-publication-verification.json`.
+
+Define the region in **Box and solvent → Define submodel**. The existing box/shell
+visibility toggle also controls the NAMD region. `CreateJobRequest.submodel` accepts
+the same oriented-box object as the UI; `PUT /api/md/jobs/{id}/submodel` supports
+headless edits. A geometry change on an unstarted prepared job returns it to draft
+and discards only its generated inputs, preserving the original Design snapshot.
+Run prepares it again with the saved region. Once started, the region is frozen;
+visibility remains editable. Production inherits the exact topology and shell.
+Older jobs with display-only boxes cannot silently run their full prepared
+topology: Start rejects a selection/package mismatch and requests a newly
+prepared relaxation. Changing the region of an already-run full-model NAMD job
+is not supported by this initial implementation.
+
+Selection operates on the full psfgen CHARMM topology, before solvation:
+
+- A nucleotide moves when its phosphate is inside the box; a phosphate-less
+  terminal nucleotide uses C1′. All atoms of that nucleotide move together.
+- A nucleotide joins the surrounding shell when any atom is within the shell distance.
+  Every residue supporting a bond, angle, dihedral or improper touching a mobile
+  atom is also retained, including with a zero shell.
+- Cuts occur only among fixed atoms. No artificial caps, charge edits or molecular
+  geometry changes are introduced. The full source Design and source PSF/PDB
+  remain available, alongside source-index and residue maps in `submodel.json`.
+- Water and ions are added around the retained topology and remain mobile.
+  NAMD uses native `fixedAtoms`, a fixed-volume cell and CPU/GPU offload.
+  GPU-resident execution is incompatible with native fixed atoms.
+- Initial support is explicit-solvent DNA without additional anchors or surfaces.
+  Unsupported material/protocol combinations fail explicitly. Prepared RAM/VRAM
+  admission counts all retained atoms and solvent, plus fixed-mask buffers; fixed
+  atoms are not deducted from neighbor/topology memory. Preparation reservation
+  remains conservative because constructing the full source topology still costs RAM.
+
+The fixed-atom and constant-pressure restrictions follow the
+[NAMD user guide](https://www.ks.uiuc.edu/Research/namd/3.0/ug.pdf).
+These are design-exploration boundary conditions, not an equilibrium model of the
+whole origami. Shell-size convergence and agreement with a full simulation remain
+separate scientific validation tasks.
+
+Native trials used the installed December-2025 NAMD build, four CPU threads and
+CUDA offload. Each ran minimization, 10,000 relaxation steps at 2 fs, and a separate
+5,000-step production at 4 fs with HMR and rigid hydrogen bonds:
+
+| Source | Full DNA atoms | Retained DNA atoms | Mobile DNA atoms | Retained / mobile nucleotides | Shell |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `duplex.nadoc` | 2,665 | 1,334 | 920 | 42 / 29 | 1 nm |
+| `Submodel_tests.nadoc` | 35,971 | 6,157 | 3,339 | 194 / 105 | 2 nm |
+
+Both trials completed. Fixed-shell maximum displacement was below 2×10⁻¹⁴ Å;
+mobile-atom RMS displacement during production was 1.36 Å and 1.74 Å respectively.
+These short runs establish execution, not equilibration. The second source uses
+the saved box previously exercised with oxDNA. Selection uses phosphate sites rather than oxDNA particle centers, so retained
+and mobile counts need not match oxDNA.
+
+Normal API preparation, box-edit rebuilding, production creation and managed
+production execution were also exercised. Both parents and production children
+passed trajectory, atomistic-frame and flexibility-map API checks. Canonical PSF
+term packing is tested with MDAnalysis as well as the native engine: an arbitrary
+whitespace layout accepted by NAMD is insufficient for the visualization reader.
+The browser check restores each job's box and shell, exercises the existing
+visibility toggle, and plays its atomistic trajectory. Side-view inspection
+exposed and corrected the solvent-overlay center: cropped packages now record
+their cell center in source-design coordinates and show the fixed-volume label.
+The read-only test fixture redirects only file loading to the diagnostic load
+endpoint; job, region, display and trajectory requests use their real endpoints.
+Original source files are unchanged. Native trials and browser copies are
+isolated from user jobs; browser workspaces are removed on success or failure.
+Evidence is in `.development-artifacts/namd-submodel-20261110/`, including native
+logs, motion measurements, API results, source hashes and lossless PSF reflow checks.
+
+Initial integration validation: 9 NAMD-submodel tests, 13 selection tests and 6 sequence-guard tests
+passed. The frontend suite passed 883 files / 10,185 tests (one skipped); smoke
+passed all 25 checks; lint passed. `main.js` LOC delta is zero. `test-smart`
+selected `FAST  (fast suite only)`: 20,681 passed, 90 skipped, one unrelated
+failure in `test_part_transform_frontend_contract.py`'s CPD case. The aggregate
+190-second runtime exceeded the 90-second backstop, with no per-test violators;
+timing triage found distributed suite growth, not a new submodel bottleneck.
+No test limits or classifications were changed. The initial sequence-start
+regression was corrected and its six-test file rerun successfully. Final
+focused checks also cover preservation of older boxes during deferred sequence
+preparation. Broad-suite deferral, verbatim:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
 
 ## Managed CPU execution and compute budgets
 
@@ -650,3 +885,19 @@ and server processes were removed. Final hash checks confirm unchanged source an
 original job files, and both native production inputs exactly equal their preceding
 relaxation checkpoints; see `verification.json`. The before-hidden-fix screenshot
 and log remain available alongside the corrected screenshots.
+
+### Editing copied NAMD jobs (2026-11-10)
+
+Relaxation copies preserve the source job's model path even when its original
+preparation request has a missing or outdated path. This keeps background job
+refreshes from switching the editor away during a box drag. Explicitly selected
+legacy copies without a path also remain selected during refresh, and both job
+lists recover their membership from the recorded project ID. No saved job data
+is rewritten. Changing
+documents still clears selection; frozen production topology rules are unchanged.
+
+The opt-in `frontend/e2e/submodel_edit.spec.js` exercises the real new-job wizard
+and copy menu, pointer transforms, shell input, refresh during drag, and saved-box
+restoration. It requires `NADOC_SUBMODEL_ZOOM_SOURCE` and an isolated
+`NADOC_WORKSPACE`; the caller must remove the workspace and bridge in `finally`.
+It reads an existing source and creates disposable job records only.

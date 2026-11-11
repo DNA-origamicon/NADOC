@@ -1,0 +1,12 @@
+{
+  "lead_ids": 145,
+  "edge_targets": 145,
+  "transcription_matches_reopened_ledgers": true,
+  "bootstrap_resume_byte_identical": true,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5326,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 8645
+  }
+}

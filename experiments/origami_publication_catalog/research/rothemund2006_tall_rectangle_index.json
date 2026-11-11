@@ -1,0 +1,1361 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/pre2020-expansion/rothemund2006-s1.pdf",
+    "sha256": "df8d44cedf83015968931651d832e6355f31ff2981d2d5afa7fb6988b20c2e84",
+    "url": "https://rothemundlab.caltech.edu/downloads/folding_dna_supp1.pdf",
+    "locator": "NoteS1design workflow opening; NoteS3overviewPDF20; tallrectangleFiguresS35-S38PDF42-45; scaffoldFigureS39captionPDF46; MethodsS4.1PDF47. PDF44FigureS37 visuallyinspected. RemainingSI notfullyread."
+  },
+  "rows": [
+    {
+      "name": "t1r0g",
+      "well": "A1",
+      "sequence": "AGGGTTGATATAAGTATAGCCCGGAATAGGTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r0f",
+      "well": "A1",
+      "sequence": "TGAAAGTATTAAGAGGCTATTATT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r24f",
+      "well": "A1",
+      "sequence": "TAGATGGGGTGCGGGCCTCTTCGCGCAAGGCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r10e",
+      "well": "B1",
+      "sequence": "TGAACAAAGATAACCCACAAGAATAAGACTCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r10f",
+      "well": "B1",
+      "sequence": "AAAAGTAAAACGTCAAAAATGAAAAAACGATT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r26e",
+      "well": "B1",
+      "sequence": "GCTCACAAGGGTAACGCCAGGGTTTTGGGAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r10f",
+      "well": "C1",
+      "sequence": "ATCAGAGAGTCAGAGGGTAATTGAACCAGTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r12f",
+      "well": "C1",
+      "sequence": "TTTTGTTTGCTTATCCGGTATTCTAAATCAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r26f",
+      "well": "C1",
+      "sequence": "ATTAAGTTTTCCACACAACATACGCCTAATGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r12e",
+      "well": "D1",
+      "sequence": "TATTTTGCACGCTAACGAGCGTCTGAACACCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r14f",
+      "well": "D1",
+      "sequence": "TATAGAAGACGCGCCTGTTTATCAGTTCAGCT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r28e",
+      "well": "D1",
+      "sequence": "AGCTGATTACTCACATTAATTGCGTGTTATCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r12f",
+      "well": "E1",
+      "sequence": "TCTTACCAACCCAGCTACAATTTTAAAGAAGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r16f",
+      "well": "E1",
+      "sequence": "AATGCAGAGAAAAAGCCTGTTTAGGGAATCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r28f",
+      "well": "E1",
+      "sequence": "GTGAGCTAGCCCTTCACCGCCTGGGGTTTGCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r14e",
+      "well": "F1",
+      "sequence": "ATCGGCTGACCAAGTACCGCACTCTTAGTTGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r18f",
+      "well": "F1",
+      "sequence": "AATTACTACATAGGTCTGAGAGACGTGAATTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r2e",
+      "well": "F1",
+      "sequence": "GAGAATAGGTCACCAGTACAAACTCCGCCACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r14f",
+      "well": "G1",
+      "sequence": "GGTATTAATCTTTCCTTATCATTCATATCGCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r20f",
+      "well": "G1",
+      "sequence": "ATCAAAATGAAGATGATGAAACAAAATTACCT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r2f",
+      "well": "G1",
+      "sequence": "TGAGTTTCAAAGGAACAACTAAAGATCTCCAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r16e",
+      "well": "H1",
+      "sequence": "CATATTTATTTCGAGCCAGTAATAAATCAATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r22f",
+      "well": "H1",
+      "sequence": "GAGCAAAAACTTCTGAATAATGGATGATTGTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r30e",
+      "well": "H1",
+      "sequence": "TATCAGGGCGAAAATCCTGTTTGACGGGCAAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r16f",
+      "well": "A2",
+      "sequence": "AGAGGCATACAACGCCAACATGTATCTGCGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r24f",
+      "well": "A2",
+      "sequence": "TGGATTATGCCGTCAATAGATAATCAACTAAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r30f",
+      "well": "A2",
+      "sequence": "CCAGCAGGCGATGGCCCACTACGTGAGGTGCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r18e",
+      "well": "B2",
+      "sequence": "ACAAAGAAAATTTCATCTTCTGACAGAATCGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r26f",
+      "well": "B2",
+      "sequence": "AGATTAGACCAGCAGAAGATAAAAAATACCGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r32h",
+      "well": "B2",
+      "sequence": "GTAAAGCACTAAATCGGAACCCTAAAACCGTC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r18f",
+      "well": "C2",
+      "sequence": "TTTTAGTTCGCGAGAAAACTTTTTTTATGACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r28f",
+      "well": "C2",
+      "sequence": "ACGAACCACTACATTTTGACGCTCACGCTCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r4e",
+      "well": "C2",
+      "sequence": "AAAGGCCGCTCCAAAAGGAGCCTTAGCGGAGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r20e",
+      "well": "D2",
+      "sequence": "AAATCAATCGTCGCTATTAATTAAATCGCAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r2f",
+      "well": "D2",
+      "sequence": "CTGAAACAGTCAGACGATTGGCCTCAGGAGGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r4f",
+      "well": "D2",
+      "sequence": "AAAAAAGGCTTTTGCGGGATCGTCGGGTAGCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r20f",
+      "well": "E2",
+      "sequence": "CTGTAAATATATGTGAGTGAATAAAAAGGCTA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r30j",
+      "well": "E2",
+      "sequence": "GGAAATACCAGGAACGGTACGCCATTAAAGGGATTTTAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r6e",
+      "well": "E2",
+      "sequence": "GCGAAACAAGAGGCTTTGAGGACTAGGGAGTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r22e",
+      "well": "F2",
+      "sequence": "TTTAACGTTCGGGAGAAACAATAACAGTACAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r4f",
+      "well": "F2",
+      "sequence": "TGAGGCAGGCGTCAGACTGTAGCGATCAAGTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r6f",
+      "well": "F2",
+      "sequence": "ACGGCTACAAGTACAACGGAGATTCGCGACCT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r22f",
+      "well": "G2",
+      "sequence": "CTTTTACACAGATGAATATACAGTGCCATCAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r6f",
+      "well": "G2",
+      "sequence": "TGCCTTTAAGACAAAAGGGCGACAGGTTTACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r8e",
+      "well": "G2",
+      "sequence": "CCAAATCATTACTTAGCCGGAACGTACCAAGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r24e",
+      "well": "H2",
+      "sequence": "TTATTAATGAACAAAGAAACCACCTTTTCAGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t7r8f",
+      "well": "H2",
+      "sequence": "AGCGCCAAGCAGATAGCCGAACAATTTTTAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r8f",
+      "well": "H2",
+      "sequence": "GCTCCATGACGTAACAAAGCTGCTACACCAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r24f",
+      "well": "A3",
+      "sequence": "ATTTTGCGTTTAAAAGTTTGAGTACCGGCACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r0g",
+      "well": "A3",
+      "sequence": "TATCACCGTACTCAGGAGGTTTAGATAGTTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r10e",
+      "well": "A3",
+      "sequence": "CATTCAACCTTGCCCTGACGAGAACATTCAGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r26e",
+      "well": "B3",
+      "sequence": "CTAAAGCAAATCAATATCTGGTCACCCGAACG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r10e",
+      "well": "B3",
+      "sequence": "GGACGTTGAGAACTGGCTCATTATGCGCTAAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r12e",
+      "well": "B3",
+      "sequence": "AAACAGTTTAATGCAGATACATAAGAATACCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r26f",
+      "well": "C3",
+      "sequence": "AAACCCTCTCACCTTGCTGAACCTAGAGGATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r10f",
+      "well": "C3",
+      "sequence": "CGATTTTAGGAAGAAAAATCTACGGATAAAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r14e",
+      "well": "C3",
+      "sequence": "TTTTTGCGCAGAAAACGAGAATGAAATGCTTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r28e",
+      "well": "D3",
+      "sequence": "GCCAACAGATACGTGGCACAGACATGAAAAAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r12e",
+      "well": "D3",
+      "sequence": "TTTGCCAGGCGAGAGGCTTTTGCAATCCTGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r16e",
+      "well": "D3",
+      "sequence": "TCAATTCTGATGGCTTAGAGCTTAAGAGGTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r28f",
+      "well": "E3",
+      "sequence": "GCGTAAGAAGATAGAACCCTTCTGAACGCGCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r12f",
+      "well": "E3",
+      "sequence": "CCAAAATAAGGGGGTAATAGTAAAAAAAGATT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r18e",
+      "well": "E3",
+      "sequence": "AGGTAAAGACTAATAGTAGTAGCAAGGTGGCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r2e",
+      "well": "F3",
+      "sequence": "TAAGCGTCGGTAATAAGTTTTAACCCGTCGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r14e",
+      "well": "F3",
+      "sequence": "TTTTAATTGCCCGAAAGACTTCAACAAGAACG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r20e",
+      "well": "F3",
+      "sequence": "AGAAAAGCATTCAAAAGGGTGAGATAATGTGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r2f",
+      "well": "G3",
+      "sequence": "AGTGTACTATACATGGCTTTTGATCTTTCCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r14f",
+      "well": "G3",
+      "sequence": "AAGAGGAACGAGCTTCAAAGCGAAAGTTTCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r22e",
+      "well": "G3",
+      "sequence": "GATTGACCCCCAAAAACAGGAAGATGATAATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r30e",
+      "well": "H3",
+      "sequence": "GTTGTAGCCCTGAGTAGAAGAACTACATTCTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r16e",
+      "well": "H3",
+      "sequence": "CGAGTAGAACAGTTGATTCCCAATATTTAGGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r24e",
+      "well": "H3",
+      "sequence": "CAGCTGGCGTAATGGGATAGGTCAAAACGGCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r30f",
+      "well": "A4",
+      "sequence": "ATCACTTGAATACTTCTTTGATTAGTTGTTCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r16f",
+      "well": "A4",
+      "sequence": "TCCATATATTTAGTTTGACCATTAAGCATAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r26e",
+      "well": "A4",
+      "sequence": "GCATAAAGGAAAGGGGGATGTGCTTATTACGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r32h",
+      "well": "B4",
+      "sequence": "TACAGGGCGCGTACTATGGTTGCTAATTAACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r18e",
+      "well": "B4",
+      "sequence": "CTGTAATAGGTTGTACCAAAAACACAAATATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r28e",
+      "well": "B4",
+      "sequence": "GAGTTGCATGTAAAGCCTGGGGTGAGCCGGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r4e",
+      "well": "C4",
+      "sequence": "AACCAGAGACCCTCAGAACCGCCACGTTCCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r18f",
+      "well": "C4",
+      "sequence": "GCTAAATCCTTTTGCGGGAGAAGCCCGGAGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r2i",
+      "well": "C4",
+      "sequence": "AATAATAAATAGGAACCCATGTACAGGGATAGCAAGCCCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r4f",
+      "well": "D4",
+      "sequence": "GAGCCGCCCCACCACCGGAACCGCTGCGCCGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r20e",
+      "well": "D4",
+      "sequence": "TCAGGTCATTTTTGAGAGATCTACCCTTGCTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r30e",
+      "well": "D4",
+      "sequence": "ACCCAAATGCAAGCGGTCCACGCTCCCTGAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r6e",
+      "well": "E4",
+      "sequence": "GACTTGAGGTAGCACCATTACCATATCACCGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r20f",
+      "well": "E4",
+      "sequence": "GGTAGCTATTGCCTGAGAGTCTGGTTAAATCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r32e",
+      "well": "E4",
+      "sequence": "CAAGTTTTTTGGGGTCGAACCATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r6f",
+      "well": "F4",
+      "sequence": "AATCACCACCATTTGGGAATTAGACCAACCTA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r22e",
+      "well": "F4",
+      "sequence": "AAATAATTTTTAACCAATAGGAACAACAGTAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r4e",
+      "well": "F4",
+      "sequence": "CAGCGAAATTTTTTCACGTTGAAAGAATTGCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r8e",
+      "well": "G4",
+      "sequence": "TTATTACGTAAAGGTGGCAACATACCGTCACC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r22f",
+      "well": "G4",
+      "sequence": "GCTCATTTCGCGTCTGGCCTTCCTGGCCTCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r6e",
+      "well": "G4",
+      "sequence": "CGCCTGATGACAGCATCGGAACGAACCCTCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t1r8f",
+      "well": "H4",
+      "sequence": "TACATACACAGTATGTTAGCAAACTGTACAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r24e",
+      "well": "H4",
+      "sequence": "GCTTCTGGCACTCCAGCCAGCTTTACATTATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-7r8e",
+      "well": "H4",
+      "sequence": "GAATAAGGAAATTGTGTCGAAATCTGTATCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r0g",
+      "well": "A5",
+      "sequence": "TGCTCAGTACCAGGCGGATAAGTGGGGGTCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r24f",
+      "well": "A5",
+      "sequence": "GAAGATCGTGCCGGAAACCAGGCAGTGCCAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "tr-rem1",
+      "well": "A5",
+      "sequence": "GCGCTTAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r10e",
+      "well": "B5",
+      "sequence": "GCGCATTAATAAGAGCAAGAAACAATAACGGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r26e",
+      "well": "B5",
+      "sequence": "CCCGGGTACCTGCAGGTCGACTCTCAAATATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r10f",
+      "well": "C5",
+      "sequence": "GCCCAATAGACGGGAGAATTAACTTTCCAGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r26f",
+      "well": "C5",
+      "sequence": "CTTGCATGCCGAGCTCGAATTCGTCCTGTCGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r12e",
+      "well": "D5",
+      "sequence": "AGGTTTTGGCCAGTTACAAAATAAACAGGGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r28e",
+      "well": "D5",
+      "sequence": "GGGAGAGGCATTAATGAATCGGCCACCTGAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r12f",
+      "well": "E5",
+      "sequence": "CCTAATTTAAGCCTTAAATCAAGAATCGAGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r28f",
+      "well": "E5",
+      "sequence": "GCCAGCTGCGGTTTGCGTATTGGGAATCAAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r14e",
+      "well": "F5",
+      "sequence": "CTAATTTACCGTTTTTATTTTCATCTTGCGGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r2e",
+      "well": "F5",
+      "sequence": "ACGTTAGTTCTAAAGTTTTGTCGTGATACAGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r14f",
+      "well": "G5",
+      "sequence": "CAAGCAAGCGAGCATGTAGAAACCAGAGAATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r2f",
+      "well": "G5",
+      "sequence": "CGTAACGAAAATGAATTTTCTGTAGTGAATTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r16e",
+      "well": "H5",
+      "sequence": "ACGCTCAACGACAAAAGGTAAAGTATCCCATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r30e",
+      "well": "H5",
+      "sequence": "AGTTTGGACGAGATAGGGTTGAGTGTAATAAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r16f",
+      "well": "A6",
+      "sequence": "TAAAGTACCAGTAGGGCTTAATTGCTAAATTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r30f",
+      "well": "A6",
+      "sequence": "GAATAGCCACAAGAGTCCACTATTAAGCCGGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r18e",
+      "well": "B6",
+      "sequence": "TATGTAAAGAAATACCGACCGTGTTAAAGCCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r32h",
+      "well": "B6",
+      "sequence": "GAACGTGGCGAGAAAGGAAGGGAATGCGCCGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r18f",
+      "well": "C6",
+      "sequence": "AATGGTTTTGCTGATGCAAATCCATTTTCCCT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r4e",
+      "well": "C6",
+      "sequence": "CAATGACAGCTTGATACCGATAGTCTCCCTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r20e",
+      "well": "D6",
+      "sequence": "TTGAATTATTGAAAACATAGCGATTATAACTA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r4f",
+      "well": "D6",
+      "sequence": "CTTAAACAACAACCATCGCCCACGCGGGTAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r20f",
+      "well": "E6",
+      "sequence": "TAGAATCCCCTTTTTTAATGGAAACGGATTCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r6e",
+      "well": "E6",
+      "sequence": "AAACGAAATGCCACTACGAAGGCAGCCAGCAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r22e",
+      "well": "F6",
+      "sequence": "ACAGAAATCTTTGAATACCAAGTTAATTTCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r6f",
+      "well": "F6",
+      "sequence": "ATACGTAAGAGGCAAAAGAATACACTGACCAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r22f",
+      "well": "G6",
+      "sequence": "CCTGATTGAAAGAAATTGCGTAGAAGAAGGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r8e",
+      "well": "G6",
+      "sequence": "CCAGGCGCGAGGACAGATGAACGGGTAGAAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r24e",
+      "well": "H6",
+      "sequence": "CGACAACTTCATCATATTCCTGATCACGTAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-1r8f",
+      "well": "H6",
+      "sequence": "CTTTGAAAATAGGCTGGCTGACCTACCTTATG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r24f",
+      "well": "A7",
+      "sequence": "CGGAATTACGTATTAAATCCTTTGGTTGGCAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r0g",
+      "well": "A7",
+      "sequence": "CCCTCAGAACCGCCACCCTCAGAAACAACGCC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r26e",
+      "well": "B7",
+      "sequence": "GCCACGCTTTGAAAGGAATTGAGGAAACAATT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r10e",
+      "well": "B7",
+      "sequence": "ACGAACTATTAATCATTGTGAATTTCATCAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r26f",
+      "well": "C7",
+      "sequence": "ATCAACAGGAGAGCCAGCAGCAAAATATTTTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r10f",
+      "well": "C7",
+      "sequence": "TTTCAACTACGGAACAACATTATTAACACTAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r28e",
+      "well": "D7",
+      "sequence": "GTCACACGATTAGTCTTTAATGCGGCAACAGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r12e",
+      "well": "D7",
+      "sequence": "ACTGGATATCGTTTACCAGACGACTTAATAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r28f",
+      "well": "E7",
+      "sequence": "GAATGGCTACCAGTAATAAAAGGGCAAACTAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r12f",
+      "well": "E7",
+      "sequence": "CATAACCCGCGTCCAATACTGCGGTATTATAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r2e",
+      "well": "F7",
+      "sequence": "GGAAAGCGGTAACAGTGCCCGTATCGGGGTTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r14e",
+      "well": "F7",
+      "sequence": "GAAGCAAAAAAGCGGATTGCATCAATGTTTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r2f",
+      "well": "G7",
+      "sequence": "TGCCTTGACAGTCTCTGAATTTACCCCTCAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r14f",
+      "well": "G7",
+      "sequence": "TCAGAAGCCTCCAACAGGTCAGGATTTAAATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r30e",
+      "well": "H7",
+      "sequence": "GTAAAAGACTGGTAATATCCAGAAATTCACCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r16e",
+      "well": "H7",
+      "sequence": "TCGCAAATAAGTACGGTGTCTGGACCAGACCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r30f",
+      "well": "A8",
+      "sequence": "CGGCCTTGGTCTGTCCATCACGCATTGACGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r16f",
+      "well": "A8",
+      "sequence": "TGCAACTAGGTCAATAACCTGTTTAGAATTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r32h",
+      "well": "B8",
+      "sequence": "CACGTATAACGTGCTTTCCTCGTTGCCACCGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r18e",
+      "well": "B8",
+      "sequence": "CAACGCAAAGCAATAAAGCCTCAGGATACATT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r4e",
+      "well": "C8",
+      "sequence": "GTTTGCCACCTCAGAGCCGCCACCGCCAGAAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r18f",
+      "well": "C8",
+      "sequence": "CAAAATTAGGATAAAAATTTTTAGGATATTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r4f",
+      "well": "D8",
+      "sequence": "GCCACCACTCTTTTCATAATCAAATAGCAAGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r20e",
+      "well": "D8",
+      "sequence": "AGAGAATCAGCTGATAAATTAATGCTTTATTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r6e",
+      "well": "E8",
+      "sequence": "TTATTCATGTCACCAATGAAACCATTATTAGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r20f",
+      "well": "E8",
+      "sequence": "ACCGTTCTGATGAACGGTAATCGTAATATTTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r6f",
+      "well": "F8",
+      "sequence": "CCGGAAACTAAAGGTGAATTATCATAAAAGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r22e",
+      "well": "F8",
+      "sequence": "CTTTCATCTCGCATTAAATTTTTGAGCAAACA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r8e",
+      "well": "G8",
+      "sequence": "ATACCCAAACACCACGGAATAAGTGACGGAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r22f",
+      "well": "G8",
+      "sequence": "GTTAAAATAACATTAAATGTGAGCATCTGCCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t3r8f",
+      "well": "H8",
+      "sequence": "ACGCAAAGAAGAACTGGCATGATTTGAGTTAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r24e",
+      "well": "H8",
+      "sequence": "TTCGCCATGGACGACGACAGTATCGTAGCCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r0g",
+      "well": "A9",
+      "sequence": "CCTCAAGAGAAGGATTAGGATTAGAAACAGTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r24f",
+      "well": "A9",
+      "sequence": "GTTTGAGGTCAGGCTGCGCAACTGTTCCCAGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r10e",
+      "well": "B9",
+      "sequence": "CTTTACAGTATCTTACCGAAGCCCAGTTACCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r26e",
+      "well": "B9",
+      "sequence": "TCATAGCTTGTAAAACGACGGCCAAAGCGCCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r10f",
+      "well": "C9",
+      "sequence": "GCAATAGCAGAGAATAACATAAAAACAGCCAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r26f",
+      "well": "C9",
+      "sequence": "CACGACGTGTTTCCTGTGTGAAATTTGCGCTC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r12e",
+      "well": "D9",
+      "sequence": "GAGGCGTTTCCCAATCCAAATAAGATAGCAGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r28e",
+      "well": "D9",
+      "sequence": "TGGTTTTTCTTTCCAGTCGGGAAAAATCATGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r12f",
+      "well": "E9",
+      "sequence": "ATTATTTATTAGCGAACCTCCCGACGTAGGAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r28f",
+      "well": "E9",
+      "sequence": "ACTGCCCGCTTTTCACCAGTGAGATGGTGGTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r14e",
+      "well": "F9",
+      "sequence": "TAAGTCCTGCGCCCAATAGCAAGCAAGAACGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r2e",
+      "well": "F9",
+      "sequence": "TGCTAAACTCCACAGACAGCCCTCTACCGCCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r14f",
+      "well": "G9",
+      "sequence": "TCATTACCGAACAAGAAAAATAATAATTCTGT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r2f",
+      "well": "G9",
+      "sequence": "TGTAGCATAACTTTCAACAGTTTCTAATTGTA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r16e",
+      "well": "H9",
+      "sequence": "GCGTTATACGACAATAAACAACATACAATAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r30e",
+      "well": "H9",
+      "sequence": "TGGACTCCGGCAAAATCCCTTATACGCCAGGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r16f",
+      "well": "A10",
+      "sequence": "CCAGACGACAAATTCTTACCAGTAGATAAATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r30f",
+      "well": "A10",
+      "sequence": "CCGAAATCAACGTCAAAGGGCGAAAAGGGAGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r18e",
+      "well": "B10",
+      "sequence": "TAACCTCCAATAAGAATAAACACCTATCATAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r32h",
+      "well": "B10",
+      "sequence": "CCCCGATTTAGAGCTTGACGGGGAAAAGAACG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r18f",
+      "well": "C10",
+      "sequence": "AGGCGTTAGGCTTAGGTTGGGTTAAGCTTAGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r4e",
+      "well": "C10",
+      "sequence": "ATATATTCTCAGCTTGCTTTCGAGTGGGATTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r20e",
+      "well": "D10",
+      "sequence": "AAAACAAACTGAGAAGAGTCAATATACCTTTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r4f",
+      "well": "D10",
+      "sequence": "TCGGTTTAGGTCGCTGAGGCTTGCAAAGACTT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r20f",
+      "well": "E10",
+      "sequence": "TTAAGACGATTAATTACATTTAACACAAAATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r6e",
+      "well": "E10",
+      "sequence": "CTCATCTTGGAAGTTTCCATTAAACATAACCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r22e",
+      "well": "F10",
+      "sequence": "AACCTACCGCGAATTATTCATTTCACATCAAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r6f",
+      "well": "F10",
+      "sequence": "TTTCATGATGACCCCCAGCGATTAAGGCGCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r22f",
+      "well": "G10",
+      "sequence": "GCGCAGAGATATCAAAATTATTTGTATCAGAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r8e",
+      "well": "G10",
+      "sequence": "AGTAATCTTCATAAGGGAACCGAACTAAAACA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r24e",
+      "well": "H10",
+      "sequence": "GGATTTAGTTCATCAATATAATCCAGGGTTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-3r8f",
+      "well": "H10",
+      "sequence": "ACGGTCAATGACAAGAACCGGATATGGTTTAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r24f",
+      "well": "A11",
+      "sequence": "GATGGCAAAAGTATTAGACTTTACAAGGTTAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r0g",
+      "well": "A11",
+      "sequence": "CTCAGAGCCACCACCCTCATTTTCCGTAACAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r26e",
+      "well": "B11",
+      "sequence": "AGGCGGTCTCTTTAGGAGCACTAAACATTTGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r10e",
+      "well": "B11",
+      "sequence": "AAAGATTCTAAATTGGGCTTGAGATTCATTAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r26f",
+      "well": "C11",
+      "sequence": "CTAAAATAAGTATTAACACCGCCTCGAACTGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r10f",
+      "well": "C11",
+      "sequence": "ACGAGTAGATCAGTTGAGATTTAGCGCCAAAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r28e",
+      "well": "D11",
+      "sequence": "GAAATGGAAAACATCGCCATTAAACAGAGGTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r12e",
+      "well": "D11",
+      "sequence": "TAAATATTGAGGCATAGTAAGAGCACAGGTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r28f",
+      "well": "E11",
+      "sequence": "TAGCCCTATTATTTACATTGGCAGCAATATTA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r12f",
+      "well": "E11",
+      "sequence": "GGAATTACCATTGAATCCCCCTCACCATAAAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r2e",
+      "well": "F11",
+      "sequence": "ACAAACAACTGCCTATTTCGGAACCTGAGACT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r14e",
+      "well": "F11",
+      "sequence": "TACCTTTAAGGTCTTTACCCTGACAATCGTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r2f",
+      "well": "G11",
+      "sequence": "AATGCCCCATAAATCCTCATTAAAAGAACCAC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r14f",
+      "well": "G11",
+      "sequence": "CAAAAATCATTGCTCCTTTTGATAATTGCTGA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r30e",
+      "well": "H11",
+      "sequence": "AGAAGTGTCATTGCAACAGGAAAAAATCGTCT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r16e",
+      "well": "H11",
+      "sequence": "TTTCATTTCTGTAGCTCAACATGTTTAGAGAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r30f",
+      "well": "A12",
+      "sequence": "CCGCCAGCTTTTATAATCAGTGAGAGAATCAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r16f",
+      "well": "A12",
+      "sequence": "ATATAATGGGGGCGCGAGCTGAAATTAACATC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r32h",
+      "well": "B12",
+      "sequence": "AGCGGGAGCTAAACAGGAGGCCGAGAATCCTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r18e",
+      "well": "B12",
+      "sequence": "TATATTTTCATACAGGCAAGGCAAAGCTATAT",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r4e",
+      "well": "C12",
+      "sequence": "TCGGCATTCCGCCGCCAGCATTGATGATATTC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r18f",
+      "well": "C12",
+      "sequence": "CAATAAATAAATGCAATGCCTGAGAAGGCCGG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r4f",
+      "well": "D12",
+      "sequence": "CACCAGAGTTCGGTCATAGCCCCCTCGATAGC",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r20e",
+      "well": "D12",
+      "sequence": "CATGTCAAAAATCACCATCAATATAACCCTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r6e",
+      "well": "E12",
+      "sequence": "ATTGAGGGAATCAGTAGCGACAGACGTTTTCA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r20f",
+      "well": "E12",
+      "sequence": "AGACAGTCTCATATGTACCCCGGTTTGTATAA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r6f",
+      "well": "F12",
+      "sequence": "AGCACCGTAGGGAAGGTAAATATTTTATTTTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r22e",
+      "well": "F12",
+      "sequence": "ACCCGTCGTTAAATTGTAAACGTTAAAACTAG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r8e",
+      "well": "G12",
+      "sequence": "GAAGGAAAAATAGAAAATTCATATTTCAACCG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r22f",
+      "well": "G12",
+      "sequence": "GCAAATATGATTCTCCGTGGGAACCGTTGGTG",
+      "pdf_page": 45
+    },
+    {
+      "name": "t5r8f",
+      "well": "H12",
+      "sequence": "TCACAATCCCGAGGAAACGCAATAATGAAATA",
+      "pdf_page": 45
+    },
+    {
+      "name": "t-5r24e",
+      "well": "H12",
+      "sequence": "GGCGATCGCGCATCGTAACCGTGCGAGTAACA",
+      "pdf_page": 45
+    }
+  ],
+  "limitations": "LiteralTableS38 extraction for bridgedseam. Threecolumnplate identity not reconstructed; not experimentalmap recipe. Unbridgedseam andanti-stacking modifications need explicitvariant mapping; fullbase audit pending."
+}

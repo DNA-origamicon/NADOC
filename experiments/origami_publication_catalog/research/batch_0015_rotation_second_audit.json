@@ -1,0 +1,43 @@
+{
+  "reviewed_keys": [
+    "10.3390/nano5010180",
+    "10.3389/fimmu.2015.00323",
+    "10.1371/journal.pone.0132132",
+    "10.1186/s11671-015-1102-1"
+  ],
+  "first_pass_count": 20,
+  "input_count": 25,
+  "exclusion_audit": "Same-agent comparison of actual model/fabrication methods to background origami citations for both exclusions",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 12022
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6039,
+    "provisional_work_keys_not_reconciled": 6037,
+    "versions_with_explicit_version_relation": 4,
+    "review_stages": {
+      "metadata_screened": 1184,
+      "unreviewed": 4550,
+      "fulltext_reviewed": 72,
+      "design_sources_reviewed": 235
+    },
+    "relevance": {
+      "uncertain": 5709,
+      "background_or_review": 34,
+      "design_bearing": 278,
+      "not_origami": 20
+    },
+    "catalog_eligibility": {
+      "unresolved": 6015,
+      "excluded": 25,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  }
+}

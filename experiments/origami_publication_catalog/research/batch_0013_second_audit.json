@@ -1,0 +1,67 @@
+{
+  "reviewed_keys": [
+    "10.1021/acs.nanolett.8b01374",
+    "10.1021/acsami.8b04757",
+    "10.1021/acsami.8b09222"
+  ],
+  "first_pass_count": 5,
+  "input_count": 25,
+  "scaffold_inventory": [
+    {
+      "table": "S2",
+      "extracted_bases": 10563,
+      "lowercase_bases": 0,
+      "sequence_sha256": "c9ee2e9757b1c3acb395621f87592d0cd07fdf27637a361a2c8be49ca2e3fb63"
+    },
+    {
+      "table": "S3",
+      "extracted_bases": 10782,
+      "lowercase_bases": 1,
+      "sequence_sha256": "12cd8b21b0cd37d29c0c755f255d588e1a26cccaf39d5021bd37e6ac827a1816"
+    },
+    {
+      "table": "S4",
+      "extracted_bases": 20307,
+      "lowercase_bases": 0,
+      "sequence_sha256": "f364e3e1322563a591b4c8bb1fce41b54fbc52e509545266d867dc834d027025"
+    },
+    {
+      "table": "S5",
+      "extracted_bases": 31274,
+      "lowercase_bases": 0,
+      "sequence_sha256": "a37704f7c2add32a9eb5eb79cdcd28d96bbc2ae563d885ef194df8a009bec1b5"
+    }
+  ],
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11641
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6040,
+    "provisional_work_keys_not_reconciled": 6039,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 1167,
+      "unreviewed": 4619,
+      "fulltext_reviewed": 58,
+      "design_sources_reviewed": 197
+    },
+    "relevance": {
+      "uncertain": 5772,
+      "background_or_review": 25,
+      "design_bearing": 237,
+      "not_origami": 7
+    },
+    "catalog_eligibility": {
+      "unresolved": 6029,
+      "excluded": 11,
+      "eligible": 1
+    },
+    "design_groups": 139,
+    "design_source_reviews": 62,
+    "discovery_runs": 49
+  }
+}

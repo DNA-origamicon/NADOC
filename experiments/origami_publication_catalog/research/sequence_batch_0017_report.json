@@ -1,0 +1,429 @@
+{
+  "run_id": "SEQ0002",
+  "batch_id": "B0017",
+  "records": [
+    {
+      "registry_key": "10.1038/nature04586",
+      "run_id": "SEQ0002",
+      "decision": "prioritize",
+      "threshold": 100,
+      "note": "Existing inspected SI1S38PDF45 has225uniquely named bridged tall-rectangle staple rows; gate passes, exact experimentalvariant sourcecompleteness remains unresolved.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/rothemund2006-s1.pdf",
+          "locator": "NoteS1design workflow opening; NoteS3overviewPDF20; tallrectangleFiguresS35-S38PDF42-45; scaffoldFigureS39captionPDF46; MethodsS4.1PDF47. PDF44FigureS37 visuallyinspected. RemainingSI notfullyread.",
+          "sha256": "df8d44cedf83015968931651d832e6355f31ff2981d2d5afa7fb6988b20c2e84",
+          "url": "https://rothemundlab.caltech.edu/downloads/folding_dna_supp1.pdf"
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "PMC7080001",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved XML contains0table-wrap elements and0supplementary-material elements; no qualifying sequence table or recorded supplemental download. No fulltext/design review performed.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/PMC7080001.xml",
+          "sha256": "1d47ff3b087daa5f821965eb4075952ac33c5ee43161f1a92396dacf76ee543a",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7080001/fullTextXML",
+          "locator": "Source inventory: table/supplement elements inspected; no complete content review."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.55838/1980-3540.ge.2007.32",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Prior fulltext review established classroom paper-folding model; no molecular staple table. Preserve existing not_origami classification.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/research-20261105/sepel2007-paper.pdf",
+          "locator": "Entire3-page article text and Figures1-4 captions read, printed3-5; classroom activities specify printed paper, base-letter completion and mountain/valley folding. Figure images and linked teaching templates not independently audited.",
+          "sha256": "1bc0bf5e0ff60ae277c1c9ff00427245ca279ce69217e2f09a394db4045ad435",
+          "url": "https://geneticanaescola.com/revista/article/download/32/26"
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "epmc:1842",
+      "decision": "exclude_patent",
+      "basis": "Existing source triage retained"
+    },
+    {
+      "registry_key": "epmc:1391",
+      "decision": "exclude_patent",
+      "basis": "Existing source triage retained"
+    },
+    {
+      "registry_key": "10.1007/s12033-007-0059-4",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1007/s12033-007-0059-4: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1021/nl0722830",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1021/nl0722830: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1002/smll.200701320",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1002/smll.200701320: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "PMC2588530",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved XML contains1table-wrap elements and0supplementary-material elements; no qualifying sequence table or recorded supplemental download. No fulltext/design review performed. Sole table is cover notice with paper-folding model credit,not a DNA sequence table.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/PMC2588530.xml",
+          "sha256": "e6ed1d9f107089bd8354eb6e4a9175150eb1c381789ba278d6d3d82196a88fee",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC2588530/fullTextXML",
+          "locator": "Source inventory: table/supplement elements inspected; no complete content review."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1002/anie.200904802",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1002/anie.200904802: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1093/nass/nrp041",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1093/nass/nrp041: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/nnano.2009.5",
+      "decision": "prioritize",
+      "basis": "Existing source triage retained"
+    },
+    {
+      "registry_key": "10.1093/nar/gkp005",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved primary XML Tables1-3 list4,6,32strands for tetrahedron,cube,soccerball; no100-entry table. XML supplement links absent. Defer detailed design review.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/PMC2673411.xml",
+          "sha256": "8b7d10b466201476a07d9fecb0c72451dc2b84d17350d9630df13e05f7a73380",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC2673411/fullTextXML",
+          "locator": "Tables1-3 captions and row counts inspected; source gate only,not complete paper review."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1073/pnas.0808736106",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1073/pnas.0808736106: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1088/0957-4484/20/17/175102",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1088/0957-4484/20/17/175102: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1126/science.1202998",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1126/science.1202998: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.3410/f.8883956.9433054",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.3410/f.8883956.9433054: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.4161/adna.2.2.17085",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.4161/adna.2.2.17085: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.5059/yukigoseikyokaishi.69.1352",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.5059/yukigoseikyokaishi.69.1352: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "PMC3525245",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "Saved XML contains0table-wrap elements and0supplementary-material elements; no qualifying sequence table or recorded supplemental download. No fulltext/design review performed.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "assets/sources/pre2020-expansion/PMC3525245.xml",
+          "sha256": "013aa79b413861be4ee9ba5b4674481a0921186347b91682ef70d11429cb1f3c",
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3525245/fullTextXML",
+          "locator": "Source inventory: table/supplement elements inspected; no complete content review."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1016/j.bpj.2009.12.3206",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1016/j.bpj.2009.12.3206: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1021/am900884b",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1021/am900884b: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1038/464158a",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1038/464158a: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1002/ange.201006818",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1002/ange.201006818: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    },
+    {
+      "registry_key": "10.1007/978-1-61779-142-0_13",
+      "run_id": "SEQ0002",
+      "decision": "no_qualifying_table_found",
+      "threshold": 100,
+      "note": "No qualifying staple table found: saved registry has no downloaded supplements or supplement links; current publication evidence has no acquired sequence source. Source availability remains unknown. Move on without rescue retrieval.",
+      "source_coverage": "Saved registry supplement links/downloads and current evidence references; no exhaustive publisher/repository search. No linked supplement means unknown availability,not proven absence.",
+      "evidence": [
+        {
+          "local_file": "publication_registry.json",
+          "sha256": "36195fb40a053d5a68d06c26e619a9f3b41ea9a2d0052d45f8f70cf8f7d0e4fa",
+          "url": "",
+          "locator": "10.1007/978-1-61779-142-0_13: recorded source inventory,empty downloaded_supplements andsupplement_links; not proof of publisher source absence."
+        }
+      ],
+      "date": "2026-11-05",
+      "reopen_condition": "New source evidence or explicit user request only"
+    }
+  ],
+  "summary": {
+    "prioritize": 2,
+    "no_qualifying_table_found": 21,
+    "exclude_patent": 2
+  },
+  "limitations": "Gate dispositions cover25inputs,not25fulltext reviews. No qualifying table found is limited to inspected saved sources. Earlier deep-review and retrieval queues are superseded for these records.",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6158,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 15930
+  }
+}

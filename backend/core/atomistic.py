@@ -2016,9 +2016,26 @@ def build_atomistic_model(
 
     extra_base_xover_src: set[tuple[str, int, str]] = set()
     extra_base_xover_dst: set[tuple[str, int, str]] = set()
+    # Forced ligations also insert a nucleotide chain, but need not share a
+    # helix or bp index. Suppress only their exact directed endpoint pair.
+    # Keep exact pairs for bond suppression, including same-helix and offset
+    # joins. Placement endpoints below are admitted by the actual strand walk.
+    extra_base_forced_pairs = {
+        (
+            (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value),
+            (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction.value),
+        )
+        for fl in design.forced_ligations if fl.extra_bases
+    }
+    extra_base_forced_dst: set[tuple[str, int, str]] = set()
     for _s in design.strands:
         _prev_d = None
         for _d in _s.domains:
+            if _prev_d is not None:
+                _src = (_prev_d.helix_id, _prev_d.end_bp, _prev_d.direction.value)
+                _dst = (_d.helix_id, _d.start_bp, _d.direction.value)
+                if (_src, _dst) in extra_base_forced_pairs:
+                    extra_base_forced_dst.add(_dst)
             if (
                 _prev_d is not None
                 and _prev_d.helix_id != _d.helix_id
@@ -2426,7 +2443,11 @@ def build_atomistic_model(
                     if prev_o3_serial is not None and p_serial is not None:
                         # Skip direct bond if the previous nucleotide is the 3′
                         # junction of an extra-base crossover (handled separately).
-                        if prev_nuc_key not in extra_base_xover_src:
+                        if (
+                            prev_nuc_key not in extra_base_xover_src
+                            and (prev_nuc_key, (h_id, bp, dir_str))
+                            not in extra_base_forced_pairs
+                        ):
                             bonds.append((prev_o3_serial, p_serial))
                     prev_o3_serial = o3_serial
                     prev_nuc_key = (h_id, bp, dir_str)
@@ -2463,10 +2484,13 @@ def build_atomistic_model(
                     prev_domain.end_bp,
                     prev_domain.direction.value,
                 )
-                if src_key in extra_base_xover_src:
+                dst_key = (domain.helix_id, domain.start_bp, domain.direction.value)
+                if (
+                    src_key in extra_base_xover_src
+                    or (src_key, dst_key) in extra_base_forced_pairs
+                ):
                     prev_domain = domain
                     continue
-                dst_key = (domain.helix_id, domain.start_bp, domain.direction.value)
                 src_s = bp_to_sugar_serials.get(src_key)
                 dst_s = bp_to_sugar_serials.get(dst_key)
                 if src_s and dst_s:
@@ -2628,7 +2652,7 @@ def build_atomistic_model(
     # Apply its 45°-CW γ torsion now, after closure, so the requested final
     # angle survives in both the fast display and exact MD/PDB build paths.
     _extra_base_gamma_rad = -_EXTRA_BASE_3PRIME_GAMMA_CW_DEG * _math.pi / 180.0
-    for _dst_key in extra_base_xover_dst:
+    for _dst_key in extra_base_xover_dst | extra_base_forced_dst:
         _dst_sugar = bp_to_sugar_serials.get(_dst_key)
         if _dst_sugar is not None:
             _rotate_built_gamma_branch(atoms, _dst_sugar, _extra_base_gamma_rad)
@@ -2691,7 +2715,8 @@ def build_atomistic_model(
         apply_deformations_to_atoms(atoms, design)
         if (
             _two_base_phosphate_clearance
-            and any(len(xo.extra_bases or ()) == 2 for xo in design.crossovers)
+            and any(len(junction.extra_bases or ()) == 2
+                    for junction in (*design.crossovers, *design.forced_ligations))
             and nuc_pos_override is None
             and nuc_frame_override is None
             and axis_override is None

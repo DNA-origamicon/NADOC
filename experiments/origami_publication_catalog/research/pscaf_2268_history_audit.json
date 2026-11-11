@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-05",
+  "history_entries": 1,
+  "original_equals_pinned": true,
+  "native_start": [
+    3,
+    0
+  ],
+  "native_end": [
+    1,
+    34
+  ],
+  "native_positions": 49,
+  "native_length_with_indels": 49,
+  "ambiguous_csv_row": {
+    "Start": "3[0]",
+    "End": "1[34]",
+    "Sequence": "????GACTGCTCCTGGAAGGCTGCTCCTTCGGCCAAAGAGCAAAGTGATCC",
+    "Length": "49",
+    "Color": "#57bb00"
+  },
+  "no_molecular_authoring": true,
+  "source_evidence": [
+    {
+      "local_file": "assets/research-20261105/pscaf-2268-file-history.json",
+      "sha256": "2f46372ed9861f4909d654c74b8e52ee505e63021343ab133d5dda26586e00dc",
+      "url": "https://api.github.com/repos/douglaslab/pScaf/commits?path=4_staple_sequences%2F6hb-2268.csv&per_page=100",
+      "locator": "One-entry response for current reachable path history; deleted branches are outside this check"
+    },
+    {
+      "local_file": "assets/research-20261105/pscaf-2268-original-20180516.csv",
+      "sha256": "69cd92b3e67608b4235c3cd36356193ea931cf44e8672e6af94ef09e5f3f353b",
+      "url": "https://raw.githubusercontent.com/douglaslab/pScaf/9558806f9cb30ffbad5aa94c82aa4699f3953b26/4_staple_sequences/6hb-2268.csv",
+      "locator": "Original2018-05-16 CSV row69"
+    }
+  ],
+  "conclusion": "Historical path check finds one listed2018-05-16 commit; original CSV equals pinned source byte-for-byte: True. Native staple3[0] to1[34] has49 positions and no indels. This supports stated length49 but does not determine unknown bases or explain51 CSV characters; no correction made."
+}

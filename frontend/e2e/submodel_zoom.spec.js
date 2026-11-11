@@ -1,0 +1,50 @@
+import { test, expect } from '@playwright/test'
+
+// Caller owns/removes isolated workspace and source link; no molecular authoring.
+test('submodel box assigns an independent oriented Zoom Volume', async ({ page }, info) => {
+  test.skip(!process.env.NADOC_SUBMODEL_ZOOM_SOURCE, 'Requires read-only source fixture')
+  test.setTimeout(150000)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const source = process.env.NADOC_SUBMODEL_ZOOM_SOURCE
+  await page.route('**/api/library/open-part', async route => {
+    const response = await page.request.post('/api/design/load', { data: { path: source }, headers: route.request().headers() })
+    await route.fulfill({ response })
+  })
+  await page.goto('/?debug=1&doc=__e2e__submodel-zoom&open=Submodel_tests.nadoc')
+  await page.waitForFunction(() => window.__nadocMdPanel && window.__NADOC_ZOOM_VOLUME__)
+  await expect(page.locator('#welcome-screen')).toHaveClass(/hidden/, { timeout: 30000 })
+  for (const label of ['Close Feature log sidebar', 'Close Properties sidebar']) {
+    const close = page.getByRole('button', { name: label, exact: true })
+    if (await close.count()) await close.first().click()
+  }
+  await page.evaluate(() => window.__leftSidebar.selectTab('dynamics'))
+  await page.locator('.engine-selector-btn[data-engine="namd"]').click()
+  await page.locator('#md-box-solvent-toggle').click()
+  await expect(page.locator('#md-submodel-zoom')).toBeDisabled()
+  expect(await page.locator('#md-box-solvent-body').evaluate(el => el.lastElementChild.id)).toBe('md-submodel')
+  const box = { shape: 'box', min_corner: [4.59135,-.95055,12.15865], max_corner: [10.99135,5.44945,16.91865], rotation: [0,0,Math.sin(.15),Math.cos(.15)], shell_nm: 3 }
+  const created = await page.request.post('/api/md/jobs', { headers: { 'X-NADOC-Doc': '__e2e__submodel-zoom' }, data: { draft: true, submodel: box, design_source_path: 'Submodel_tests.nadoc', threads: 4 } })
+  expect(created.ok()).toBe(true)
+  const job = await created.json()
+  await page.evaluate(async id => { await window.__nadocMdPanel.refresh(); await window.__nadocMdPanel.selectJob(id) }, job.job_id)
+  await expect(page.locator('#md-submodel-zoom')).toBeEnabled()
+  await expect(page.locator('#md-submodel-controls')).toBeHidden()
+  await page.locator('#md-submodel-zoom').click()
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().ready)).toBe(true)
+  await expect(page.locator('#zoom-volume-inset')).toBeVisible()
+  const assigned = await page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().volume)
+  expect(assigned).toEqual({ shape: 'box', min_corner: box.min_corner, max_corner: box.max_corner, rotation: box.rotation })
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().triangles)).toBeGreaterThan(0)
+  await page.locator('#md-define-submodel').click()
+  await page.evaluate(() => window.__NADOC_SUBMODEL__.moveSelected([.5,0,0]))
+  expect(await page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().volume)).toEqual(assigned)
+  await page.locator('#md-submodel-zoom').click()
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().volume.min_corner[0])).toBeCloseTo(box.min_corner[0] + .5)
+  await expect.poll(() => page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.debug().ready)).toBe(true)
+  await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({ target: [8,2,14.5], position: [50,12,22] }))
+  await page.screenshot({ path: info.outputPath('submodel-zoom.png') })
+  console.log('REVIEW_IMAGE', info.outputPath('submodel-zoom.png'))
+  await page.waitForTimeout(40000)
+  await page.evaluate(() => window.__NADOC_ZOOM_VOLUME__.clear())
+  await expect(page.locator('#zoom-volume-inset')).toBeHidden()
+})

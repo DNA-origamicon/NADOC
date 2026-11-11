@@ -91,3 +91,17 @@ the intended Git changes using the repository's normal user-authorized process.
 Avoid concurrent edits to the same ledgers; retain both decision histories when
 resolving conflicts. The kickoff prompt itself does not authorize commits or pushes
 in future sessions.
+
+## Optional human access handoff
+
+Apply the first staple-table screening gate in [the protocol](RESEARCH_PROTOCOL.md)
+before detailed review or an access handoff. If no qualifying table is found,
+record the checked sources and move on; do not seek human intervention solely to
+rescue that record. Preserve the source gap and reopen only with new evidence or
+an explicit user request.
+
+Use [research/ACCESS_HELP.md](research/ACCESS_HELP.md) and the generated
+[access queue](research/ACCESS_REQUESTS.html) only when an exact resource or
+clarification requires human action after reasonable automatic routes. The agent
+continues public acquisition and independent review. Authentication remains in
+the user’s browser; no credentials, cookies or tokens enter the research logs.

@@ -1,0 +1,12 @@
+{
+  "source_file": "assets/research-20261105/FNANO11schedule.pdf",
+  "sha256": "90fec55bc876026a3b6bb0d440f63575f1a4d4271a71b1eeb20884888204063f",
+  "page": 7,
+  "method": "Rendered pdftoppm at1600pixels and inspected visually",
+  "observations": [
+    "Dongran Han title visibly ends with functionalized; missing object is in source, not repaired.",
+    "Rasmus surname clipped at author/title column boundary, text layer retains full surname; author identity requires further primary corroboration.",
+    "Rendered text resolves extracted ti/tt font substitutions in titles; raw extraction retained for stable IDs."
+  ],
+  "scope": "Page7 only; not proof of abstract or design completeness"
+}

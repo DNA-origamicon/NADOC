@@ -121,6 +121,12 @@ class NucleotideDefaultColorMap extends Map {
     this.defaultHex = defaultHex
   }
 
+  clone() {
+    const copy = new NucleotideDefaultColorMap(this.defaultHex)
+    for (const [key, value] of this) copy.set(key, value)
+    return copy
+  }
+
   get(key) {
     if (super.has(key)) return super.get(key)
     return _isNucleotideScalarKey(key) ? this.defaultHex : undefined

@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-05",
+  "network_check": {
+    "service": "https://ipinfo.io/json",
+    "organization": "AS104 University of Colorado at Boulder",
+    "city": "Boulder",
+    "region": "Colorado",
+    "country": "US",
+    "ip_address_retained": false
+  },
+  "publisher_checks": [
+    {
+      "url": "https://pubs.rsc.org/en/content/articlehtml/2020/nh/c9nh00529c",
+      "status": 403,
+      "server": "cloudflare",
+      "body_markers": [
+        "Just a moment",
+        "Cloudflare",
+        "bot"
+      ]
+    },
+    {
+      "url": "https://pubs.acs.org/doi/10.1021/nl101079u",
+      "status": 403,
+      "server": "cloudflare",
+      "body_markers": [
+        "Just a moment",
+        "Cloudflare",
+        "bot"
+      ]
+    }
+  ],
+  "interpretation": "CU Boulder egress verified for local Python requests. These403 responses are browser/bot challenges, not demonstrated subscription denials. Web tool network path is separate and unverified. No credentials/cookies/tokens recorded."
+}

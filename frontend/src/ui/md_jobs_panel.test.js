@@ -1541,7 +1541,7 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     const submodel = { select: vi.fn() }
     const panel = initMdJobsPanel({ submodel })
     await panel.selectJob(job.job_id)
-    expect(submodel.select).toHaveBeenLastCalledWith('md', job.job_id)
+    expect(submodel.select).toHaveBeenLastCalledWith('md', job.job_id, { editable: true })
     panel.deselectJob()
     expect(submodel.select).toHaveBeenLastCalledWith('md', null)
   })
@@ -2996,4 +2996,27 @@ describe('Alpine persisted submission phases', () => {
     expect(mdRunControl({ status: 'draft', execution_target: 'alpine', awaiting_sequence: true },
       { submitting: true })).toMatchObject({ action: 'submit', disabled: true, label: '☁ Submit to Alpine' })
   })
+})
+
+it('keeps an explicitly selected pathless copy during list refresh, without auto-selecting it', () => {
+  const copy = { job_id: 'copy', status: 'draft', design_source_path: null }
+  const other = { job_id: 'other', status: 'completed', design_source_path: 'part.nadoc' }
+  expect(preferredMdSelection([other], 'copy', false, [other, copy])).toBe('copy')
+  expect(preferredMdSelection([], 'copy', false, [copy])).toBe('copy')
+  expect(preferredMdSelection([other], null, false, [other, copy])).toBe('other')
+  expect(preferredMdSelection([], null, false, [copy])).toBeNull()
+  expect(preferredMdSelection([other], 'copy', true, [other, copy])).toBeNull()
+  expect(preferredMdSelection([other], 'deleted', false, [other])).toBe('other')
+})
+
+it('lists a pathless NAMD copy only for its recorded project', () => {
+  const jobs = [
+    { job_id: 'copy', project_id: 'part' },
+    { job_id: 'other', project_id: 'other' },
+    { job_id: 'unknown' },
+    { job_id: 'other-path', project_id: 'part', design_source_path: 'other.nadoc' },
+  ]
+  expect(filterJobsForPart(jobs, 'part.nadoc', false, 'part')).toEqual(jobs.slice(0, 1))
+  expect(filterJobsForPart(jobs, 'part.nadoc', false)).toEqual([])
+  expect(filterJobsForPart(jobs, null, false, 'part')).toEqual([])
 })

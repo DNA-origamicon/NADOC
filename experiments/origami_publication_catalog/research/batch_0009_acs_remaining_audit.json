@@ -1,0 +1,67 @@
+{
+  "batch_id": "B0009",
+  "reviewed_count": 20,
+  "input_count": 25,
+  "reviewed_keys": [
+    "10.1021/acsnano.6b01537",
+    "10.1021/acs.nanolett.6b01335",
+    "10.1021/jacs.6b03966",
+    "10.1021/acsnano.6b00413",
+    "10.1021/acsnano.6b03076",
+    "10.1021/acsphotonics.6b00062",
+    "10.1021/acsami.6b04992",
+    "10.1021/acs.nanolett.6b03418",
+    "10.1021/acs.nanolett.6b03586",
+    "10.1021/acs.langmuir.6b01961",
+    "10.1021/acsnano.6b05276",
+    "10.1021/acsami.6b10535",
+    "10.1021/acs.nanolett.6b04146",
+    "10.1021/acs.nanolett.6b04169",
+    "10.1021/acsami.6b10266",
+    "10.1091/mbc.e13-03-0155",
+    "10.1093/nar/gkt592",
+    "10.1101/gad.226837.113",
+    "10.1083/jcb.2002pi",
+    "10.1093/nar/gkt1269"
+  ],
+  "remaining_keys": [
+    "10.1098/rsif.2012.0740",
+    "10.1103/physreve.87.032702",
+    "10.1073/pnas.1310092110",
+    "10.1080/07391102.2013.786386",
+    "10.1088/0957-4484/24/43/435601"
+  ],
+  "complete_sources_certified": 0,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5458,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9623
+  },
+  "counts": {
+    "publication_versions": 5458,
+    "canonical_work_keys": 5457,
+    "provisional_work_keys_not_reconciled": 5456,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 573,
+      "unreviewed": 4705,
+      "fulltext_reviewed": 38,
+      "design_sources_reviewed": 142
+    },
+    "relevance": {
+      "uncertain": 5275,
+      "background_or_review": 11,
+      "design_bearing": 171,
+      "not_origami": 1
+    },
+    "catalog_eligibility": {
+      "unresolved": 5452,
+      "excluded": 5,
+      "eligible": 1
+    },
+    "design_groups": 134,
+    "design_source_reviews": 57,
+    "discovery_runs": 38
+  }
+}

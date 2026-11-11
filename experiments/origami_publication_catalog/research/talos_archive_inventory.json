@@ -1,0 +1,2993 @@
+{
+  "archives": [
+    {
+      "file": "assets/sources/acs-expansion-20261104/14163344-nn8b08671_si_002.zip",
+      "sha256": "bde9797a6da2f46ace2826bd746ea9e41ec01c961f4884a245cc9e16c339bddc",
+      "members": [
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_42bp_Flat/Cube_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_42bp_Flat/Cube_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 9834,
+          "sha256": "505142ad04f129690926e45f552a0474de38d1bcae11274d1991d63dbd6a2059"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_42bp_Mitered/Cube_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_42bp_Mitered/Cube_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 11803,
+          "sha256": "2ca46b9e3e4c449f70f40ee77741989a68be52f31ebedc33c90a47a9111c1edf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_63bp_Flat/Cube_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_63bp_Flat/Cube_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 14649,
+          "sha256": "ba57150b246d6142d985f07056f2c4185fc57c031be9e5c8d1897c8b9c728c91"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_63bp_Mitered/Cube_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_63bp_Mitered/Cube_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 16850,
+          "sha256": "76bdbf145c328da12cc88f33da1b50de5e8fb9d6720b3708768ce4cc0f0fa9d2"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_84bp_Flat/Cube_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_84bp_Flat/Cube_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 19518,
+          "sha256": "c5ab11a28c2b0c2a19416c78381beed01a75fe5bf665b5768a5b89cf575ef4ec"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_84bp_Mitered/Cube_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 649,
+          "sha256": "31fcf5a15ae4e4f4ea2490fc5149f1c6e0f5ba0e59e02c09ba16257de5a4d6fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cube_6HB_84bp_Mitered/Cube_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 21515,
+          "sha256": "a0de0b667d5b0fcb7ce8c8a074f198a50cef208978afb6a8222ee45e6cf7e225"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_42bp_Flat/Cubeocta_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_42bp_Flat/Cubeocta_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 21588,
+          "sha256": "a817a03d374088ee858aeaad79f4a5deb7103c0087276c23f188d573bee1d462"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_42bp_Mitered/Cubeocta_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_42bp_Mitered/Cubeocta_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 27446,
+          "sha256": "88a17069d37a74d24007b9201160b129ea0d27cd8f6fc7767cc930978d8d4e02"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_63bp_Flat/Cubeocta_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_63bp_Flat/Cubeocta_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 31614,
+          "sha256": "a59d43262cd293bcd43bf766a525f952006912bb9dfcdb5c43f6cc7f5695ce96"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_63bp_Mitered/Cubeocta_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_63bp_Mitered/Cubeocta_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 37418,
+          "sha256": "e176e28d52ee86f47c8e1c1e2c5831e2cbedff87ae806925fc1c119b2ee5a8ae"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_84bp_Flat/Cubeocta_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_84bp_Flat/Cubeocta_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 40315,
+          "sha256": "6438de1b582d40d2c1a891443d140f9a9f435974a94df256a93f3120b6fb6cad"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_84bp_Mitered/Cubeocta_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "7f2db384dbb8bb1c35dec6550e1bc840ba1712dd4bddf1d8f2ef4599361cd325"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Cubeocta_6HB_84bp_Mitered/Cubeocta_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 48327,
+          "sha256": "0052e5c65484f27cf59c85715e8b266699dcc4fdb4ec8701e9ae883d11b804db"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_42bp_Flat/Deltoi_Icositetra_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_42bp_Flat/Deltoi_Icositetra_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 51837,
+          "sha256": "61bb42ca277d1028ceb33f95f232281c04d81cacf41b9958d9b6efa739af36ba"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_42bp_Mitered/Deltoi_Icositetra_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_42bp_Mitered/Deltoi_Icositetra_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 54988,
+          "sha256": "23380c18a3e5752ab81bd3e7e9972d51d43766e76a2199544932fbdb5225c7a7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_63bp_Flat/Deltoi_Icositetra_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_63bp_Flat/Deltoi_Icositetra_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 76004,
+          "sha256": "8e09e7262c62f027468fa537181abe5a2a49d54f9ca64d71a4b940b96e139faf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_63bp_Mitered/Deltoi_Icositetra_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_63bp_Mitered/Deltoi_Icositetra_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 79808,
+          "sha256": "2b68895e2e0c0ce0a246bc85cb7fc06d1d41ab255347c3d7a87e57979a9e816f"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_84bp_Flat/Deltoi_Icositetra_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_84bp_Flat/Deltoi_Icositetra_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 96901,
+          "sha256": "283bdcc20020c6b99efdb99572f16814692bfecc88280834b7d4ba824833fa56"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_84bp_Mitered/Deltoi_Icositetra_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1893,
+          "sha256": "468bf6588c01783d7a1816ae75623147ac59622ce0f1f2fc47de2f3d42adbcf1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Deltoi_Icositetra_6HB_84bp_Mitered/Deltoi_Icositetra_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 103953,
+          "sha256": "ae41a26cc1f3d8ec764db4ebd027a3c2c7504b22f9cebdcd1884c29a3a319da4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_42bp_Flat/Disdya_Dodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_42bp_Flat/Disdya_Dodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 83293,
+          "sha256": "de810f27f46e2c78940edf9f0c3e77ab28d99111585eeeca37962b2e883d2d75"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_42bp_Mitered/Disdya_Dodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_42bp_Mitered/Disdya_Dodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 97459,
+          "sha256": "e89871237d5866247ec336475fe3e9378c897044c587e70a808dae4a57627866"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_63bp_Flat/Disdya_Dodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_63bp_Flat/Disdya_Dodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 121765,
+          "sha256": "8d7e4dba7aca245151d11d9631e1f9a11e47d82d6a12f13b953e37df767f6aaa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_63bp_Mitered/Disdya_Dodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_63bp_Mitered/Disdya_Dodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 138866,
+          "sha256": "b21c5b20831a308679c5d69a1cab2d03deaa1d018d8c3028b9cd097e5023c40c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_84bp_Flat/Disdya_Dodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_84bp_Flat/Disdya_Dodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 165595,
+          "sha256": "02488ccf772ec869e70197019b037915a284b3e34dbcc85d7072e8670d4c0a27"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_84bp_Mitered/Disdya_Dodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "c31be5cb788edf4b573b917683182a24d2f5d1000d86a8c8d4c0476137bf9a43"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Disdya_Dodeca_6HB_84bp_Mitered/Disdya_Dodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 181831,
+          "sha256": "8009bc1b0ae7370aad5b42f980c5b221092e3fdc3fceb21b05ee27fea8819f89"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_42bp_Flat/Dodecahedron_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_42bp_Flat/Dodecahedron_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 27855,
+          "sha256": "0c293ceccde5034bde3b759005bda7a28154736e0ace058060a9d9704b36beee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_42bp_Mitered/Dodecahedron_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_42bp_Mitered/Dodecahedron_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 28290,
+          "sha256": "7faa1a221c618d2cf0a1ae2e3d5afd32f17b35ece973c7700b456b1212c0d236"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_63bp_Flat/Dodecahedron_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_63bp_Flat/Dodecahedron_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 40750,
+          "sha256": "0b7efccbbd47468423c6e23c4fb9a20ba9f10967c2cd41529d0770616439eaad"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_63bp_Mitered/Dodecahedron_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_63bp_Mitered/Dodecahedron_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 40533,
+          "sha256": "59bde64b2f5d0baf2301b1edc7c5c60fe460eaac411085aac786d0b7918b2a2f"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_84bp_Flat/Dodecahedron_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_84bp_Flat/Dodecahedron_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 51865,
+          "sha256": "41ac81f34b4a4147e9369db1c0368b855e7e23ad93f97a8d019316cbf28ddc59"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_84bp_Mitered/Dodecahedron_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "43abdceb5c381ac30104bfbd7c1f9d33dc5af261ad6a372118e4dd0ea3407971"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Dodecahedron_6HB_84bp_Mitered/Dodecahedron_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 53781,
+          "sha256": "31f94d894a128e1544d7dc7ac4566b546f74b1e66660f108e18ed7f5735fca2e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_42bp_Flat/Elong_Penta_Gyrobicupola_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_42bp_Flat/Elong_Penta_Gyrobicupola_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 61240,
+          "sha256": "9c1a8a7d5fc2d52fea278196ac9c39e134a4665df06ba5188c3581edb9cc9b45"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_42bp_Mitered/Elong_Penta_Gyrobicupola_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_42bp_Mitered/Elong_Penta_Gyrobicupola_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 80489,
+          "sha256": "9634512ae864335bd8a065405253f18cc8113224a8292e55d2090267af8a6b5e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_63bp_Flat/Elong_Penta_Gyrobicupola_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_63bp_Flat/Elong_Penta_Gyrobicupola_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 89185,
+          "sha256": "b927147ad6dab892327368c9ac7ee0efbdf25f2b37df22ee9c9599e47b200268"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_63bp_Mitered/Elong_Penta_Gyrobicupola_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_63bp_Mitered/Elong_Penta_Gyrobicupola_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 107876,
+          "sha256": "9fff8141a09ab4683724502374023ebb068cf4d3feec94241f87a40923f22609"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_84bp_Flat/Elong_Penta_Gyrobicupola_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_84bp_Flat/Elong_Penta_Gyrobicupola_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 112855,
+          "sha256": "98777c235f40e8f7db545195c0b0cdf7d6bdb655520c549c39e2c13acb18975e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_84bp_Mitered/Elong_Penta_Gyrobicupola_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "19b2b50e59efe32d906ae7992b539e58d1f03f2700a78de5f6c7b4d62579ab93"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobicupola_6HB_84bp_Mitered/Elong_Penta_Gyrobicupola_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 138888,
+          "sha256": "f6c9546d7c09f2bb3bd4157ce9885975d6c3f69d02f112413eb072ce9c6d76ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_42bp_Flat/Elong_Penta_Gyrobirotunda_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_42bp_Flat/Elong_Penta_Gyrobirotunda_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 82133,
+          "sha256": "37e8d10f4103489cc9ffc497d7a7b3d89aeb8a468293197ec4392d85fdda2087"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_42bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_42bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 106260,
+          "sha256": "31c842b63cbf47384157acaf553012b9b1acf2133d402b3ea550a0059d766af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_63bp_Flat/Elong_Penta_Gyrobirotunda_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_63bp_Flat/Elong_Penta_Gyrobirotunda_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 119633,
+          "sha256": "2dd13ed692ff091ea59ceb3294513809daec2950893bf04193b918ccb20619b9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_63bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_63bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 143037,
+          "sha256": "955c901a30116bbe2ca81c4f483b270369afefc9541be1d36f0dc75ac476ec1a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_84bp_Flat/Elong_Penta_Gyrobirotunda_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_84bp_Flat/Elong_Penta_Gyrobirotunda_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 151355,
+          "sha256": "22adfc009ba9b60f63efbc7670f2746bb8ce231bd3ba2880ff335ca0fbdfa903"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_84bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "6f5cc630d77ae29b78b0e4b4476361ab8206a69d96b24bc104eb1c7ff7f5ab61"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Elong_Penta_Gyrobirotunda_6HB_84bp_Mitered/Elong_Penta_Gyrobirotunda_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 182091,
+          "sha256": "c6ae3d65d26d71fb0a7680a13da92c643b39bc8e4711d1767019e93b4e175e8c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_42bp_Flat/Ennea_Trapezo_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_42bp_Flat/Ennea_Trapezo_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 140374,
+          "sha256": "33ffcf453b410456e94373292eba381c5cca0a24599766e401cc89c2ad890baf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_42bp_Mitered/Ennea_Trapezo_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_42bp_Mitered/Ennea_Trapezo_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 149605,
+          "sha256": "fb1acbfb3b3a14d4bfe045a195909843676ba69bdb49210aec20e53948e6903f"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_63bp_Flat/Ennea_Trapezo_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_63bp_Flat/Ennea_Trapezo_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 211828,
+          "sha256": "26147f8c3840ef6e6e36d1f9c8b24ae8ecb09249a0dad6dc3af285d4463f07ad"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_63bp_Mitered/Ennea_Trapezo_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_63bp_Mitered/Ennea_Trapezo_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 223110,
+          "sha256": "daae364e33dcd579f2b7dfd592b66d41e69d656b11fbe6a761288b0264030648"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_84bp_Flat/Ennea_Trapezo_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_84bp_Flat/Ennea_Trapezo_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 285980,
+          "sha256": "a4d8d4abde0c886fd78155f021c90ba48d7d50f9ba7579027d2ce118ab82641b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_84bp_Mitered/Ennea_Trapezo_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1479,
+          "sha256": "67846fa0e3304b47ccbbef1d8b76afbe96e17cc992db0a1c13757db74bdab1bf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Ennea_Trapezo_6HB_84bp_Mitered/Ennea_Trapezo_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 296447,
+          "sha256": "32a5c1140e2fd7fd5cab0ed76be087939eef7e03fe540b84811bccc0cbd5dace"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_42bp_Flat/Gyroelon_Penta_Pyramid_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_42bp_Flat/Gyroelon_Penta_Pyramid_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 26118,
+          "sha256": "f8f7d09638af3cf0fea21e09a9319811db526470e4a1acc5b4d62efc57d254c7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_42bp_Mitered/Gyroelon_Penta_Pyramid_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_42bp_Mitered/Gyroelon_Penta_Pyramid_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 29469,
+          "sha256": "e45c2370fd5aa41d0fa8527a02535194dd990c7f841ffbc2c5c621e39e00c490"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_63bp_Flat/Gyroelon_Penta_Pyramid_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_63bp_Flat/Gyroelon_Penta_Pyramid_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 37542,
+          "sha256": "b9a21231d69aa4b1adbe4f58bc9ad402076f3f77ae660b42ea97ebe1293d4855"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_63bp_Mitered/Gyroelon_Penta_Pyramid_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_63bp_Mitered/Gyroelon_Penta_Pyramid_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 40132,
+          "sha256": "977e9e6a218abadb7f3509a92cbea056ebc3177d07c44221c072e85c079325c8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_84bp_Flat/Gyroelon_Penta_Pyramid_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_84bp_Flat/Gyroelon_Penta_Pyramid_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 47581,
+          "sha256": "840d67b75ab0885c571a414c80b8030545c9bf93cc1b2d14d5bde8796f55516b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_84bp_Mitered/Gyroelon_Penta_Pyramid_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1019,
+          "sha256": "da192002d11598e50d1b535384185423aa15423b8f09e777a0235d46158d4d49"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelon_Penta_Pyramid_6HB_84bp_Mitered/Gyroelon_Penta_Pyramid_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 52249,
+          "sha256": "80449d36a2c623738e44230806406769ddfe6b3f763afb39d1098a1d90962d78"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_42bp_Flat/Gyroelong_Square_Bicupola_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_42bp_Flat/Gyroelong_Square_Bicupola_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 58998,
+          "sha256": "2a2bff949337a94f9dfaee6b991e133d5fe04095a67356af17ac25328eb37bdf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_42bp_Mitered/Gyroelong_Square_Bicupola_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_42bp_Mitered/Gyroelong_Square_Bicupola_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 70445,
+          "sha256": "0c8da1a89931decf3be7273d1981f1105e4b037db51471be4937954be094d142"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_63bp_Flat/Gyroelong_Square_Bicupola_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_63bp_Flat/Gyroelong_Square_Bicupola_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 84814,
+          "sha256": "f6c703e59bdee20ec2404feec79ff58a636dd2fbda56272e9d08e5f205f17767"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_63bp_Mitered/Gyroelong_Square_Bicupola_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_63bp_Mitered/Gyroelong_Square_Bicupola_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 95467,
+          "sha256": "0ab65248f3fc2220166dc8421a9ef9e717ab014b3dd9769682684da21152fc13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_84bp_Flat/Gyroelong_Square_Bicupola_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_84bp_Flat/Gyroelong_Square_Bicupola_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 107886,
+          "sha256": "646f8d00f6c1541d892e61c985033114d70ca8e0ecc322272d8d6c681ddf58dd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_84bp_Mitered/Gyroelong_Square_Bicupola_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2031,
+          "sha256": "3ae113019fc16277e948a58711a8bc5a8f5be0d056f2330c9ff636e3fda8e8e4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bicupola_6HB_84bp_Mitered/Gyroelong_Square_Bicupola_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 122945,
+          "sha256": "3a9fda9094787b9155ae75e02c88de7cc6ec654205d4b939c7907b8183d84ebe"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_42bp_Flat/Gyroelong_Square_Bipyramid_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_42bp_Flat/Gyroelong_Square_Bipyramid_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 24708,
+          "sha256": "f333e2498411d5bf017488fe621beb80b30f1c5ccc7e2b33bcf9201f465f3109"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_42bp_Mitered/Gyroelong_Square_Bipyramid_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_42bp_Mitered/Gyroelong_Square_Bipyramid_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 28568,
+          "sha256": "20dbdfd970800af5e9a8e5dc5d43da26b575127196249fd0165745eaea715aba"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_63bp_Flat/Gyroelong_Square_Bipyramid_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_63bp_Flat/Gyroelong_Square_Bipyramid_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 36030,
+          "sha256": "43ce27181d2e6a50154865d27b5321173280df0526c77bde0acc5963e5b6b7b3"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_63bp_Mitered/Gyroelong_Square_Bipyramid_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_63bp_Mitered/Gyroelong_Square_Bipyramid_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 39159,
+          "sha256": "80ec61114a1977052db80967b3e32a06e3da0fb190c539065affbdf1bf895b15"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_84bp_Flat/Gyroelong_Square_Bipyramid_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_84bp_Flat/Gyroelong_Square_Bipyramid_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 45595,
+          "sha256": "a0ab5f43a3cfdebbb25de1ddb2c73a203ecf225c2df25c87dc8f3b60eacf0513"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_84bp_Mitered/Gyroelong_Square_Bipyramid_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 973,
+          "sha256": "46a427a46600987a736e52d014c81e7cb6849e9b77de82ebab8b9c83a37b6046"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Gyroelong_Square_Bipyramid_6HB_84bp_Mitered/Gyroelong_Square_Bipyramid_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 50848,
+          "sha256": "6125a1fff4fe61f8abe15106e662ce77c23090cfdd382f1bb4ae71f1b4cf9b21"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_42bp_Flat/Hepta_Bipyramid_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_42bp_Flat/Hepta_Bipyramid_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 37626,
+          "sha256": "015cceee32d28a07a456ee25c75cd371bbaf1b95bfe4fcf506610def5d9d44ac"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_42bp_Mitered/Hepta_Bipyramid_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_42bp_Mitered/Hepta_Bipyramid_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 43615,
+          "sha256": "66906b441347406e74c1d3c5dc0e5cdc3914ba1a5edddb1538996449090ebf98"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_63bp_Flat/Hepta_Bipyramid_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_63bp_Flat/Hepta_Bipyramid_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 55870,
+          "sha256": "3d5deff3eb97d8b39819137fb35fb552f8939e2b58610051bd281f21691f60df"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_63bp_Mitered/Hepta_Bipyramid_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_63bp_Mitered/Hepta_Bipyramid_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 62787,
+          "sha256": "c945a88237e00468643feb948a04060e48e143a53068507f2bbe95194aabe344"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_84bp_Flat/Hepta_Bipyramid_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_84bp_Flat/Hepta_Bipyramid_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 76299,
+          "sha256": "aad5829a92adf2c6933f8eab8c115e910750043e88c0ccdddc1346c4a9b749fe"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_84bp_Mitered/Hepta_Bipyramid_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "591ad05a4d1c432bc0b2f3f2e53102aea061b0d8f04d5829e61821b965f3c735"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Hepta_Bipyramid_6HB_84bp_Mitered/Hepta_Bipyramid_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 81712,
+          "sha256": "7d88a355b3e8132ae720adcaa108791e2b0b971f7077efdf9482ceb22fb5bf1e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_42bp_Flat/Icosahedron_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_42bp_Flat/Icosahedron_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 27645,
+          "sha256": "d1fdff30784639f2e2c36619985db6dab43a3c2eede1ab32a0f1c3ded97aad6d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_42bp_Mitered/Icosahedron_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_42bp_Mitered/Icosahedron_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 31755,
+          "sha256": "3d4d107c2a93d6bf0b3cd2ef54226e94231ef9ba639b559928f8878cfae5824f"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_63bp_Flat/Icosahedron_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_63bp_Flat/Icosahedron_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 40450,
+          "sha256": "e3c3fa6a43eb17e75e2afa53cd5c17fd1a9fb33a56aeecb75394e16f573d9c39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_63bp_Mitered/Icosahedron_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_63bp_Mitered/Icosahedron_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 43803,
+          "sha256": "48a5c53caa42f1c79e306941e9b5a005e0df1d57fea3d56ddc7edc8d98aeaf44"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_84bp_Flat/Icosahedron_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_84bp_Flat/Icosahedron_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 51505,
+          "sha256": "0edfa47ce5a5e4557e9592f33cc36e880e169b22b37aae82eb4a2c7689382549"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_84bp_Mitered/Icosahedron_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1157,
+          "sha256": "22444bb7664245bedd8a7440db8504dc6dc58907a1037d49970355e12ac460d5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosahedron_6HB_84bp_Mitered/Icosahedron_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 57187,
+          "sha256": "1d482eb1b902c6aa7778224ad1512fa6c15d3984cc0c44e184a9608a629c147a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_42bp_Flat/Icosidodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_42bp_Flat/Icosidodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 55420,
+          "sha256": "e5e853fe0ae63918f9c2070c39167e74adae787db3882615559e745772519f1d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_42bp_Mitered/Icosidodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_42bp_Mitered/Icosidodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 71243,
+          "sha256": "13fa7629bc80b37352a03638268b84754a1402ae3205c64176ee4d16d700859c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_63bp_Flat/Icosidodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_63bp_Flat/Icosidodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 81025,
+          "sha256": "7700c2694e3bfefa01824aaac7a38c31b2e4dd0a44096130d907b255da0584f0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_63bp_Mitered/Icosidodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_63bp_Mitered/Icosidodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 95743,
+          "sha256": "c6e711fb564e56d4dd1feb0e301763bc77cfc9eea60e35c43d103fe0eae2c443"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_84bp_Flat/Icosidodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_84bp_Flat/Icosidodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 103135,
+          "sha256": "4a772f9eb62dd23823c89512e01ae00f5dcc70fdda26158083c5b3691a8b197e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_84bp_Mitered/Icosidodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "16dac5bd2a5bfc5391614c4bf5c2deb10640d2f41e112362877bd568f3cc38fc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Icosidodeca_6HB_84bp_Mitered/Icosidodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 122047,
+          "sha256": "84ccd7f9d3d74a51bf3616cf556c7fce82bfee10547c6070f39caa5fe7692c88"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_42bp_Flat/Octahedron_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_42bp_Flat/Octahedron_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 10266,
+          "sha256": "cd697e9efa093fee2efff282b31981da767c547e2ca3cddb40bc423592694be7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_42bp_Mitered/Octahedron_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_42bp_Mitered/Octahedron_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 12703,
+          "sha256": "e407ac209bb565d3eba37e29303db787ac9914a0c05b764287ce8bf5c00ed30c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_63bp_Flat/Octahedron_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_63bp_Flat/Octahedron_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 15297,
+          "sha256": "a794df16acda25c8d55abc424a226f6b3a619ea9832b4638793f52ca60d8c715"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_63bp_Mitered/Octahedron_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_63bp_Mitered/Octahedron_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 18051,
+          "sha256": "77a81c56e30a79c6e9a155e9a4b5d540b0d3cb03128597bb4a9b91d2a0087dbb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_84bp_Flat/Octahedron_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_84bp_Flat/Octahedron_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 20382,
+          "sha256": "3dd20df2cf32fa072bf76d647710a8de381ced2d61d5a4f1e4fa0ee19c0fcf40"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_84bp_Mitered/Octahedron_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 603,
+          "sha256": "5e16bd7115607134e719a5a1b79b779d1d905c193cd8b4e21a75a24bd6aa6f08"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Octahedron_6HB_84bp_Mitered/Octahedron_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 22965,
+          "sha256": "5e6b208650cd1b3b137453e7ace0aa42af38163c18da786e1be69902b0eee6cc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_42bp_Flat/Penta_Bipyramid_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_42bp_Flat/Penta_Bipyramid_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 13273,
+          "sha256": "055f31b06c9be11995328ca3cb6c89ba7ffc1695bc9b3f5531d31a0eecf50b66"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_42bp_Mitered/Penta_Bipyramid_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_42bp_Mitered/Penta_Bipyramid_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 16514,
+          "sha256": "ec3c42c619ee94b58d451e36411fcb030f9362e3a625734ae5f35a5dde581a3c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_63bp_Flat/Penta_Bipyramid_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_63bp_Flat/Penta_Bipyramid_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 19837,
+          "sha256": "e90fb21e684d42ecb0ff6d1d4b1fddd8ed05c6d3e6b3f984ce46b93a0759ea19"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_63bp_Mitered/Penta_Bipyramid_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_63bp_Mitered/Penta_Bipyramid_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 23592,
+          "sha256": "ebbdd9358dd2dbdb3471edd999b91f18af891304db36499dac46c15ed9f390db"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_84bp_Flat/Penta_Bipyramid_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_84bp_Flat/Penta_Bipyramid_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 26419,
+          "sha256": "7cc37bfca036a6b131c95083c09f41a314679fb993618dd52166b78bbe1ccbaa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_84bp_Mitered/Penta_Bipyramid_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 696,
+          "sha256": "1f55a4e1b7da09ff48990d662cf8c88aff4e456586f878f12ada8b36781d8def"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Bipyramid_6HB_84bp_Mitered/Penta_Bipyramid_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 29488,
+          "sha256": "f3b69fc5ea6bee8b3de2d0e353781d35900a617a14b6289c370e15a98769f12c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_42bp_Flat/Penta_Dodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_42bp_Flat/Penta_Dodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 84421,
+          "sha256": "6b7db4ab87add888cdd279e7be5d04cfdd26363e91a67012cb3d27977b631e85"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_42bp_Mitered/Penta_Dodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_42bp_Mitered/Penta_Dodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 99998,
+          "sha256": "4ee483f5452452ff7a5a481ab8d79df69e2c4f3a5fa8c0134bd1b1720b85cb59"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_63bp_Flat/Penta_Dodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_63bp_Flat/Penta_Dodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 128233,
+          "sha256": "51ea54ab5a9ec005ff870c9ab09c210da2196a608a18756765b1aeb872451dd9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_63bp_Mitered/Penta_Dodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_63bp_Mitered/Penta_Dodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 139550,
+          "sha256": "fcdd57bee0a910f4f1a807ef555aa84a07e862a45b31d75b9ccd3567924bef68"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_84bp_Flat/Penta_Dodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_84bp_Flat/Penta_Dodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 161683,
+          "sha256": "675f48b51401f8b00ee224a8d970244d5123b33fb7129f879492847bf1cf42de"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_84bp_Mitered/Penta_Dodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "2f1789eab15877fa4d6a721bbabf60e5d99adc5978f96df7d26358c3a0d1b2bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Dodeca_6HB_84bp_Mitered/Penta_Dodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 180892,
+          "sha256": "033d13bcbac0d0d552c49e477a1ccfdf221d0fc93ff11ea01e655e84bf22374a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_42bp_Flat/Penta_Icositetra_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_42bp_Flat/Penta_Icositetra_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 63413,
+          "sha256": "4ef7b6f2233096f870f06f95d524d0a601d6e9fa1e35b09ded726ff0b80ed095"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_42bp_Mitered/Penta_Icositetra_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_42bp_Mitered/Penta_Icositetra_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 67776,
+          "sha256": "27b5eb593075e121dcf0872182d54e4f1c437c7a27a25a11eb6fd96f034a8a8b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_63bp_Flat/Penta_Icositetra_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_63bp_Flat/Penta_Icositetra_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 93904,
+          "sha256": "f22efa87327f8938ba2fcf6b5be8f736be71765d7d408b3873523d7075650f04"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_63bp_Mitered/Penta_Icositetra_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_63bp_Mitered/Penta_Icositetra_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 98035,
+          "sha256": "36a63921e6f7fd1d5742c1c5de7c9a3ea8b237bfc78ced263693ae63cbbb2427"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_84bp_Flat/Penta_Icositetra_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_84bp_Flat/Penta_Icositetra_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 122215,
+          "sha256": "e7bc98f938a7a9b1c882b7d4d4962f211bd5226dd7dd6e68c63d13f326f47c38"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_84bp_Mitered/Penta_Icositetra_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2445,
+          "sha256": "21e2503f5b239d9e59fecf9358112108e0271c876b4d864f7bd7fa040bc85e2d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Icositetra_6HB_84bp_Mitered/Penta_Icositetra_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 129131,
+          "sha256": "fc39e16f3ade41b001575afacbf0153de7871c84feeef100a55902d8b1bdf300"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_42bp_Flat/Penta_Orthobirotunda_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_42bp_Flat/Penta_Orthobirotunda_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 59200,
+          "sha256": "0114aec3124f852affbf7421ac578104958f0aaa69305d4dd4d16d83a34ecbdf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_42bp_Mitered/Penta_Orthobirotunda_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_42bp_Mitered/Penta_Orthobirotunda_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 75793,
+          "sha256": "0f3a0cf73a2d362a53c874034b4d6bb8e38a7caef23be68b8e03fcd43b847e17"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_63bp_Flat/Penta_Orthobirotunda_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_63bp_Flat/Penta_Orthobirotunda_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 86425,
+          "sha256": "ab8ee3a4265a37a9354f76ef5ea4cd4a48f85019ef181cf6fab022ea1d6f24c3"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_63bp_Mitered/Penta_Orthobirotunda_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_63bp_Mitered/Penta_Orthobirotunda_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 101672,
+          "sha256": "4e90ef63152dd8becc7c12ef088968b908bd1184cf571acc95759e95c947c842"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_84bp_Flat/Penta_Orthobirotunda_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_84bp_Flat/Penta_Orthobirotunda_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 109615,
+          "sha256": "8ba13ef32e17e5febbe4272f8fdf60b72b7d89681f27f7d6fddbde7e6908cf05"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_84bp_Mitered/Penta_Orthobirotunda_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2261,
+          "sha256": "5f24d3e6a556d137e65e7ee010e7035053fa2143645b89c25db3b8b8acdf83d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthobirotunda_6HB_84bp_Mitered/Penta_Orthobirotunda_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 130377,
+          "sha256": "a81a73d472878f19e82709768d501f73740ba102432fe3f0187789373c4c5a27"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_42bp_Flat/Penta_Orthocupolarotunda_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_42bp_Flat/Penta_Orthocupolarotunda_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 51172,
+          "sha256": "1875cdffc74aa0e661f4a1713f554636a6e324ac59c3a7cd034cf0acaf95a938"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_42bp_Mitered/Penta_Orthocupolarotunda_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_42bp_Mitered/Penta_Orthocupolarotunda_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 65870,
+          "sha256": "35ddbd08d71a5709bf9125cb5d1ea2afa248cb70a46a107367f871bae2dd824c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_63bp_Flat/Penta_Orthocupolarotunda_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_63bp_Flat/Penta_Orthocupolarotunda_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 74458,
+          "sha256": "0be7e7bee9af8994dc535b54fca030838aafdcdc41cffe0eeea93e3844897c68"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_63bp_Mitered/Penta_Orthocupolarotunda_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_63bp_Mitered/Penta_Orthocupolarotunda_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 88451,
+          "sha256": "79859886327fb18531dcf0405810fa58edbf005a2f4e296f3ab22afd9f91606d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_84bp_Flat/Penta_Orthocupolarotunda_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_84bp_Flat/Penta_Orthocupolarotunda_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 94185,
+          "sha256": "17347f23c34cf51f95c2faf280dccfbe507909de4ddae2b0d0385fc4f6f3fcc0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_84bp_Mitered/Penta_Orthocupolarotunda_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1916,
+          "sha256": "a4bfca185056028b4c1c568d81a003f99469cb7262886aa6b8d2e4ab3f0c27eb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Penta_Orthocupolarotunda_6HB_84bp_Mitered/Penta_Orthocupolarotunda_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 113305,
+          "sha256": "7b71d5f514d8ab0447bd56c33dcc32acae542d3d283af182ccd00ea17847e203"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_42bp_Flat/Rhom_Dodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_42bp_Flat/Rhom_Dodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 22092,
+          "sha256": "47d3356939c2b38b639e55f630b5543a40e90be6a14cdcd748f5880e9186dfc4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_42bp_Mitered/Rhom_Dodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_42bp_Mitered/Rhom_Dodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 23824,
+          "sha256": "782e09ce39f9d8b83b2b4350f9c914379b90d5ae3b46a7ab988b665fb5a6de9e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_63bp_Flat/Rhom_Dodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_63bp_Flat/Rhom_Dodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 32334,
+          "sha256": "994156c057a96a1a52f532a788a53bd5debf4e39966f39c5f63786f7839d9ca7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_63bp_Mitered/Rhom_Dodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_63bp_Mitered/Rhom_Dodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 33484,
+          "sha256": "ac66653313a317cdaacef245de64fca2fe099ad8c2778f1eb42fc7b3d4cbf01d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_84bp_Flat/Rhom_Dodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_84bp_Flat/Rhom_Dodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 41179,
+          "sha256": "28ca06ace9784c222f18ffcf8225aa948cc6e4e44527e18ed4bc1c3bbeacb8b8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_84bp_Mitered/Rhom_Dodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1065,
+          "sha256": "39ebfd88ed29c602c8422de3be846bee8ddec01b0e3cb8988eb981976dd55c46"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Dodeca_6HB_84bp_Mitered/Rhom_Dodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 44077,
+          "sha256": "d8065c23ce4d0a30464e9a8436f7299ef592d136a0fce5227c3e2d3c29826416"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_42bp_Flat/Rhom_Triaconta_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_42bp_Flat/Rhom_Triaconta_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 56680,
+          "sha256": "6140546fc6f43b9d02969a8ff755e4cb404ae0d92b8bf3cbdb0c3108b30e0576"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_42bp_Mitered/Rhom_Triaconta_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_42bp_Mitered/Rhom_Triaconta_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 61297,
+          "sha256": "72b60ca94c4de52059766352977dab6577bc5fa5bdd555971b3fabc74df0d07c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_63bp_Flat/Rhom_Triaconta_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_63bp_Flat/Rhom_Triaconta_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 82825,
+          "sha256": "32ac03b5c6ed8cc197b0879bb0665a2a2b8620ffa297ba8deb36cc05e77509ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_63bp_Mitered/Rhom_Triaconta_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_63bp_Mitered/Rhom_Triaconta_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 86218,
+          "sha256": "547e4edc4525c216c838cc059db4a31804fa49ef2a31831338b6baea1a21d6ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_84bp_Flat/Rhom_Triaconta_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_84bp_Flat/Rhom_Triaconta_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 105295,
+          "sha256": "2176c1482fd2ea84040c46b3c13b13b902c987d9123daba1e4b36ed57e941514"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_84bp_Mitered/Rhom_Triaconta_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2307,
+          "sha256": "ea09fb2a5fe18092a36757fac5514a8099331b7b088e0fdc7bfd583c0144f3ab"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhom_Triaconta_6HB_84bp_Mitered/Rhom_Triaconta_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 113526,
+          "sha256": "4589dcbedfe801cee6b7e21922f9c26c005cbc6ec4eda7c6403d1d2169777c41"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_42bp_Flat/Rhombic_Hexeconta_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_42bp_Flat/Rhombic_Hexeconta_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 108775,
+          "sha256": "f82956e0bde2c0d12f672e05f8ed3b2e8e3141d0b5e3cbf19f0790848d417334"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_42bp_Mitered/Rhombic_Hexeconta_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_42bp_Mitered/Rhombic_Hexeconta_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 140720,
+          "sha256": "3d4f9cf2825b28144727a70775f299ed295bf3c15c8dab4865a05fe702801419"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_63bp_Flat/Rhombic_Hexeconta_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_63bp_Flat/Rhombic_Hexeconta_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 162307,
+          "sha256": "d0422c91c5079d149f394e92fcec322f8eb7299688f039442f2798f589e333b8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_63bp_Mitered/Rhombic_Hexeconta_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_63bp_Mitered/Rhombic_Hexeconta_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 194082,
+          "sha256": "fbb6022da2afedfb1766ad423f1d3afa33fc6ce53ecb7983eb7563cc73187495"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_84bp_Flat/Rhombic_Hexeconta_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_84bp_Flat/Rhombic_Hexeconta_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 216397,
+          "sha256": "c6a01d73914d3e51b33a0ffbdf5f32d8758c1544c1785ef6f5e361096dfe7076"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_84bp_Mitered/Rhombic_Hexeconta_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 4377,
+          "sha256": "bb7d58cb1638988ec91110bbb58aafd97ac3c4cc77691de59d3c146464fda9ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombic_Hexeconta_6HB_84bp_Mitered/Rhombic_Hexeconta_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 248106,
+          "sha256": "c21134c0552bbc3e0afa370b20470b0de751bb9daee733e1cc43f815001cc10d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_42bp_Flat/Rhombicubocta_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_42bp_Flat/Rhombicubocta_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 44983,
+          "sha256": "532b1a2cc0fa04b37fd93c74e348a613a1d134b7310c8a3165ea537c536152d9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_42bp_Mitered/Rhombicubocta_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_42bp_Mitered/Rhombicubocta_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 59851,
+          "sha256": "7035946dee3a8e56d137aa1186a70f153c815df9791bb703223ffed28ac4207a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_63bp_Flat/Rhombicubocta_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_63bp_Flat/Rhombicubocta_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 65755,
+          "sha256": "84730911f9cbcdfee671ada7000e208d0ad7331a934c9162201e5774e3f6e4ba"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_63bp_Mitered/Rhombicubocta_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_63bp_Mitered/Rhombicubocta_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 80383,
+          "sha256": "0fb76c3bfa913cbd3af0619eb217b5c375441c5832f654409843e910647ce26a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_84bp_Flat/Rhombicubocta_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_84bp_Flat/Rhombicubocta_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 83635,
+          "sha256": "4d3d325dd3d7fb9c7a0375b02db01f4fdb848ace9397e55c750388caf5aba113"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_84bp_Mitered/Rhombicubocta_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1847,
+          "sha256": "2eb03223e1074b1cbca7df9faf4e6c2f11e0dff0193c4432b0396196c0ea93fa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Rhombicubocta_6HB_84bp_Mitered/Rhombicubocta_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 101998,
+          "sha256": "4aae980fe84ba92089b6a0301ae550754734c8dc73fed8f5583cc1c504b6ef59"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_42bp_Flat/Small_Stell_Dodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_42bp_Flat/Small_Stell_Dodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 128262,
+          "sha256": "7389143b5f8dfaa2f1d800517b74f145b5d794372a4d76b5beddbfa6db895fbe"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_42bp_Mitered/Small_Stell_Dodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_42bp_Mitered/Small_Stell_Dodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 162019,
+          "sha256": "3ce8097d01dccbf5a8c4fe5b610de99750764f9313723aa0b713aeb069635a98"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_63bp_Flat/Small_Stell_Dodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_63bp_Flat/Small_Stell_Dodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 181978,
+          "sha256": "80223d16b13a68e22cefb023df7b616a058d3701d66f5dacf342c38fa7eddd7b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_63bp_Mitered/Small_Stell_Dodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_63bp_Mitered/Small_Stell_Dodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 217717,
+          "sha256": "6298fb581fb7b64143c7eb3528f2395dcae804a81c8cd0aad868ea76a3524291"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_84bp_Flat/Small_Stell_Dodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_84bp_Flat/Small_Stell_Dodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 239647,
+          "sha256": "afc4629f9dab76bb3ffb5915ba3712ae12ff154a82b360f47eafa900b07269b5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_84bp_Mitered/Small_Stell_Dodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "a853dd19133fc610c20fb6dd072939392f84f1d15f42f13d1170bae5100fdac9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Small_Stell_Dodeca_6HB_84bp_Mitered/Small_Stell_Dodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 276147,
+          "sha256": "87af0ec7a1384c33bb32c44d42bdd5ce27cc348318cfd8e92dc5e024f67777ed"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_42bp_Flat/Snub_Cube_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_42bp_Flat/Snub_Cube_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 54580,
+          "sha256": "8568a20b2ca5c3a0d19f590c5efc8a27f5d27736a936e894c03d7aa0846730b8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_42bp_Mitered/Snub_Cube_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_42bp_Mitered/Snub_Cube_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 66414,
+          "sha256": "8c05e590f13a5d8c4f0b35967f4f2a6cb2cdadc31b6ead1e6bf506f75446d499"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_63bp_Flat/Snub_Cube_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_63bp_Flat/Snub_Cube_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 79825,
+          "sha256": "ff5a2846fb52cce303491bcbf02db3452a1fc3c302cd22b00ef7b7530b3da6a8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_63bp_Mitered/Snub_Cube_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_63bp_Mitered/Snub_Cube_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 90085,
+          "sha256": "47fa89db6a86c9e402060ac317b9d33c48f48d352ad18fedf50638e4c51a229b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_84bp_Flat/Snub_Cube_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_84bp_Flat/Snub_Cube_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 101695,
+          "sha256": "192cec0c235f63a871b5866438121d8867518842560cf1e8c5e8ed7efd683e54"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_84bp_Mitered/Snub_Cube_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2123,
+          "sha256": "245133d91d7f22be7ffbf82e3b48ea16cb91d40adea8d63816f9e31e55378028"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Snub_Cube_6HB_84bp_Mitered/Snub_Cube_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 116624,
+          "sha256": "fd59c148618f7239c7ac2604aceeff3aec51a9912e7f34c774fac78e964ea9ac"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_42bp_Flat/Square_Gyrobicupola_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_42bp_Flat/Square_Gyrobicupola_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 31544,
+          "sha256": "66313913c9a1fdc55b03d47f27339908160f89869f4d6ac22db441410daba8d0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_42bp_Mitered/Square_Gyrobicupola_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_42bp_Mitered/Square_Gyrobicupola_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 40854,
+          "sha256": "ecc04f4ec940f470c4593616065d412987feacd1b652cd60021f2ff9277d51e8"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_63bp_Flat/Square_Gyrobicupola_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_63bp_Flat/Square_Gyrobicupola_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 45969,
+          "sha256": "ed29f83f9d273a67e227f0c70e446883c5b57ace7c0831906cf957012a141faa"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_63bp_Mitered/Square_Gyrobicupola_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_63bp_Mitered/Square_Gyrobicupola_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 55476,
+          "sha256": "8651812b19cf4bf0cfff9f1b4794addbb00179e3aa1ed52eac16037aef58bdad"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_84bp_Flat/Square_Gyrobicupola_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_84bp_Flat/Square_Gyrobicupola_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 58275,
+          "sha256": "06f0437c377acbbe8ddeac265a13446bb2018c03fde3d81fc22c0c1ac1b97328"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_84bp_Mitered/Square_Gyrobicupola_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1295,
+          "sha256": "692745a7b0965cbbace798f3b4cba1a8db551d324ef1d5bd59e012382d821eea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Square_Gyrobicupola_6HB_84bp_Mitered/Square_Gyrobicupola_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 70299,
+          "sha256": "c93863ef99d3c8805f5c276c4dab24ee3045a479ba9c27b6085e3c4669209b1a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_42bp_Flat/Tetra_Hexa_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_42bp_Flat/Tetra_Hexa_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 35544,
+          "sha256": "9f1d54f2dca8c567185ff64ea0c0c4e8946518a5771c78a6347fd42d892712d3"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_42bp_Mitered/Tetra_Hexa_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_42bp_Mitered/Tetra_Hexa_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 41816,
+          "sha256": "ad43dd9174e6f731cd781220a7dd26812dbd327f14244c91a7b12bead01f37cd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_63bp_Flat/Tetra_Hexa_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_63bp_Flat/Tetra_Hexa_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 52555,
+          "sha256": "20a2e7fa58712cce87448f240b9d44454ad4595f9cdc190fa0e16680e4749a12"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_63bp_Mitered/Tetra_Hexa_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_63bp_Mitered/Tetra_Hexa_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 58489,
+          "sha256": "d2acb9da518bd7bab5f873f5c501d3e84dedc02521c1fb2a5c9e88f028219f9a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_84bp_Flat/Tetra_Hexa_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_84bp_Flat/Tetra_Hexa_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 66772,
+          "sha256": "54373b1f279c272fa201b3614c1a9386952ab98d789b48c3c2565aed4dee51db"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_84bp_Mitered/Tetra_Hexa_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "71b26df927e7fc29f9a94aea824f877aa399e53267c3a5cee73dbc207c3954ea"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetra_Hexa_6HB_84bp_Mitered/Tetra_Hexa_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 75675,
+          "sha256": "5ca8e8816e87eed06b41781b0b54a794573203f1214be1364216b3ec8a977249"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_42bp_Flat/Tetrahedron_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_42bp_Flat/Tetrahedron_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 5205,
+          "sha256": "8d3087619677a9427b2645edabfee4ef2aaac1f2453208a9239a4e435dc2c2c2"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_42bp_Mitered/Tetrahedron_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_42bp_Mitered/Tetrahedron_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 7032,
+          "sha256": "296a842874b5dcfc8e7c7bb7a19193dd9ef9776a95e436ee344a0417304d2095"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_63bp_Flat/Tetrahedron_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_63bp_Flat/Tetrahedron_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 7728,
+          "sha256": "0fce85be2c9ff9cd38c6a0e23579407ccaf9fd70d0d88617ca9ef3801148e2b7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_63bp_Mitered/Tetrahedron_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_63bp_Mitered/Tetrahedron_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 9331,
+          "sha256": "27a28b093edbdd0ebb31bcdcf46744d2f32566a176f080ce0f58453b21e42124"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_84bp_Flat/Tetrahedron_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_84bp_Flat/Tetrahedron_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 10254,
+          "sha256": "b8d86199ab8feeef0fe1bfe1dc361d6c2c22981e48bbbf27f031e343652e98f9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_84bp_Mitered/Tetrahedron_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 419,
+          "sha256": "544709ee0b0fd465dde763a9f924ac27d485299b2967e928fe50ce7a7af06997"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tetrahedron_6HB_84bp_Mitered/Tetrahedron_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 12024,
+          "sha256": "eb9d0e4bd836509ddde92ed2f9c6e17dc2c4468d9ca9191f11608acc1339f5d6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_42bp_Flat/Tria_Icosa_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_42bp_Flat/Tria_Icosa_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 100762,
+          "sha256": "6a44fd6c0237cfffb51a1d86d6e3e5a44e43dd431c16e4432f315b9ad0db9589"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_42bp_Mitered/Tria_Icosa_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_42bp_Mitered/Tria_Icosa_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 121117,
+          "sha256": "31857e78f3eac8c093ffb43de7adb1075f192d1c9fb5e2c7b306a998dd916c52"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_63bp_Flat/Tria_Icosa_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_63bp_Flat/Tria_Icosa_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 144748,
+          "sha256": "e827531fb664795b6650a8f3e184ef9d46dec3a407a9186bc80eee49fad550c4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_63bp_Mitered/Tria_Icosa_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_63bp_Mitered/Tria_Icosa_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 165932,
+          "sha256": "c2cfd39978f7d1165fd6b7c6afe1f206268a00badf06b9a17e30b6caccf44fc5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_84bp_Flat/Tria_Icosa_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_84bp_Flat/Tria_Icosa_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 186088,
+          "sha256": "73d886c38340b8b9ff3cec54e176a356664e0a2ce75f9c86a55121656fb2a9a1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_84bp_Mitered/Tria_Icosa_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2997,
+          "sha256": "84c3eaea8f9d7049c2f564e62c8c763449c0b5ebede73013c5eec272375a817d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Icosa_6HB_84bp_Mitered/Tria_Icosa_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 214637,
+          "sha256": "f65d26becca45c850c2afa2e936fd1c58a6b8a06c7ed13c0b14f59f205dfdb5d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_42bp_Flat/Tria_Octa_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_42bp_Flat/Tria_Octa_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 39373,
+          "sha256": "54bc9a00b1b78f8cd1325775d80544c656cc883bc949bbc341da3fdf202033dd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_42bp_Mitered/Tria_Octa_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_42bp_Mitered/Tria_Octa_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 47124,
+          "sha256": "f9496a8840ecb8c9e134078cec36f2e0c5bb6668bd6ad244388302f0d746030b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_63bp_Flat/Tria_Octa_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_63bp_Flat/Tria_Octa_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 57412,
+          "sha256": "6f68784a957dc2a57fc39981693788df4ed3b03a75cad1b91fcaf61dc4da0ec9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_63bp_Mitered/Tria_Octa_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_63bp_Mitered/Tria_Octa_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 65219,
+          "sha256": "350583449146678ccd8fd9f859ffacd82cee16b9b35d4b1500aeac799f595909"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_84bp_Flat/Tria_Octa_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_84bp_Flat/Tria_Octa_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 73564,
+          "sha256": "aa94a521ad38f42c6c794c05fff99ba6c108e145f4d27155c0e0cf09702b9b5d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_84bp_Mitered/Tria_Octa_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1341,
+          "sha256": "c36990b85ccf884f0c9f01065c4abf54b395586cbae2f41d257fd2eeeee852a4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Octa_6HB_84bp_Mitered/Tria_Octa_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 84609,
+          "sha256": "825f751463a4c0e397784e0d16df412c22f0ef6bddd9253315c17b71e4ac0bb0"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_42bp_Flat/Tria_Tetra_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_42bp_Flat/Tria_Tetra_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 19098,
+          "sha256": "accb9a255a7d71d10477931b148d28012e1035268ec48c27f4d44700653c2867"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_42bp_Mitered/Tria_Tetra_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_42bp_Mitered/Tria_Tetra_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 23614,
+          "sha256": "95ec98fbbc080477302ef0661b6efc34b10e556d77924b9ca1ef1535cc3522c1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_63bp_Flat/Tria_Tetra_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_63bp_Flat/Tria_Tetra_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 28641,
+          "sha256": "a63f72dc3d08992b75c4e5363d36d91d89294db739309e468e9b7877d34583f6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_63bp_Mitered/Tria_Tetra_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_63bp_Mitered/Tria_Tetra_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 32324,
+          "sha256": "fedaa8667d5d8b5cd0a474bb54cc1651d337e6ee262e051fba1b426a78b497ef"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_84bp_Flat/Tria_Tetra_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_84bp_Flat/Tria_Tetra_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 36904,
+          "sha256": "ad1e8c89b12c4c18f718adfbb3b43771a0a15c7aaca53106ba4c1384ebf4abff"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_84bp_Mitered/Tria_Tetra_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 788,
+          "sha256": "1cd8b4c11808972f0c58b30a1813186b975a88588049fe812af4ed1fa0111af5"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Tria_Tetra_6HB_84bp_Mitered/Tria_Tetra_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 42178,
+          "sha256": "72149667eacd3de17df1af8e063601bd4adc98ab607e9c36ecd1d7d325af8fa4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_42bp_Flat/Triang_Bipyramid_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_42bp_Flat/Triang_Bipyramid_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 8088,
+          "sha256": "94daa05f8d4e88f09467ac80d38b38a49790159cb056b897dde5d6f4591293d1"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_42bp_Mitered/Triang_Bipyramid_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_42bp_Mitered/Triang_Bipyramid_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 10900,
+          "sha256": "c3d2af729b748152bc4829ce9794340bdb48d678aa522c8617b254f4bbd9056e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_63bp_Flat/Triang_Bipyramid_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_63bp_Flat/Triang_Bipyramid_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 12009,
+          "sha256": "26dc93416ca693fa55ad37fa42f1ceeb08b7f6a9662c0252d230337fbbf051c4"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_63bp_Mitered/Triang_Bipyramid_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_63bp_Mitered/Triang_Bipyramid_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 14516,
+          "sha256": "f914f3eda2d1793312cc8ebd2c48e3adc355da2989e5df9b3bddf7c8d45e52da"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_84bp_Flat/Triang_Bipyramid_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_84bp_Flat/Triang_Bipyramid_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 15951,
+          "sha256": "568971a284921d7d6d1ef72c661e84d83708095baa47ac00ca476c526795fdcc"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_84bp_Mitered/Triang_Bipyramid_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 511,
+          "sha256": "75f2836d322ed8785b09c2d71f7c58a923dc22a060245bbff5e4fe25f17274c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Triang_Bipyramid_6HB_84bp_Mitered/Triang_Bipyramid_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 18674,
+          "sha256": "28914442918a00a2e7c5dd18b67bcf3eee23a30065595a6255ae260c7dc9254b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_42bp_Flat/Trunc_Cube_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_42bp_Flat/Trunc_Cube_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 32949,
+          "sha256": "c6bbed45c466f46e55af232bb8ddde5ac31fb114159db6c7018c2388db4f7e79"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_42bp_Mitered/Trunc_Cube_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_42bp_Mitered/Trunc_Cube_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 47636,
+          "sha256": "bea7239dd78372d296c94fe38b6583aa90ba7ad3a11652ac06a45e78f48c31d3"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_63bp_Flat/Trunc_Cube_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_63bp_Flat/Trunc_Cube_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 48205,
+          "sha256": "8911489dfa926092cfe303f9d0fd2d9697c7e7134b04bd686ebb8442e7761c69"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_63bp_Mitered/Trunc_Cube_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_63bp_Mitered/Trunc_Cube_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 62434,
+          "sha256": "3a11b2c7f21b515f883990a0d390fa52269f154327fe7b53fe0d69eaac4487e7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_84bp_Flat/Trunc_Cube_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_84bp_Flat/Trunc_Cube_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 61399,
+          "sha256": "317b5d27bf46f1e46bda9ae40bd3c4dbda5ee8d5b90c976ce6c6904aac6b2fc7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_84bp_Mitered/Trunc_Cube_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "e214bc95cf1fca6f7204543bfc7d81709aa9dbfab973ded5413d544475c448a6"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cube_6HB_84bp_Mitered/Trunc_Cube_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 78031,
+          "sha256": "aa7e99a8d4787f05a767240c6902f4d2e1880bd12e8a36cc327b392e34f00197"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_42bp_Flat/Trunc_Cubocta_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_42bp_Flat/Trunc_Cubocta_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 67537,
+          "sha256": "392ca331dbafba1864c11ad1477562828a35d756e709805a453be515194902f2"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_42bp_Mitered/Trunc_Cubocta_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_42bp_Mitered/Trunc_Cubocta_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 78964,
+          "sha256": "e2fb9d8afb6f6990f5e8d924cff06dfb824d05199564b262ca1cfcde006c38bd"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_63bp_Flat/Trunc_Cubocta_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_63bp_Flat/Trunc_Cubocta_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 98695,
+          "sha256": "3e981696614ae6f3a82e7427c7d1e1ff06a64a76cb0c99c81c8e660c3d17eeeb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_63bp_Mitered/Trunc_Cubocta_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_63bp_Mitered/Trunc_Cubocta_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 109701,
+          "sha256": "c2a326fc6cf0a7d4360040cdc2e52d051405746dbc445201b716407c008b7e13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_84bp_Flat/Trunc_Cubocta_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_84bp_Flat/Trunc_Cubocta_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 125515,
+          "sha256": "ef05cdf43c603c874b19e90fcafb7057f3c64abc9e557af5e6053bb06686c7f7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_84bp_Mitered/Trunc_Cubocta_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 2951,
+          "sha256": "4da4ec6f42e090f1e8d857ae2d8c3da3edbe3811dfe9cd39d12f807a217a7d13"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Cubocta_6HB_84bp_Mitered/Trunc_Cubocta_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 142063,
+          "sha256": "37bc45b1dbaf859fa277d83767bdeda5788259e4ba89b30b204fc9275d1a64da"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_42bp_Flat/Trunc_Dodeca_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_42bp_Flat/Trunc_Dodeca_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 83821,
+          "sha256": "f0d5dcd4f43870cd3516221127dddebffef5dade6933ed81c2f4094dde775a99"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_42bp_Mitered/Trunc_Dodeca_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_42bp_Mitered/Trunc_Dodeca_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 122139,
+          "sha256": "e8db3549dfc990081b59d512c47a321d2087c31542eae4347af26032761ff667"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_63bp_Flat/Trunc_Dodeca_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_63bp_Flat/Trunc_Dodeca_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 122500,
+          "sha256": "90c7c4f64346956b54b1953b8a0361188216beb68c3381ba17fbaa5f17a4cc5a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_63bp_Mitered/Trunc_Dodeca_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_63bp_Mitered/Trunc_Dodeca_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 158917,
+          "sha256": "4a76b3263817c41aed9e2fb2882018d5ce27b08aa1d80546a640453a797a5ba7"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_84bp_Flat/Trunc_Dodeca_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_84bp_Flat/Trunc_Dodeca_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 156007,
+          "sha256": "750a49e1a1cfbc3b9e33ec8a12e8c9eb4f8e8fb5b72fce93e9de6a7d813f2406"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_84bp_Mitered/Trunc_Dodeca_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "0d823715df7087f162bd5d34ea4fe9e63a4472bfb2e84cbaaae2892268fce784"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Dodeca_6HB_84bp_Mitered/Trunc_Dodeca_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 198746,
+          "sha256": "797d476db49d6e96d442f590fdeff5577c14e89251feea848a3a5b2ebb835a99"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_42bp_Flat/Trunc_Icosa_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_42bp_Flat/Trunc_Icosa_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 83191,
+          "sha256": "4ea768f20a167ac3dae4ba910d2259150fc557c2cbd7a869c1597557519f0a72"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_42bp_Mitered/Trunc_Icosa_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_42bp_Mitered/Trunc_Icosa_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 88920,
+          "sha256": "49885789c1a70b8590dd6b3089fda0aca749179f8970b4e0a9a42b1d9324c19e"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_63bp_Flat/Trunc_Icosa_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_63bp_Flat/Trunc_Icosa_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 121600,
+          "sha256": "2a6937bb21e0d986bd6d2b18a60df64ac587e3b98a1189ce78b71336ce8dbfee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_63bp_Mitered/Trunc_Icosa_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_63bp_Mitered/Trunc_Icosa_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 125522,
+          "sha256": "06ef825394763d6bc5a9d9cd63d0e952ef5bbaa24680a165cddcf032f18b2c5d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_84bp_Flat/Trunc_Icosa_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_84bp_Flat/Trunc_Icosa_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 154927,
+          "sha256": "8b9a500a8495c12935170098143de332b3a0f6ca5c83a0984f62fc5feb5d6289"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_84bp_Mitered/Trunc_Icosa_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 3641,
+          "sha256": "98af082b02d5ce41967203e6f8d550cf76cdc5c79f6a86af18ee2f7a93dfa8c9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Icosa_6HB_84bp_Mitered/Trunc_Icosa_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 166312,
+          "sha256": "330da28c7e3e463682fb07ebf13707503c1da315cea46f68aa8eda39c4195432"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_42bp_Flat/Trunc_Octa_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_42bp_Flat/Trunc_Octa_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 32949,
+          "sha256": "a821cd5e196f96f74b989e709a6ac646cb5a40b9495e37ef9e98d78c5585276c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_42bp_Mitered/Trunc_Octa_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_42bp_Mitered/Trunc_Octa_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 38110,
+          "sha256": "406a3111385ea65acd948afb05c198d165fa7605dd0c1c72ff8304a234b6a64b"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_63bp_Flat/Trunc_Octa_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_63bp_Flat/Trunc_Octa_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 48205,
+          "sha256": "76598904cb6ffcafff741ddaafc9eebb58eb87301f6962adf84179e2e75f87ee"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_63bp_Mitered/Trunc_Octa_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_63bp_Mitered/Trunc_Octa_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 52393,
+          "sha256": "4d798d6f989d9451bf129e98f562aff5a8b697bc28a8691edeff581365a8a1bb"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_84bp_Flat/Trunc_Octa_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_84bp_Flat/Trunc_Octa_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 61399,
+          "sha256": "4d1a20815383e20078e268b1f3a83b7031d94b1d965072fa81bbb4e44c422c40"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_84bp_Mitered/Trunc_Octa_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 1571,
+          "sha256": "8db3c322b0e09078223ab1314732ba68b9c8f8173d3ebcdf66d47aed03473b4c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Octa_6HB_84bp_Mitered/Trunc_Octa_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 68793,
+          "sha256": "d39953e36e2c51f86e24797a46f2dc1240fafc13c712157aab6d079ace245444"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_42bp_Flat/Trunc_Tetra_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_42bp_Flat/Trunc_Tetra_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 15489,
+          "sha256": "9c881c910e20b51d0aa3b97fc6704cc5fd425dbddded1fe15e2f60333d40174d"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_42bp_Mitered/Trunc_Tetra_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_42bp_Mitered/Trunc_Tetra_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 22421,
+          "sha256": "c4dcf86e342adfa425670c8bd6a1af2e928ca6b20bc7d13b12f193cda41f53d2"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_63bp_Flat/Trunc_Tetra_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_63bp_Flat/Trunc_Tetra_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 23169,
+          "sha256": "7adf75baa48e55321d391f1e98afb8b568b90c5aa4f358b9ebc017495a230baf"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_63bp_Mitered/Trunc_Tetra_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_63bp_Mitered/Trunc_Tetra_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 30103,
+          "sha256": "6c0b597393377dc622a75bd8438bc1484b7ef33e1f62757b3d3b63f2c0a1f76f"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_84bp_Flat/Trunc_Tetra_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_84bp_Flat/Trunc_Tetra_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 30852,
+          "sha256": "f5b815b6e13795e57750f9383718cdde18533d8373857864f41ec08e54b5845c"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_84bp_Mitered/Trunc_Tetra_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 880,
+          "sha256": "1a8772837194e69c7e52c6ca2997dfbc47f9f4adb78055341ea3e4832d3b62be"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Trunc_Tetra_6HB_84bp_Mitered/Trunc_Tetra_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 37785,
+          "sha256": "3fd64fef0821d672bafd470703d96fb8d58839e8c9c74277d22068eae23af1b9"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_42bp_Flat/Twisted_Tri_Prism_6HB_42bp_Flat_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_42bp_Flat/Twisted_Tri_Prism_6HB_42bp_Flat_Sequence.csv",
+          "bytes": 10852,
+          "sha256": "b30425e908c7a71d292746517def16cc4615458402394d021b3dbf1adc20710a"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_42bp_Mitered/Twisted_Tri_Prism_6HB_42bp_Mitered_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_42bp_Mitered/Twisted_Tri_Prism_6HB_42bp_Mitered_Sequence.csv",
+          "bytes": 15124,
+          "sha256": "8883b423f98a6c80aea8aa7bc1cda66843feca9342d8535bfc3e4bbeede09866"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_63bp_Flat/Twisted_Tri_Prism_6HB_63bp_Flat_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_63bp_Flat/Twisted_Tri_Prism_6HB_63bp_Flat_Sequence.csv",
+          "bytes": 15608,
+          "sha256": "221f119c3a538f85e6a55135f5041bc5072c19b27da1f1d0b8ead92a0972d610"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_63bp_Mitered/Twisted_Tri_Prism_6HB_63bp_Mitered_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_63bp_Mitered/Twisted_Tri_Prism_6HB_63bp_Mitered_Sequence.csv",
+          "bytes": 20212,
+          "sha256": "d90de769f23b2f6a6542915e7afff81a8ddec173e53c4b5bb2fe7b1d894687ac"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_84bp_Flat/Twisted_Tri_Prism_6HB_84bp_Flat_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_84bp_Flat/Twisted_Tri_Prism_6HB_84bp_Flat_Sequence.csv",
+          "bytes": 21127,
+          "sha256": "c7dfea1085a5da68d5c7c015b8f9af15cc19ea2e982a07c137e5d125c81fa265"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_84bp_Mitered/Twisted_Tri_Prism_6HB_84bp_Mitered_Geometry.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Library of 240 DNA Nanoparticles/Twisted_Tri_Prism_6HB_84bp_Mitered/Twisted_Tri_Prism_6HB_84bp_Mitered_Sequence.csv",
+          "bytes": 25517,
+          "sha256": "aa67533f3246d538fc7b6ea2aeb6cb7d5f22bff09ab56b29df92ff19404bbeb5"
+        },
+        {
+          "name": "readme.txt",
+          "bytes": 312,
+          "sha256": "c45247797cbb3596568d32c22a267d0e7572ae2faab6cfa4d22e2968248b47b3"
+        }
+      ]
+    },
+    {
+      "file": "assets/sources/acs-expansion-20261104/14163347-nn8b08671_si_003.zip",
+      "sha256": "995881ea85597c5ae39e113428e94878109c2d84956c167a68f79226c945a46b",
+      "members": [
+        {
+          "name": "Source Codes/1_Input.f90",
+          "bytes": 64459,
+          "sha256": "151de894f294e3204004711225334cea6ec20ce275e3f6773967daa80c0ed311"
+        },
+        {
+          "name": "Source Codes/2_ModGeo.f90",
+          "bytes": 74556,
+          "sha256": "ea66e0002c442fa9b24c7cb6f28f208a8d00462a258560e7fd70464857efa943"
+        },
+        {
+          "name": "Source Codes/3_Section.f90",
+          "bytes": 42825,
+          "sha256": "1ca5796486bd0ce191ab0f8153b19b92f3cf083f2a9ac4fd373aaea8bbb6065c"
+        },
+        {
+          "name": "Source Codes/4_Basepair.f90",
+          "bytes": 104482,
+          "sha256": "8414fdacf3c644b0b1ebe71e416ad3347ccf68790dfccb0525fff0395ecb218f"
+        },
+        {
+          "name": "Source Codes/5_Route.f90",
+          "bytes": 173453,
+          "sha256": "bf6db5e54e308e8859c1c47e0649f23da518d32011dc6672fb914ca5ff10ebf1"
+        },
+        {
+          "name": "Source Codes/6_SeqDesign.f90",
+          "bytes": 320994,
+          "sha256": "671e0739cda4e55ade02ee094afa64d48924fa16c6d4b2a51d01e90a00305eb0"
+        },
+        {
+          "name": "Source Codes/7_Output.f90",
+          "bytes": 136423,
+          "sha256": "3b8f9f2686e66895256ae804526d6aa8a25e8adf19c349cb6110de658384ee10"
+        },
+        {
+          "name": "Source Codes/Data_Bound.f90",
+          "bytes": 2846,
+          "sha256": "06f8e686865fec80337c23669deb8c0abde39be2a1a5c48faed10caea0b82597"
+        },
+        {
+          "name": "Source Codes/Data_DNA.f90",
+          "bytes": 4998,
+          "sha256": "f94cceb2c08c00d06f70e6a347cb3e9c1977eed297de933f31a9213373449a82"
+        },
+        {
+          "name": "Source Codes/Data_Geom.f90",
+          "bytes": 4711,
+          "sha256": "a0b778411315771cd939be3eb55e8385922547d93d5ad3561cac961532773955"
+        },
+        {
+          "name": "Source Codes/Data_Mesh.f90",
+          "bytes": 2731,
+          "sha256": "9d2c5fe209b01ffbaf9a26dca64eb508242ac95c37a3fd925fcd75d8c30d4bb9"
+        },
+        {
+          "name": "Source Codes/Data_Prob.f90",
+          "bytes": 2731,
+          "sha256": "fba1b44c201418874f6ac8358f8343bc16373604c487086efadde81e84b0e221"
+        },
+        {
+          "name": "Source Codes/Exam_Archi.f90",
+          "bytes": 98756,
+          "sha256": "63d13d6e817b9a403e7f3d0e886042858f9b1589a3485283242dde45464a56a1"
+        },
+        {
+          "name": "Source Codes/Exam_Catalan.f90",
+          "bytes": 101230,
+          "sha256": "964fc1093f4a687fd4a4b1f6e32a5043afbda5de3ac9c786c6732665c9876090"
+        },
+        {
+          "name": "Source Codes/Exam_Johnson.f90",
+          "bytes": 52180,
+          "sha256": "32e3fba8d3d8162cf154b08923c1a4f18af5d435a882b4510ce4890fa48be003"
+        },
+        {
+          "name": "Source Codes/Exam_Miscel.f90",
+          "bytes": 86870,
+          "sha256": "63c613b3dd15688fd29730402f75b8fb61d6ee781279d3beab40757af6217668"
+        },
+        {
+          "name": "Source Codes/Exam_Platonic.f90",
+          "bytes": 16332,
+          "sha256": "5a36c9745433efdae67fd1e26eaf949e54c166b3c78dd16c67783b05bf4bff54"
+        },
+        {
+          "name": "Source Codes/Importer.f90",
+          "bytes": 5906,
+          "sha256": "cd1b36884171a0ba1204bd748a038e4494adc7b885babfafc53f173c57c1e6ef"
+        },
+        {
+          "name": "Source Codes/List.f90",
+          "bytes": 7763,
+          "sha256": "f24c89b7bea802843b010599b5b3354b843066206faf7b1a392fa726f0ab038e"
+        },
+        {
+          "name": "Source Codes/Makefile",
+          "bytes": 4302,
+          "sha256": "59f3d8fdf96187812f3a4b3e1f9be3c1590bfc34fc3ab6798ffacc7d6e618f07"
+        },
+        {
+          "name": "Source Codes/Mani.f90",
+          "bytes": 15278,
+          "sha256": "1d6fa0a0a4e57a6800b80982a9923ebb787640c6d804cc497f0471d618d617c0"
+        },
+        {
+          "name": "Source Codes/Math.f90",
+          "bytes": 18361,
+          "sha256": "9132223f639b8609602e9b8bb7fd8cc7b512e0cdcc7b9b7dd521468edc7f7886"
+        },
+        {
+          "name": "Source Codes/Para.f90",
+          "bytes": 12377,
+          "sha256": "3fd38fc70346e290bb769ed8ddfbf51da44a77ab0b1c363fbdf23925920fe947"
+        },
+        {
+          "name": "Source Codes/SpanTree.f90",
+          "bytes": 46712,
+          "sha256": "d3a0ce3d81ee634b344e92a266f5461ea13ff7fb02c26bdd81c957a2f4116515"
+        },
+        {
+          "name": "Source Codes/TALOS",
+          "bytes": 3274772,
+          "sha256": "42a21c244304fdc9a2042fc318868c7be7d7bd13715283925097cf0c0615fb68"
+        },
+        {
+          "name": "Source Codes/TALOS.f90",
+          "bytes": 19682,
+          "sha256": "d967b1551d33f928353e2e758ee7d22eaf72055102fe00c91d31a1318f5ee25d"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/01_tetrahedron.ply",
+          "bytes": 329,
+          "sha256": "4055c4b8be9d047260aa8c744d2f44751b19036cdcefe583a5d77a5e1b0be1e5"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/02_cube.ply",
+          "bytes": 479,
+          "sha256": "68629bc68e298762115281a091a82d1b47f0419e0b9e9fb7f4f5b5d49e62f547"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/03_octahedron.ply",
+          "bytes": 422,
+          "sha256": "e359f1037aa4f49414b2f95860a773e009d50576d287788ef58863f5c1201ee6"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/04_dodecahedron.ply",
+          "bytes": 958,
+          "sha256": "5fb0d3389ed81d19e76dd5f23001583f46bfc39df4e328fd9e5f777c3ecf7c86"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/05_icosahedron.ply",
+          "bytes": 734,
+          "sha256": "0d650ffcd38f146e639f33aa72dc548653300e51acdbbbb097d183895e7fb8b6"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/06_cuboctahedron.ply",
+          "bytes": 584,
+          "sha256": "7b790c85c9950d3eb00d8641636056d0a39f53b25bde6384decf006bd963e665"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/07_icosidodecahedron.ply",
+          "bytes": 1374,
+          "sha256": "49e96fef35e345301530a859d75678a1435d3adfea81c118a1a0cd2cabb85d1a"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/08_rhombicuboctahedron.ply",
+          "bytes": 1160,
+          "sha256": "02aaecf2237c685314aa5a7efbdc95d4b44f2cb4da0b75d175ea079ce0f2f491"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/09_snub_cube.ply",
+          "bytes": 1341,
+          "sha256": "499a27475c2132e91c6cd1e02bb84779aa233b42a48cd91ba37a3590ab7dcedb"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/10_truncated_cube.ply",
+          "bytes": 1066,
+          "sha256": "c0be28e4679d3a44ab167718cd535fbd15f5e9fd6b1a329ea265349a084c9e18"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/11_truncated_cuboctahedron.ply",
+          "bytes": 2064,
+          "sha256": "a17a6a76c178638a24146e1f1849781195adc5e6e494033752aadb086081b0a7"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/12_truncated_dodecahedron.ply",
+          "bytes": 2580,
+          "sha256": "c9320a44b08244a57bd3bad4a497dac2cfe128c40a465be985a9dc15fd7b5107"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/13_truncated_icosahedron.ply",
+          "bytes": 2572,
+          "sha256": "4c4cbf882d636840e20a5b768ebf7f98a97891e2c52eadcc8d4668fffcacc848"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/14_truncated_octahedron.ply",
+          "bytes": 1081,
+          "sha256": "e533e32dc78b9332b2fb7c02069f2c8141d5dd751bb43d68a3683b22d54c8c61"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/15_truncated_tetrahedron.ply",
+          "bytes": 625,
+          "sha256": "0ac52bd16b5747ddeff6b0eaba68a29d0b036f612283cfe55efc11a9517fb22d"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/16_gyroelongated_pentagonal_pyramid.ply",
+          "bytes": 666,
+          "sha256": "98c2ea2eb10dbbe02f4247cae51f4ae0e61b83e5056fd78f758dd3cb7ab17437"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/17_triangular_bipyramid.ply",
+          "bytes": 378,
+          "sha256": "f4a751b3e48389034276e5224f3120a4cdd3444ba8eccc528476198a11cadbd9"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/18_pentagonal_bipyramid.ply",
+          "bytes": 478,
+          "sha256": "49986891f0b94fb9b811145200821d2dcfd41e4eb56d720df92914a9bf78691e"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/19_gyroelongated_square_bipyramid.ply",
+          "bytes": 628,
+          "sha256": "ff0f5cc0ca0c01e1a80059aabebf8057016380f00a2c7a89328a97d3c19eb5cd"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/20_square_gyrobicupola.ply",
+          "bytes": 869,
+          "sha256": "728b3538bc341c3fdcaf971ebcd1f50b254ecaae38a549992135035ed13f786c"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/21_pentagonal_orthocupolarotunda.ply",
+          "bytes": 1278,
+          "sha256": "990817d1e4faeaf6001f32c48c4eaca6c24ef81523be26132aab196ebbe211db"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/22_pentagonal_orthobirotunda.ply",
+          "bytes": 1505,
+          "sha256": "126c5477ec665388f204c4d2f657b1a66ff74df154f3da1fe0443e7a926f4065"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/23_elongated_pentagonal_gyrobicupola.ply",
+          "bytes": 1506,
+          "sha256": "6bab19846ec5f55aea8dd179209df544ea00db667a8b7df643f7cd3b5dd5b410"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/24_elongated_pentagonal_gyrobirotunda.ply",
+          "bytes": 1961,
+          "sha256": "d1693830e0a62cbb02c755969384a9d79c6d47d482d7e1f5dfddf6c1535109b5"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/25_gyroelongated_square_bicupola.ply",
+          "bytes": 1308,
+          "sha256": "13fed1c6adf31529f4dd071fc100c4fa16f9c10415f4b06fd6fdee4ce9cbbd74"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/26_rhombic_dodecahedron.ply",
+          "bytes": 628,
+          "sha256": "9483161b26fed23e8b626cfb0fdb5bc4505b43ca05e26d7a889a2431d8535bd3"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/27_rhombic_triacontahedron.ply",
+          "bytes": 1416,
+          "sha256": "871d231a5a65d1e41e5dd721f4945136589a181d36b1c2c433c1dcb03f143779"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/28_deltoidal_icositetrahedron.ply",
+          "bytes": 1253,
+          "sha256": "d0ab3dc54bc92a3fc44756bf36b3c5e6d85b19ce01f4a1c797addfb951bd1770"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/29_pentagonal_icositetrahedron.ply",
+          "bytes": 1750,
+          "sha256": "6c864644afa59553176f19a7b01b2d3a0433d52fe4372b15358cfdc68d4a0e83"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/30_triakis_octahedron.ply",
+          "bytes": 829,
+          "sha256": "2548a08c2cf71b33c1236ccad025f872e4c54f7c0854cecc6d80535123c113fe"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/31_disdyakis_dodecahedron.ply",
+          "bytes": 1487,
+          "sha256": "0973ffdddf068bb861ee995433ceca649ea206aef4ed67bdc746e60ca0c571cd"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/32_triakis_icosahedron.ply",
+          "bytes": 1862,
+          "sha256": "9cae11e680866065fc5628306c34afb72140ecbf39ff24d549d5f38fdd4a093b"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/33_pentakis_dodecahedron.ply",
+          "bytes": 1874,
+          "sha256": "659394b28844192453be95fbe1c22a668c9d84d299fb92dcf4a83831e0ee920e"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/34_tetrakis_hexahedron.ply",
+          "bytes": 839,
+          "sha256": "9ad7f2106d967dff41409bcf542b59bd8cff208de9fae08e7f77918dc9bb7cde"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/35_triakis_tetrahedron.ply",
+          "bytes": 530,
+          "sha256": "7a090f497221013e135e4da807ec47f7f82a797ac407ff34681473a759c05369"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/36_twisted_triangular_prism.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/37_heptagonal_bipyramid.ply",
+          "bytes": 577,
+          "sha256": "a3b2d9605d37968270d430e35f4c94644e9e6717824b0bceedb357c29720faf1"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/38_enneagonal_trapezohedron.ply",
+          "bytes": 1009,
+          "sha256": "22dda93c97be49185b09939b0439b73481d08e14ecf5d8ddc918f0cac91b9920"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/39_small_stell_dodecahedron.ply",
+          "bytes": 1833,
+          "sha256": "4e89f42f98500cddac0d83a096f9b1810119ea0debe7c171c94de32b0346ba53"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/input/40_rhombic_hexecontahedron.ply",
+          "bytes": 2922,
+          "sha256": "3039de78ab8cc878d9531fe12b57dd6bf59ce950fd627fc0f7875f1d454809ae"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/TALOS-Finder",
+          "bytes": 59,
+          "sha256": "06bccb5a55795e26c8df1afaa5e273fba9cf23b36e95a4c3c6300c0d2b5f1b24"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/TALOS-Terminal",
+          "bytes": 3274772,
+          "sha256": "42a21c244304fdc9a2042fc318868c7be7d7bd13715283925097cf0c0615fb68"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/env.txt",
+          "bytes": 2305,
+          "sha256": "86835adc669f6444d6b883d4fea7187ee453aab6ab2c38a9bbbdcc4be13915b1"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Mac/readme.txt",
+          "bytes": 1128,
+          "sha256": "16d11677b4bc4271fc8e8eb51ad01d8309fa9a941dae454326353112a44c08b2"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/01_tetrahedron.ply",
+          "bytes": 329,
+          "sha256": "4055c4b8be9d047260aa8c744d2f44751b19036cdcefe583a5d77a5e1b0be1e5"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/02_cube.ply",
+          "bytes": 479,
+          "sha256": "68629bc68e298762115281a091a82d1b47f0419e0b9e9fb7f4f5b5d49e62f547"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/03_octahedron.ply",
+          "bytes": 422,
+          "sha256": "e359f1037aa4f49414b2f95860a773e009d50576d287788ef58863f5c1201ee6"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/04_dodecahedron.ply",
+          "bytes": 958,
+          "sha256": "5fb0d3389ed81d19e76dd5f23001583f46bfc39df4e328fd9e5f777c3ecf7c86"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/05_icosahedron.ply",
+          "bytes": 734,
+          "sha256": "0d650ffcd38f146e639f33aa72dc548653300e51acdbbbb097d183895e7fb8b6"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/06_cuboctahedron.ply",
+          "bytes": 584,
+          "sha256": "7b790c85c9950d3eb00d8641636056d0a39f53b25bde6384decf006bd963e665"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/07_icosidodecahedron.ply",
+          "bytes": 1374,
+          "sha256": "49e96fef35e345301530a859d75678a1435d3adfea81c118a1a0cd2cabb85d1a"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/08_rhombicuboctahedron.ply",
+          "bytes": 1160,
+          "sha256": "02aaecf2237c685314aa5a7efbdc95d4b44f2cb4da0b75d175ea079ce0f2f491"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/09_snub_cube.ply",
+          "bytes": 1341,
+          "sha256": "499a27475c2132e91c6cd1e02bb84779aa233b42a48cd91ba37a3590ab7dcedb"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/10_truncated_cube.ply",
+          "bytes": 1066,
+          "sha256": "c0be28e4679d3a44ab167718cd535fbd15f5e9fd6b1a329ea265349a084c9e18"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/11_truncated_cuboctahedron.ply",
+          "bytes": 2064,
+          "sha256": "a17a6a76c178638a24146e1f1849781195adc5e6e494033752aadb086081b0a7"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/12_truncated_dodecahedron.ply",
+          "bytes": 2580,
+          "sha256": "c9320a44b08244a57bd3bad4a497dac2cfe128c40a465be985a9dc15fd7b5107"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/13_truncated_icosahedron.ply",
+          "bytes": 2572,
+          "sha256": "4c4cbf882d636840e20a5b768ebf7f98a97891e2c52eadcc8d4668fffcacc848"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/14_truncated_octahedron.ply",
+          "bytes": 1081,
+          "sha256": "e533e32dc78b9332b2fb7c02069f2c8141d5dd751bb43d68a3683b22d54c8c61"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/15_truncated_tetrahedron.ply",
+          "bytes": 625,
+          "sha256": "0ac52bd16b5747ddeff6b0eaba68a29d0b036f612283cfe55efc11a9517fb22d"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/16_gyroelongated_pentagonal_pyramid.ply",
+          "bytes": 666,
+          "sha256": "98c2ea2eb10dbbe02f4247cae51f4ae0e61b83e5056fd78f758dd3cb7ab17437"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/17_triangular_bipyramid.ply",
+          "bytes": 378,
+          "sha256": "f4a751b3e48389034276e5224f3120a4cdd3444ba8eccc528476198a11cadbd9"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/18_pentagonal_bipyramid.ply",
+          "bytes": 478,
+          "sha256": "49986891f0b94fb9b811145200821d2dcfd41e4eb56d720df92914a9bf78691e"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/19_gyroelongated_square_bipyramid.ply",
+          "bytes": 628,
+          "sha256": "ff0f5cc0ca0c01e1a80059aabebf8057016380f00a2c7a89328a97d3c19eb5cd"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/20_square_gyrobicupola.ply",
+          "bytes": 869,
+          "sha256": "728b3538bc341c3fdcaf971ebcd1f50b254ecaae38a549992135035ed13f786c"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/21_pentagonal_orthocupolarotunda.ply",
+          "bytes": 1278,
+          "sha256": "990817d1e4faeaf6001f32c48c4eaca6c24ef81523be26132aab196ebbe211db"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/22_pentagonal_orthobirotunda.ply",
+          "bytes": 1505,
+          "sha256": "126c5477ec665388f204c4d2f657b1a66ff74df154f3da1fe0443e7a926f4065"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/23_elongated_pentagonal_gyrobicupola.ply",
+          "bytes": 1506,
+          "sha256": "6bab19846ec5f55aea8dd179209df544ea00db667a8b7df643f7cd3b5dd5b410"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/24_elongated_pentagonal_gyrobirotunda.ply",
+          "bytes": 1961,
+          "sha256": "d1693830e0a62cbb02c755969384a9d79c6d47d482d7e1f5dfddf6c1535109b5"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/25_gyroelongated_square_bicupola.ply",
+          "bytes": 1308,
+          "sha256": "13fed1c6adf31529f4dd071fc100c4fa16f9c10415f4b06fd6fdee4ce9cbbd74"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/26_rhombic_dodecahedron.ply",
+          "bytes": 628,
+          "sha256": "9483161b26fed23e8b626cfb0fdb5bc4505b43ca05e26d7a889a2431d8535bd3"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/27_rhombic_triacontahedron.ply",
+          "bytes": 1416,
+          "sha256": "871d231a5a65d1e41e5dd721f4945136589a181d36b1c2c433c1dcb03f143779"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/28_deltoidal_icositetrahedron.ply",
+          "bytes": 1253,
+          "sha256": "d0ab3dc54bc92a3fc44756bf36b3c5e6d85b19ce01f4a1c797addfb951bd1770"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/29_pentagonal_icositetrahedron.ply",
+          "bytes": 1750,
+          "sha256": "6c864644afa59553176f19a7b01b2d3a0433d52fe4372b15358cfdc68d4a0e83"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/30_triakis_octahedron.ply",
+          "bytes": 829,
+          "sha256": "2548a08c2cf71b33c1236ccad025f872e4c54f7c0854cecc6d80535123c113fe"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/31_disdyakis_dodecahedron.ply",
+          "bytes": 1487,
+          "sha256": "0973ffdddf068bb861ee995433ceca649ea206aef4ed67bdc746e60ca0c571cd"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/32_triakis_icosahedron.ply",
+          "bytes": 1862,
+          "sha256": "9cae11e680866065fc5628306c34afb72140ecbf39ff24d549d5f38fdd4a093b"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/33_pentakis_dodecahedron.ply",
+          "bytes": 1874,
+          "sha256": "659394b28844192453be95fbe1c22a668c9d84d299fb92dcf4a83831e0ee920e"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/34_tetrakis_hexahedron.ply",
+          "bytes": 839,
+          "sha256": "9ad7f2106d967dff41409bcf542b59bd8cff208de9fae08e7f77918dc9bb7cde"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/35_triakis_tetrahedron.ply",
+          "bytes": 530,
+          "sha256": "7a090f497221013e135e4da807ec47f7f82a797ac407ff34681473a759c05369"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/36_twisted_triangular_prism.ply",
+          "bytes": 534,
+          "sha256": "c71f51e1a31e95ac2c0e605d5b30dfc68a97fd0c38010713e496d4a7e303cd39"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/37_heptagonal_bipyramid.ply",
+          "bytes": 577,
+          "sha256": "a3b2d9605d37968270d430e35f4c94644e9e6717824b0bceedb357c29720faf1"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/38_enneagonal_trapezohedron.ply",
+          "bytes": 1009,
+          "sha256": "22dda93c97be49185b09939b0439b73481d08e14ecf5d8ddc918f0cac91b9920"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/39_small_stell_dodecahedron.ply",
+          "bytes": 1833,
+          "sha256": "4e89f42f98500cddac0d83a096f9b1810119ea0debe7c171c94de32b0346ba53"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/input/40_rhombic_hexecontahedron.ply",
+          "bytes": 2922,
+          "sha256": "3039de78ab8cc878d9531fe12b57dd6bf59ce950fd627fc0f7875f1d454809ae"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/TALOS.exe",
+          "bytes": 3056128,
+          "sha256": "c6415dfa18797306f49387d4394a837b055b64defd54fb03407fcb3ef2072741"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/env.txt",
+          "bytes": 2305,
+          "sha256": "b2a08f57b91d5ae9847bc3db20d1df8f7ff2d5579f469c1ec229c077ffd8d359"
+        },
+        {
+          "name": "Pre-compiled Binaries/TALOS-Win/readme.txt",
+          "bytes": 1183,
+          "sha256": "ed65bf0c50d81fbf1184f9b105bd078cb84f5274ff23ee826bda25fdbce162f0"
+        }
+      ]
+    }
+  ],
+  "geometry_sequence_directory_pairs": 240,
+  "method": "List and hash existing ZIP members in memory; confirm directory pairing only",
+  "limitations": [
+    "240 file pairs are not independently validated source sets or experimentally confirmed designs.",
+    "No software executed and no structures extracted, modified or reconstructed.",
+    "Content-level sequence/scaffold/routing consistency remains unaudited."
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "batch_id": "B0009",
+  "reviewed_count": 21,
+  "input_count": 25,
+  "remaining_keys": [
+    "10.1098/rsif.2012.0740",
+    "10.1073/pnas.1310092110",
+    "10.1080/07391102.2013.786386",
+    "10.1088/0957-4484/24/43/435601"
+  ],
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5458,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9624
+  },
+  "counts": {
+    "publication_versions": 5458,
+    "canonical_work_keys": 5457,
+    "provisional_work_keys_not_reconciled": 5456,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 573,
+      "unreviewed": 4704,
+      "fulltext_reviewed": 39,
+      "design_sources_reviewed": 142
+    },
+    "relevance": {
+      "uncertain": 5274,
+      "background_or_review": 11,
+      "design_bearing": 171,
+      "not_origami": 2
+    },
+    "catalog_eligibility": {
+      "unresolved": 5451,
+      "excluded": 6,
+      "eligible": 1
+    },
+    "design_groups": 134,
+    "design_source_reviews": 57,
+    "discovery_runs": 38
+  }
+}

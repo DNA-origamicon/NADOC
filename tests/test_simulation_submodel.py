@@ -34,7 +34,7 @@ def test_routes_resolve_job_storage(engine, monkeypatch, tmp_path):
     from importlib import import_module
     from types import SimpleNamespace
     routes = import_module(f"backend.api.routes_{engine}")
-    monkeypatch.setattr(routes, "_load_job", lambda id: SimpleNamespace(status="queued", job_dir=lambda ws: tmp_path / id))
+    monkeypatch.setattr(routes, "_load_job", lambda id: SimpleNamespace(status="draft", job_id=id, slurm_job_id=None, runpod_pod_id=None, run_kind=None, prep_params_set=None, prep_params={}, save=lambda ws: None, job_dir=lambda ws: tmp_path / id))
     monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
     (tmp_path / "job-a").mkdir()
     (tmp_path / "job-b").mkdir()

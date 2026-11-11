@@ -1,0 +1,14 @@
+{
+  "deposited_references": 178,
+  "doi_bearing": 172,
+  "no_doi": 6,
+  "matched_reference_occurrences": 79,
+  "unique_targets": 178,
+  "unmatched_unique_targets": 99,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6149,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 12564
+  }
+}

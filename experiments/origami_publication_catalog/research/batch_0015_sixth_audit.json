@@ -1,0 +1,41 @@
+{
+  "reviewed_keys": [
+    "10.1021/acscentsci.9b00174",
+    "10.1021/acs.nanolett.9b01201"
+  ],
+  "first_pass_count": 11,
+  "input_count": 25,
+  "exclusion_audit": "Same-agent check of oc9b00174 Table S-I and assembly methods pp5\u20139; main pending",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 12002
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6039,
+    "provisional_work_keys_not_reconciled": 6037,
+    "versions_with_explicit_version_relation": 4,
+    "review_stages": {
+      "metadata_screened": 1184,
+      "unreviewed": 4559,
+      "fulltext_reviewed": 67,
+      "design_sources_reviewed": 231
+    },
+    "relevance": {
+      "uncertain": 5718,
+      "background_or_review": 31,
+      "design_bearing": 274,
+      "not_origami": 18
+    },
+    "catalog_eligibility": {
+      "unresolved": 6017,
+      "excluded": 23,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  }
+}

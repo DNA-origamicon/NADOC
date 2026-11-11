@@ -1,0 +1,521 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/diblock-si.pdf",
+    "sha256": "fe9300d017b372fa03d18b280d4fc99d4cb94eb6546cded26c0d596db5d91740",
+    "url": "https://ndownloader.figshare.com/files/7321154",
+    "locator": "Entire SI S1\u2013S18 text inspected; S2 routing/cross-section and S9 colored capture boundaries visually inspected. TableS1 S2\u2013S12; tall rectangle experiments S14/S16\u201317."
+  },
+  "structural_rows": [
+    {
+      "name": "s 1",
+      "sequence": "CCGTCTATCACAGGAGGCCGA",
+      "map_position": "0[118]",
+      "pdf_page": 2
+    },
+    {
+      "name": "s 2",
+      "sequence": "AATAATTCTCATTTTTGCGGATGGCATAGCCGAACAA",
+      "map_position": "1[136]",
+      "pdf_page": 2
+    },
+    {
+      "name": "s 3",
+      "sequence": "TTTCATCAGAGTACCTTTAATTGCTGGAAACGCAATA",
+      "map_position": "1[168]",
+      "pdf_page": 2
+    },
+    {
+      "name": "s 4",
+      "sequence": "ACCCGTCGCGGAAGCAAACTCCAACAACTGGCATGAT",
+      "map_position": "1[200]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 5",
+      "sequence": "GATTGACGTTTTAATTCGAGCTTTATGTTAGC",
+      "map_position": "1[232]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 6",
+      "sequence": "ATCAGCTCATTTTTCTGAATATAATGCT",
+      "map_position": "1[98]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 7",
+      "sequence": "CATTATACAAATACCGAACGAATCTGAAA",
+      "map_position": "10[119]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 8",
+      "sequence": "GAATTACCAACAGAGGTGAGGCGCATGGAAATAC",
+      "map_position": "10[151]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 9",
+      "sequence": "GAGATGGCTGCAACAGTGCCATACCGCCAGCC",
+      "map_position": "10[183]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 10",
+      "sequence": "AGAAACACAAATGAAAAATCTAAATCGGCCTTGC",
+      "map_position": "10[215]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 11",
+      "sequence": "AAAGCTGCTCATTCACCTCAAATATCAA",
+      "map_position": "10[253]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 12",
+      "sequence": "GCGCAGACGGTCAATCATAAG",
+      "map_position": "11[232]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 13",
+      "sequence": "GATCGTCACCCTCAGCAGCGA",
+      "map_position": "12[118]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 14",
+      "sequence": "CAACGCCTATTCATTTCAATTACCTCTGAGAAGAGTC",
+      "map_position": "13[136]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 15",
+      "sequence": "TAGTTAGCTACCAAGTTACAAAATCCATAGGTCTGAG",
+      "map_position": "13[168]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 16",
+      "sequence": "CTTTCCAGAACAATAACGGATTCGCCGGCTTAGGTTG",
+      "map_position": "13[200]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 17",
+      "sequence": "TGGGATTATACAGTAACAGTACCATGCTGATG",
+      "map_position": "13[232]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 18",
+      "sequence": "GTACCGTAACACTGGATGAAACAAACAT",
+      "map_position": "13[98]",
+      "pdf_page": 3
+    },
+    {
+      "name": "s 19",
+      "sequence": "AAGAAGATAGTTTCGTCACCAGTTTGCGG",
+      "map_position": "14[119]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 20",
+      "sequence": "GGCGAATTGTAGCATTCCACAGATCGCTGAGGCT",
+      "map_position": "14[151]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 21",
+      "sequence": "CTTTGAAGTAACGATCTAAAGACCATCGCCCA",
+      "map_position": "14[183]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 22",
+      "sequence": "TCGGGAGAACGTTAGTAAATGAATGATACCGATA",
+      "map_position": "14[215]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 23",
+      "sequence": "AACGTCAGATGAATTTGCTAAACAACTT",
+      "map_position": "14[253]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 24",
+      "sequence": "CAAATCCAATCGCAAGACAAA",
+      "map_position": "15[232]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 25",
+      "sequence": "CGATTGGCCTTGATATTCACA",
+      "map_position": "16[118]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 26",
+      "sequence": "CACCGTCAACATGTAATTTAGGCAGTTTCCTTATCAT",
+      "map_position": "17[136]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 27",
+      "sequence": "GAGCCAGCTTAATTGAGAATCGCCACAAGTACCGCAC",
+      "map_position": "17[168]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 28",
+      "sequence": "CATTAGCACCAGTATAAAGCCAACGCGTTTTTATTTT",
+      "map_position": "17[200]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 29",
+      "sequence": "CCATCGATTTAGTATCATATGCGCGCCCAATA",
+      "map_position": "17[232]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 30",
+      "sequence": "AAATATTGACGGAACAGTAATAAGAGAA",
+      "map_position": "17[98]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 31",
+      "sequence": "TTTCGAGCATTATTCATTAAAGGGTCAGA",
+      "map_position": "18[119]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 32",
+      "sequence": "CAACGCCACCGACTTGAGCCATTGCCGCCGCCAG",
+      "map_position": "18[151]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 33",
+      "sequence": "GTAGGGCAAAATCACCAGTAGCCTCAGAGCCG",
+      "map_position": "18[183]",
+      "pdf_page": 4
+    },
+    {
+      "name": "s 34",
+      "sequence": "AATTCTTAAGGCCGGAAACGTCAACCCTCAGAAC",
+      "map_position": "18[215]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 35",
+      "sequence": "CTAGAAAAAGCCTGTAGCAGCACCGTAA",
+      "map_position": "18[253]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 36",
+      "sequence": "GCAAGCAAATCAGATATAGAA",
+      "map_position": "19[232]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 37",
+      "sequence": "CTTAATTGTAACCAATAGGAACCGAAAAA",
+      "map_position": "2[119]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 38",
+      "sequence": "ATAAGAGGGCGTCTGGCCTTCCTTATTAAAGAAC",
+      "map_position": "2[151]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 39",
+      "sequence": "GATTAGAACATTAAATGTGAGAGTGTTGTTCC",
+      "map_position": "2[183]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 40",
+      "sequence": "AACCAGACGATTCTCCGTGGGAAATAAATCAAAA",
+      "map_position": "2[215]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 41",
+      "sequence": "ACTTCAAATATCGCCGTAATGGGATAGG",
+      "map_position": "2[253]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 42",
+      "sequence": "GAATAACATAAAAACAGGGAA",
+      "map_position": "20[118]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 43",
+      "sequence": "ATCAATTCATCAGGTCATTGCCTGACTCGTATTAAAT",
+      "map_position": "21[136]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 44",
+      "sequence": "CCAATAAAGGGTAGCTATTTTTGAGATTTTAAAAGTT",
+      "map_position": "21[168]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 45",
+      "sequence": "AGCAAAATACCGTTCTAGCTGATAAGCGGAACAAAGA",
+      "map_position": "21[200]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 46",
+      "sequence": "AAGCTAAGACAGTCAAATCACCATTATCATCA",
+      "map_position": "21[232]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 47",
+      "sequence": "CTATATTTTCATTTCAAGAGAATCGATG",
+      "map_position": "21[98]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 48",
+      "sequence": "GGAGCAAAGGGGCGCGAGCTGAACAGAGA",
+      "map_position": "22[119]",
+      "pdf_page": 5
+    },
+    {
+      "name": "s 49",
+      "sequence": "CAAAGGCTTACTAATAGTAGTAGGTTTAACGTCA",
+      "map_position": "22[151]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 50",
+      "sequence": "CCGGAGATCATACAGGCAAGGTTATCCCAATC",
+      "map_position": "22[183]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 51",
+      "sequence": "GATATTCATAAGCAATAAAGCCTTTTGCCAGTTA",
+      "map_position": "22[215]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 52",
+      "sequence": "TGAGAAAGGCCGGAATCGGTTGTACCAA",
+      "map_position": "22[253]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 53",
+      "sequence": "TATTCCTGATTATCAGATGAT",
+      "map_position": "23[232]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 54",
+      "sequence": "AAACGTAGAAAATACATACAT",
+      "map_position": "3[232]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 55",
+      "sequence": "CGCGCGGGGAGAGGCGGTTTG",
+      "map_position": "4[118]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 56",
+      "sequence": "CGATCGGTTTAGACTGGATAGCGTCTTTCGGAACCTA",
+      "map_position": "5[136]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 57",
+      "sequence": "GCTGGCGAAAGTTTTGCCAGAGGGGATTAAGAGGCTG",
+      "map_position": "5[168]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 58",
+      "sequence": "TTAAGTTGAAACCAAAATAGCGAGATTAGGATTAGCG",
+      "map_position": "5[200]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 59",
+      "sequence": "ACGACGTATCATAACCCTCGTTTCGGATAAGT",
+      "map_position": "5[232]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 60",
+      "sequence": "CCATTCGCCATTCACGTCATAAATATTC",
+      "map_position": "5[98]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 61",
+      "sequence": "TGCGGAATGGCTGCGCAACTGTCGGCCAA",
+      "map_position": "6[119]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 62",
+      "sequence": "TAAAATGTGCGGGCCTCTTCGCTGGAAACCTGTC",
+      "map_position": "6[151]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 63",
+      "sequence": "GCAAAAGAAGGGGGATGTGCTTGCGTTGCGCT",
+      "map_position": "6[183]",
+      "pdf_page": 6
+    },
+    {
+      "name": "s 64",
+      "sequence": "GACGATAAGGTAACGCCAGGGTTGGTGCCTAATG",
+      "map_position": "6[215]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 65",
+      "sequence": "GTAAGAGCAACACTTGTAAAACGACGGC",
+      "map_position": "6[253]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 66",
+      "sequence": "GCCGTCGAGAGGGTTGATATA",
+      "map_position": "7[232]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 67",
+      "sequence": "TGGATTATTTACATTGGCAGA",
+      "map_position": "8[118]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 68",
+      "sequence": "GAAGATAATTATGCGATTTTAAGAACGATTATACCAA",
+      "map_position": "9[136]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 69",
+      "sequence": "AACACCGCTTTAATTTCAACTTTAAGAGATTTGTATC",
+      "map_position": "9[168]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 70",
+      "sequence": "CCAGCAGCCAGAACGAGTAGTAAATCGAAATCCGCGA",
+      "map_position": "9[200]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 71",
+      "sequence": "TTGCTGAAGTGAATAAGGCTTGCCGGAACGAG",
+      "map_position": "9[232]",
+      "pdf_page": 7
+    },
+    {
+      "name": "s 72",
+      "sequence": "AACATCGCCATTAACAGTCAGGACGTTG",
+      "map_position": "9[98]",
+      "pdf_page": 7
+    }
+  ],
+  "arm_names": [
+    "A 1",
+    "A 2",
+    "A 3",
+    "A 4",
+    "A 5",
+    "A 6",
+    "A 7",
+    "A 8",
+    "B 1",
+    "B 2",
+    "B 3",
+    "B 4",
+    "B 5",
+    "B 6",
+    "B 7",
+    "B 8",
+    "C 1",
+    "C 2",
+    "C 3",
+    "C 4",
+    "C 5",
+    "C 6",
+    "C 7",
+    "C 8",
+    "D 1",
+    "D 2",
+    "D 3",
+    "D 4",
+    "D 5",
+    "D 6",
+    "D 7",
+    "D 8",
+    "E 1",
+    "E 2",
+    "E 3",
+    "E 4",
+    "E 5",
+    "E 6",
+    "E 7",
+    "E 8",
+    "F 1",
+    "F 2",
+    "F 3",
+    "F 4",
+    "F 5",
+    "F 6",
+    "F 7",
+    "F 8"
+  ],
+  "crown_names": [
+    "ABE 1",
+    "ABE 2",
+    "ABE 3",
+    "ABE 4",
+    "ABE 5",
+    "ABE 6",
+    "BCD 1",
+    "BCD 2",
+    "BCD 3",
+    "BCD 4",
+    "BCD 5",
+    "BCD 6",
+    "DEF 1",
+    "DEF 2",
+    "DEF 3",
+    "DEF 4",
+    "DEF 5",
+    "DEF 6",
+    "ACF 1",
+    "ACF 2",
+    "ACF 3",
+    "ACF 4",
+    "ACF 5",
+    "ACF 6"
+  ],
+  "table_total": 144,
+  "separate_nanoparticle_coating_oligos": 2,
+  "limitations": "72 structural sequences text-indexed, not independently base-by-base certified. 48 arm and24 crown sequences not transcribed: colored capture boundaries and line wraps require systematic source-image checks. Optional captures cannot be removed merely by trimming polyA runs.144rows is not proof of complete routing or synthesis set."
+}

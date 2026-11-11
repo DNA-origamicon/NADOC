@@ -9,7 +9,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     md: document.getElementById('md-submodel'),
   }
   if (!hosts.oxdna || !hosts.md) return null
-  const records = new Map(), selected = { oxdna: null, md: null }, subscribers = new Set()
+  const records = new Map(), selected = { oxdna: null, md: null }, subscribers = new Set(), zoomButtons = {}
   let engine = 'oxdna', active = null, editor = null, disposed = false
   const sourceKey = () => {
     const s = store.getState()
@@ -22,7 +22,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     if (!records.has(key)) records.set(key, { key, job, engine: forEngine, box: null, loaded: !job, loading: false, error: '', queue: Promise.resolve(), pending: 0 })
     return records.get(key)
   }
-  const status = {}, buttons = {}, retries = {}, shellInputs = {}, projections = {}
+  const status = {}, buttons = {}, retries = {}, shellInputs = {}, shellDirty = {}, projections = {}, details = {}
   const shell = createSubmodelShell(sceneDeps.scene)
   const mdVisibility = document.getElementById('md-box-view-details')
   let oxVisibility = null
@@ -34,10 +34,12 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     const button = document.createElement('button')
     button.type = 'button'; button.className = 'btn btn--sm'; button.textContent = 'Define submodel'; button.id = `${key}-define-submodel`
     const label = document.createElement('p'); label.setAttribute('role', 'status')
-    const note = document.createElement('p')
-    note.textContent = key === 'oxdna'
+    button.title = key === 'oxdna'
       ? 'Submodels run locally on CPU with a Brownian thermostat. Only the box moves; the shell is fixed. Outside context remains visible but is not simulated. Maps include this frozen context; its zero fluctuation is imposed, not sampled.'
-      : 'NAMD selection only — this box does not restrict Run.'
+      : 'New NAMD submodels simulate whole nucleotides in the box, a surrounding shell of DNA with uniform 0.1 kcal/mol/Å² heavy-atom restraints and a fixed outer 0.3 nm plus cut-bond support, and mobile water and ions. Bonded neighbors are retained even with a zero shell. Uses a fixed-volume cell; GPU runs use offload mode.'
+    button.title += ' Shell distance is measured outside the box; bonded support is retained even at 0 nm. Click to show the region controls.'
+    const content = document.createElement('div'); content.hidden = true; content.id = `${key}-submodel-controls`; details[key] = content
+    button.setAttribute('aria-controls', content.id)
     const projection = document.createElement('p')
     projection.id = key + '-submodel-projection'
     projection.setAttribute('aria-live', 'polite')
@@ -46,27 +48,39 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     retry.type = 'button'; retry.className = 'btn btn--sm'; retry.textContent = 'Retry save'; retry.hidden = true
     retry.addEventListener('click', () => { const r = record(key); void save(r, r.box).catch(() => {}) })
     const shellLabel = document.createElement('label')
-    shellLabel.className = 'submodel-shell-field'; shellLabel.textContent = 'Fixed shell (nm) '
+    shellLabel.className = 'submodel-shell-field'; shellLabel.textContent = 'Surrounding shell (nm) '
     const shellInput = document.createElement('input')
     shellInput.type = 'number'; shellInput.min = '0'; shellInput.max = '1000'; shellInput.step = '0.1'; shellInput.value = '3'; shellInput.id = `${key}-submodel-shell`
     shellLabel.append(shellInput); shellInputs[key] = shellInput
+    shellInput.addEventListener('input', () => { shellDirty[key] = true })
     shellInput.addEventListener('change', () => {
       const r = record(key), radius = Number(shellInput.value)
+      shellDirty[key] = false
       if (!shellInput.value.trim() || !Number.isFinite(radius) || radius < 0 || radius > 1000) { paint(); return }
       if (r.box) { save(r, { ...r.box, shell_nm: radius }); notify(); paint() }
     })
-    const help = document.createElement('p')
-    help.textContent = 'Distance outside the box. 0 nm keeps only directly bonded neighbours fixed. Bonded neighbours are always retained.'
-    host.append(button, label, retry, shellLabel, help)
+    const zoom = document.createElement('button')
+    zoom.type = 'button'; zoom.className = 'btn btn--sm'; zoom.textContent = 'Use as zoom volume'; zoom.id = `${key}-submodel-zoom`
+    zoom.title = 'Copy this box’s position, dimensions and rotation to Zoom Volume.'
+    zoom.addEventListener('click', () => {
+      const r = record(key)
+      if (!r.box || r.loading || !r.loaded) return
+      window.dispatchEvent(new CustomEvent('nadoc:zoom-volume-box', { detail: structuredClone(r.box) }))
+    })
+    zoomButtons[key] = zoom
+    const actions = document.createElement('div'); actions.className = 'submodel-actions'; actions.append(button, zoom)
+    host.append(actions, label, retry, content)
+    content.append(shellLabel)
     if (key === 'oxdna') {
       const visibilityLabel = document.createElement('label')
       oxVisibility = document.createElement('input'); oxVisibility.type = 'checkbox'; oxVisibility.id = 'oxdna-submodel-visible'; oxVisibility.checked = true
-      visibilityLabel.append(oxVisibility, ' Show box and shell'); host.append(visibilityLabel)
+      visibilityLabel.append(oxVisibility, ' Show box and shell'); content.append(visibilityLabel)
       oxVisibility.addEventListener('change', () => { const r = record('oxdna'); if (r.box) { save(r, { ...r.box, visible: oxVisibility.checked }); notify(); paint() } })
     }
-    host.append(note, projection); buttons[key] = button; status[key] = label; retries[key] = retry
+    content.append(projection); buttons[key] = button; status[key] = label; retries[key] = retry
     button.addEventListener('click', () => {
       engine = key
+      record(key).opened = true
       if (key === 'md' && mdVisibility && !mdVisibility.checked) { mdVisibility.checked = true; mdVisibility.dispatchEvent(new Event('change', { bubbles: true })) }
       if (key === 'oxdna' && record(key).box?.visible === false) save(record(key), { ...record(key).box, visible: true })
       refresh()
@@ -82,7 +96,7 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     const s = store.getState(), key = s.assemblyActive ? 'currentAssembly' : 'currentDesign'
     return { ...s, [key]: { ...s[key], id: active?.key, view_volumes: volumes(active) } }
   }
-  function notify() { shell.update(active?.box, visible(active)); for (const fn of subscribers) fn(state()) }
+  function notify() { window.dispatchEvent(new CustomEvent('nadoc:submodel-details', { detail: { engine, box: active?.box ?? null, visible: visible(active) } })); shell.update(active?.box, visible(active)); for (const fn of subscribers) fn(state()) }
   async function updateProjection(r) {
     if (r.engine !== 'oxdna' || !api.estimateSimulationSubmodel || !r.job || !r.box) return
     const key = JSON.stringify({ ...r.box, visible: undefined })
@@ -102,10 +116,14 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
   function paint() {
     for (const key of Object.keys(hosts)) {
       const r = record(key)
-      projections[key].textContent = r.box ? (r.projectionText || (key === 'oxdna' ? 'Create a job to estimate its particle count and resource budget.' : '')) : ''
+      details[key].hidden = !r.opened
+      buttons[key].setAttribute('aria-expanded', String(!!r.opened))
+      status[key].hidden = !r.opened && !r.error
+      projections[key].textContent = r.box ? (r.projectionText || '') : ''
       buttons[key].disabled = r.loading || !r.loaded
+      zoomButtons[key].disabled = r.loading || !r.loaded || !r.box
       shellInputs[key].disabled = r.loading || !r.loaded || !r.box
-      shellInputs[key].value = String(r.box?.shell_nm ?? 3)
+      if (!shellDirty[key]) shellInputs[key].value = String(r.box?.shell_nm ?? 3)
       if (key === 'oxdna') { oxVisibility.checked = r.box?.visible !== false; oxVisibility.disabled = !r.box || r.loading }
       retries[key].hidden = !r.error || !r.loaded
       buttons[key].textContent = r.box ? 'Edit submodel' : 'Define submodel'
@@ -113,13 +131,23 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     }
   }
   function save(r, box) {
+    const geometry = value => JSON.stringify(value ? [value.min_corner, value.max_corner, value.rotation || [0,0,0,1], value.shell_nm ?? 3] : null)
+    if (r.engine === 'md' && r.job && r.editable === false && geometry(box) !== geometry(r.box)) {
+      // A completed/preparing job owns frozen inputs. Editing its region starts
+      // a fresh setup; never PUT changed geometry onto that historical job.
+      const opened = r.opened
+      selected.md = null
+      r = record('md'); r.opened = opened
+      window.dispatchEvent(new CustomEvent('nadoc:submodel-new-setup', { detail: { engine: 'namd' } }))
+      refresh()
+    }
     r.box = box; if (!box) { r.projectionText = ''; r.projectionKey = null }; r.error = ''; r.loaded = true; r.loading = false
     if (!r.job) { paint(); return Promise.resolve() }
     r.pending++; paint()
     const snapshot = structuredClone(box)
     r.queue = r.queue.catch(() => {}).then(async () => {
       const result = await api.saveSimulationSubmodel(r.engine, r.job, snapshot)
-      if (!result) throw new Error('Could not save submodel. Retry save before leaving this page.')
+      if (!result) throw new Error(`Could not save submodel: ${api.lastErrorMessage?.() || 'request failed'}. Retry save before leaving this page.`)
       r.error = ''
       void updateProjection(r)
     }).catch(error => { r.error = error.message; throw error }).finally(() => { r.pending--; if (!disposed) paint() })
@@ -138,17 +166,19 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
     },
   }
   active = record(engine)
-  hosts[engine].append(mount)
+  details[engine].append(mount)
   editor = createEditor({ document, store: adapter, api: { saveViewVolumes: async () => ({}), saveAssemblyViewVolumes: async () => ({}) }, host: mount, outlineOnly: true, ...sceneDeps })
   function refresh() {
     active = hosts[engine] ? record(engine) : null
     mount.hidden = !active || !active.loaded || active.loading
-    if (active) hosts[engine].append(mount)
+    if (active) details[engine].append(mount)
     notify(); paint()
   }
-  async function select(forEngine, id) {
+  async function select(forEngine, id, options = {}) {
+    if (selected[forEngine] !== (id ?? null)) shellDirty[forEngine] = false
     selected[forEngine] = id ?? null
     const r = record(forEngine)
+    if (options.editable !== undefined) r.editable = options.editable
     if (!r.loaded && !r.loading) {
       r.loading = true; refresh()
       try {
@@ -167,22 +197,32 @@ export function initSimulationSubmodel({ document, store, api, createEditor = in
   window.addEventListener('nadoc:box-solvent-details', onMdVisibility)
   const unsubscribe = store.subscribe(() => {
     const next = sourceKey()
-    if (source !== next) { source = next; selected.oxdna = null; selected.md = null }
+    if (source !== next) { source = next; selected.oxdna = null; selected.md = null; shellDirty.oxdna = false; shellDirty.md = false }
     refresh()
   })
   refresh()
   return {
     select,
+    setEditable(forEngine, id, editable) {
+      const r = records.get(`${forEngine}:job:${id}`)
+      if (r) r.editable = editable
+    },
     async flush(forEngine) {
       const r = record(forEngine)
       await r.queue
       if (r.error || !r.loaded) throw new Error(r.error || 'Wait for the submodel to load before running.')
     },
     capture: forEngine => structuredClone(record(forEngine).box),
-    async created(forEngine, id, box) {
+    async created(forEngine, id, box, { persisted = false } = {}) {
       selected[forEngine] = id
       const r = record(forEngine)
-      try { await save(r, box) } catch { /* Keep the created job selected and show the save failure. */ }
+      if (persisted) {
+        // NAMD includes the selection in POST /jobs atomically. A second PUT can
+        // race preparation and is not needed to make the created job durable.
+        r.box = structuredClone(box); r.loaded = true; r.loading = false; r.error = ''
+      } else {
+        try { await save(r, box) } catch { /* Keep the created job selected and show the save failure. */ }
+      }
       refresh()
     },
     debug: { ...editor.debug, shellVisible: shell.visible, selectJob: select, saveToJob: async (forEngine, id) => { const box = structuredClone(record(forEngine).box); selected[forEngine] = id; await save(record(forEngine), box); refresh() } },

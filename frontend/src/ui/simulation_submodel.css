@@ -24,3 +24,6 @@
 #md-submodel > .btn[hidden] {
   display: none;
 }
+
+.submodel-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#md-submodel { margin-top: 10px; }

@@ -1,0 +1,40 @@
+{
+  "new_journal_records": 1,
+  "existing_source_reviews": 1,
+  "provisional_design_groups": [
+    "RDE0036"
+  ],
+  "complete_source_certifications": 0,
+  "counts": {
+    "publication_versions": 5658,
+    "canonical_work_keys": 5657,
+    "provisional_work_keys_not_reconciled": 5656,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 776,
+      "unreviewed": 4674,
+      "fulltext_reviewed": 49,
+      "design_sources_reviewed": 159
+    },
+    "relevance": {
+      "uncertain": 5444,
+      "background_or_review": 17,
+      "design_bearing": 193,
+      "not_origami": 4
+    },
+    "catalog_eligibility": {
+      "unresolved": 5649,
+      "excluded": 8,
+      "eligible": 1
+    },
+    "design_groups": 136,
+    "design_source_reviews": 59,
+    "discovery_runs": 43
+  },
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5658,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10601
+  }
+}

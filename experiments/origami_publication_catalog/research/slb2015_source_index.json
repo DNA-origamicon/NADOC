@@ -1,0 +1,1053 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/PMC4560778-41467_2015_BFncomms9052_MOESM1003_ESM.pdf",
+    "sha256": "2687ce8a0234437b784e8e3827597a31270c03be2403ee371994b96b43ac6c34",
+    "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fncomms9052/MediaObjects/41467_2015_BFncomms9052_MOESM1003_ESM.pdf",
+    "locator": "Tables 1-4 PDF28-32 inspected in layout text. Figure18 PDF25 routing image visually inspected; Figures19/20 captions PDF26/27 read. No base-by-base image verification."
+  },
+  "table1_labels": [
+    {
+      "label": "top-A1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-I1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-A2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-I2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-A3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-I3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-A4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-I4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-A5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-I5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-A6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-J1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-J2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-J3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-J4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-J5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-K1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-B6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-K2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-K3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-K4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-L1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-L2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-L3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-C6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-M1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-M2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-M3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-D6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-N6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-E6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-F1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-F2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-O6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-F3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-G1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-G2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-G3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-H1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P5",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-H2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-P6",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-H3",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-Q1",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-H4",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-Q2",
+      "pdf_page": 28
+    },
+    {
+      "label": "top-Q3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-F3",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-Q4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-F4",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-Q5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-F5",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-Q6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-G1",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-G2",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-G3",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-G4",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-H1",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-H2",
+      "pdf_page": 29
+    },
+    {
+      "label": "top-R6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-H3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-H4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-I1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-I2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-I3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-I4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-A6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-J1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-J2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-J3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-J4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-K1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-K2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-B6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-K3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-K4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-L1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-L2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-L3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-L4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-C6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-M1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-M2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-M3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-M4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-M5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-D6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-N6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E5",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-O1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-E6",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-O2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-F1",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-O3",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-F2",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-O4",
+      "pdf_page": 29
+    },
+    {
+      "label": "bot-O5",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-3b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-O6",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-4a",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P1",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-4b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P2",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-5a",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P3",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-5b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P4",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-6a",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P5",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-6b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-P6",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-7a",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q1",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-7b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q2",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-7c",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q3",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-8a",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q4",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-8b",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q5",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB1",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-Q6",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB2",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R1",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB3",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R2",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB4",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R3",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB5",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R4",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB6",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R5",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB7",
+      "pdf_page": 30
+    },
+    {
+      "label": "bot-R6",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB8",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-1a",
+      "pdf_page": 30
+    },
+    {
+      "label": "4HB9",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-1b",
+      "pdf_page": 30
+    },
+    {
+      "label": "loop1",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-2a",
+      "pdf_page": 30
+    },
+    {
+      "label": "loop2",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-2b",
+      "pdf_page": 30
+    },
+    {
+      "label": "loop3",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-2c",
+      "pdf_page": 30
+    },
+    {
+      "label": "loop4",
+      "pdf_page": 30
+    },
+    {
+      "label": "L-3a",
+      "pdf_page": 30
+    }
+  ],
+  "table2_rows": [
+    {
+      "label": "top-A1-L",
+      "literal_sequence": "ttttAAGGCTTATCCGGTATAGCAAATCAGATATAGtttt"
+    },
+    {
+      "label": "top-A2-L",
+      "literal_sequence": "ttttCGACAAAAGGTAAAGTAGAGAATATAAAGTACtttt"
+    },
+    {
+      "label": "top-A3-L",
+      "literal_sequence": "ttttGAGAAAACTTTTTCAAGCAAGACAAAGAACGCtttt"
+    },
+    {
+      "label": "top-A4-L",
+      "literal_sequence": "ttttAGAGGCGAATTATTCAAGTTACAAAATCGCGCtttt"
+    },
+    {
+      "label": "top-A5-L",
+      "literal_sequence": "ttttGGAACAAAGAAACCACAACATTATCATTTTGCtttt"
+    },
+    {
+      "label": "top-A6-L",
+      "literal_sequence": "ttttGAGCCAGCAGCAAATGAACAGTGCCACGCTGAtttt"
+    },
+    {
+      "label": "top-R1-L",
+      "literal_sequence": "ttttATAACCCACAAGAATTCGCTAATATCAGAGAGtttt"
+    },
+    {
+      "label": "top-R2-L",
+      "literal_sequence": "ttttTCAATAGAAAATTCATGTTTATTTTGTCACAAtttt"
+    },
+    {
+      "label": "top-R3-L",
+      "literal_sequence": "ttttGCATTTTCGGTCATAGTAGCGCGTTTTCATCGtttt"
+    },
+    {
+      "label": "top-R4-L",
+      "literal_sequence": "ttttGTAACAGTGCCCGTATGGGGTCAGTGCCTTGAtttt"
+    },
+    {
+      "label": "top-R5-L",
+      "literal_sequence": "ttttCCAATAGGAACCCATGTTCAGGGATAGCAAGCtttt"
+    },
+    {
+      "label": "top-R6-L",
+      "literal_sequence": "ttttGGTTTATCAGCTTGCTAGCCTTTAATTGTATCtttt"
+    },
+    {
+      "label": "bot-A1-L",
+      "literal_sequence": "ttttTTGATAAGAGGTCATTCCTTTAATTGCTCCTTtttt"
+    },
+    {
+      "label": "bot-A2-L",
+      "literal_sequence": "ttttGCAAGGCAAAGAATTACCAATAAATCATACAGtttt"
+    },
+    {
+      "label": "bot-A3-L",
+      "literal_sequence": "ttttTGAGAGATCTACAAAGAGAGGGTAGCTATTTTtttt"
+    },
+    {
+      "label": "bot-A4-L",
+      "literal_sequence": "ttttGAAAAGCCCCAAAAACCCCCGGTTGATAATCAtttt"
+    },
+    {
+      "label": "bot-A5-L",
+      "literal_sequence": "ttttAGGGGGATGTGCTGCATACGCCAGCTGGCGAAtttt"
+    },
+    {
+      "label": "bot-A6-L",
+      "literal_sequence": "ttttCTTTCCAGTCGGGAAATTGCGCTCACTGCCCGtttt"
+    },
+    {
+      "label": "bot-R1-L",
+      "literal_sequence": "ttttAAAATGTTTAGACTGGCAGAGGGGGTAATAGTtttt"
+    },
+    {
+      "label": "bot-R2-L",
+      "literal_sequence": "ttttACCTTATGCGATTTTATTAATCATTGTGAATTtttt"
+    },
+    {
+      "label": "bot-R3-L",
+      "literal_sequence": "ttttTTCCATTAAACGGGTATTTTTCATGAGGAAGTtttt"
+    },
+    {
+      "label": "bot-R4-L",
+      "literal_sequence": "ttttCCAGTCACACGACCAGTACATTGGCAGATTCAtttt"
+    },
+    {
+      "label": "bot-R5-L",
+      "literal_sequence": "ttttATTTTAGACAGGAACGGAGGCCGATTAAAGGGtttt"
+    },
+    {
+      "label": "bot-R6-L",
+      "literal_sequence": "ttttGGTCGAGGTGCCGTAAAAATCAAGTTTTTTGGtttt"
+    }
+  ],
+  "table3_rows": [
+    {
+      "label": "top-D5 biotin",
+      "literal_sequence": "XttAATCCTTTATTATCAGATGATGGCTACATCGG"
+    },
+    {
+      "label": "top-P3 biotin",
+      "literal_sequence": "XttTTTTCATAACAGAATCAAGTTTGCCAAAGACA"
+    },
+    {
+      "label": "bot-C1 biotin",
+      "literal_sequence": "XttACTAATAGAGCTTAATTGCTGAATGCAAACTC"
+    },
+    {
+      "label": "bot-O1 biotin",
+      "literal_sequence": "XttAATCTACGACGATAAAAACCAAAAATTCATTG"
+    }
+  ],
+  "table4_rows": [
+    {
+      "label": "top-D1\u2019",
+      "literal_sequence": "TTTATTTTCCGACTTGCGGGAGGT"
+    },
+    {
+      "label": "top-E1 biotin",
+      "literal_sequence": "XTTTGAAGCCTTAAATCTCATCGAGAACAAGCAACGCGCC"
+    },
+    {
+      "label": "top-D6 biotin",
+      "literal_sequence": "XAGCAGAAGATAAAACAAAATATCAAACCCTCATCGTATTA"
+    },
+    {
+      "label": "top-E6\u2019",
+      "literal_sequence": "CTGGTCAGACCGAACGAACCACC"
+    },
+    {
+      "label": "top-N1\u2019",
+      "literal_sequence": "CGAAGCCCAGGGAAGCGCATTAG"
+    },
+    {
+      "label": "top-O1 biotin",
+      "literal_sequence": "XACGGGAGAATTAACTGATGAAATAGCAATAGCCATAAAGG"
+    },
+    {
+      "label": "top-N6 biotin",
+      "literal_sequence": "XAATGACAACAACCATCTAAAGGAATTGCGAAGCATTCCA"
+    },
+    {
+      "label": "top-O6\u2019",
+      "literal_sequence": "TTTTCACGCGATAGTTGCGCCGAC"
+    },
+    {
+      "label": "bot-D1 biotin",
+      "literal_sequence": "XGCGAACCAGACCGGAAATAATGCT"
+    },
+    {
+      "label": "bot-E1\u2019",
+      "literal_sequence": "GGGGCGCGACATGTTTTAAATATTAATTCGAGCTTCAAA"
+    },
+    {
+      "label": "bot-D6\u2019",
+      "literal_sequence": "GACGTTGTGTAAAGCCTGGGGTGCAACGCGCGGGGAGAGG"
+    },
+    {
+      "label": "bot-E6 biotin",
+      "literal_sequence": "XCGGTTTGCGTATTGGGCCGGAAG"
+    },
+    {
+      "label": "bot-N1 biotin",
+      "literal_sequence": "XTCAAATGCTTTAAACCCTCGTTT"
+    },
+    {
+      "label": "bot-O1\u2019",
+      "literal_sequence": "AATCTACGACGATAAAAACCAAAAATTCATTGAATCCCCC"
+    },
+    {
+      "label": "bot-N6\u2019",
+      "literal_sequence": "TGACGAGCGGGAAAGCCGGCGAATCCAACGTCAAAGGGC"
+    },
+    {
+      "label": "bot-O6 biotin",
+      "literal_sequence": "XGAAAAACCGTCTATCAGATTTAGA"
+    }
+  ],
+  "limitations": "Table1 label inventory only; not 215 verified sequences. Multiline L/4HB sequences and lowercase bases require preservation. X is biotin, not a nucleotide. No complete recipe or native-file certification."
+}

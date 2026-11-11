@@ -1,0 +1,45 @@
+{
+  "reviewed_keys": [
+    "10.3934/matersci.2015.4.448"
+  ],
+  "first_pass_count": 16,
+  "input_count": 25,
+  "access_failures": [
+    "JoVE PDF browser check",
+    "PMC4542500/6436813 browser checks",
+    "Guessed author2015.SST.jove.pdf URL404"
+  ],
+  "irrelevant_search": "batch_0015_jove_metadata.json returned unrelated records and is not classification evidence",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 6041,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 12009
+  },
+  "counts": {
+    "publication_versions": 6041,
+    "canonical_work_keys": 6039,
+    "provisional_work_keys_not_reconciled": 6037,
+    "versions_with_explicit_version_relation": 4,
+    "review_stages": {
+      "metadata_screened": 1184,
+      "unreviewed": 4554,
+      "fulltext_reviewed": 68,
+      "design_sources_reviewed": 235
+    },
+    "relevance": {
+      "uncertain": 5713,
+      "background_or_review": 32,
+      "design_bearing": 278,
+      "not_origami": 18
+    },
+    "catalog_eligibility": {
+      "unresolved": 6017,
+      "excluded": 23,
+      "eligible": 1
+    },
+    "design_groups": 141,
+    "design_source_reviews": 64,
+    "discovery_runs": 50
+  }
+}

@@ -202,6 +202,8 @@ def build_replica_package(
     """
     parent_pkg = parent.package_dir(workspace)
     manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    if manifest.get("submodel") and anchors_file:
+        raise ValueError("Additional anchors are not yet supported on NAMD submodels")
     from backend.core.cpd_forcefield import (  # noqa: PLC0415
         assert_packaged_photoproduct_integrator,
         inject_packaged_photoproduct_parameters,
@@ -679,6 +681,21 @@ def build_replica_package(
     text = json.dumps(child_manifest, indent=2)
     (child_pkg / "manifest.json").write_text(text)
     (child_pkg / "nadoc_md_run.json").write_text(text)
+
+    if (parent_pkg / "submodel.json").exists():
+        from backend.core.namd_submodel import finalize_package
+        shutil.copy2(parent_pkg / "submodel.json", child_pkg / "submodel.json")
+        source_dir = parent_pkg / "submodel_source"
+        if source_dir.exists():
+            shutil.copytree(source_dir, child_pkg / "submodel_source", dirs_exist_ok=True)
+        for suffix in ("_wc_pairs.json", "_ss_exclusion.json"):
+            source_registry = parent_pkg / (name_stem + suffix)
+            if source_registry.exists():
+                shutil.copy2(source_registry, child_pkg / source_registry.name)
+        finalize_package(child_pkg, name_stem)
+        selection = parent.job_dir(workspace) / "submodel_selection.json"
+        if selection.exists():
+            shutil.copy2(selection, child.job_dir(workspace) / selection.name)
 
     child.segments = [
         MdSegmentStatus(

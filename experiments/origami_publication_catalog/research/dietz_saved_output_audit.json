@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "reopened_edges": 107,
+  "source_inventory_entries": 107,
+  "repeated_label100_preserved": true,
+  "ISBN_year_not_treated_as_entry": true,
+  "known_doi_matches": 28,
+  "unmatched_identity_scope": 79,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5457,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 9049
+  }
+}

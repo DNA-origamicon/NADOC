@@ -1,0 +1,422 @@
+[
+  {
+    "number": 1,
+    "dois": [
+      "10.1126/science.1102896"
+    ],
+    "text": "Novoselov, K. S. et al. Electric field effect in atomically thin carbon films. Science 306, 666–669 (2004)."
+  },
+  {
+    "number": 2,
+    "dois": [
+      "10.1038/nature04233"
+    ],
+    "text": "Novoselov, K. S. et al. Two-dimensional gas of massless Dirac fermions in graphene. Nature 438, 197–200 (2005)."
+  },
+  {
+    "number": 3,
+    "dois": [
+      "10.1038/nnano.2007.300"
+    ],
+    "text": "Avouris, P., Chen, Z. & Perebeinos, V. . Carbon-based electronics. Nat. Nanotechnol. 2, 605–615 (2007)."
+  },
+  {
+    "number": 4,
+    "dois": [
+      "10.1140/epjb/e2009-00327-8"
+    ],
+    "text": "Dubois, S. M. M., Zanolli, Z., Declerck, X. & Charlier, J. C. . Electronic properties and quantum transport in graphene-based nanostructures. Eur. Phys. J. B 72, 1–24 (2009)."
+  },
+  {
+    "number": 5,
+    "dois": [
+      "10.1039/c0jm00261e"
+    ],
+    "text": "Dutta, S. & Pati, S. K. . Novel properties of graphene nanoribbons: a review. J. Mater. Chem. 20, 8207–8223 (2010)."
+  },
+  {
+    "number": 6,
+    "dois": [
+      "10.1103/physrevlett.98.206805"
+    ],
+    "text": "Han, M. Y., Ozyilmaz, B., Zhang, Y. & Kim, P. . Energy band-gap engineering of graphene nanoribbons. Phys. Rev. Lett. 98, 206805 (2007)."
+  },
+  {
+    "number": 7,
+    "dois": [
+      "10.1126/science.1150878"
+    ],
+    "text": "Li, X. L., Wang, X. R., Zhang, L., Lee, S. W. & Dai, H. J. . Chemically derived, ultrasmooth graphene nanoribbon semiconductors. Science 319, 1229–1232 (2008)."
+  },
+  {
+    "number": 8,
+    "dois": [
+      "10.1103/physrevb.76.235404"
+    ],
+    "text": "Recher, P. et al. Aharonov-Bohm effect and broken valley degeneracy in graphene rings. Phys. Rev. B 76, 235404 (2007)."
+  },
+  {
+    "number": 9,
+    "dois": [
+      "10.1103/physrevb.77.085413"
+    ],
+    "text": "Russo, S. et al. Observation of Aharonov-Bohm conductance oscillations in a graphene ring. Phys. Rev. B 77, 085413 (2008)."
+  },
+  {
+    "number": 10,
+    "dois": [
+      "10.1103/physrevlett.98.016802"
+    ],
+    "text": "Silvestrov, P. G. & Efetov, K. B. . Quantum dots in graphene. Phys. Rev. Lett. 98, 016802 (2007)."
+  },
+  {
+    "number": 11,
+    "dois": [
+      "10.1021/nl801225h"
+    ],
+    "text": "Stampfer, C. et al. Tunable graphene single electron transistor. Nano Lett. 8, 2378–2383 (2008)."
+  },
+  {
+    "number": 12,
+    "dois": [
+      "10.1021/nl900531n"
+    ],
+    "text": "Bai, J., Duan, X. & Huang, Y. . Rational fabrication of graphene nanoribbons using a nanowire etch mask. Nano Lett. 9, 2083–2087 (2009)."
+  },
+  {
+    "number": 13,
+    "dois": [
+      "10.1038/nchem.719"
+    ],
+    "text": "Wang, X. & Dai, H. . Etching and narrowing of graphene from the edges. Nat. Chem. 2, 661–665 (2010)."
+  },
+  {
+    "number": 14,
+    "dois": [
+      "10.1038/nature09211"
+    ],
+    "text": "Cai, J. et al. Atomically precise bottom-up fabrication of graphene nanoribbons. Nature 466, 470–473 (2010)."
+  },
+  {
+    "number": 15,
+    "dois": [
+      "10.1038/nature07872"
+    ],
+    "text": "Kosynkin, D. V. et al. Longitudinal unzipping of carbon nanotubes to form graphene nanoribbons. Nature 458, 872–876 (2009)."
+  },
+  {
+    "number": 16,
+    "dois": [
+      "10.1038/nature07919"
+    ],
+    "text": "Jiao, L., Zhang, L., Wang, X., Diankov, G. & Dai, H. . Narrow graphene nanoribbons from carbon nanotubes. Nature 458, 877–880 (2009)."
+  },
+  {
+    "number": 17,
+    "dois": [
+      "10.1038/nature01406"
+    ],
+    "text": "Seeman, N. C. . DNA in a material world. Nature 421, 427–431 (2003)."
+  },
+  {
+    "number": 18,
+    "dois": [
+      "10.1126/science.1120367"
+    ],
+    "text": "Goodman, R. P. et al. Rapid chiral assembly of rigid DNA building blocks for molecular nanofabrication. Science 310, 1661–1665 (2005)."
+  },
+  {
+    "number": 19,
+    "dois": [
+      "10.1002/anie.200502358"
+    ],
+    "text": "Feldkamp, U. & Niemeyer, C. M. . Rational design of DNA nanoarchitectures. Angew. Chem. Int. Ed. 45, 1856–1876 (2006)."
+  },
+  {
+    "number": 20,
+    "dois": [
+      "10.1002/anie.200801982"
+    ],
+    "text": "Simmel, F. C. . Three-dimensional nanoconstruction with DNA. Angew. Chem. Int. Ed. 47, 5884–5887 (2008)."
+  },
+  {
+    "number": 21,
+    "dois": [
+      "10.1021/bi802324w"
+    ],
+    "text": "Lin, C., Liu, Y. & Yan, H. . Designer DNA nanoarchitectures. Biochemistry 48, 1663–1674 (2009)."
+  },
+  {
+    "number": 22,
+    "dois": [
+      "10.1038/nature04586"
+    ],
+    "text": "Rothemund, P. W. K. . Folding DNA to create nanoscale shapes and patterns. Nature 440, 297–302 (2006)."
+  },
+  {
+    "number": 23,
+    "dois": [
+      "10.1038/nature08016"
+    ],
+    "text": "Douglas, S. M. et al. Self-assembly of DNA into nanoscale three-dimensional shapes. Nature 459, 414–418 (2009)."
+  },
+  {
+    "number": 24,
+    "dois": [
+      "10.1126/science.1174251"
+    ],
+    "text": "Dietz, H., Douglas, S. M. & Shih, W. M. . Folding DNA into twisted and curved nanoscale shapes. Science 325, 725–730 (2009)."
+  },
+  {
+    "number": 25,
+    "dois": [
+      "10.1016/j.sbi.2010.03.009"
+    ],
+    "text": "Shih, W. M. & Lin, C. . Knitting complex weaves with DNA origami. Curr. Opin. Struct. Biol. 20, 276–282 (2010)."
+  },
+  {
+    "number": 26,
+    "dois": [
+      "10.1126/science.1157312"
+    ],
+    "text": "Yin, P. et al. Programming DNA tube circumferences. Science 321, 824–826 (2008)."
+  },
+  {
+    "number": 27,
+    "dois": [
+      "10.1038/nature11075"
+    ],
+    "text": "Wei, B., Dai, M. & Yin, P. . Complex shapes self-assembled from single-stranded DNA tiles. Nature 485, 626 (2012)."
+  },
+  {
+    "number": 28,
+    "dois": [
+      "10.1126/science.1227268"
+    ],
+    "text": "Ke, Y., Ong, L. L., Shih, W. M. & Yin, P. . Three-dimensional structures self-assembled from DNA bricks. Science 388, 1177–1183 (2012)."
+  },
+  {
+    "number": 29,
+    "dois": [
+      "10.1126/science.1091022"
+    ],
+    "text": "Keren, K., Berman, R. S., Buchstab, E., Sivan, U. & Braun, E. . DNA-templated carbon nanotube field-effect transistor. Science 302, 1380–1382 (2003)."
+  },
+  {
+    "number": 30,
+    "dois": [
+      "10.1038/nnano.2007.460"
+    ],
+    "text": "Berti, L. & Burley, G. A. . Nucleic acid and nucleotide-mediated synthesis of inorganic nanoparticles. Nat. Nanotechnol. 3, 81–87 (2008)."
+  },
+  {
+    "number": 31,
+    "dois": [
+      "10.1126/science.1165831"
+    ],
+    "text": "Sharma, J. et al. Control of self-assembly of DNA tubules through integration of gold nanoparticles. Science 323, 112–116 (2009)."
+  },
+  {
+    "number": 32,
+    "dois": [
+      "10.1038/nnano.2011.49"
+    ],
+    "text": "Tan, S. J., Campolongo, M. J., Luo, D. & Cheng, W. . Building plasmonic nanostructures with DNA. Nat. Nanotechnol. 6, 268–276 (2011)."
+  },
+  {
+    "number": 33,
+    "dois": [
+      "10.1038/nature10889"
+    ],
+    "text": "Kuzyk, A. et al. DNA-based self-assembly of chiral plasmonic nanostructures with tailored optical response. Nature 483, 311–314 (2012)."
+  },
+  {
+    "number": 34,
+    "dois": [
+      "10.1126/science.1071247"
+    ],
+    "text": "Keren, K. et al. Sequence-specific molecular lithography on single DNA molecules. Science 297, 72–75 (2002)."
+  },
+  {
+    "number": 35,
+    "dois": [
+      "10.1021/nl034720q"
+    ],
+    "text": "Deng, Z. & Mao, C. . DNA-templated fabrication of 1D parallel and 2D crossed metallic nanowire arrays. Nano Lett. 3, 1545–1548 (2003)."
+  },
+  {
+    "number": 36,
+    "dois": [
+      "10.1126/science.1089389"
+    ],
+    "text": "Yan, H., Park, S. H., Finkelstein, G., Reif, J. H. & LaBean, T. H. . DNA-templated self-assembly of protein arrays and highly conductive nanowires. Science 301, 1882–1884 (2003)."
+  },
+  {
+    "number": 37,
+    "dois": [
+      "10.1021/nn1035075"
+    ],
+    "text": "Liu, J. et al. Metallization of branched DNA origami for nanoelectronic circuit fabrication. ACS Nano 5, 2240–2247 (2011)."
+  },
+  {
+    "number": 38,
+    "dois": [
+      "10.1021/nl202066c"
+    ],
+    "text": "Pilo-Pais, M., Goldberg, S., Samano, E., LaBean, T. H. & Finkelstein, G. . Connecting the nanodots: Programmable nanofabrication of fused metal shapes on DNA templates. Nano Lett. 11, 3489–3492 (2011)."
+  },
+  {
+    "number": 39,
+    "dois": [
+      "10.1002/smll.201100465"
+    ],
+    "text": "Schreiber, R. et al. DNA origami-templated growth of arbitrarily shaped metal nanoparticles. Small 7, 1795–1799 (2011)."
+  },
+  {
+    "number": 40,
+    "dois": [
+      "10.1021/jp302316p"
+    ],
+    "text": "Pearson, A. C. et al. DNA origami metallized site specifically to form electrically conductive nanowires. J. Phys. Chem. B 116, 10551–10560 (2012)."
+  },
+  {
+    "number": 41,
+    "dois": [
+      "10.1002/anie.200460257"
+    ],
+    "text": "Deng, Z. & Mao, C. . Molecular lithography with DNA nanostructures. Angew. Chem. Int. Ed. 43, 4068–4070 (2004)."
+  },
+  {
+    "number": 42,
+    "dois": [
+      "10.1002/smll.200700240"
+    ],
+    "text": "Becerril, H. A. & Woolley, A. T. . DNA shadow nanolithography. Small 3, 1534–1538 (2007)."
+  },
+  {
+    "number": 43,
+    "dois": [
+      "10.1021/ja2038886"
+    ],
+    "text": "Surwade, S. P., Zhao, S. & Liu, H. . Molecular lithography through DNA-mediated etching and masking of SiO2 . J. Am. Chem. Soc. 133, 11868–11871 (2011)."
+  },
+  {
+    "number": 44,
+    "dois": [
+      "10.1039/c2cs35302d"
+    ],
+    "text": "Zhang, G., Surwade, S. P., Zhou, F. & Liu, H. . DNA nanostructure meets nanofabrication. Chem. Soc. Rev. 42, 2488–2496 (2013)."
+  },
+  {
+    "number": 45,
+    "dois": [
+      "10.1126/science.1171245"
+    ],
+    "text": "Li, X. S. et al. Large-area synthesis of high-quality and uniform graphene films on copper foils. Science 324, 1312–1314 (2009)."
+  },
+  {
+    "number": 46,
+    "dois": [
+      "10.1103/physrevb.61.14095"
+    ],
+    "text": "Ferrari, A. C. & Robertson, J. . Interpretation of Raman spectra of disordered and amorphous carbon. Phys. Rev. B 61, 14095–14107 (2000)."
+  },
+  {
+    "number": 47,
+    "dois": [
+      "10.1103/physrevlett.97.187401"
+    ],
+    "text": "Ferrari, A. C. et al. Raman spectrum of graphene and graphene layers. Phys. Rev. Lett. 97, 187401 (2006)."
+  },
+  {
+    "number": 48,
+    "dois": [
+      "10.1016/j.ssc.2007.03.052"
+    ],
+    "text": "Ferrari, A. C. . Raman spectroscopy of graphene and graphite: Disorder, electron-phonon coupling, doping and nonadiabatic effects. Solid State Commun. 143, 47–57 (2007)."
+  },
+  {
+    "number": 49,
+    "dois": [
+      "10.1103/physrevb.84.113406"
+    ],
+    "text": "Rao, R., Tishler, D., Katoch, J. & Ishigami, M. . Multiphonon Raman scattering in graphene. Phys. Rev. B 84, 113406 (2011)."
+  },
+  {
+    "number": 50,
+    "dois": [
+      "10.1021/nn1010842"
+    ],
+    "text": "Schedin, F. et al. Surface-enhanced Raman spectroscopy of graphene. ACS Nano 4, 5617–5626 (2011)."
+  },
+  {
+    "number": 51,
+    "dois": [
+      "10.1002/chem.201002027"
+    ],
+    "text": "Lee, J., Shim, S., Kim, B. & Shin, H. S. . Surface-enhanced Raman scattering of single- and few-layer graphene by the deposition of gold nanoparticles. Chem. Eur. J. 17, 2381–2387 (2011)."
+  },
+  {
+    "number": 52,
+    "dois": [
+      "10.1021/nn103004c"
+    ],
+    "text": "Lee, J., Novoselov, K. S. & Shin, H. S. . Interaction between metal and graphene: dependence on the layer number of graphene. ACS Nano 5, 608–612 (2011)."
+  },
+  {
+    "number": 53,
+    "dois": [
+      "10.1103/physrevb.80.165413"
+    ],
+    "text": "Basko, D. M., Piscanec, S. & Ferrari, A. C. . Electron-electron interactions and doping dependence of the two-phonon Raman intensity in graphene. Phys. Rev. B 80, 165413 (2009)."
+  },
+  {
+    "number": 54,
+    "dois": [
+      "10.1103/physrevb.79.205433"
+    ],
+    "text": "Mohiuddin, T. M. G. et al. Uniaxial strain in graphene by Raman spectroscopy: G peak splitting, grüneisen parameters, and sample orientation. Phys. Rev. B 79, 205433 (2009)."
+  },
+  {
+    "number": 55,
+    "dois": [
+      "10.1038/nchem.1421"
+    ],
+    "text": "Wang, Q. H. et al. Understanding and controlling the substrate effect on graphene electron-transfer chemistry via reactivity imprint lithography. Nat. Chem. 4, 724–732 (2012)."
+  },
+  {
+    "number": 56,
+    "dois": [
+      "10.1103/physrevb.79.205428"
+    ],
+    "text": "Basko, D. M. . Boundary problems for Dirac electrons and edge-assisted Raman scattering in graphene. Phys. Rev. B 79, 205428 (2009)."
+  },
+  {
+    "number": 57,
+    "dois": [
+      "10.1021/nl8032697"
+    ],
+    "text": "Casiraghi, C. et al. Raman spectroscopy of graphene edges. Nano Lett. 9, 1433–1441 (2009)."
+  },
+  {
+    "number": 58,
+    "dois": [
+      "10.1103/physrevlett.105.166601"
+    ],
+    "text": "Taychatanapat, T. & Jarillo-Herrero, P. . Electronic transport in dual-gated bilayer graphene at large displacement fields. Phys. Rev. Lett. 105, 166601 (2010)."
+  },
+  {
+    "number": 59,
+    "dois": [
+      "10.1021/nl9039636"
+    ],
+    "text": "Xia, F., Farmer, D. B., Lin, Y.-M. & Avouris, P. . Graphene field-effect transistors with high on/off current ratio and large transport band gap at room temperature. Nano Lett. 10, 715–718 (2010)."
+  },
+  {
+    "number": 60,
+    "dois": [
+      "10.1021/nl0617033"
+    ],
+    "text": "Barone, V., Hod, O. & Scuseria, G. E. . Electronic structure and stability of semiconducting graphene nanoribbons. Nano Lett. 6, 2748–2754 (2006)."
+  }
+]

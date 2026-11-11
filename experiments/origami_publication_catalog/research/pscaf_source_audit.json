@@ -1,0 +1,25 @@
+[
+  {
+    "design_id": "S008",
+    "source": "assets/sources/pre2020-expansion/repositories/douglaslab__pScaf__4_staple_sequences__6hb-1512.csv",
+    "rows": 48,
+    "length_mismatch_rows": [],
+    "scope": "Length-field consistency only; not sequence-to-routing or scaffold-completeness proof"
+  },
+  {
+    "design_id": "S009",
+    "source": "assets/sources/pre2020-expansion/repositories/douglaslab__pScaf__4_staple_sequences__6hb-2268.csv",
+    "rows": 72,
+    "length_mismatch_rows": [
+      69
+    ],
+    "scope": "Length-field consistency only; not sequence-to-routing or scaffold-completeness proof"
+  },
+  {
+    "design_id": "S010",
+    "source": "assets/sources/pre2020-expansion/repositories/douglaslab__pScaf__4_staple_sequences__6hb-3024.csv",
+    "rows": 96,
+    "length_mismatch_rows": [],
+    "scope": "Length-field consistency only; not sequence-to-routing or scaffold-completeness proof"
+  }
+]

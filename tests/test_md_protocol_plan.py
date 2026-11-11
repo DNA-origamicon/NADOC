@@ -1221,8 +1221,8 @@ def test_a_continuation_is_unrestrained_by_default(client, chain_parent):
     req = _prod_plan(client, chain_parent)["production_request"]
     assert req["enm_restraints"]["value"] == "off"
     assert "default is unrestrained" in req["enm_restraints"]["reason"]
-    # …and the thermostat coupling it was running under, for the same reason.
-    assert req["langevin_damping"]["value"] == 2.0
+    # A parent's custom thermostat is not the default for a new production request.
+    assert req["langevin_damping"]["value"] == 1.0
 
 
 def test_an_explicit_choice_still_beats_the_inherited_one(client, chain_parent):

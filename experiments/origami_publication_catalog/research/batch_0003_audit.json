@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-05",
+  "validation": {
+    "status": "passed",
+    "publication_keys": 4985,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 7589
+  },
+  "forward_raw_rows": 311,
+  "forward_unique_provider_ids": 311,
+  "forward_pre2020_year_leads": 252,
+  "review_csv_rows": 125,
+  "bootstrap_preserves_ledgers_byte_for_byte": true,
+  "focused_tests_passed": 15,
+  "counts": {
+    "publication_versions": 4985,
+    "provisional_work_keys_not_reconciled": 4985,
+    "review_stages": {
+      "metadata_screened": 66,
+      "unreviewed": 4860,
+      "fulltext_reviewed": 16,
+      "design_sources_reviewed": 43
+    },
+    "relevance": {
+      "uncertain": 4926,
+      "background_or_review": 2,
+      "design_bearing": 57
+    },
+    "catalog_eligibility": {
+      "unresolved": 4981,
+      "excluded": 3,
+      "eligible": 1
+    },
+    "design_groups": 102,
+    "design_source_reviews": 14,
+    "discovery_runs": 23
+  },
+  "notes": [
+    "Forward targets are not reconciled works.",
+    "B0003 final exclusion and two design exclusions have same-agent second-pass audits.",
+    "B0004 queue persisted; not yet screened."
+  ]
+}

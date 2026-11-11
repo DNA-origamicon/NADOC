@@ -1,0 +1,36 @@
+"""Recover primary main-text evidence and reconcile a malformed citation without erasure."""
+import json,re,subprocess
+import ledger as L
+from review_batch_0001 import evidence
+
+def main():
+ key='10.1021/acsnano.8b08671';shep='10.1038/s41598-019-42665-1';rid='author-priority-mark-bathe';batch='AUTHOR0013';base=L.ROOT/'assets/research-20261105';pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ before=next(b['before_counts'] for b in L.read('batches') if b['batch_id']==batch)
+ me=evidence(base/'talos-mit-manuscript.pdf','https://dspace.mit.edu/server/api/core/bitstreams/d46e1a50-4fc5-4b8c-b967-abde6cb30f56/content','MIT cover, manuscript title/DOI; printedpp6–9 folding validation/library/methods; refs1–68 printedpp12–15. Repository and ResearchGate covers precede author manuscript; upload dates are not publication dates.')
+ meta=evidence(L.ROOT/'assets/sources/acs-expansion-20261104/article-7624907.json','https://api.figshare.com/v2/articles/7624907','Publisher supplement title, references and related_materials IsSupplementTo DOI')
+ se=evidence(L.ROOT/'assets/sources/acs-expansion-20261104/14163341-nn8b08671_si_001.pdf','https://ndownloader.figshare.com/files/14163341','FigS76 PDF/printedp96 visually inspected; FigS54 FV pentagonal bipyramid TEM; TableS12 PB staples; TablesS13–17 MV staples/scaffold')
+ note='Main-text followup confirms five FV experimental variants (tetrahedra42/63/84bp, octahedron84bp, pentagonal bipyramid42bp), four regular MV variants (tetrahedra42/63/84bp and octahedron84bp), and an experimentally tested asymmetric MV tetrahedron. SI FigS76 geometry, gel and TEM visually inspected: six edges42,69,69,103,103,130bp. These ten reported experimental variants are not the240 computed library designs. Main describes40 geometric families and240 in-silico designs, with exact library/experiment overlap still pending. Twisted triangular prism with30degree right-handed twist is described as designed; no experimental validation inferred. Whole objects remain wireframes despite6HB honeycomb edges. Main methods uses commercial full-length M13,20nM scaffold/600nM staples,TAE100mM NaCl14mM MgCl2 and22hour anneal. Exact per-object routing and complete source mapping remain unverified.'
+ p=pubs[key]
+ for e in [me,meta,se]:
+  if e not in p['evidence']:p['evidence'].append(e)
+ p.update(access='main_and_four_supplements_available',rationale=p['rationale']+' '+note,design_contributions=['new_design','modified_design'],reviewer='Codex primary manuscript methods/results and targeted SI inspection',run_id=rid,date=L.DATE,unresolved_questions=['Map all experimental variants to exact scaffold, staple and native routing sources; reconcile their overlap with240 computed library entries.','Resolve original first-online date against retained primary metadata; manuscript printed issue date2019-02-26 is not first-online date.','Reconcile all68 references and follow forward citations; no citation-route closure asserted.'])
+ L.upsert('publication_reviews',p,'Add main-text experimental inventory and distinguish computed-only designs')
+ edge=next(e for e in L.read('discovery_edges') if e['edge_id']=='shepherd2019:reference:23')
+ edge.update(target_key=key,reconciliation_state='primary_title_authors_doi_identity_verified; original_malformed_doi_preserved',original_cited_doi='10.1021/acsnano.1028b08671',reconciliation_evidence=[me,meta],reconciliation_note='Shepherdref23 Jun et al exact title matches primary TALOS manuscript and publisher supplement parent DOI; source citation spelling retained.')
+ L.upsert('discovery_edges',edge,'Resolve citation target using primary title/DOI and publisher parent relation')
+ for table,idfield,idval,qfield in [('publication_reviews','registry_key',shep,'unresolved_questions'),('design_evidence','design_id','RDE0048','outstanding_checks')]:
+  row=next(r for r in L.read(table) if r[idfield]==idval)
+  row[qfield]=[q.replace('mainref23 has malformed DOI10.1021/acsnano.1028b08671, probable intended8b08671 remains a candidate correction.','mainref23 target resolved to10.1021/acsnano.8b08671 by primary manuscript and publisher supplement metadata; malformed original citation preserved.') for q in row[qfield]]
+  L.upsert(table,row,'Resolve malformed citation target; leave other source questions open')
+ names=[f'{v} tetrahedron {n}bp' for v in ['FV','MV'] for n in [42,63,84]]+['FV octahedron84bp','MV octahedron84bp','FV pentagonal bipyramid42bp','MV asymmetric tetrahedron42/69/69/103/103/130bp']
+ did='RDE0049';old=next((d for d in L.read('design_evidence') if d['design_id']==did),None);assert old is None or key in old['publication_keys']
+ L.upsert('design_evidence',dict(design_id=did,publication_keys=[key],named_objects=names+['Computed library240 entries; not240 experimentally tested objects','Designed twisted triangular prism30degree twist'],identity_status='Publication-level family with10 experimentally reported variants plus computed designs; overlaps pending',lattice_decision='Polyhedral wireframes excluded despite honeycomb6HB edge packing',catalog_eligibility='excluded',core_variant_composition=note,relationships=[],variant_links=[],source_completeness='not_verified',evidence=[me,se],source_files=[me,se],outstanding_checks=p['unresolved_questions'],review_stage='source_reviewed',review_run=batch,run_id=rid,date=L.DATE,legacy_record={}), 'Record explicit experimental versus computational design units')
+ text=subprocess.check_output(['pdftotext','-layout',str(base/'talos-mit-manuscript.pdf'),'-']).decode();part=text.split('REFERENCES',1)[1]
+ part=re.sub(r'^.*(?:Author Manuscript|ACS Nano\. Author manuscript;|Jun et al\.).*$', '',part,flags=re.M)
+ part=part.split('Figure 1.',1)[0];ms=list(re.finditer(r'^\s*\((\d+)\)\.\s+',part,re.M));assert [int(m[1]) for m in ms]==list(range(1,69))
+ for i,m in enumerate(ms):
+  citation=' '.join(part[m.end():ms[i+1].start() if i+1<len(ms) else len(part)].split());assert len(citation)<2000
+  L.upsert('discovery_edges',dict(edge_id='talos2019:reference:'+m[1],source_key=key,target_key='citation:talos2019:'+m[1],relation='cites',evidence_url=me['url'],local_file=me['local_file'],sha256=me['sha256'],locator='Main reference'+m[1]+' printedpp12–15',citation=citation,reconciliation_state='pending_identity_date_scope_reconciliation',run_id=rid,date=L.DATE),'Retain all68 primary reference entries without relevance cap')
+ L.upsert('batches',dict(batch_id=batch,date=L.DATE,status='completed',input_keys=[key,shep],selection='TALOS primary manuscript recovery and malformed citation reconciliation',before_counts=before,after_counts=L.counts(),completed_actions=['Acquired MIT author manuscript; local ACS403 remains route-specific, no user intervention needed.','Resolved Shepherdref23 target while preserving malformed original DOI.','Documented10 experimentally reported variants versus240 computed library entries and a designed twisted prism; inspected SI FigS76.','Retained68 manuscript references.'],validation=[L.validate()],unresolved_keys=[key,shep],next_queue=p['unresolved_questions']+['Acquire DAEDALUS2016 main/SI through public repositories; rotate remaining named authors and low-keyword records.']), 'Save primary followup and unresolved source scope')
+ print(L.validate())
+if __name__=='__main__':main()

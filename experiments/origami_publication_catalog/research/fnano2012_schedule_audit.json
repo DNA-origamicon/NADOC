@@ -1,0 +1,140 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "transcribed": 12,
+      "expected_named_entries": 12,
+      "source_types": {
+        "keynote": 3,
+        "invited": 6,
+        "contributed": 3
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 2,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "workshop": 1,
+        "poster": 12,
+        "keynote": 1,
+        "invited": 2
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 3,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "invited": 5,
+        "keynote": 1,
+        "contributed": 1,
+        "poster": 9
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 4,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "poster": 12,
+        "keynote": 1,
+        "invited": 2,
+        "contributed": 1
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 5,
+      "transcribed": 13,
+      "expected_named_entries": 13,
+      "source_types": {
+        "keynote": 2,
+        "invited": 6,
+        "contributed": 1,
+        "talk": 3,
+        "award_address": 1
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 6,
+      "transcribed": 20,
+      "expected_named_entries": 20,
+      "source_types": {
+        "poster": 20
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 7,
+      "transcribed": 20,
+      "expected_named_entries": 20,
+      "source_types": {
+        "poster": 20
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 8,
+      "transcribed": 10,
+      "expected_named_entries": 10,
+      "source_types": {
+        "invited": 5,
+        "contributed": 3,
+        "keynote": 2
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    },
+    {
+      "page": 9,
+      "transcribed": 16,
+      "expected_named_entries": 16,
+      "source_types": {
+        "keynote": 1,
+        "invited": 2,
+        "poster": 13
+      },
+      "audit_method": "Complete page text inspected; p2 additionally rendered and visually reviewed. Administrative/session headers excluded; title and first-author presence asserted."
+    }
+  ],
+  "total_transcribed": 139,
+  "source_page_total": 9,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5871,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 11189
+  },
+  "counts": {
+    "publication_versions": 5871,
+    "canonical_work_keys": 5870,
+    "provisional_work_keys_not_reconciled": 5869,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 993,
+      "unreviewed": 4649,
+      "fulltext_reviewed": 53,
+      "design_sources_reviewed": 176
+    },
+    "relevance": {
+      "uncertain": 5635,
+      "background_or_review": 19,
+      "design_bearing": 212,
+      "not_origami": 5
+    },
+    "catalog_eligibility": {
+      "unresolved": 5861,
+      "excluded": 9,
+      "eligible": 1
+    },
+    "design_groups": 138,
+    "design_source_reviews": 61,
+    "discovery_runs": 46
+  },
+  "visual_followup": "Page7 rendered at1700px: missing numerals in Encapsulation of D DNA and D and D DNA Lattices are visible in source; p6 author continuation confirmed at p7 top.",
+  "counterpart_candidate": "10.1021/nn203161y; full8author program group matches journal, exact scope pending"
+}

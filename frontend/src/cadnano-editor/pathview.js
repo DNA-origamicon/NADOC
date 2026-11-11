@@ -26,6 +26,7 @@ import { buildContinuedRows, helixAtRowBp, reorderContinuedRows, rowPaintRanges 
 // The drawing-grid geometry lives in ./pathview/layout.js because the 3D app's
 // Domain Designer fork (ui/overhang_pathview.js) shares it — importing it from
 // HERE dragged this whole 4977-LOC module into the main-app bundle (TD-14).
+import { pairedCrossoverBows } from '../design/paired_crossover_bows.js'
 import {
   GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
   CELL_H, PAIR_Y, ROW_H,
@@ -1044,6 +1045,7 @@ export function initPathview(canvasEl, containerEl, {
   let _xoverArcHitBins = new Map()
 
   function _ensureXoverArcHitIndex() {
+    _ensureStrandIndex()
     const pbSignature = `${_pbActive}:${_pbNearBp}:${_pbFarBp}`
     if (_xoverArcHitDesign === _design &&
         _xoverArcHitLayoutRevision === _layoutRevision &&
@@ -1110,7 +1112,8 @@ export function initPathview(canvasEl, containerEl, {
         : (() => {
             const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
             return [{ x0: xA, y0: yA, x1: xB, y1: yB,
-              cx: (xA + xB) / 2 + bowAmt, cy: (yA + yB) / 2 }]
+              cx: (xA + xB) / 2 + (_pairedCrossoverBows.get(fl.id) ?? 1) * bowAmt,
+              cy: (yA + yB) / 2 }]
           })()
       addDescriptor({ fl, segments: segments.map(boundedSegment) })
     }
@@ -1394,6 +1397,7 @@ export function initPathview(canvasEl, containerEl, {
   let _strandById = new Map()
   let _extensionHostEntries = []
   let _forcedLigTransitionKeys = new Set()
+  let _pairedCrossoverBows = new Map()
   let _elementOwnerByKey = new Map()
   let _domainOwnerByKey = new Map()
   let _domainElementKeysByStrand = new Map()
@@ -1467,6 +1471,7 @@ export function initPathview(canvasEl, containerEl, {
       return [{ ext, strand, idx: strandIndexById.get(ext.strand_id) }]
     })
     _forcedLigTransitionKeys = forcedLigTransitionKeys
+    _pairedCrossoverBows = pairedCrossoverBows(_design)
     _activeStrandExtentCached = isFinite(activeLo) ? { lo: activeLo, hi: activeHi } : null
     _referenceOnlyHelixIdsCached = refHelixIds
     _selectionOwnerIndexDesign = null
@@ -2462,6 +2467,7 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   function _drawCrossoverArcs() {
+    _ensureStrandIndex()
     const hasXovers = _design?.crossovers?.length > 0
     const hasForcedLigs = _design?.forced_ligations?.length > 0
     if (!hasXovers && !hasForcedLigs) return
@@ -2654,7 +2660,7 @@ export function initPathview(canvasEl, containerEl, {
       const midX = (xA + xB) / 2
       const midY = (yA + yB) / 2
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
-      const ctrlX = midX + bowAmt
+      const ctrlX = midX + (_pairedCrossoverBows.get(fl.id) ?? 1) * bowAmt
       const ctrlY = midY
       if (isRefFL) { ctx.setLineDash([6 / _zoom, 5 / _zoom]); ctx.lineCap = 'butt' }
       ctx.beginPath()

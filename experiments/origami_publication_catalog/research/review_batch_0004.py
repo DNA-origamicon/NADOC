@@ -1,0 +1,38 @@
+"""B0004 explicit first-pass decisions from inspected ACS supplement sections."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+
+D={
+'sb3000518':('reused_design,modified_design','PDF pp.1–2 Figs S1–S2 and Table S1 introduction','Scaples-based triangles use a design-scaffold sequence; a gel compares the origami triangle and random-sequence scaples triangle. Table S1 warns that 18 mismatches arose from the database scaffold sequence and distinguishes corrected listed staples.','Inspect main article and parent reference 8; separate actual origami comparator from scaffold-free derivative. Never certify experimental sequences from corrected table alone.'),
+'ja304263n':('reused_design','PDF pp.4,6 Figs S2–S3 captions','Experiments explicitly compare doxorubicin-loaded triangular and tubular origami and unloaded origami controls. Biological endpoints establish substantive experimental use, not complete design sources.','Resolve original tube and triangle publications and core staple sets; loading a drug does not itself imply modified DNA routing.'),
+'nn3022662':('new_design,modified_design','PDF pp.2–3 Figs S1–S2 and staple-list headings','Distinct S-Nano and T-Nano design diagrams are paired with staple lists for p7560 and p8634 respectively.','Inspect diagram images and main methods for lattice and twist; reconcile edge/cap groups. Extracted table columns cannot certify sequence assignments.'),
+'ja307785r':('modified_design','PDF pp.2–3 methods and Fig S1','Azobenzene-modified staples are chemically prepared in two variants; gel experiments measure irradiation-dependent disassembly of hexagonal-shaped dimers.','Inspect monomer geometry and orientation-specific linkage sets. Hexagonal object shape does not establish a hexagonal helix lattice.'),
+'ja3076692':('reused_design,modified_design','PDF p.2 one-pot and step-wise construction','Core, top/bottom and left/right edge staples are mixed at distinct concentrations; rectangles, short/long nanotubes and nanoribbons use different programs. Stepwise assembly omits selected edge staples before adding linkers.','Map core and linker sets to each assembly; separate component geometry from higher-order arrangements and reconcile parent.'),
+'nn302322j':('reused_design,modified_design','PDF pp.2–3 staple pool analysis and Fig S1; Tables S2–S4 headings','Triangle and rectangle controls use individually synthesized staples; dsM13-derived folds are compared with ssM13 origami, and nano-house assembly is optimized by incubation. Separate tables name sharp triangle, reverse-complemented tall rectangle and nano-house.','Inspect all scaffold identities and staple tables, parent sources, and nano-house linkage; do not infer complete yield from concentration estimates.'),
+'nl304492y':('new_design,modified_design','PDF pp.3–4 DNA origami structure and modification/immobilization','p8634 nanopillars are designed in caDNAno. Standing pillars use 15 biotin strands and two Alexa647 strands; lying pillars use alternative immobilization oligos while other staples remain unmodified.','Match Tables S2–S3 substitutions and Fig S3 routing; model assumptions of 10.67 bases/turn and 2.7nm spacing are not independent lattice validation.'),
+'ja312191a':('new_design,reused_design,modified_design','PDF pp.1–2 visually inspected: preparation methods and Fig S1','Rectangular origami staples were designed in inSequio; single-cross origami follows a prior report, and one-dimensional cross assemblies use sticky-end sequences differing from that report. AFM documents nanotube attachment.','Text extraction omits nearly all methods and sequences: inspect source images for remaining tables, parent reference 2, routing and linker variants.'),
+'la305155u':('reused_design','PDF pp.2–5 Figs S1–S4','AFM/SEM supporting data characterize palladium seeding and gold/copper metallization of origami bridging electrodes.','Retrieve main methods and original template. Characterization figures are evidence of use, not routing or a complete synthesis set.'),
+'ja4000728':('reused_design,modified_design','PDF pp.2–3 preparation and thermal monitoring','M13 2D and 3D objects use fluorescein/TAMRA-modified staples; rectangles and cuboids have distinct thermal protocols.','Inspect design list and all modified staple locations; reconcile core parent sources and each 3D lattice independently.'),
+'nl400538y':('reused_design,modified_design','PDF p.1 preparation of rectangular template','Rectangle omits side staples and adds four capture-strand groups with 18-base extensions to organize nanoparticle binding sites.','Resolve standard recipe reference 1 and all three-dimensional arrangements; inspect complete core and capture combinations.'),
+'nl400976s':('reused_design,modified_design','PDF p.3 preparation of origami scaffolds and probe oligonucleotides','M13 rectangular arrays omit staples 1–12 and 205–216 and extend selected 5-prime ends with a probe-binding sequence; labeled target/probe sets support kinetic measurements.','Resolve references 1–2 and exact Figure S2 positions and variants; no full source-set certification.'),
+'nn401759r':('new_design,modified_design','PDF pp.5,8 ionic traces; p.11 section 8a staple table','14nm pore trapping experiments and an explicit 14nm start/end/sequence/length table support a structural design; contents separately identify a 5nm design and layouts.','Inspect both complete layout/sequence sections and parent relationships before judging lattice and source completeness.'),
+'jp312422n':('modified_design','PDF p.4 Figs S1–S2; p.30 Fig S37 and associated modified sequences','TEM documents particle/dye constructs, and the 12.8nm monomer schematic lists modified C30/C26/C28 strands with fluorophore-position context.','Inspect full origami scaffold, parent source and all monomer/dimer variants. Diagram/sequence association needs source-image verification.'),
+'nl401879r':('reused_design,modified_design','PDF pp.1–2 Single/Double Nanotube Designs','Three single-tube waveguide variants use 172 staples with 15nt sticky ends at selected sites; a double-tube variant modifies 36 staples for nine crosslink positions.','Resolve parent six-helix bundle reference 1; match component-specific sticky ends/crosslinks and distinguish assemblies from single-tube geometry.')}
+
+def main():
+    acs={r['doi']:r for r in json.loads((L.ROOT/'acs_acquisition.json').read_text())['records']}
+    for r in L.read('publication_reviews'):
+        suffix=r.get('doi','').split('/')[-1]
+        if suffix not in D or r.get('run_id')!='bootstrap-20261105':continue
+        c,loc,note,q=D[suffix];f=next(f for f in acs[r['doi']]['files'] if f.get('local_file','').endswith('.pdf'))
+        ev=[evidence(L.ROOT/'assets'/f['local_file'],f['url'],loc)]
+        r.update(review_stage='design_sources_reviewed',relevance='design_bearing',catalog_eligibility='unresolved',design_contributions=c.split(','),evidence=ev,rationale=note,unresolved_questions=[q],access='partial',reviewer='Codex source inspection',run_id='B0004',date=L.DATE)
+        L.upsert('publication_reviews',r,'B0004 explicit inspected supplement evidence; scope and completeness remain separate')
+    b=next(b for b in L.read('batches') if b['batch_id']=='B0004')
+    if b['status']=='in_progress':
+        b.update(completed_actions=['Inspected cited source sections for 15 prioritized ACS records.','Read carbon-nanotube origami methods in source images after nearly empty text extraction.'],after_counts=L.counts(),unresolved_keys=b['input_keys'],next_queue=b['input_keys'][15:],validation=[L.validate()])
+        L.upsert('batches',b,'Save partial B0004; rotating ten records pending')
+    print(L.validate())
+
+if __name__=='__main__':main()

@@ -74,6 +74,7 @@ from backend.core.md_ensemble import NAMD_SEED_MAX, random_seed
 from backend.core.md_integrator import resolve_integrator
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
+    LEGACY_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
     PRODUCTION_DCD_FREQ,
     PRODUCTION_LANGEVIN_DAMPING,
@@ -1324,6 +1325,8 @@ async def md_solvent_meta(job_id: str) -> dict:
 
     manifest = package_dir / "manifest.json"
     mf = _read(manifest) if manifest.exists() else {}
+    out["npt_allowed"] = (mf.get("solvation") or {}).get("npt_allowed", True)
+    out["source_cell_center_nm"] = (mf.get("submodel") or {}).get("source_cell_center_nm")
 
     # Not every package writes a standalone charge_audit.json — replica packages
     # hardlink only the immutable structure files, and some builders fold the audit
@@ -1832,6 +1835,8 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # "auto" (the atom-count gate inside build_production_conf).  None here means auto.
     resident_mode = body.gpu_resident or manifest.get("gpu_resident_mode") or "auto"
     force_resident = {"on": True, "off": False}.get(str(resident_mode).lower())
+    if manifest.get("submodel"):
+        force_resident = False
     total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
     return {
         "total_steps": total_steps,
@@ -2072,6 +2077,9 @@ def _append_production_segments(
     text = json.dumps(manifest, indent=2)
     manifest_path.write_text(text)
     (package_dir / "nadoc_md_run.json").write_text(text)
+
+    from backend.core.namd_submodel import finalize_package
+    finalize_package(package_dir, name_stem)
 
     job.segments.extend(
         MdSegmentStatus(
@@ -2791,6 +2799,8 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
             f"instead.",
         )
     pkg = job.package_dir(_workspace())
+    if (pkg / "submodel.json").exists() and body.anchors:
+        raise HTTPException(409, "Additional anchors are not yet supported on NAMD submodels; the package owns its shell boundary restraints.")
     manifest_path = pkg / "manifest.json"
     if not manifest_path.exists():
         raise HTTPException(
@@ -2942,6 +2952,8 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     params["mrdna_job_id"] = job.seed_mrdna_job_id
     params["blade_job_id"] = job.seed_blade_job_id
     params["draft"] = False
+    if "submodel" not in body.model_fields_set:
+        params["submodel"] = read_selection(job.job_dir(_workspace()))["box"]
     params.setdefault("design_source_path", job.design_source_path)
     new_body = CreateJobRequest(**params)
 
@@ -3105,6 +3117,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
             box_mode=body.box_mode,box_size_nm=body.box_size_nm,
             nacl_mM=0 if body.salt_mode=='screening' else body.ion_conc_mM,
             mgcl2_mM=12.5 if body.salt_mode=='screening' else body.mg_conc_mM,
+            submodel=body.submodel,
         )
         if not profile:
             return {**forecast(target, 0), "skipped": True}
@@ -3115,7 +3128,8 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         # DCD output, stage overrides and mixed timesteps all affect this quote.
         from backend.api.routes_md_plan import ProtocolPlanRequest, protocol_plan
         from backend.core.namd_runtime import local_compute,completion_quote
-        request=ProtocolPlanRequest(**{**body.model_dump(), 'n_atoms_hint': n_atoms})
+        request=ProtocolPlanRequest(**{**body.model_dump(), 'n_atoms_hint': n_atoms,
+            **({'gpu_resident': 'off'} if body.submodel else {})})
         plan=await protocol_plan(request,include_box_preview=False)
         stages=plan['stages']
         predicted=namd_run_output_bytes([
@@ -3123,7 +3137,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         ],n_atoms)
         length_ns=sum(float(stage['ns']) for stage in stages)
         work=[dict(role=stage['role'],steps=stage['steps'],
-                   gpu_resident=str(stage['params'].get('gpuresident','off')).lower() in ('on','yes','true','1'),
+                   gpu_resident=not body.submodel and str(stage['params'].get('gpuresident','off')).lower() in ('on','yes','true','1'),
                    pairlistdist=stage['params'].get('pairlistdist',13.5),
                    pmegridspacing=stage['params'].get('pmegridspacing',1.5),
                    margin=stage['params'].get('margin',3)) for stage in stages]
@@ -3143,6 +3157,8 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         **timing,
         "n_atoms": n_atoms,
         "length_ns": round(length_ns, 3),
+        "submodel": profile.get("submodel"),
+        "box_nm": profile.get("resource_box_nm", profile.get("box_nm")),
     }
 
 
@@ -3171,13 +3187,14 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
             design,
             padding_nm=resolved.padding_nm,
             devices=resolved.devices,
-            gpu_resident_mode=resolved.gpu_resident or 'auto',
+            gpu_resident_mode='off' if resolved.submodel else resolved.gpu_resident or 'auto',
             box_mode=resolved.box_mode,
             box_size_nm=resolved.box_size_nm,
             nacl_mM=0.0 if resolved.salt_mode=='screening' else resolved.ion_conc_mM,
             mgcl2_mM=12.5 if resolved.salt_mode=='screening' else resolved.mg_conc_mM,
             threads=resolved.threads,
             stage_overrides=resolved.stage_overrides,
+            submodel=resolved.submodel,
         )
         return advice
     except Exception as exc:  # noqa: BLE001 — unknown sizing must not authorize a launch
@@ -3226,7 +3243,7 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     they mean.
 
     On top of :func:`disk_guard.forecast` this adds ``est_ns_per_day`` /
-    ``est_hours`` so the panel can warn about a multi-day run before it starts.
+    ``est_hours`` for descriptive ETA display before the run starts.
     Throughput is a rough atom-count model, so it is advisory only and is omitted
     (``None``) when the atom count is unknown.
     """
@@ -3234,6 +3251,11 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
 
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
+    from backend.core.namd_resources import prepared_forecast_context
+    try:
+        context = await run_in_threadpool(prepared_forecast_context, package_dir, threads=job.threads, devices=job.devices)
+    except (OSError, ValueError, KeyError):
+        context = {}
     n_atoms = _psf_atom_count(package_dir / f"{job.name_stem}.psf")
     plan = _production_fast_plan(job, body)
     from backend.core.cpd_forcefield import (
@@ -3267,7 +3289,7 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     from backend.core.md_optimize import gpu_resident_pays
     mode=plan['force_resident'] if plan['force_resident'] is not None else gpu_resident_pays(n_atoms)
     work=[dict(role='production',steps=steps,gpu_resident=mode) for steps,_ in segments]
-    compute=local_compute(n_atoms,work,devices=job.devices,threads=job.threads) if n_atoms else None
+    compute=local_compute(n_atoms,work,devices=job.devices,threads=job.threads,box_nm=context.get('box_nm')) if n_atoms else None
     if compute and str(timing.get('throughput_source') or '').startswith('measured:') and timing.get('est_hours'):
         # Keep a verified parent rate while adding the same lifecycle accounting.
         factor=timing['est_hours']/compute['hours']
@@ -3280,6 +3302,7 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     return {
         **forecast(package_dir if package_dir.exists() else _workspace(), predicted),
         **timing,
+        **context,
         "completion": quote,
         "n_atoms": n_atoms,
         "total_steps": total_steps,
@@ -3522,6 +3545,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str, design=None) -> MdJob
     job.status = MdStatus.draft
     _apply_run_dir(job, body.run_dir, execution_target=body.execution_target)
     job.save(_workspace())
+    save_selection(job.job_dir(_workspace()), SubmodelSelection(box=body.submodel))
     logger.info(
         "create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
         job.job_id,
@@ -3696,6 +3720,7 @@ def _spawn_prep_job(
     job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.preparing
     job.save(_workspace())
+    save_selection(job.job_dir(_workspace()), SubmodelSelection(box=body.submodel))
     logger.info(
         "create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
         job.job_id,
@@ -3934,6 +3959,15 @@ async def _prepare_job_bg(
             # takes an md_protocols kwarg.
             seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
             seed_kwargs["box_size_nm"] = body.box_size_nm
+        if body.submodel is not None:
+            from backend.core.namd_submodel import package_builder
+            if (body.protocol not in (EQUILIBRIUM_AWARE_PROTOCOL, LEGACY_PROTOCOL)
+                    or seed_kwargs_graphene or seed_solute_coords is not None
+                    or body.anchors or body.surface_anchors or body.anchor_atoms
+                    or "package_builder" in seed_kwargs):
+                raise ValueError("NAMD submodels currently require explicit-solvent DNA without additional anchors or surfaces")
+            seed_kwargs["package_builder"] = package_builder(body.submodel.model_dump(mode="json"))
+            seed_kwargs["fixed_cell"] = True
         from backend.core.namd_resources import prepare_with_memory_budget
         # The validated preparation envelope covers explicit-solvent DNA; other
         # material/protocol paths keep their separate preparation implementation.
@@ -3958,7 +3992,7 @@ async def _prepare_job_bg(
             force_soft=bool(body.force_soft or body.oxdna_job_id),
             high_aspect_ratio=body.relax_preset == HIGH_ASPECT_RATIO,
             fast=body.fast,
-            gpu_resident_mode=body.gpu_resident or "auto",
+            gpu_resident_mode="off" if body.submodel else body.gpu_resident or "auto",
             # The three ladder axes, decoupled (exp51).  None on any of them keeps the
             # historical `fast`-derived behaviour, so an old client sends the same package.
             relax_timestep_fs=body.relax_timestep_fs,
@@ -4840,6 +4874,10 @@ async def copy_md_job(job_id: str) -> dict:
                 "seed": copied_seed,
                 "autostart": False,
                 "draft": True,
+                # Older jobs may record their model association only on the job,
+                # not in prep_params. Losing it makes list refreshes drop a copy.
+                "design_source_path": source.design_source_path
+                or source.prep_params.get("design_source_path"),
             }
         )
         seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
@@ -5460,10 +5498,9 @@ class ProductionRunRequest(BaseModel):
         gt=0.0,
         le=100.0,
         description="Langevin coupling in ps^-1. Omit for the literature production value "
-        "(1.0). The ladder's 5.0 is an EQUILIBRATION setting: at that coupling "
-        "the dynamics are overdamped, so diffusion, relaxation and correlation "
-        "times are all scaled by something unrelated to the system. Raise it "
-        "only if you want equilibrium averages and do not care about kinetics.",
+        "(1.0), including continuations and submodels. The ladder's 5.0 is an "
+        "equilibration setting. Stronger coupling can alter diffusion and dynamical "
+        "correlations; use a different production value only as an explicit, validated choice.",
     )
 
     gpu_resident: Optional[str] = Field(
@@ -5721,15 +5758,9 @@ def _production_restraint_plan(
             f"the {parent_preset or 'unrecorded'} parent protocol, not a production setting"
         )
 
-    # A continuation also inherits the thermostat coupling it was running under, for the
-    # same reason: a chain whose damping changes partway is two different experiments
-    # sharing one set of coordinates.
-    if damping:
-        resolved = float(damping)
-    elif chained and recipe.get("langevin_damping"):
-        resolved = float(recipe["langevin_damping"])
-    else:
-        resolved = PRODUCTION_LANGEVIN_DAMPING
+    # Every new production request defaults to 1 ps^-1, including continuations
+    # and submodels. A different coupling requires an explicit request.
+    resolved = float(damping) if damping is not None else PRODUCTION_LANGEVIN_DAMPING
     return {
         "enm_restraints": enm,
         "enm_reason": why,
@@ -6583,6 +6614,7 @@ def _save_draft_settings(job: MdJob, body: CreateJobRequest) -> MdJob:
     job.error = None
     job.failure_kind = None
     job.save(_workspace())
+    save_selection(job.job_dir(_workspace()), SubmodelSelection(box=body.submodel))
     return job
 
 
@@ -6662,6 +6694,8 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
             return result["job"]
 
         request = CreateJobRequest(**body)
+        if "submodel" not in body:
+            request = request.model_copy(update={"submodel": SubmodelSelection(**read_selection(job.job_dir(_workspace()))).box})
     except ValidationError as exc:
         raise HTTPException(422, exc.errors()) from exc
 
@@ -7013,11 +7047,19 @@ async def start_md_job(job_id: str) -> dict:
             "message": "Sequences accepted; refreshing atom counts and preparing the run.",
         }
 
+    if job.status == MdStatus.draft and job.prep_params:
+        params = {**job.prep_params, "autostart": True,
+                  "submodel": read_selection(job.job_dir(_workspace()))["box"]}
+        return await prepare_draft_job(job_id, CreateJobRequest(**params))
+
     if is_running(job_id):
         return {"ok": True, "message": "Job already running"}
 
     if job.status in (MdStatus.running, MdStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
+
+    from backend.api.md_submodel import require_prepared_selection
+    require_prepared_selection(job, _workspace())
 
     # Repair production packages made before nanopore metadata inheritance was added.
     # This precedes both local and RunPod launch, so an already-queued child gets the
@@ -7075,6 +7117,7 @@ def _prepare_sequence_deferred_job(job: MdJob, *, autostart: bool) -> MdJob:
     # disk, throughput, VRAM and remote-resource consumers before dynamics can start.
     params = dict(job.prep_params or {})
     params.update(autostart=autostart, draft=False)
+    params["submodel"] = read_selection(job.job_dir(_workspace()))["box"]
     body = CreateJobRequest(**params)
     job.awaiting_sequence = False
     job.save(_workspace())
@@ -8783,4 +8826,7 @@ async def get_md_submodel(job_id: str) -> dict:
 
 @router.put("/md/jobs/{job_id}/submodel")
 async def put_md_submodel(job_id: str, selection: SubmodelSelection) -> dict:
-    return save_selection(_load_job(job_id).job_dir(_workspace()), selection)
+    from backend.api.md_submodel import save_job_selection
+    return save_job_selection(_load_job(job_id), _workspace(), selection,
+        clear_artifacts=_clear_editable_job_artifacts, reset_runtime=_reset_editable_runtime_state,
+        editable=_job_settings_editable)

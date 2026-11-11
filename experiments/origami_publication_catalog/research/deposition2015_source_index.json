@@ -1,0 +1,1845 @@
+{
+  "evidence": {
+    "local_file": "assets/sources/pre2020-expansion/supplements/PMC4616047-41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "sha256": "4a573a97b2f67e1a7636d1755ab98be8c572e9deae885bb83579c64c93903871",
+    "url": "https://static-content.springer.com/esm/art%3A10.1038%2Fsrep15634/MediaObjects/41598_2015_BFsrep15634_MOESM1_ESM.pdf",
+    "locator": "Notes2-4 PDF2-3; linker TablesS1/S2 PDF4; FigureS4 PDF5 visually inspected at whole-page scale; TablesS3/S4 PDF6-8/10-12. FigureS5 PDF9 caption only this pass. Base-by-base image audit pending."
+  },
+  "tables": [
+    {
+      "table": "S3",
+      "rows": [
+        {
+          "start": "11[408]",
+          "end": "10[392]",
+          "first_line_sequence": "ACTATGGTGGGATTTTAGGGTCAGTTGGCAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "14[183]",
+          "end": "11[183]",
+          "first_line_sequence": "TAACTATATTCATCTTCTGACCTTAAATAAGGCGTTAAACAGTATAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "14[407]",
+          "end": "11[407]",
+          "first_line_sequence": "TATAAATCCACTATTAAAGAACGTGCGCTGGCAAGTGTAGGGCGCGT",
+          "pdf_page": 6
+        },
+        {
+          "start": "22[87]",
+          "end": "19[87]",
+          "first_line_sequence": "CCCTCAGAGTCATAGCCCCCTTATAGCGTCAGACTGTAGTCACCAGT",
+          "pdf_page": 6
+        },
+        {
+          "start": "4[431]",
+          "end": "6[424]",
+          "first_line_sequence": "AGAGATAGAACCCTTCAATATTACCGCCAGCCTGGTAATA",
+          "pdf_page": 6
+        },
+        {
+          "start": "19[392]",
+          "end": "22[392]",
+          "first_line_sequence": "TTTTTTAAAATATTTTGTTAAAATAGAGAATCGATGAACGGGCTATCA",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[143]",
+          "end": "19[143]",
+          "first_line_sequence": "ATGTGAATATTGACGGGAAACCATCGAAGCGA",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[279]",
+          "end": "16[272]",
+          "first_line_sequence": "TCCAGCCAATCATGGTCATAGCTGGCAAAAGAAGATGAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "26[375]",
+          "end": "24[368]",
+          "first_line_sequence": "AATCCCCCGGTAATAGTAAAATGAATGCCTGAGTAAGAG",
+          "pdf_page": 6
+        },
+        {
+          "start": "27[400]",
+          "end": "26[400]",
+          "first_line_sequence": "AGTCAGCATCAATTCTGCCTCAGAGCTACTG",
+          "pdf_page": 6
+        },
+        {
+          "start": "25[392]",
+          "end": "23[407]",
+          "first_line_sequence": "GGATAGCGTCCAAATAAAGCTAAAAATTTTTAGAACCCTTGAGAAAG",
+          "pdf_page": 6
+        },
+        {
+          "start": "7[400]",
+          "end": "5[407]",
+          "first_line_sequence": "AGGTGAGCAATACTTCGTCTTTAATGCGCGATTTTGAAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "27[352]",
+          "end": "26[376]",
+          "first_line_sequence": "CGAGAATGACCATAAATCAAAAATCAGGTCTATTCATTG",
+          "pdf_page": 6
+        },
+        {
+          "start": "3[416]",
+          "end": "2[440]",
+          "first_line_sequence": "GTAATAAAAGGGACATTCTGGTTTTGACGCTCAATGGATT",
+          "pdf_page": 6
+        },
+        {
+          "start": "19[296]",
+          "end": "20[288]",
+          "first_line_sequence": "GACAGATGCCAGAACGAGTAGTAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "17[144]",
+          "end": "16[144]",
+          "first_line_sequence": "AGGCGATTAAGTTGGGCTGTAAATCGTCGCT",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[199]",
+          "end": "21[199]",
+          "first_line_sequence": "GGGAAGGGTGATAAATTGTGTCGAACTACGAAGGCACCAAAGGACTAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "16[87]",
+          "end": "13[87]",
+          "first_line_sequence": "ATTTTGTCTGGCATGATTAAGACTCGAGGAAACGCAATAAATAATAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "15[120]",
+          "end": "12[120]",
+          "first_line_sequence": "ACGTAGACAGATAGCCGAACAAATAGCTATCTTACCGACTGAACAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "25[328]",
+          "end": "24[344]",
+          "first_line_sequence": "AATAGCGAGAGGCTTTTGCAAAAGCTCGTTT",
+          "pdf_page": 6
+        },
+        {
+          "start": "21[288]",
+          "end": "20[312]",
+          "first_line_sequence": "AGATGGTTTAATTTCAACTTTAATCATTGTGGCCCTGAC",
+          "pdf_page": 6
+        },
+        {
+          "start": "14[143]",
+          "end": "15[143]",
+          "first_line_sequence": "CAAAGAGAAAAGTAAGAAATACATACATTAAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "9[352]",
+          "end": "11[359]",
+          "first_line_sequence": "TCTAAAGCATCACCTTAAGGTTATCTAAAATAGAGGATTT",
+          "pdf_page": 6
+        },
+        {
+          "start": "8[111]",
+          "end": "9[111]",
+          "first_line_sequence": "ATAGAATCTTACCAACTATTATTTATCAGCCA",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[247]",
+          "end": "16[240]",
+          "first_line_sequence": "CGGAAACCAGGATCCCCGGGTACAAACAAAATTAATTAC",
+          "pdf_page": 6
+        },
+        {
+          "start": "10[87]",
+          "end": "7[87]",
+          "first_line_sequence": "GATTTTTTACAAAATAAACAGCCAGCTAACGAGCGTCTTTTGCACCC",
+          "pdf_page": 6
+        },
+        {
+          "start": "27[424]",
+          "end": "30[424]",
+          "first_line_sequence": "TAGTAGCACATTTGGGGCGCGAGCTAGTTTGACCATTAGATGCGAACG",
+          "pdf_page": 6
+        },
+        {
+          "start": "15[328]",
+          "end": "18[328]",
+          "first_line_sequence": "TTAACGTCCAAGTTACAAAATCGCTTCCACACAACATACGGTGCATCT",
+          "pdf_page": 6
+        },
+        {
+          "start": "13[344]",
+          "end": "11[343]",
+          "first_line_sequence": "GCGGAATTCGTATTAAATCCTTTAATAGATA",
+          "pdf_page": 6
+        },
+        {
+          "start": "6[103]",
+          "end": "7[111]",
+          "first_line_sequence": "TCCTTATCTTTTATCCTGATAAGT",
+          "pdf_page": 6
+        },
+        {
+          "start": "21[424]",
+          "end": "24[424]",
+          "first_line_sequence": "TCATATGTAGAGGGTAGCTATTTTCAGTCAAATCACCATCTCAACGCA",
+          "pdf_page": 6
+        },
+        {
+          "start": "27[112]",
+          "end": "26[112]",
+          "first_line_sequence": "CACAGACAGCCCTCATAAACAACTTTCAACA",
+          "pdf_page": 6
+        },
+        {
+          "start": "15[424]",
+          "end": "18[424]",
+          "first_line_sequence": "GCGGTCCAGGGAGAGGCGGTTTGCGCTTTCCAGTCGGGAAGCGAGTAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[311]",
+          "end": "15[311]",
+          "first_line_sequence": "GACGACAGGTTATCCGCTCACAAGCAGAGGCGAATTATTAGAAATTG",
+          "pdf_page": 6
+        },
+        {
+          "start": "22[391]",
+          "end": "25[391]",
+          "first_line_sequence": "GGTCATTGTAAAGATTCAAAAGGGCATATATTTTAAATGCTTTAGACT",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[327]",
+          "end": "21[327]",
+          "first_line_sequence": "GCCAGTTTAGGCGCATAGGCTGGCTCAGTGAATAAGGCTTAATTACCT",
+          "pdf_page": 6
+        },
+        {
+          "start": "23[144]",
+          "end": "22[144]",
+          "first_line_sequence": "AATTTCTTAAACAGCTTTTGCGGGATCGTCA",
+          "pdf_page": 6
+        },
+        {
+          "start": "24[367]",
+          "end": "26[352]",
+          "first_line_sequence": "CAACACTATCATAACCAAGTTTTGCCAGAGGGTCAAATGCTTTAAACA",
+          "pdf_page": 6
+        },
+        {
+          "start": "7[440]",
+          "end": "5[439]",
+          "first_line_sequence": "CCTGAGTAAACTATCGGCCTTGCATTGCAAC",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[359]",
+          "end": "18[376]",
+          "first_line_sequence": "GTGTAGATTAATCTTGACAAGAACCGGATTTTTGTTAAAACCGTAAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "4[87]",
+          "end": "2[80]",
+          "first_line_sequence": "TTTTTCTACGGTATCATCGTAGGACGCCCAATAGCAAGCA",
+          "pdf_page": 6
+        },
+        {
+          "start": "11[344]",
+          "end": "10[328]",
+          "first_line_sequence": "ATACATTTTCTTTAGGAGCACTAACAACTAAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "10[439]",
+          "end": "7[439]",
+          "first_line_sequence": "GAGCTAAAAAGTGTTTTTATAATACCGAGTAAAAGAGTCATCACTTG",
+          "pdf_page": 6
+        },
+        {
+          "start": "4[118]",
+          "end": "6[104]",
+          "first_line_sequence": "CACTCATCGAGAACAAGCAAGCCATTCCAAGAACGGGTAGCTGTCTT",
+          "pdf_page": 6
+        },
+        {
+          "start": "30[439]",
+          "end": "27[439]",
+          "first_line_sequence": "CCCAATTCTACATTTCGCAAATGTGTTTAGCTATATTTTTTAACATC",
+          "pdf_page": 6
+        },
+        {
+          "start": "24[103]",
+          "end": "24[120]",
+          "first_line_sequence": "TTAAAGCCCTTTTGATGATAGCGGAGTGAGAATAGAAAGTATTCACA",
+          "pdf_page": 6
+        },
+        {
+          "start": "30[103]",
+          "end": "31[119]",
+          "first_line_sequence": "ACCACCCTCGCCACCCTCAGAACCGCCACCCT",
+          "pdf_page": 6
+        },
+        {
+          "start": "21[184]",
+          "end": "18[184]",
+          "first_line_sequence": "GGCTTTGCCTAAAACGAAAGAGGATTTGTATCATCGCCCGATCGGT",
+          "pdf_page": 6
+        },
+        {
+          "start": "21[440]",
+          "end": "18[440]",
+          "first_line_sequence": "TGATAATCCAAAAACAGGAAGATCTGGCCTTCCTGTAGTCAACATT",
+          "pdf_page": 6
+        },
+        {
+          "start": "18[119]",
+          "end": "15[119]",
+          "first_line_sequence": "CATTAAAGTTCAACCGATTGAGGACATATAAAAGAAACGGTTAGCAA",
+          "pdf_page": 6
+        },
+        {
+          "start": "11[144]",
+          "end": "9[159]",
+          "first_line_sequence": "TTTAGTATCATATGCGGAATCGCCATATTTAGTAAAGTAATTCTGTC",
+          "pdf_page": 6
+        },
+        {
+          "start": "16[215]",
+          "end": "15[223]",
+          "first_line_sequence": "CCTTTTTTGTGAATTTATCAAAAT",
+          "pdf_page": 6
+        },
+        {
+          "start": "14[223]",
+          "end": "15[199]",
+          "first_line_sequence": "AGAGACTACCTTTTTAACCTCCGGCTTAGGTTCTGAGAAG",
+          "pdf_page": 6
+        },
+        {
+          "start": "30[119]",
+          "end": "28[111]",
+          "first_line_sequence": "CGCCACCCAAGCCCAATAGGAACTACAAACTACAACGCCT",
+          "pdf_page": 7
+        },
+        {
+          "start": "10[391]",
+          "end": "13[391]",
+          "first_line_sequence": "ATCAACAGTTAATGCGCCGCTACAGCGGTCACGCTGCGCGGTTTGGAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "12[103]",
+          "end": "15[103]",
+          "first_line_sequence": "AGCGCTAAAACAATGAAATAGCAAGTTACCAGAAGGAAACCCTTATTA",
+          "pdf_page": 7
+        },
+        {
+          "start": "31[88]",
+          "end": "28[88]",
+          "first_line_sequence": "TTTAGTACGAGAAGGATTAGGATGGCTGAGACTCCTCAATCGGAAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "9[424]",
+          "end": "12[424]",
+          "first_line_sequence": "ATCCTGAGCAGGAGGCCGATTAAATGCTTTGACGAGCACGAGGAGCGG",
+          "pdf_page": 7
+        },
+        {
+          "start": "28[139]",
+          "end": "29[139]",
+          "first_line_sequence": "TTTCGTCACCAGCCATGTACCGTA",
+          "pdf_page": 7
+        },
+        {
+          "start": "17[296]",
+          "end": "19[295]",
+          "first_line_sequence": "GTGAAATTTATCGGCCTCAGGAAGTGAAAGAG",
+          "pdf_page": 7
+        },
+        {
+          "start": "33[416]",
+          "end": "33[439]",
+          "first_line_sequence": "TATAATGCTGTAGCTCAACATGTT",
+          "pdf_page": 7
+        },
+        {
+          "start": "18[423]",
+          "end": "21[423]",
+          "first_line_sequence": "CAACCCGTCAAAAATAATTCGCGTTGTATAAGCAAATATTCATGTCAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "6[423]",
+          "end": "9[423]",
+          "first_line_sequence": "TCCAGAACTTTGATTAGTAATAACTGTCCATCACGCAAATACGCCAGA",
+          "pdf_page": 7
+        },
+        {
+          "start": "22[343]",
+          "end": "19[343]",
+          "first_line_sequence": "CTAACGGATTTAAGAACTGGCTCAAACAAAGCTGCTCATTGACCTTC",
+          "pdf_page": 7
+        },
+        {
+          "start": "6[140]",
+          "end": "7[140]",
+          "first_line_sequence": "ACGAGCATGTAGATAATATCCCATCC",
+          "pdf_page": 7
+        },
+        {
+          "start": "12[423]",
+          "end": "15[423]",
+          "first_line_sequence": "GCGCTAGGGGACTCCAACGTCAAAGTTCCGAAATCGGCAATGCAGCAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "18[215]",
+          "end": "16[216]",
+          "first_line_sequence": "AGGCTGCGGCCAAGCTTGCATGCCTGAATTA",
+          "pdf_page": 7
+        },
+        {
+          "start": "24[423]",
+          "end": "27[423]",
+          "first_line_sequence": "AGGATAAATCGGTTGTACCAAAAAAAAATTAAGCAATAAAACTAATAG",
+          "pdf_page": 7
+        },
+        {
+          "start": "9[400]",
+          "end": "8[400]",
+          "first_line_sequence": "TATCTACAGGAACGGTTAACCGTTGTAGGCG",
+          "pdf_page": 7
+        },
+        {
+          "start": "23[368]",
+          "end": "22[368]",
+          "first_line_sequence": "ATAGTAATGTGTAGGCCTGAGAGTCTGAAGA",
+          "pdf_page": 7
+        },
+        {
+          "start": "13[307]",
+          "end": "12[307]",
+          "first_line_sequence": "ATTATCATTTTGCTTTTAAAAGTTTG",
+          "pdf_page": 7
+        },
+        {
+          "start": "13[328]",
+          "end": "15[327]",
+          "first_line_sequence": "GAAACCACTGGATTATACTTCTGATTTCAGGT",
+          "pdf_page": 7
+        },
+        {
+          "start": "33[440]",
+          "end": "32[416]",
+          "first_line_sequence": "TTAAATATTACGGTGTCTGTTTGCGGATGGCTTAGAGCTT",
+          "pdf_page": 7
+        },
+        {
+          "start": "18[263]",
+          "end": "18[280]",
+          "first_line_sequence": "GCACCGCTGTCAATCATAAGGGAACCGAACTGACCAACTTATCGCAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "21[200]",
+          "end": "21[223]",
+          "first_line_sequence": "AGACTTTTTCATGAGGAAGTTTCC",
+          "pdf_page": 7
+        },
+        {
+          "start": "26[135]",
+          "end": "27[159]",
+          "first_line_sequence": "GATTTTGCTAGTTAGCGTAACGATCTAAAGTTTTGTCGTC",
+          "pdf_page": 7
+        },
+        {
+          "start": "24[439]",
+          "end": "21[439]",
+          "first_line_sequence": "CCTTTATTAATATGATATTCAACGATAAATTAATGCCGGACCCCGGT",
+          "pdf_page": 7
+        },
+        {
+          "start": "15[144]",
+          "end": "14[144]",
+          "first_line_sequence": "TTTCCCTTAGAATCCTAATCCAATCGCAAGA",
+          "pdf_page": 7
+        },
+        {
+          "start": "15[440]",
+          "end": "13[439]",
+          "first_line_sequence": "TGCCCCAATCCTGTTTGATGGTGGGGCGAAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "21[328]",
+          "end": "24[328]",
+          "first_line_sequence": "TATGCGATACAACATTATTACAGGCCACATTCAACTAATGACGATAAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "20[367]",
+          "end": "21[367]",
+          "first_line_sequence": "TTACCCAAATCAACGTTTATACCAGTCAGGAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "23[168]",
+          "end": "25[183]",
+          "first_line_sequence": "ATAGTTGCAGCCTTTAATTGTATCTTCACGTTGAAAATCTCCAAAAAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "26[111]",
+          "end": "27[111]",
+          "first_line_sequence": "GTTTCACAGGAGTGTACAGTTAATGCCCATTC",
+          "pdf_page": 7
+        },
+        {
+          "start": "21[368]",
+          "end": "20[368]",
+          "first_line_sequence": "GTTGGGGAGCAAACATCGCATTAAATATTCA",
+          "pdf_page": 7
+        },
+        {
+          "start": "18[375]",
+          "end": "16[368]",
+          "first_line_sequence": "GGGATAGGCCTAATGAGTGAGCTCCAGTGAGACGGAAAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "20[407]",
+          "end": "17[407]",
+          "first_line_sequence": "TAAACGTTCCAATAGGAACGCCATCGGATTCTCCGTGGGGTTGCGCT",
+          "pdf_page": 7
+        },
+        {
+          "start": "27[440]",
+          "end": "24[440]",
+          "first_line_sequence": "CAATAAAAAGGCAAAGAATTAGCCATTATGACCCTGTAGGGAGAAG",
+          "pdf_page": 7
+        },
+        {
+          "start": "13[368]",
+          "end": "12[368]",
+          "first_line_sequence": "TTATCTGTTGTTCCATAACCACCACATTTAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "15[200]",
+          "end": "18[200]",
+          "first_line_sequence": "AGTCAATAAATGGAAACAGTACATTAAAACGACGGCCAGTCAACTGTT",
+          "pdf_page": 7
+        },
+        {
+          "start": "10[183]",
+          "end": "11[167]",
+          "first_line_sequence": "CGCTCAACAGTAGGGCTTAATTGATTATACAA",
+          "pdf_page": 7
+        },
+        {
+          "start": "30[423]",
+          "end": "30[440]",
+          "first_line_sequence": "AGTAGATTTCCTTTTGATAAGAGGTCATTGAAGTTTCATAGTTGATT",
+          "pdf_page": 7
+        },
+        {
+          "start": "8[159]",
+          "end": "9[135]",
+          "first_line_sequence": "CAATAAACAACATGTTCAGCTAATGCAGAACGAAAGTACC",
+          "pdf_page": 7
+        },
+        {
+          "start": "22[204]",
+          "end": "23[204]",
+          "first_line_sequence": "CCGATATATTCGGAACCATCGCCCAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "19[144]",
+          "end": "18[144]",
+          "first_line_sequence": "TTATACCAAGCGCGAAGCTGGCGAAAGGGGG",
+          "pdf_page": 7
+        },
+        {
+          "start": "9[376]",
+          "end": "8[352]",
+          "first_line_sequence": "TCAAATACCTGCAACAGTGCCACGCTGAGAGCCAGCAGC",
+          "pdf_page": 7
+        },
+        {
+          "start": "15[368]",
+          "end": "14[368]",
+          "first_line_sequence": "CGGGAGGCAACAGCTATAGGGTTGAGAGATG",
+          "pdf_page": 7
+        },
+        {
+          "start": "5[440]",
+          "end": "4[432]",
+          "first_line_sequence": "AGGAAAAAAATACCTACACCAAC",
+          "pdf_page": 7
+        },
+        {
+          "start": "14[167]",
+          "end": "17[167]",
+          "first_line_sequence": "CTGATGCATGAAAACATAGCGATAGTGAATAACCTTGCTTTAACGCCA",
+          "pdf_page": 7
+        },
+        {
+          "start": "16[367]",
+          "end": "18[360]",
+          "first_line_sequence": "AATAACGGATTCGCCTTGTAAAGCCTGGGGTGTCACGTTG",
+          "pdf_page": 7
+        },
+        {
+          "start": "11[168]",
+          "end": "14[168]",
+          "first_line_sequence": "ATTCTTACTAAGAATAAACACCGGATATATTTTAGTTAATTGTAAATG",
+          "pdf_page": 7
+        },
+        {
+          "start": "16[183]",
+          "end": "14[184]",
+          "first_line_sequence": "ATATGTGAGCTTAGATTAAGACGGGGTTATA",
+          "pdf_page": 7
+        },
+        {
+          "start": "15[288]",
+          "end": "17[295]",
+          "first_line_sequence": "CGTAAAACAGAAATAACATTTCAATTACCTGATTTCCTGT",
+          "pdf_page": 7
+        },
+        {
+          "start": "9[112]",
+          "end": "8[112]",
+          "first_line_sequence": "GTAATAAGAGAATATCGCCTGTTTATCAACA",
+          "pdf_page": 7
+        },
+        {
+          "start": "21[120]",
+          "end": "18[120]",
+          "first_line_sequence": "CAAAATCTAATCAGTAGCGACAGGGAAACGTCACCAATAAATTATT",
+          "pdf_page": 7
+        },
+        {
+          "start": "19[344]",
+          "end": "16[344]",
+          "first_line_sequence": "ATCAAGAGGGGCGCATCGTAACCAGCCGGAAGCATAAAGGATTGCT",
+          "pdf_page": 7
+        },
+        {
+          "start": "24[143]",
+          "end": "26[136]",
+          "first_line_sequence": "TTTCGATTGGCCTTGAGAACAACTAAAGGAATCTGTATGG",
+          "pdf_page": 7
+        },
+        {
+          "start": "17[408]",
+          "end": "14[408]",
+          "first_line_sequence": "CACTGCCCGTATTGGGCGCCAGGCTGGCCCTGAGAGAGTAATCCCT",
+          "pdf_page": 7
+        },
+        {
+          "start": "16[271]",
+          "end": "18[264]",
+          "first_line_sequence": "GAAACAAACATCAAGACGAGCTCGAATTCGTAGCTTTCCG",
+          "pdf_page": 7
+        },
+        {
+          "start": "20[167]",
+          "end": "23[167]",
+          "first_line_sequence": "TACACTAAAACGAGGGTAGCAACGGGAGTTAAAGGCCGCTTGATACCG",
+          "pdf_page": 7
+        },
+        {
+          "start": "12[367]",
+          "end": "13[367]",
+          "first_line_sequence": "AAACAATTCGACAACTATCATCATATTCCTGA",
+          "pdf_page": 7
+        },
+        {
+          "start": "18[183]",
+          "end": "16[184]",
+          "first_line_sequence": "GCGGGCCTCCAGTCACGACGTTGAAATCAAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "16[343]",
+          "end": "13[343]",
+          "first_line_sequence": "TTGAATACAGATGAATATACAGTAATAATCCTGATTGTTCAGAAGGA",
+          "pdf_page": 8
+        },
+        {
+          "start": "13[144]",
+          "end": "12[144]",
+          "first_line_sequence": "GAGAAAACTTTTTCAAAATCATAATTACTAG",
+          "pdf_page": 8
+        },
+        {
+          "start": "2[439]",
+          "end": "2[416]",
+          "first_line_sequence": "ATTTACATTGGCAGATTCACCAGT",
+          "pdf_page": 8
+        },
+        {
+          "start": "29[371]",
+          "end": "28[371]",
+          "first_line_sequence": "CGAAAGACTTCAAAAAAGATTAAGAG",
+          "pdf_page": 8
+        },
+        {
+          "start": "16[391]",
+          "end": "19[391]",
+          "first_line_sequence": "TCTTTTCAAACTCACATTAATTGCAACAAACGGCGGATTGTCAGCTCA",
+          "pdf_page": 8
+        },
+        {
+          "start": "12[204]",
+          "end": "13[204]",
+          "first_line_sequence": "ACCGACCGTGTGAAAATTTAATGGTT",
+          "pdf_page": 8
+        },
+        {
+          "start": "24[183]",
+          "end": "21[183]",
+          "first_line_sequence": "CCAAAAGGGCCGACAATGACAACTCGCTGAGGCTTGCAGGCTACAGA",
+          "pdf_page": 8
+        },
+        {
+          "start": "12[143]",
+          "end": "13[143]",
+          "first_line_sequence": "AAAAAAACTGAACACCAGCCCTTTTTAAACGC",
+          "pdf_page": 8
+        },
+        {
+          "start": "7[371]",
+          "end": "6[371]",
+          "first_line_sequence": "GAACGAACCACCACATCGCCATTAAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "22[143]",
+          "end": "23[143]",
+          "first_line_sequence": "CCCTCAGCCACCACCGCAGGTCAGACGAGGTG",
+          "pdf_page": 8
+        },
+        {
+          "start": "15[104]",
+          "end": "18[104]",
+          "first_line_sequence": "CGCAGTATCAAAGACACCACGGAAAGACAAAAGGGCGACAGTGAATTA",
+          "pdf_page": 8
+        },
+        {
+          "start": "30[407]",
+          "end": "28[400]",
+          "first_line_sequence": "GGAAGCAACGAGCTTCAAAGCGAATGAAAAGGTGGAAGC",
+          "pdf_page": 8
+        },
+        {
+          "start": "23[307]",
+          "end": "22[307]",
+          "first_line_sequence": "AGATTTAGGAATATAGAAAGATTCAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "8[399]",
+          "end": "9[399]",
+          "first_line_sequence": "GTCAGTATTAACACCGTCAAACCCTCAATCAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "31[392]",
+          "end": "30[408]",
+          "first_line_sequence": "GGATTAGAGAGTACCTTTAATTGCCCAGACC",
+          "pdf_page": 8
+        },
+        {
+          "start": "28[399]",
+          "end": "30[392]",
+          "first_line_sequence": "AAAGCGGATTGCATCAATATCGCGTTTTAATTACTCCAAC",
+          "pdf_page": 8
+        },
+        {
+          "start": "7[112]",
+          "end": "5[118]",
+          "first_line_sequence": "CCTGAACAAGAAAAAAACCAATCAATAATCGTTAAACC",
+          "pdf_page": 8
+        },
+        {
+          "start": "16[239]",
+          "end": "18[232]",
+          "first_line_sequence": "ATTTAACAATTTCATTTGCAGGTCGACTCTAGAGGCAAAG",
+          "pdf_page": 8
+        },
+        {
+          "start": "25[88]",
+          "end": "22[88]",
+          "first_line_sequence": "ATACATGGAGAATGGAAAGCGCACCAGAACCACCACCAGACCGCCA",
+          "pdf_page": 8
+        },
+        {
+          "start": "22[367]",
+          "end": "23[367]",
+          "first_line_sequence": "AAAATCTACGTTAATAAAAGGAATTACGAGGC",
+          "pdf_page": 8
+        },
+        {
+          "start": "15[312]",
+          "end": "14[288]",
+          "first_line_sequence": "CGTAGATATAATGGAAGGGTTAGAACCTACCATATCAAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "21[104]",
+          "end": "24[104]",
+          "first_line_sequence": "GCCATCTTAGCCGCCACCCTCAGAAGCCGCCGCCAGCATTAATCCTCA",
+          "pdf_page": 8
+        },
+        {
+          "start": "24[343]",
+          "end": "22[344]",
+          "first_line_sequence": "ACCAGACGCAGATACATAACGCCAAAACGAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "33[80]",
+          "end": "31[87]",
+          "first_line_sequence": "AAGTATAGCCCGGAATCCGTACTCAGGGATAAAGGCGAGG",
+          "pdf_page": 8
+        },
+        {
+          "start": "17[168]",
+          "end": "20[168]",
+          "first_line_sequence": "GGGTTTTCCTTCGCTATTACGCCAACAAAGTACAACGGAGCAAAAGAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "10[111]",
+          "end": "12[104]",
+          "first_line_sequence": "TTTCGCCAATCCAAATAGAATAACATAAAAACGGTAATTG",
+          "pdf_page": 8
+        },
+        {
+          "start": "18[231]",
+          "end": "18[248]",
+          "first_line_sequence": "CGCCATTCCATGTTACTTAGCCGGAACGAGGCGCAGACGTCTGGTGC",
+          "pdf_page": 8
+        },
+        {
+          "start": "13[88]",
+          "end": "10[88]",
+          "first_line_sequence": "GAGCAAGATATCAGAGAGATAACAGCAGCCTTTACAGAGAAGAAAC",
+          "pdf_page": 8
+        },
+        {
+          "start": "13[392]",
+          "end": "16[392]",
+          "first_line_sequence": "CAAGAGTCAAAAGAATAGCCCGAGGATTGCCCTTCACCGCGTGGTTTT",
+          "pdf_page": 8
+        },
+        {
+          "start": "20[143]",
+          "end": "21[143]",
+          "first_line_sequence": "CCCCCTAGCAGCACCGACCGGAACCAGAGCAG",
+          "pdf_page": 8
+        },
+        {
+          "start": "24[119]",
+          "end": "21[119]",
+          "first_line_sequence": "AACAAATAGACAGGAGGTTGAGGGAACCGCCTCCCTCAGTTCATAAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "28[87]",
+          "end": "25[87]",
+          "first_line_sequence": "CTATTATTACAGTGCCCGTATAAACTGGTAATAAGTTTTTAAGCGTC",
+          "pdf_page": 8
+        },
+        {
+          "start": "12[119]",
+          "end": "10[112]",
+          "first_line_sequence": "AGTCAGAGAGGGAAGCGCATTAGATTTAGGCAGAGGCAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "7[88]",
+          "end": "4[88]",
+          "first_line_sequence": "AGCTACAAGAGGTTTTGAAGCCTACCTCCCGACTTGCGGGTTTTTA",
+          "pdf_page": 8
+        },
+        {
+          "start": "23[408]",
+          "end": "20[408]",
+          "first_line_sequence": "GCCGGAGATGAGAGATCTACAAAGTAATCGTAAAACTAGTAAATTG",
+          "pdf_page": 8
+        },
+        {
+          "start": "9[136]",
+          "end": "11[143]",
+          "first_line_sequence": "GACAAAAGACAACGCCAACATGTAACGGGAGAATTGCCTG",
+          "pdf_page": 8
+        },
+        {
+          "start": "20[311]",
+          "end": "18[312]",
+          "first_line_sequence": "GAGAAACAAACGGTGTACAGACCGAGGGGAC",
+          "pdf_page": 8
+        },
+        {
+          "start": "16[143]",
+          "end": "17[143]",
+          "first_line_sequence": "ATTAATAAAGGTGGCAGAGGGAAGGTACTGCA",
+          "pdf_page": 8
+        },
+        {
+          "start": "18[439]",
+          "end": "15[439]",
+          "first_line_sequence": "AAATGTGAACCTGTCGTGCCAGCAATCGGCCAACGCGCGCGCTGGTT",
+          "pdf_page": 8
+        },
+        {
+          "start": "20[223]",
+          "end": "18[216]",
+          "first_line_sequence": "TAAAATACGTAATGCCAATCCGCGACCTGCTCGCCATTC",
+          "pdf_page": 8
+        },
+        {
+          "start": "5[408]",
+          "end": "4[392]",
+          "first_line_sequence": "GGCTATTATGACCTGAAAGCGTAAGAATACGT",
+          "pdf_page": 8
+        },
+        {
+          "start": "28[110]",
+          "end": "30[104]",
+          "first_line_sequence": "GTAGCCCTGCCTATTCATTTTCAGGGATAGCTCAGAGCC",
+          "pdf_page": 8
+        },
+        {
+          "start": "19[88]",
+          "end": "16[88]",
+          "first_line_sequence": "AGCACCATACCGACTTGAGCCATGGTTTACCAGCGCCAATAAGTTT",
+          "pdf_page": 8
+        },
+        {
+          "start": "18[103]",
+          "end": "21[103]",
+          "first_line_sequence": "TCACCGTCTACCATTAGCAAGGCCAATCAAGTTTGCCTTTTAGCGTTT",
+          "pdf_page": 8
+        },
+        {
+          "start": "11[328]",
+          "end": "13[327]",
+          "first_line_sequence": "GAGCCGTCGCCCGAACGTTATTAAGGAACAAA",
+          "pdf_page": 8
+        },
+        {
+          "start": "13[440]",
+          "end": "10[440]",
+          "first_line_sequence": "AACCGTCAAGGGAAGAAAGCGAATATAACGTGCTTTCCCAGAGCGG",
+          "pdf_page": 8
+        },
+        {
+          "start": "26[399]",
+          "end": "27[399]",
+          "first_line_sequence": "CGGAATCGTCATAAATTTACCCTGACTATTAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "5[392]",
+          "end": "7[399]",
+          "first_line_sequence": "GACAATATACTGATAGCCCTAAAAGCAGAAGATAAAACAG",
+          "pdf_page": 8
+        },
+        {
+          "start": "11[360]",
+          "end": "9[375]",
+          "first_line_sequence": "AGAAGTATTAGACCCCGCCGCGCTTGAAAGGAATTGAGGGCTGAACC",
+          "pdf_page": 8
+        },
+        {
+          "start": "14[367]",
+          "end": "15[367]",
+          "first_line_sequence": "ATGGCAATTCATCAATACAGTACCTTTTACAT",
+          "pdf_page": 8
+        },
+        {
+          "start": "21[144]",
+          "end": "20[144]",
+          "first_line_sequence": "CGAAAGACAGCATCGGAACACTCATCTTTGA",
+          "pdf_page": 8
+        },
+        {
+          "start": "26[159]",
+          "end": "24[144]",
+          "first_line_sequence": "TTAGTAAATGAATTTTTGCGAATAATAATTTTGGTTTATCAGCTTGC",
+          "pdf_page": 8
+        }
+      ]
+    },
+    {
+      "table": "S4",
+      "rows": [
+        {
+          "start": "38[90]",
+          "end": "20[77]",
+          "first_line_sequence": "GATACTTGCCAGTTAAACCATCAATATGGAGCAAACAACAAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "36[69]",
+          "end": "39[69]",
+          "first_line_sequence": "GGAGGTTCGAGCGTAAACAGCGAGAGAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "42[83]",
+          "end": "22[84]",
+          "first_line_sequence": "CTTGCAGGAGCCTACCTCCCGGACCTTTATTTCAAGACAGTC",
+          "pdf_page": 10
+        },
+        {
+          "start": "39[112]",
+          "end": "57[118]",
+          "first_line_sequence": "AAACGAATTATGCGGGGCTTGCAGAACCACCCATG",
+          "pdf_page": 10
+        },
+        {
+          "start": "39[91]",
+          "end": "59[90]",
+          "first_line_sequence": "GAAGAAACTCATTACACCAGACACCACCCTCATCTGGTTGAT",
+          "pdf_page": 10
+        },
+        {
+          "start": "53[105]",
+          "end": "59[111]",
+          "first_line_sequence": "ATTTTTTCGGAGTGTCTTTCCCACAGACAATAGGAGCCACCCGAATAGG",
+          "pdf_page": 10
+        },
+        {
+          "start": "17[91]",
+          "end": "37[90]",
+          "first_line_sequence": "ATATTTTGGCCGGACGCAAGGAAAGAAGTTTTGAAATATAAC",
+          "pdf_page": 10
+        },
+        {
+          "start": "32[41]",
+          "end": "9[41]",
+          "first_line_sequence": "AGCATGTAAGAATAGCCAACGCAGTTGAAATATCTCCTGCAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "30[69]",
+          "end": "35[69]",
+          "first_line_sequence": "TAAGAGAAACGCGCGAAAAATGGGTATTAGCCGTTTAAGAAC",
+          "pdf_page": 10
+        },
+        {
+          "start": "26[83]",
+          "end": "6[84]",
+          "first_line_sequence": "CATCCTATTTTAAAACTAATAGCTCCTGTGTGAAAGCGTTGC",
+          "pdf_page": 10
+        },
+        {
+          "start": "4[118]",
+          "end": "32[112]",
+          "first_line_sequence": "CGTATTGCAGCTGCGGTCACGCGACAGTGGTGGCAAATAACCAGGAAGC",
+          "pdf_page": 10
+        },
+        {
+          "start": "15[42]",
+          "end": "20[49]",
+          "first_line_sequence": "AGATGATAAAATTATAGATTTTTGCTTTATTATTCATTTCAATACATTT",
+          "pdf_page": 10
+        },
+        {
+          "start": "24[41]",
+          "end": "6[35]",
+          "first_line_sequence": "ACTATATGATTATCGGAGCGGCAGATTCGAATACG",
+          "pdf_page": 10
+        },
+        {
+          "start": "29[77]",
+          "end": "10[70]",
+          "first_line_sequence": "CATTTATTGCTGAAACGAGTAGATTTGTGAGCACTTTAGCATCACCTTG",
+          "pdf_page": 10
+        },
+        {
+          "start": "32[62]",
+          "end": "11[62]",
+          "first_line_sequence": "AATATCCAATTACTACAAATTGGTTATC",
+          "pdf_page": 10
+        },
+        {
+          "start": "57[119]",
+          "end": "35[125]",
+          "first_line_sequence": "TACCGTACGCCTGTGAGTAATTCATAAGATAGCGT",
+          "pdf_page": 10
+        },
+        {
+          "start": "33[112]",
+          "end": "51[118]",
+          "first_line_sequence": "TTACCCTACCAAGCCAAAAGAGTTTATCGACAATG",
+          "pdf_page": 10
+        },
+        {
+          "start": "26[111]",
+          "end": "20[105]",
+          "first_line_sequence": "TCAATTCATTAGCACATTATGTTTTTAGAAAAGGGTAGCTGAAGGTCAT",
+          "pdf_page": 10
+        },
+        {
+          "start": "36[111]",
+          "end": "39[111]",
+          "first_line_sequence": "GAGAGGCCGAGGCAATACCACGTTAATA",
+          "pdf_page": 10
+        },
+        {
+          "start": "53[119]",
+          "end": "29[125]",
+          "first_line_sequence": "AAAATCTTGTATCGATACACTACTTTTTAAACTCCCTCCTTTATATGCA",
+          "pdf_page": 10
+        },
+        {
+          "start": "32[104]",
+          "end": "9[104]",
+          "first_line_sequence": "ACTTCAATTTCGCATCCCAATCGCAACTTTAAGTTTGTAAAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "11[91]",
+          "end": "30[91]",
+          "first_line_sequence": "CAGGCTGTCTGCGATATAATGGATGGCT",
+          "pdf_page": 10
+        },
+        {
+          "start": "46[111]",
+          "end": "40[105]",
+          "first_line_sequence": "GCGAAACGACCTGCAACTGACCTGACCTAACAAAGGTAAATTATTTTAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "4[48]",
+          "end": "0[35]",
+          "first_line_sequence": "TTGACGCTAATATCCATCACTCCGAGTAGGTACGCCAGAATC",
+          "pdf_page": 10
+        },
+        {
+          "start": "15[91]",
+          "end": "35[90]",
+          "first_line_sequence": "ACATTAAAATACTTAGGCAAGCAGAAAACGAGATCCGCCAGA",
+          "pdf_page": 10
+        },
+        {
+          "start": "16[69]",
+          "end": "19[69]",
+          "first_line_sequence": "AGGGTTAAGATGAAAACAATAAGCAAAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "12[125]",
+          "end": "10[112]",
+          "first_line_sequence": "CACCGCTATACGAGGATCCCCGGGTACCCAGTGCCGTGCTGC",
+          "pdf_page": 10
+        },
+        {
+          "start": "9[42]",
+          "end": "5[48]",
+          "first_line_sequence": "CAGTGCCAAGATAAGTCTTTAAGCGTAAACCAGTC",
+          "pdf_page": 10
+        },
+        {
+          "start": "33[91]",
+          "end": "53[90]",
+          "first_line_sequence": "CATAAATAACGGAGACCAACCGTGAATTTCTTAGCAAAAAGG",
+          "pdf_page": 10
+        },
+        {
+          "start": "2[76]",
+          "end": "34[70]",
+          "first_line_sequence": "GTAGCAACATTGCATAATGGATGATTGTACCTTTTTATTTTAACAAGCA",
+          "pdf_page": 10
+        },
+        {
+          "start": "49[91]",
+          "end": "51[97]",
+          "first_line_sequence": "AGCGAAACTTTTGCGGGATCGTTAACAGCTTGATA",
+          "pdf_page": 10
+        },
+        {
+          "start": "31[70]",
+          "end": "48[84]",
+          "first_line_sequence": "CTGTTTAATTATTCAAACGTCACCAAACCCTCAGCAATACGT",
+          "pdf_page": 10
+        },
+        {
+          "start": "2[118]",
+          "end": "34[112]",
+          "first_line_sequence": "AGGCGAACCCTGAGTAATTCGCAACCCGCCAAAAAAAATTAACCTCAAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "17[70]",
+          "end": "44[70]",
+          "first_line_sequence": "TATACAGGTCGCTATCTGAGAACTTGCGGCGAGGCAATACCC",
+          "pdf_page": 10
+        },
+        {
+          "start": "35[49]",
+          "end": "53[55]",
+          "first_line_sequence": "CTTATCCGATTAAGGGCAACAGGAGGTTACCCTCA",
+          "pdf_page": 10
+        },
+        {
+          "start": "6[83]",
+          "end": "29[76]",
+          "first_line_sequence": "GCTCACCAACAGAGAAACATCGATTAGATCTTTAGATCATATGCAGAGG",
+          "pdf_page": 10
+        },
+        {
+          "start": "57[35]",
+          "end": "35[41]",
+          "first_line_sequence": "GGGTCAGAGTGTACCGAACAAATTACGCTCAGATA",
+          "pdf_page": 10
+        },
+        {
+          "start": "6[97]",
+          "end": "13[90]",
+          "first_line_sequence": "ATTAATTTTGTTATAAGCGCCATTCGCAAGGTGCA",
+          "pdf_page": 10
+        },
+        {
+          "start": "53[77]",
+          "end": "46[84]",
+          "first_line_sequence": "CCACCAGCATCTTTGGCACTACGAAGGCATTTGTA",
+          "pdf_page": 10
+        },
+        {
+          "start": "19[70]",
+          "end": "38[70]",
+          "first_line_sequence": "GAAGATGCATCAAGTTCTGTAACAAAAT",
+          "pdf_page": 10
+        },
+        {
+          "start": "40[76]",
+          "end": "57[76]",
+          "first_line_sequence": "AGCGCATAATAATAAACCTATAGTTAAT",
+          "pdf_page": 10
+        },
+        {
+          "start": "45[70]",
+          "end": "53[76]",
+          "first_line_sequence": "AAAGACAGAGCCGCAGAGCCG",
+          "pdf_page": 10
+        },
+        {
+          "start": "38[62]",
+          "end": "4[56]",
+          "first_line_sequence": "CATATTAGTGAATAATTTTCCTAACGTCGAACCTAATATTACGAAATAC",
+          "pdf_page": 10
+        },
+        {
+          "start": "30[104]",
+          "end": "27[111]",
+          "first_line_sequence": "TTTTGCGCTGTAGCTCAACATAGTTGATAATGGTC",
+          "pdf_page": 10
+        },
+        {
+          "start": "4[97]",
+          "end": "4[77]",
+          "first_line_sequence": "TTTTCTTTTCACCAGTGAGAG",
+          "pdf_page": 10
+        },
+        {
+          "start": "33[70]",
+          "end": "50[77]",
+          "first_line_sequence": "AAACCAAGGAATAATATTGACTCATAATCCCCTTATTAGCGTTCTGAAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "51[119]",
+          "end": "49[125]",
+          "first_line_sequence": "ACAACAAGCTGAGGGCAACGG",
+          "pdf_page": 10
+        },
+        {
+          "start": "29[42]",
+          "end": "25[48]",
+          "first_line_sequence": "TATTTAAGTATAAAAACACCGTTTGAAAAAAGAAC",
+          "pdf_page": 10
+        },
+        {
+          "start": "4[76]",
+          "end": "32[70]",
+          "first_line_sequence": "GAAAAACACATTCTCATTATCTTATTAAATTTCATGCCTGTTTGAACAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "44[83]",
+          "end": "25[83]",
+          "first_line_sequence": "GAACGGGGTTTTAGATCGAGAGTAATAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "22[125]",
+          "end": "4[119]",
+          "first_line_sequence": "GTAGGTATTGTTAATCAAAAAAGAGTTGCGGTTTG",
+          "pdf_page": 10
+        },
+        {
+          "start": "57[91]",
+          "end": "35[104]",
+          "first_line_sequence": "GGGATAGCAAGCCCAGCCCTCAGGCTGGCAACTTTATAGTAA",
+          "pdf_page": 10
+        },
+        {
+          "start": "18[62]",
+          "end": "16[49]",
+          "first_line_sequence": "ACGGATTCTGTCCATTGATTAGTAATAACAGAACACCATATC",
+          "pdf_page": 10
+        },
+        {
+          "start": "42[69]",
+          "end": "39[62]",
+          "first_line_sequence": "CAATGAATAAGCCCTAGACGGGAGAATTCTTTACA",
+          "pdf_page": 11
+        },
+        {
+          "start": "22[83]",
+          "end": "2[77]",
+          "first_line_sequence": "AAATCTCTAACAGTTTCTGAAACACGGGCAACAGCCGAAATCGGCAATT",
+          "pdf_page": 11
+        },
+        {
+          "start": "10[48]",
+          "end": "14[42]",
+          "first_line_sequence": "CTCAATCAAGGAATTGAGGATAACTCGTACCAGAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "55[63]",
+          "end": "59[76]",
+          "first_line_sequence": "AATGGAACGTCATATATAAACTATTCTGGCGGATAAGTGCCG",
+          "pdf_page": 11
+        },
+        {
+          "start": "0[125]",
+          "end": "22[112]",
+          "first_line_sequence": "TATTAAAGAACGTGAGGGTTGGAAGATTTAAATTTAAGATTC",
+          "pdf_page": 11
+        },
+        {
+          "start": "0[83]",
+          "end": "18[70]",
+          "first_line_sequence": "TCTATCAGCCGATTAATTAACCGGGAGA",
+          "pdf_page": 11
+        },
+        {
+          "start": "48[83]",
+          "end": "48[91]",
+          "first_line_sequence": "AATGCAATCAACAATAAATTCGAGCTTCCGGGTAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "49[63]",
+          "end": "43[69]",
+          "first_line_sequence": "AGGCCGGATTAAAGAGGTAAAGTTTATTGAAACGCAAAAGAAGAAACGC",
+          "pdf_page": 11
+        },
+        {
+          "start": "22[69]",
+          "end": "19[62]",
+          "first_line_sequence": "TTAATTAACCTTGCAAAACAAAATTAATTTACCTG",
+          "pdf_page": 11
+        },
+        {
+          "start": "35[91]",
+          "end": "54[84]",
+          "first_line_sequence": "GGGGGTAGAAAGAGGTGTCGAAAAGGAACAACTCC",
+          "pdf_page": 11
+        },
+        {
+          "start": "38[41]",
+          "end": "4[35]",
+          "first_line_sequence": "AATAAGATACATAAAAACATAAATTGCGTTTGCACTTGCTGGTCAATCG",
+          "pdf_page": 11
+        },
+        {
+          "start": "6[55]",
+          "end": "28[49]",
+          "first_line_sequence": "ACCTGAAATGCGCGATACATTTGAGGAACTTACCA",
+          "pdf_page": 11
+        },
+        {
+          "start": "21[49]",
+          "end": "55[55]",
+          "first_line_sequence": "TATGTGATTTATCCCTTACCATAGCTATAGAAGGATTTGATGCTCATTA",
+          "pdf_page": 11
+        },
+        {
+          "start": "46[83]",
+          "end": "26[84]",
+          "first_line_sequence": "TCATCACGTACCGCTAAGTCCTAAGTTTGACCATTGCATTAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "12[62]",
+          "end": "10[49]",
+          "first_line_sequence": "ATAGATAAACTGATCGAACCACCAGCAGACGCTGATCAAACC",
+          "pdf_page": 11
+        },
+        {
+          "start": "34[48]",
+          "end": "39[48]",
+          "first_line_sequence": "AGGAATCTAGAAGGCAAGATTCCTGAATCAATCCAATGAAAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "30[111]",
+          "end": "35[111]",
+          "first_line_sequence": "AGGTCATACCAGACCCGAAAGCAGGTCTTGCTTTAAATGTTT",
+          "pdf_page": 11
+        },
+        {
+          "start": "34[62]",
+          "end": "13[62]",
+          "first_line_sequence": "TTTATTTAACTTTTCCTAAATCCTTTGC",
+          "pdf_page": 11
+        },
+        {
+          "start": "29[49]",
+          "end": "33[48]",
+          "first_line_sequence": "CAACGCCGTACCGACAAAAGGCAACATGATTTACGTTTCCTT",
+          "pdf_page": 11
+        },
+        {
+          "start": "43[112]",
+          "end": "55[118]",
+          "first_line_sequence": "TCATCAAAGCATTCAGACGTT",
+          "pdf_page": 11
+        },
+        {
+          "start": "53[56]",
+          "end": "29[62]",
+          "first_line_sequence": "GAGCCACACCGGAAGGAGGGAGTGAATTAATGCAGATATAAAAACATGT",
+          "pdf_page": 11
+        },
+        {
+          "start": "39[49]",
+          "end": "57[55]",
+          "first_line_sequence": "TAGCAGCAACTGAACACAAGAAAAGTATAGTAACA",
+          "pdf_page": 11
+        },
+        {
+          "start": "49[49]",
+          "end": "54[42]",
+          "first_line_sequence": "CATTACCTCAGTAGCGACAGACGTTTTCCACCACCAACCGCCGAGGCAG",
+          "pdf_page": 11
+        },
+        {
+          "start": "29[63]",
+          "end": "23[69]",
+          "first_line_sequence": "AATTTAGGCGTTATAGAAAAACTTCTGATCAAATATAACCTCTCATAGG",
+          "pdf_page": 11
+        },
+        {
+          "start": "24[62]",
+          "end": "6[56]",
+          "first_line_sequence": "CGGCTTACATCAATGGAACAACAGTAATCCTTCTG",
+          "pdf_page": 11
+        },
+        {
+          "start": "5[91]",
+          "end": "15[90]",
+          "first_line_sequence": "CAGTCGGCGCATCGTAACCTTATCATCA",
+          "pdf_page": 11
+        },
+        {
+          "start": "9[105]",
+          "end": "6[105]",
+          "first_line_sequence": "CGACGGCGAGCTCGCAATTCCGTGAGCT",
+          "pdf_page": 11
+        },
+        {
+          "start": "8[97]",
+          "end": "11[90]",
+          "first_line_sequence": "AATCATGACGACGTGGGTAACGCCAGGGAACCATT",
+          "pdf_page": 11
+        },
+        {
+          "start": "5[105]",
+          "end": "0[98]",
+          "first_line_sequence": "GTCGTGCGGCGCCACGCCTGGAATCCTGCCGAGATGACTCCAACGTCAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "50[76]",
+          "end": "54[63]",
+          "first_line_sequence": "CCATCGATAGCAGCTCATAGCCAAAATCCACCCTCCGCCAGC",
+          "pdf_page": 11
+        },
+        {
+          "start": "10[69]",
+          "end": "15[69]",
+          "first_line_sequence": "CTGAACCTAAAATAGCCGTCACCGAACGATTTTGCATAATCC",
+          "pdf_page": 11
+        },
+        {
+          "start": "30[90]",
+          "end": "30[70]",
+          "first_line_sequence": "TAGAGCTTATCGAGCCAGTAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "10[111]",
+          "end": "14[105]",
+          "first_line_sequence": "AAGGCGAGTTGGGACCGGAAAGGGACGATTGGTGT",
+          "pdf_page": 11
+        },
+        {
+          "start": "15[105]",
+          "end": "19[111]",
+          "first_line_sequence": "CGAGTAACGTCTGGTTCGCATGTATAAGTAAAACT",
+          "pdf_page": 11
+        },
+        {
+          "start": "20[41]",
+          "end": "2[35]",
+          "first_line_sequence": "TCATTTGGAGGCGAGAATACCGAGGCCATGCCTGA",
+          "pdf_page": 11
+        },
+        {
+          "start": "47[49]",
+          "end": "49[62]",
+          "first_line_sequence": "GATTGAGCCAGAGCATCGGCATTTTCGGACCGTAAATTAGCA",
+          "pdf_page": 11
+        },
+        {
+          "start": "57[77]",
+          "end": "42[84]",
+          "first_line_sequence": "GCCCCCTACCGTTCACGTGTACAGACCAAATAAGG",
+          "pdf_page": 11
+        },
+        {
+          "start": "51[98]",
+          "end": "47[111]",
+          "first_line_sequence": "CCGATAGAAGGCCGGACAGCATCGGAACAAGTTTCAAAGAGG",
+          "pdf_page": 11
+        },
+        {
+          "start": "34[41]",
+          "end": "8[35]",
+          "first_line_sequence": "ATTACCGGCAAGACTACCGACATTCGACTTAGAAGGCTATTAAACAGAG",
+          "pdf_page": 11
+        },
+        {
+          "start": "32[125]",
+          "end": "9[125]",
+          "first_line_sequence": "GATTAAGTGTTTAGTCATTCCTCGGTGCGGGGGATAAGCTTG",
+          "pdf_page": 11
+        },
+        {
+          "start": "59[56]",
+          "end": "23[62]",
+          "first_line_sequence": "GTACCAGAAACATGATTGAGTATAGCAAACGCTAATTGAAGCATCAAAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "15[49]",
+          "end": "46[49]",
+          "first_line_sequence": "GGCAATTGGTTGGGGCGAGAATCATCGTATCATTCAATCAAT",
+          "pdf_page": 11
+        },
+        {
+          "start": "0[55]",
+          "end": "36[49]",
+          "first_line_sequence": "CAGGAACAAAGAGTCGCCTGATCAGGTTCTTAGAATGAATTTCTTAAAT",
+          "pdf_page": 11
+        },
+        {
+          "start": "6[118]",
+          "end": "30[112]",
+          "first_line_sequence": "CTAATGAACACAACTCTGGTGAGGGCGAATATAACGTTTTAATGATAAG",
+          "pdf_page": 11
+        },
+        {
+          "start": "40[104]",
+          "end": "21[104]",
+          "first_line_sequence": "GAACTGGAATCTACATTCAACACCGTTC",
+          "pdf_page": 11
+        },
+        {
+          "start": "55[35]",
+          "end": "33[41]",
+          "first_line_sequence": "CAAACAAGTCAGACACATACATCATATGGGCTGTC",
+          "pdf_page": 11
+        },
+        {
+          "start": "8[83]",
+          "end": "8[84]",
+          "first_line_sequence": "CTGTTCATTAAAAATGAAAAATCTAATTCCCAGTCGTCATAG",
+          "pdf_page": 11
+        },
+        {
+          "start": "40[125]",
+          "end": "21[125]",
+          "first_line_sequence": "AATTACCCTAACGGGTTGAGAATGCCGG",
+          "pdf_page": 11
+        },
+        {
+          "start": "55[77]",
+          "end": "55[97]",
+          "first_line_sequence": "TCTCTGAATACGATCTAAAGT",
+          "pdf_page": 11
+        },
+        {
+          "start": "55[98]",
+          "end": "33[104]",
+          "first_line_sequence": "TTTGTCGAGAATAGAATCCGCAAAGTACCAAAAAT",
+          "pdf_page": 11
+        },
+        {
+          "start": "36[125]",
+          "end": "6[119]",
+          "first_line_sequence": "AAAACCAATATATTGGTTGTATCGGATTTGGGATAATTAATGGGGGTGC",
+          "pdf_page": 11
+        },
+        {
+          "start": "59[91]",
+          "end": "37[104]",
+          "first_line_sequence": "ATAAGTATAGCCCGTCAGAGCACGAGTACTGCTCAGGAATTA",
+          "pdf_page": 11
+        },
+        {
+          "start": "54[83]",
+          "end": "44[84]",
+          "first_line_sequence": "ACCACCACCGCCTGATAAATTGACAGAT",
+          "pdf_page": 11
+        },
+        {
+          "start": "59[77]",
+          "end": "40[77]",
+          "first_line_sequence": "TCGAGAGATTTCGGAGCCTGACGAGAAATACCAGTCAAGGGA",
+          "pdf_page": 11
+        },
+        {
+          "start": "4[55]",
+          "end": "26[49]",
+          "first_line_sequence": "CTACATTACACGACAGAAACCATTAAATTTAATGG",
+          "pdf_page": 11
+        },
+        {
+          "start": "42[48]",
+          "end": "39[41]",
+          "first_line_sequence": "CTTACCGGATAACCCACCCTGAACAAAGGTCAAAA",
+          "pdf_page": 11
+        },
+        {
+          "start": "5[63]",
+          "end": "0[56]",
+          "first_line_sequence": "AAAAGGGGCTCATGCGCCAGCTACTTCTTCACGCAAAAGGGATTTTAGA",
+          "pdf_page": 11
+        },
+        {
+          "start": "25[84]",
+          "end": "5[90]",
+          "first_line_sequence": "ATCATACTTGCGGGAGAAGCTTTGGATTTGAGTAAGGCTGCCCGCTTTC",
+          "pdf_page": 12
+        },
+        {
+          "start": "31[112]",
+          "end": "52[105]",
+          "first_line_sequence": "CGGAAGCCATGAGGGAGGGTACTTGCAGGGAGTTATTGCGCCAGCTTGC",
+          "pdf_page": 12
+        },
+        {
+          "start": "53[35]",
+          "end": "29[41]",
+          "first_line_sequence": "CCCTCAGGGAACCGGGCGACACTTGAGCCAATAAATAAAGTAATCGCCA",
+          "pdf_page": 12
+        },
+        {
+          "start": "2[97]",
+          "end": "17[90]",
+          "first_line_sequence": "GTGGTTCTGATTGCGTAGCCAGCTTTACACCGTTA",
+          "pdf_page": 12
+        },
+        {
+          "start": "20[104]",
+          "end": "2[98]",
+          "first_line_sequence": "TGCCTGAGTAATCGCAAATATGAATAGCTTTGATG",
+          "pdf_page": 12
+        },
+        {
+          "start": "10[62]",
+          "end": "6[63]",
+          "first_line_sequence": "TCAAATAGAGCCAGCAGCAAATACCGAAAGCCCTAATAGAAC",
+          "pdf_page": 12
+        },
+        {
+          "start": "36[104]",
+          "end": "6[98]",
+          "first_line_sequence": "TTTTGCAATAAAAAACCCTGTATGTGAGAGATGGGGAAACCTAACTCAC",
+          "pdf_page": 12
+        },
+        {
+          "start": "55[42]",
+          "end": "59[55]",
+          "first_line_sequence": "ATAAATCATACAGGTGCCTTGTAAGAGGCGGGGTTTTGCTCA",
+          "pdf_page": 12
+        },
+        {
+          "start": "37[70]",
+          "end": "55[76]",
+          "first_line_sequence": "CTTTCCACAAGAAAAATAATACAGTAAGAGCGCAG",
+          "pdf_page": 12
+        },
+        {
+          "start": "34[104]",
+          "end": "8[98]",
+          "first_line_sequence": "AACAGTTGCAAAGATACTAATGTTTGAGCCAGGCACCGCTCAAATTCGT",
+          "pdf_page": 12
+        },
+        {
+          "start": "20[125]",
+          "end": "2[119]",
+          "first_line_sequence": "CTACAAACAATCATAAAACAGAGTGTTGCCCCAGC",
+          "pdf_page": 12
+        },
+        {
+          "start": "24[48]",
+          "end": "20[42]",
+          "first_line_sequence": "TTATATATCAATAGTCCTTGAATCAATAAACAATT",
+          "pdf_page": 12
+        },
+        {
+          "start": "53[91]",
+          "end": "31[104]",
+          "first_line_sequence": "AATTGCGAATAATATTTCGAGTAAAACGCATTAAAAAAGCGA",
+          "pdf_page": 12
+        },
+        {
+          "start": "19[91]",
+          "end": "38[91]",
+          "first_line_sequence": "ATGAACGGAGTCTGATATTCATAATGCA",
+          "pdf_page": 12
+        },
+        {
+          "start": "0[97]",
+          "end": "19[90]",
+          "first_line_sequence": "AGGGCGAATCAAAATTAAATTGTAAACTAGAATCG",
+          "pdf_page": 12
+        },
+        {
+          "start": "37[91]",
+          "end": "57[90]",
+          "first_line_sequence": "GCCAAAATTCAGTGGGCGCATATAGTTAGCGTATTGCTTTCA",
+          "pdf_page": 12
+        },
+        {
+          "start": "55[56]",
+          "end": "33[62]",
+          "first_line_sequence": "AAGCCAGATTGACATATAAAATTGTCACCAAGAAC",
+          "pdf_page": 12
+        },
+        {
+          "start": "59[35]",
+          "end": "23[41]",
+          "first_line_sequence": "GGATTAGCTGAGACTCAGAGAAAGCCCTATTTTATAGTTGCTAGAAGAG",
+          "pdf_page": 12
+        },
+        {
+          "start": "59[112]",
+          "end": "37[125]",
+          "first_line_sequence": "TGTATCACCGTACTCCACCCTAGATGGTACCCAAAAGCAACA",
+          "pdf_page": 12
+        },
+        {
+          "start": "39[70]",
+          "end": "39[90]",
+          "first_line_sequence": "TAACATAAAAACGGACGTTGG",
+          "pdf_page": 12
+        },
+        {
+          "start": "23[112]",
+          "end": "53[118]",
+          "first_line_sequence": "AACCCTCAAATAGCAGACTGGGGAACCGTCCATGTGTTTCAGCACGTTG",
+          "pdf_page": 12
+        },
+        {
+          "start": "51[35]",
+          "end": "48[42]",
+          "first_line_sequence": "TGTAGCGATCAAGTATCACCAGTAGCACTCACCGA",
+          "pdf_page": 12
+        },
+        {
+          "start": "55[119]",
+          "end": "33[125]",
+          "first_line_sequence": "AGTAAATTTCAACATACTTAGCGATTATGACTATT",
+          "pdf_page": 12
+        },
+        {
+          "start": "47[42]",
+          "end": "43[48]",
+          "first_line_sequence": "TTCAACCAGAAAATTAAAGGTACTCCTTAGTTACC",
+          "pdf_page": 12
+        },
+        {
+          "start": "22[104]",
+          "end": "4[98]",
+          "first_line_sequence": "TGAGAAAGTTAAAACCTTCCTCCTTCACGGGTGGT",
+          "pdf_page": 12
+        },
+        {
+          "start": "27[49]",
+          "end": "48[49]",
+          "first_line_sequence": "GAATCATCATCCTATTCAGCTATCACCG",
+          "pdf_page": 12
+        },
+        {
+          "start": "34[125]",
+          "end": "13[125]",
+          "first_line_sequence": "GAATCCCGCAATAACTGAAAAATCGGCC",
+          "pdf_page": 12
+        },
+        {
+          "start": "19[112]",
+          "end": "42[112]",
+          "first_line_sequence": "AGCATGTGGCTATCTAAATTATTTAGGATAGTAAGTCAACGT",
+          "pdf_page": 12
+        },
+        {
+          "start": "19[77]",
+          "end": "0[84]",
+          "first_line_sequence": "ATGAAAGTTTACATCGAATCCCTTATAAAAAACCG",
+          "pdf_page": 12
+        },
+        {
+          "start": "13[91]",
+          "end": "33[90]",
+          "first_line_sequence": "TCTGCCAAGTAGTAAGATACAATATCGCGTTTTGAACATGAC",
+          "pdf_page": 12
+        },
+        {
+          "start": "57[56]",
+          "end": "35[62]",
+          "first_line_sequence": "GTGCCCGCATGGCTAACCGAGCTGGCATGGTATTC",
+          "pdf_page": 12
+        }
+      ]
+    }
+  ],
+  "limitations": "Row/first-line extraction only; not full sequence certification. Shared M13mp18 designation does not prove exact coverage. Additional Cy5 linker recipes must be checked independently."
+}

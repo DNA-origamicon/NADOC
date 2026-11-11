@@ -1,0 +1,119 @@
+{
+  "evidence": {
+    "local_file": "assets/research-20261105/amoako2019-publisher.pdf",
+    "sha256": "1ef96c09b2f26afb591e54a9b370e9c02063519c6d84c2add139523521959692",
+    "url": "https://ccsenet.org/journal/index.php/jmsr/article/download/0/0/40935/42269",
+    "locator": "All7pages extracted text read, includingTable1,Methods,Results,Conclusions andbibliography. Figureimages not yet independently inspected. Headeronline2019-09-30."
+  },
+  "rows": [
+    {
+      "name": "D1",
+      "sequence": "GCGAAGGCGATTCACAATTTTCCTGTGTGAAATTGCGTATGCATGC",
+      "printed_length": 46,
+      "actual_length": 46
+    },
+    {
+      "name": "D2",
+      "sequence": "AACTAACATTACGTTATTAGACTTTACAAACAATTCGACAATGCATGC",
+      "printed_length": 48,
+      "actual_length": 48
+    },
+    {
+      "name": "E1",
+      "sequence": "GTGACGACCAGTACATTGGCAGATTCACAAAAATGCATGC",
+      "printed_length": 40,
+      "actual_length": 40
+    },
+    {
+      "name": "E2",
+      "sequence": "TTAATCAAAGGGCGAAAAACCGTCTAATGCATGC",
+      "printed_length": 34,
+      "actual_length": 34
+    },
+    {
+      "name": "F1",
+      "sequence": "AATTAATCGCGCTAAAACATCAGCAGCAAATGCATGC",
+      "printed_length": 37,
+      "actual_length": 37
+    },
+    {
+      "name": "F2",
+      "sequence": "CCGTAGTTACAAACCTGAGCTTAATGCGCGAACTGATATGCATGC",
+      "printed_length": 45,
+      "actual_length": 45
+    },
+    {
+      "name": "G1",
+      "sequence": "AGGCCAGTCGGGAAACCTGTCATGCATGC",
+      "printed_length": 29,
+      "actual_length": 29
+    },
+    {
+      "name": "G2",
+      "sequence": "AGCTCAGCTGCACCTTCACCGCATGCATGC",
+      "printed_length": 30,
+      "actual_length": 30
+    },
+    {
+      "name": "D3",
+      "sequence": "GCGAAGGCGATTCACAATTTTCCTGTGTGAAATTGCGT",
+      "printed_length": 38,
+      "actual_length": 38
+    },
+    {
+      "name": "D4",
+      "sequence": "AACTAACATTACGTTATTAGACTTTACAAACAATTCGACA",
+      "printed_length": 40,
+      "actual_length": 40
+    },
+    {
+      "name": "E3",
+      "sequence": "GTGACGACCAGTACATTGGCAGATTCACAAAA",
+      "printed_length": 32,
+      "actual_length": 32
+    },
+    {
+      "name": "E4",
+      "sequence": "TTAATCAAAGGGCGAAAAACCGTCTA",
+      "printed_length": 26,
+      "actual_length": 26
+    },
+    {
+      "name": "F3",
+      "sequence": "AATTAATCGCGCTAAAACATCAGCAGCAA",
+      "printed_length": 29,
+      "actual_length": 29
+    },
+    {
+      "name": "F4",
+      "sequence": "CCGTAGTTACAAACCTGAGCTTAATGCGCGAACTGAT",
+      "printed_length": 37,
+      "actual_length": 37
+    },
+    {
+      "name": "G3",
+      "sequence": "AGGCCAGTCGGGAAACCTGTC",
+      "printed_length": 21,
+      "actual_length": 21
+    },
+    {
+      "name": "G4",
+      "sequence": "AGCTCAGCTGCACCTTCACCGC",
+      "printed_length": 22,
+      "actual_length": 22
+    },
+    {
+      "name": "K1",
+      "sequence": "ATGCATGCGTGGCGAGAAAGGAA",
+      "printed_length": 23,
+      "actual_length": 23
+    },
+    {
+      "name": "K2",
+      "sequence": "ATGCATGCTTAGTCTTTAA",
+      "printed_length": 19,
+      "actual_length": 19
+    }
+  ],
+  "limitations": "18connection-source rows only, not full core staples. MaintextK5 versusTableK2 unresolved; no sequence correction or synthesis package."
+}

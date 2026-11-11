@@ -1,0 +1,140 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "transcribed": {
+        "keynote": 2,
+        "poster": 15,
+        "contributed": 2,
+        "invited": 2
+      },
+      "source_left_column_labels": {
+        "keynote": 2,
+        "poster": 15,
+        "contributed": 2,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 2,
+      "transcribed": {
+        "contributed": 2,
+        "poster": 15,
+        "keynote": 1,
+        "invited": 2
+      },
+      "source_left_column_labels": {
+        "contributed": 2,
+        "poster": 15,
+        "keynote": 1,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 3,
+      "transcribed": {
+        "keynote": 2,
+        "contributed": 2,
+        "poster": 15,
+        "invited": 2
+      },
+      "source_left_column_labels": {
+        "keynote": 2,
+        "contributed": 2,
+        "poster": 15,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 4,
+      "transcribed": {
+        "keynote": 1,
+        "invited": 5,
+        "poster": 11,
+        "contributed": 1
+      },
+      "source_left_column_labels": {
+        "keynote": 1,
+        "invited": 5,
+        "poster": 11,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 5,
+      "transcribed": {
+        "invited": 4,
+        "keynote": 2,
+        "poster": 14
+      },
+      "source_left_column_labels": {
+        "invited": 4,
+        "keynote": 2,
+        "poster": 14
+      },
+      "counts_match": true
+    },
+    {
+      "page": 6,
+      "transcribed": {
+        "invited": 4,
+        "contributed": 1,
+        "poster": 15,
+        "keynote": 1
+      },
+      "source_left_column_labels": {
+        "invited": 4,
+        "contributed": 1,
+        "poster": 15,
+        "keynote": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 7,
+      "transcribed": {
+        "keynote": 1,
+        "invited": 1,
+        "contributed": 2,
+        "poster": 13
+      },
+      "source_left_column_labels": {
+        "keynote": 1,
+        "invited": 1,
+        "contributed": 2,
+        "poster": 13
+      },
+      "counts_match": true
+    },
+    {
+      "page": 8,
+      "transcribed": {
+        "keynote": 2,
+        "contributed": 1,
+        "invited": 4
+      },
+      "source_left_column_labels": {
+        "keynote": 2,
+        "contributed": 1,
+        "invited": 4
+      },
+      "counts_match": true
+    }
+  ],
+  "total_named_entries": 145,
+  "image_checks": [
+    {
+      "page": 5,
+      "finding": "Rendered page confirms Patrick D. Ellis poster row; sponsor text overlaps name in source itself."
+    }
+  ],
+  "limitations": [
+    "Full authors not yet transcribed.",
+    "Poster count is presentation rows, not number of distinct designs/topics.",
+    "Combined repeat poster sessions are not counted twice."
+  ]
+}

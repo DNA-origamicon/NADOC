@@ -1,0 +1,19 @@
+"""Complete first-pass dispositions, not bibliographic or source closure."""
+import json
+import ledger as L
+from review_batch_0001 import evidence
+ROWS=[('10.3791/52486','journal_article','metadata_screened','uncertain','batch_0015_final_access.json','Author-laboratory bibliography entry25 and materials-list header; failed retrieval log','Yin laboratory bibliography verifies authors,title,JoVE99:e52486,DOI and2015. Materials-list header corroborates identity, not exact constructed objects. Full publisher PDF/PMC browser checks, EuropePMC XML500 and guessed author PDF404 prevented primary method inspection in this pass. Title suggests single-stranded tiles, but no exclusion is made from title alone. Article/video identities and relationship to2012 tile paper require text comparison; materials list is not a complete design source.'),('10.4155/fseb12013.14.37','book_chapter','fulltext_reviewed','design_bearing','batch_0015_remaining_primary.json','Reproduced chapter text on ResearchGate: frame/types section pp41–43 and concluding reuse discussion; publisher DOI access failure separately recorded','Reproduced chapter text identifies an origami frame with about40×40nm inner opening, M13mp18 scaffold loops32nt long at connecting sites, about22nm span, and missing corner for orientation. It summarizes earlier salt/ligand/protein-induced quadruplex work using this frame. Distinguish reused frame from inserted duplex/quadruplex variants and from new experiments. Publisher copy inaccessible; inspected reproduction is partial and its pagination/source integrity require verification. Complete staple/native files, original journal counterparts and narrow source eligibility remain open.')]
+def main():
+ pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ for key,typ,stage,rel,file,loc,note in ROWS:
+  p=pubs[key];ev=evidence(L.HERE/file,'https://doi.org/'+key,loc)
+  if ev not in p['evidence']:p['evidence'].append(ev)
+  p.update(title=p['legacy_record']['publication'],publication_type=[typ],review_stage=stage,relevance=rel,design_contributions=['reused_design'] if rel=='design_bearing' else ['uncertain'],catalog_eligibility='unresolved',access='partial',rationale=note,unresolved_questions=['Acquire authoritative full text and complete source material; verify article/video/chapter counterpart identities.','Reconcile exact designs and parent lineage; follow all citations and author histories.'],reviewer='Codex explicitly limited bibliography/reproduced chapter inspection',run_id='B0015',date=L.DATE)
+  L.upsert('publication_reviews',p,'Record limited first-pass decision with unresolved access/source questions')
+ b=next(b for b in L.read('batches') if b['batch_id']=='B0015');pubs={p['registry_key']:p for p in L.read('publication_reviews')}
+ assert all(pubs[k]['review_stage']!='unreviewed' for k in b['input_keys'])
+ b['completed_actions'].append('All25inputs have first-pass dispositions; JoVE uncertain,chapter reproduced-text review; all source/discovery followups retained.')
+ b.update(status='completed',unresolved_keys=[k for k in b['input_keys'] if pubs[k]['unresolved_questions']],after_counts=L.counts(),validation=[L.validate()],next_queue=['FNANO2010 full program enumeration before next balanced batch','Reconcile234Hao Yan CV entries and all citation/author routes','JoVE primary full text,chapter publisher copy and all B0015 source completeness checks'])
+ L.upsert('batches',b,'Complete first passes only; no discovery/source closure claim')
+ L.atomic(L.HERE/'batch_0015_complete_audit.json',json.dumps(dict(batch_id='B0015',first_pass_count=25,input_count=25,unresolved_followup_count=len(b['unresolved_keys']),complete_source_certifications=0,validation=L.validate(),counts=L.counts()),indent=2)+'\n');print(L.validate())
+if __name__=='__main__':main()

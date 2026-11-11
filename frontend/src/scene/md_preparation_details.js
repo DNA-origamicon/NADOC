@@ -28,21 +28,40 @@ function label(text, {callout=false}={}) {
 export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}={}) {
   const periodicImages=initPeriodicImages({scene,getEntries})
   const group=new THREE.Group();group.name='NAMD box and solvent details';group.visible=false;group.userData.setupOnly=true;scene.add(group)
-  let lastSize=null, refreshLeader=()=>{}
+  let lastSize=null, refreshLeader=()=>{}, lastDetail=null, submodel=null
   const onCameraChange=()=>refreshLeader()
   controls?.addEventListener?.('change',onCameraChange)
-  function clear(){refreshLeader=()=>{};group.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose()});group.clear();group.visible=false}
+  function clear(){refreshLeader=()=>{};group.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose()});group.clear();group.visible=false;group.position.set(0,0,0);group.quaternion.identity()}
   function outline(size,center,color,name){
     const geometry=new THREE.BoxGeometry(...size)
     const mesh=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color,transparent:true,opacity:.65,depthWrite:false}))
     geometry.dispose();mesh.position.copy(center);mesh.name=name;group.add(mesh)
   }
   function update({detail:d}={}){
+    lastDetail=d
     clear()
+    if(submodel?.engine==='md' && submodel.box){
+      lastSize=null
+      if(!submodel.visible)return
+      const box=submodel.box,size=box.max_corner.map((v,i)=>v-box.min_corner[i])
+      group.position.set(...box.min_corner.map((v,i)=>(v+box.max_corner[i])/2))
+      group.quaternion.fromArray(box.rotation || [0,0,0,1])
+      group.userData.dimensions=size;group.userData.preview=null
+      for(let axis=0;axis<3;axis++){
+        const position=size.map(v=>-v/2);position[axis]=0
+        const lateral=[0,1,2].filter(i=>i!==axis)
+        position[lateral[0]]-=Math.max(.6,Math.min(...size)*.08)
+        position[lateral[1]]=size[lateral[1]]/2
+        const text=label(`${'XYZ'[axis]} ${Number(size[axis].toFixed(2))} nm`)
+        text.name=`Submodel dimension ${'XYZ'[axis]}`;text.position.set(...position);group.add(text)
+      }
+      group.visible=true
+      return
+    }
     if(!d?.enabled || !d.dimensions?.every(v=>Number.isFinite(v) && v>0)){lastSize=null;return}
     const size=d.dimensions,solvent=d.solvent || size
     let bounds=d.solute,center=new THREE.Vector3(...(d.center || [0,0,0]))
-    if(!bounds && d.boundary!=='slab'){
+    if(!bounds && d.boundary!=='slab' && !d.sourceCellCenter){
       const box=new THREE.Box3()
       for(const e of getEntries())if(e.pos)box.expandByPoint(e.pos)
       if(!box.isEmpty()){if(d.estimated!==false)bounds={min:box.min.toArray(),max:box.max.toArray()};box.getCenter(center)}
@@ -101,7 +120,7 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
     }
     const n=d.numbers
     const text=d.estimated===false
-      ? `${d.source} · ${d.jobName || 'Selected job'}\n${n?`Actual ions: Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}`:'Ion counts unavailable'}\nNPT dimensions change during simulation\nCentered on displayed structure for reference`
+      ? `${d.source} · ${d.jobName || 'Selected job'}\n${n?`Actual ions: Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}`:'Ion counts unavailable'}\n${d.nptAllowed === false?'Fixed-volume cell (NVT)':'NPT dimensions change during simulation'}\n${d.sourceCellCenter?'Prepared cell in source-design coordinates':'Centered on displayed structure for reference'}`
       : `New preparation preview\nNaCl ${d.na} mM · MgCl₂ ${d.mg} mM\nBulk ions ≈ Na⁺ ${n.na} · Mg²⁺ ${n.mg} · Cl⁻ ${n.cl}\n${d.temperature} ${d.temperatureLabel}\nEstimates exclude counterions / solute`
     const note=label(text,{callout:true})
     note.name='Solvent conditions callout';group.add(note)
@@ -144,5 +163,7 @@ export function initPreparationDetails({scene,camera,controls,getEntries=()=>[]}
     refreshLeader()
   }
   window.addEventListener('nadoc:box-solvent-details',update)
-  return {dispose(){periodicImages.dispose();controls?.removeEventListener?.('change',onCameraChange);window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
+  const onSubmodel=event=>{submodel=event.detail;update({detail:lastDetail})}
+  window.addEventListener('nadoc:submodel-details',onSubmodel)
+  return {dispose(){periodicImages.dispose();controls?.removeEventListener?.('change',onCameraChange);window.removeEventListener('nadoc:submodel-details',onSubmodel);window.removeEventListener('nadoc:box-solvent-details',update);clear();scene.remove(group)}}
 }

@@ -1,0 +1,233 @@
+[
+  {
+    "number": 1,
+    "dois": [
+      "10.1146/annurev-biochem-060308-102244"
+    ],
+    "text": "Seeman, N. C. Nanomaterials based on DNA. Annu. Rev. Biochem. 79, 65–87 (2010)."
+  },
+  {
+    "number": 2,
+    "dois": [
+      "10.1126/science.1260901"
+    ],
+    "text": "Jones, M. R., Seeman, N. C. & Mirkin, C. A. Nanomaterials. Programmable materials and the nature of the DNA bond. Science 347, 1260901 (2015)."
+  },
+  {
+    "number": 3,
+    "dois": [
+      "10.1126/science.aaa9897"
+    ],
+    "text": "Gonen, S., DiMaio, F., Gonen, T. & Baker, D. Design of ordered two-dimensional arrays mediated by noncovalent protein–protein interfaces. Science 348, 1365–1368 (2015)."
+  },
+  {
+    "number": 4,
+    "dois": [
+      "10.1126/science.1219364"
+    ],
+    "text": "King, N. P. et al. Computational design of self-assembling protein nanomaterials with atomic level accuracy. Science 336, 1171–1174 (2012)."
+  },
+  {
+    "number": 5,
+    "dois": [
+      "10.1038/nature04586"
+    ],
+    "text": "Rothemund, P. W. Folding DNA to create nanoscale shapes and patterns. Nature 440, 297–302 (2006)."
+  },
+  {
+    "number": 6,
+    "dois": [
+      "10.1038/nature08016"
+    ],
+    "text": "Douglas, S. M. et al. Self-assembly of DNA into nanoscale three-dimensional shapes. Nature 459, 414–418 (2009)."
+  },
+  {
+    "number": 7,
+    "dois": [
+      "10.1126/science.1174251"
+    ],
+    "text": "Dietz, H., Douglas, S. M. & Shih, W. M. Folding DNA into twisted and curved nanoscale shapes. Science 325, 725–730 (2009)."
+  },
+  {
+    "number": 8,
+    "dois": [
+      "10.1126/science.1227268"
+    ],
+    "text": "Ke, Y., Ong, L. L., Shih, W. M. & Yin, P. Three-dimensional structures self-assembled from DNA bricks. Science 338, 1177–1183 (2012)."
+  },
+  {
+    "number": 9,
+    "dois": [
+      "10.1126/science.aaa5372"
+    ],
+    "text": "Gerling, T., Wagenbauer, K. F., Neuner, A. M. & Dietz, H. Dynamic DNA devices and assemblies formed by shape-complementary, non-base pairing 3D components. Science 347, 1446–1452 (2015)."
+  },
+  {
+    "number": 10,
+    "dois": [
+      "10.1021/nl502626s"
+    ],
+    "text": "Marchi, A. N., Saaem, I., Vogen, B. N., Brown, S. & LaBean, T. H. Toward larger DNA origami. Nano Lett. 14, 5740–5747 (2014)."
+  },
+  {
+    "number": 11,
+    "dois": [
+      "10.1038/nnano.2009.220"
+    ],
+    "text": "Kershner, R. J. et al. Placement and orientation of individual DNA shapes on lithographically patterned surfaces. Nature Nanotech. 4, 557–561 (2009)."
+  },
+  {
+    "number": 12,
+    "dois": [
+      "10.1021/nn506014s"
+    ],
+    "text": "Gopinath, A. & Rothemund, P. W. Optimized assembly and covalent coupling of single-molecule DNA origami nanoarrays. ACS Nano 8, 12030–12040 (2014)."
+  },
+  {
+    "number": 13,
+    "dois": [
+      "10.1073/pnas.1215713109"
+    ],
+    "text": "Bai, X. C., Martin, T. G., Scheres, S. H. & Dietz, H. Cryo-EM structure of a 3D DNA-origami object. Proc. Natl Acad. Sci. USA 109, 20012–20017 (2012)."
+  },
+  {
+    "number": 14,
+    "dois": [
+      "10.1002/anie.201007642"
+    ],
+    "text": "Zhang, Z. et al. A DNA tile actuator with eleven discrete states. Angew. Chem. Int. Ed. 50, 3983–3987 (2011)."
+  },
+  {
+    "number": 15,
+    "dois": [
+      "10.1021/nl901265n"
+    ],
+    "text": "Kato, T., Goodman, R. P., Erben, C. M., Turberfield, A. J. & Namba, K. High-resolution structural analysis of a DNA nanostructure by cryoEM. Nano Lett. 9, 2747–2750 (2009)."
+  },
+  {
+    "number": 16,
+    "dois": [
+      "10.1002/anie.201400377"
+    ],
+    "text": "Tian, C. et al. Directed self-assembly of DNA tiles into complex nanocages. Angew. Chem. Int. Ed. 53, 8041–8044 (2014)."
+  },
+  {
+    "number": 17,
+    "dois": [
+      "10.1038/nature08274"
+    ],
+    "text": "Zheng, J. et al. From molecular to macroscopic via the rational design of a self-assembled 3D DNA crystal. Nature 461, 74–77 (2009)."
+  },
+  {
+    "number": 18,
+    "dois": [
+      "10.1038/nature06522"
+    ],
+    "text": "Henzler-Wildman, K. & Kern, D. Dynamic personalities of proteins. Nature 450, 964–972 (2007)."
+  },
+  {
+    "number": 19,
+    "dois": [
+      "10.1093/nar/gkp436"
+    ],
+    "text": "Douglas, S. M. et al. Rapid prototyping of 3D DNA-origami shapes with caDNAno. Nucleic Acids Res. 37, 5001–5006 (2009)."
+  },
+  {
+    "number": 20,
+    "dois": [
+      "10.1038/nmeth.1570"
+    ],
+    "text": "Castro, C. E. et al. A primer to scaffolded DNA origami. Nature Methods 8, 221–229 (2011)."
+  },
+  {
+    "number": 21,
+    "dois": [
+      "10.1038/nprot.2008.62"
+    ],
+    "text": "Scheres, S. H., Nunez-Ramirez, R., Sorzano, C. O., Carazo, J. M. & Marabini, R. Image processing for electron microscopy single-particle analysis using XMIPP. Nature Protoc. 3, 977–990 (2008)."
+  },
+  {
+    "number": 22,
+    "dois": [
+      "10.1002/andp.19484370105"
+    ],
+    "text": "Förster, T. Zwischenmolekulare energiewanderung und fluoreszenz. Ann. Phys. (Berlin) 437, 55–75 (1948)."
+  },
+  {
+    "number": 23,
+    "dois": [
+      "10.1146/annurev.bi.47.070178.004131"
+    ],
+    "text": "Stryer, L. Fluorescence energy transfer as a spectroscopic ruler. Annu. Rev. Biochem. 47, 819–846 (1978)."
+  },
+  {
+    "number": 24,
+    "dois": [
+      "10.1038/nmeth.2222"
+    ],
+    "text": "Kalinin, S. et al. A toolkit and benchmark study for FRET-restrained high-precision structural modeling. Nature Methods 9, 1218–1225 (2012)."
+  },
+  {
+    "number": 25,
+    "dois": [
+      "10.1002/cphc.200500191"
+    ],
+    "text": "Doose, S., Neuweiler, H. & Sauer, M. A close look at fluorescence quenching of organic dyes by tryptophan. ChemPhysChem 6, 2277–2285 (2005)."
+  },
+  {
+    "number": 26,
+    "dois": [
+      "10.1002/ange.19370501103"
+    ],
+    "text": "Scheibe, G. Über die Veränderlichkeit der Absorptionsspektren in Lösungen und die Nebenvalenzen als ihre Ursachen. Angew. Chem. 50, 212–219 (1937)."
+  },
+  {
+    "number": 27,
+    "dois": [
+      "10.1002/anie.197107951"
+    ],
+    "text": "Fasold, H., Klappenberger, J., Meyer, C. & Remold, H. Bifunctional reagents for the crosslinking of proteins. Angew. Chem. Int. Ed. Engl. 10, 795–801 (1971)."
+  },
+  {
+    "number": 28,
+    "dois": [
+      "10.1021/bi990615c"
+    ],
+    "text": "Kliche, W., Pfannstiel, J., Tiepold, M., Stoeva, S. & Faulstich, H. Thiol-specific cross-linkers of variable length reveal a similar separation of SH1 and SH2 in myosin subfragment 1 in the presence and absence of MgADP. Biochemistry 38, 10307–10317 (1999)."
+  },
+  {
+    "number": 29,
+    "dois": [
+      "10.1110/ps.51201"
+    ],
+    "text": "Green, N. S., Reisler, E. & Houk, K. N. Quantitative evaluation of the lengths of homobifunctional protein cross-linking reagents used as molecular rulers. Prot. Sci. 10, 1293–1304 (2001)."
+  },
+  {
+    "number": 30,
+    "dois": [
+      "10.1002/anie.200400656"
+    ],
+    "text": "Li, X. & Liu, D. R. DNA-templated organic synthesis: nature's strategy for controlling chemical reactivity applied to synthetic molecules. Angew. Chem. Int. Ed. 43, 4848–4870 (2004)."
+  },
+  {
+    "number": 31,
+    "dois": [
+      "10.1126/science.1102629"
+    ],
+    "text": "Gartner, Z. J. et al. DNA-templated organic synthesis and selection of a library of macrocycles. Science 305, 1601–1605 (2004)."
+  },
+  {
+    "number": 32,
+    "dois": [
+      "10.1021/ja2101196"
+    ],
+    "text": "McKee, M. L. et al. Programmable one-pot multistep organic synthesis using DNA junctions. J. Am. Chem. Soc. 134, 1446–1449 (2012)."
+  },
+  {
+    "number": 33,
+    "dois": [
+      "10.1016/j.bpj.2010.02.008"
+    ],
+    "text": "Di Fiori, N. & Meller, A. The effect of dye–dye interactions on the spatial resolution of single-molecule FRET measurements in nucleic acids. Biophys. J. 98, 2265–2272 (2010)."
+  }
+]

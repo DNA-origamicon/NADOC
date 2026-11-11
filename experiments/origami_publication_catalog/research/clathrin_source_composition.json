@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "local_file": "assets/sources/pre2020-expansion/PMC6764109.xml",
+      "sha256": "fe11052f13f2d5ef3a09e2676a02064be83dcda4749edcb19ba9c8f1a8159371",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6764109/fullTextXML",
+      "locator": "Main Results/Discussion, Conclusion and Materials/Methods read; p7249 scaffold,28HB arms,6dimerization and12polymerization staples."
+    },
+    {
+      "local_file": "assets/sources/acs-expansion-20261104/17371898-nn8b07734_si_001.pdf",
+      "sha256": "65acaf3178adcbb37406fe97f2963363f492bd772cc84e1e1a7a0b95df8fc15f",
+      "url": "https://ndownloader.figshare.com/files/17371898",
+      "locator": "SI figure captions1\u201316 and movie descriptions; sequence sections17\u201325 inspected for composition; FigS1PDF3 visually inspected. RoutingFigS17PDF16 and exact sequence map not fully audited."
+    }
+  ],
+  "bridge_pools": {
+    "common": 18,
+    "flat_specific": 6,
+    "curved_specific": 6
+  },
+  "dimerization_strands": 6,
+  "polymerization_strands": 12,
+  "dye_handles": 6,
+  "cholesterol_handles": 9,
+  "separate_conjugates": 2,
+  "limitations": "Section-wise row identities inspected; not complete core count or verified synthesis recipe. Wrapped coordinates and sequence text need structured image/source verification. Monomer/dimer/control substitution mapping pending."
+}

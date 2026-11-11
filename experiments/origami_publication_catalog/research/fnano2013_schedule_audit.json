@@ -1,0 +1,144 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "source_labels": {
+        "keynote": 3,
+        "invited": 6,
+        "poster": 11,
+        "contributed": 1
+      },
+      "transcribed": {
+        "keynote": 3,
+        "invited": 6,
+        "poster": 11,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 2,
+      "source_labels": {
+        "poster": 7,
+        "keynote": 3,
+        "invited": 5,
+        "contributed": 2
+      },
+      "transcribed": {
+        "poster": 7,
+        "keynote": 3,
+        "invited": 5,
+        "contributed": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 3,
+      "source_labels": {
+        "contributed": 4,
+        "keynote": 3,
+        "invited": 6,
+        "poster": 7
+      },
+      "transcribed": {
+        "contributed": 4,
+        "keynote": 3,
+        "invited": 6,
+        "poster": 7
+      },
+      "counts_match": true
+    },
+    {
+      "page": 4,
+      "source_labels": {
+        "poster": 17,
+        "keynote": 1,
+        "invited": 3
+      },
+      "transcribed": {
+        "poster": 17,
+        "keynote": 1,
+        "invited": 3
+      },
+      "counts_match": true
+    },
+    {
+      "page": 5,
+      "source_labels": {
+        "poster": 11,
+        "keynote": 2,
+        "invited": 2,
+        "contributed": 1
+      },
+      "transcribed": {
+        "poster": 11,
+        "keynote": 2,
+        "invited": 2,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 6,
+      "source_labels": {
+        "invited": 7,
+        "poster": 11,
+        "keynote": 1,
+        "contributed": 2
+      },
+      "transcribed": {
+        "invited": 7,
+        "poster": 11,
+        "keynote": 1,
+        "contributed": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 7,
+      "source_labels": {
+        "invited": 2,
+        "poster": 14
+      },
+      "transcribed": {
+        "invited": 2,
+        "poster": 14
+      },
+      "counts_match": true
+    }
+  ],
+  "total_transcribed": 132,
+  "source_page_total": 7,
+  "validation": {
+    "status": "passed",
+    "publication_keys": 5732,
+    "stable_legacy_design_ids": 100,
+    "hashed_evidence_references": 10754
+  },
+  "counts": {
+    "publication_versions": 5732,
+    "canonical_work_keys": 5731,
+    "provisional_work_keys_not_reconciled": 5730,
+    "versions_with_explicit_version_relation": 2,
+    "review_stages": {
+      "metadata_screened": 850,
+      "unreviewed": 4674,
+      "fulltext_reviewed": 49,
+      "design_sources_reviewed": 159
+    },
+    "relevance": {
+      "uncertain": 5518,
+      "background_or_review": 17,
+      "design_bearing": 193,
+      "not_origami": 4
+    },
+    "catalog_eligibility": {
+      "unresolved": 5723,
+      "excluded": 8,
+      "eligible": 1
+    },
+    "design_groups": 136,
+    "design_source_reviews": 59,
+    "discovery_runs": 43
+  }
+}

@@ -1,0 +1,1028 @@
+{
+  "audit": {
+    "cv_occurrences": 59,
+    "cv_sections": {
+      "JOURNAL PUBLICATIONS": 29,
+      "MEETING PROCEEDING PUBLICATIONS": 21,
+      "BOOK CHAPTERS": 8,
+      "BOOK REVIEWS": 1
+    },
+    "profile_occurrences": 10,
+    "selected_occurrences": 61,
+    "counts_overlap_not_unique": true,
+    "coverage_gap": "CV covers1993\u20132007 plus undated in-preparation; current profile only10selected works, no2008\u20132016 coverage established. Independent Duke/NCSU histories remain unenumerated."
+  },
+  "entries": [
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 1,
+      "citation": "S.-H. Park, and T.H. LaBean (in preparation) Stepwise Assembly of DNA Tile Lattices using dsDNA Bridges.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": "in_preparation",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 2,
+      "citation": "P. Yin, S. Sahu, R. Hariadi, H. M. T. Choi, S- H. Park, B. Walters, T. H. LaBean , and J. H. Reif (in preparation) On Constructing Tile-less DNA Ribbons and Tubes.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": "in_preparation",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 3,
+      "citation": "D. Sebba, T.H. LaBean & A.A. Lazarides (2007) Two-State Core-Satellite Assemblies with Switchable Plasmonic Behavior (submitted).",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": "submitted",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 4,
+      "citation": "J. H. Reif & T. H. LaBean (2007) Autonomous Programmable Biomolecular Devices Using Self-Assembled DNA Nanostructures (Invited Review to Communications of the Association for Computing Machinery) (submitted).",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": "submitted",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 5,
+      "citation": "Thom LaBean & Hanying Li (2007) Using DNA for Construction of Novel Materials, Nano Today, 2, 26-35.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 6,
+      "citation": "Thom LaBean (2006) Hydrogels: DNA bulks up. (News & Views) Nature Materials, 5, 767\u2013768.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 7,
+      "citation": "H. Li, T. H. LaBean & D. Kenan (2006) Single-chain antibodies against DNA aptamers as adapter molecules on DNA tile arrays in nanoscale materials organization. Org. Biomol. Chem., 4, 3420 - 3426 (DOI: 10.1039/b606391h). [Article featured on cover, shown at right.]",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 8,
+      "citation": "S-H. Park, M.W. Prior, T.H. LaBean*, and G. Finkelstein* (2006) Optimized fabrication and electrical analysis of silver nanowires templated on DNA molecules. Applied Physics Letters 89, 033901.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 9,
+      "citation": "S-H. Park, C. Pistol, S.- J. Ahn, J. H. Reif, A. Lebeck, C. Dwyer*, and T.H. LaBean* (2006) Finite-size, Fully- Addressable DNA Tile Lattices Formed by Hierarchical Assembly Procedures. Angew. Chem, Int. Ed. 45, 735-739 (anie.200503797).",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 10,
+      "citation": "S-H. Park, P. Yin, Y. Liu, J.H. Reif, T.H. LaBean , and Hao Yan (2005) Programmable DNA Self-assemblies for Nanoscale Organization of Ligands and Proteins. Nano Letters 5, 729-733.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 11,
+      "citation": "S-H. Park, R. Barish, H. Li, J.H. Reif , G. Finkelstein , H. Yan , and T.H. LaBean (2005) Three-Helix Bundle DNA Tiles Self-assemble into 2D Lattice or 1D Templates for Silver Nanowires. Nano Letters 5, 693-696.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 12,
+      "citation": "Kurt V. Gothelf and Thomas H. LaBean (2005) DNA-programmed assembly of nanostructures. Organic & Biomolec. Chem. 3, 4023-4037. [Article featured on cover shown at right.]",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 13,
+      "citation": "Sang Jung Ahn, Marian Kaholek, Woo-Kyung Lee, Bruce LaMattina, Thomas H. LaBean, and Stefan Zauscher (2004) Surface-Initiated Polymerization on Nanopatterns Fabricated by Electron-Beam Lithography. Advanced Materials 16, 2141-2145.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 14,
+      "citation": "Sung Ha Park, Hao Yan, John H. Reif, Thomas H. LaBean and Gleb Finkelstein (2004) Electronic nanostructures templated on self-assembled DNA scaffolds. Nanotechnology 15, S525-S527.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 15,
+      "citation": "D. Liu, S- H. Park, J. H. Reif, and T.H. LaBean (2004) DNA nanotubes self-assembled from TX tiles as templates for conductive nanowires. Proc. Nat. Acad. Sci., USA 101, 717-722.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 16,
+      "citation": "H. Li, S- H. Park, J. H. Reif, T. H. LaBean , and Hao Yan , (2004) DNA Templated Self-Assembly of Protein and Nanoparticle Linear Arrays, J. Am. Chem. Soc. 126, 418-419.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 17,
+      "citation": "K. Trabbic-Carlson, D. E Meyer, L. Liu, R. Piervincenzi, N. Nath, T. LaBean, and A. Chilkoti, (2004) Effect of Protein Fusion on the Transition Temperature of an Environmentally Responsive Elastin-like Polypeptide: A Role for Surface Hydrophobicity? Protein Engineering Design and Selection 17, 57-66.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 18,
+      "citation": "H. Yan, S.H. Park, G. Finkelstein, J.H. Reif, and T.H. LaBean (2003) DNA-Templated Self-Assembly of Protein Arrays and Highly Conductive Nanowires. Science 301, 1882-1884.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 19,
+      "citation": "Yan, H., LaBean, T.H., Feng, L., and Reif, J.H. (2003) Directed nucleation assembly of DNA tile complexes for barcode-patterned lattices, Proc. Nat. Acad. Sci., USA 100, 8103-8108.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 20,
+      "citation": "Yan, H., Feng, L., LaBean, T.H., and Reif, J.H. (2003) Parallel Molecular Computation of Pair-wise XOR Using DNA \u201cString Tile\u201d Self-Assembly, J. Am. Chem. Soc., 125, 14246-14247.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 21,
+      "citation": "Mao, C., LaBean, T.H. Reif, J.H., Seeman, N.C. (2000) Logical computation using algorithmic self-assembly of DNA triple-crossover molecules. Nature 407, 493-496.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 22,
+      "citation": "LaBean, T.H., Yan, H., Kopatsch, J., Liu, F., Winfree, E., Reif, J.H., and Seeman, N.C. (2000) Construction, Analysis, Ligation, and Self-Assembly of DNA Triple Crossover Complexes. J. Am. Chem. Soc. 122, 1848-1860.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 23,
+      "citation": "Schultes, E.A., Hraber, P.T. and LaBean, T.H. (1999) Estimating the Contributions of Selection and Self- Organization in RNA Secondary Structure. J. Molecular Evolution 49, 76-83.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 24,
+      "citation": "Schultes, E.A., Hraber, P.T. and LaBean, T.H. (1999) A Parameterization of RNA Sequence Space. Complexity 4, 61 - 71.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 25,
+      "citation": "Word, J.M., Lovell, S.C., LaBean, T.H., Taylor, H.C. Zalis, M.E., Presley, B.K., Richardson, J.S., and Richardson, D.C. (1999) Visualizing and Quantifying Molecular Goodness-of-Fit: Small-Probe Contact Dots with Explicit Hydrogens. J. Molecular Biology 285, 1711-1733.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 26,
+      "citation": "Schultes, E.A., Hraber, P.T. and LaBean, T.H. (1997) Global Similarities in Nucleotide Base Composition among Disparate Functional Classes of Single-Stranded RNA Imply Evolutionary Convergence. RNA 3, 792-806.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 27,
+      "citation": "Gernert, K.M., Surles, M.C., LaBean, T.H., Richardson, J.S., and Richardson, D.C. (1995) The Alacoil: A Very Tight, Antiparallel Coiled-Coil of Helices. Protein Science 4, 2252-2260.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 28,
+      "citation": "LaBean, T.H., Kauffman, S.A., and Butt, T.R. (1995) Libraries of Random-Sequence Polypeptides Produced with High Yield as Carboxy-Terminal Fusions with Ubiquitin. Molecular Diversity 1, 29-38.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "JOURNAL PUBLICATIONS",
+      "ordinal": 29,
+      "citation": "LaBean, T.H. and Kauffman, S.A. (1993) Design of Synthetic Gene Libraries Encoding Random Sequence Proteins with Desired Ensemble Characteristics. Protein Science 2, 1249-1254.",
+      "publication_type_lead": "journal_section_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 1,
+      "citation": "T.H. LaBean, Self-Assembling DNA Nanostructures and DNA-Based Nanofabrication (2006) IEEE - International Electron Devices Meeting, San Francisco CA, December 11-13, 2006.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 2,
+      "citation": "D. Sebba, T.H. LaBean & A.A. Lazarides, (2006) Switchable Two-State Core-satellite Assemblies, Meeting of the American Chemical Society, Colloid and Surface Science Section, Atlanta, GA (231st National Meeting, March, 2006) [Poster won the Student Poster Competition]",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 3,
+      "citation": "P. Yin, S. Sahu, R. Hariadi, H. M. T. Choi, S-H. Park, B. Walters, T. H. LaBean, & J. H. Reif, On Constructing Tile-less DNA Ribbons and Tubes, 12th International Meeting on DNA Computing (DNA 12), Seoul, Korea, June 5-9, 2006. Springer-Verlag Lecture Notes for Computer Science (LNCS), edited by Chengde Mao and Takashi Yokomori, NYC, New York, (2006).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 4,
+      "citation": "U. Majumder, S. Sahu, T.H. LaBean, and J. H. Reif, Design and Simulation of Self-Repairing DNA Lattices, 12th International Meeting on DNA Computing (DNA 12), Seoul, Korea, June 5-9, 2006. Springer-Verlag Lecture Notes in Computer Science (LNCS), Vol. 4287, ISBN 978-3-540-49024-1, pp. 195-214, edited by Chengde Mao and Takashi Yokomori, NYC, New York, (2006).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 5,
+      "citation": "H. Li, B. Lipes, A. Fernando, H. Yan, J.H. Reif, D.J. Kenan, and T.H. LaBean (2006) Aptamer Specific Single- chain Antibodies for the DNA Nanotech Toolbox, 3rd Annual Conference on Foundations of Nanoscience (FNANO06)\u2013 Self-Assembled Architectures and Devices, Snowbird, Utah, April 23-27, 2006.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 6,
+      "citation": "K. Ho, H. Li, E. B. Roesch, C. B. Sherrill, J.R. Prudent & T.H. LaBean, (2006) Increasing the Thermal Stability of Self-Assembling DNA Nanostructures by Incorporation of isoG/isoC Base Pairs, NSTI NanoTech 2006, Boston, May 7-11, 2006.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 7,
+      "citation": "Thomas H. LaBean, Sung Ha Park, Sang Jung Ahn, & John H. Reif (2005) Stepwise DNA Self-assembly of Fixed- size Nanostructures, Foundations of Nanoscience \u2013 Self-Assembled Architectures and Devices, Snowbird, Utah, April 24-28, 2005, pp 179-181.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 8,
+      "citation": "Sung Ha Park, Hanying Li, Hao Yan, John H. Reif, Gleb Finkelstein, & Thomas H. LaBean (2005) Self-assembled 1D DNA Nanostructures as Templates for Silver Nanowires, Foundations of Nanoscience \u2013 Self-Assembled Architectures and Devices, Snowbird, Utah, April 24-28, 2005, pp 194-197.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 9,
+      "citation": "Chris Dwyer, Sung Ha Park, Thomas LaBean, Alvin Lebeck (2005) The Design and Fabrication of a Fully Addressable 8-tile DNA Lattice, Foundations of Nanoscience \u2013 Self-Assembled Architectures and Devices, Snowbird, Utah, April 24-28, 2005, pp 187-191.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 10,
+      "citation": "J.H. Reif, T.H. LaBean, S. Sahu, H. Yan, P, Yin (2005) Design, Simulation, and Experimental Demonstration of Self-Assembled DNA Nanostructures and Motors, in Lecture Notes in Computer Science, Vol 3566 (ISBN: 3-540- 27884-2) Volume Title: Unconventional Programming Paradigms: International Workshop UPP 2004, Le Mont Saint Michel, France, September 15-17, 2004, Revised Selected and Invited Papers (Editors: Jean-Pierre Ban\u00e2tre, Pascal Fradet, Jean-Louis Giavitto, Olivier Michel), Springer-Verlag GmbH.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 11,
+      "citation": "T.H. LaBean (2004) Hierarchical and Serial DNA Self-Assemblies, 1st Annual Conference on Foundations of Nanoscience (FNANO04)\u2013 Self-Assembled Architectures and Devices, Snowbird, Utah, April 21-23, 2004.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 12,
+      "citation": "John H. Reif, Thomas LaBean, Sudheer Sahu, Hao Yan, Peng Yin (2004) Design, Simulation, and Experimental Demonstration of Self-Assembled DNA Nanostructures and DNA Motors, Computational Modeling and Simulation of Materials (CIMTEC) Conference, Acireale, Sicily, Italy.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 13,
+      "citation": "Hao Yan, Sung Ha Park, Liping Feng, John Reif, and Thomas H. LaBean (2003) 4x4 DNA Tile and Lattices: Characterization, Self-Assembly and Metallization of a Novel DNA Nanostructure Motif, Ninth International Meeting on DNA Based Computers (DNA9), Madison, Wisconsin, June 2-4, 2003, (Edited by Junghuei Chen and John Reif), Lecture Notes in Computer Science, Springer-Verlag, New York.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 14,
+      "citation": "Hao Yan, Liping Feng, Thomas H. LaBean, and John Reif (2003) Parallel Molecular Computation of Pair-Wise XOR Using DNA String Tile, Ninth International Meeting on DNA Based Computers (DNA9), Madison, Wisconsin, June 2-4, 2003, (Edited by Junghuei Chen and John Reif), Abstract in Lecture Notes in Computer Science, Springer- Verlag, New York.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 15,
+      "citation": "Liu, D.G., Reif, J.H., and LaBean, T.H. (2002) DNA Nanotubes: Construction and Characterization of Filaments Composed of TX -tile Lattice. in Lecture Notes in Computer Science, Vol. 2568, Editors: M. Hagiya & A. Ohuchi, Proceedings of the 8th International Meeting on DNA-Based Computers (Hokkaido University, Sapporo, Japan, June 2002) ISBN 3-540-00531-5, (Springer, Berlin).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 16,
+      "citation": "Reif, J.H., LaBean, T.H., Pirrung, M., Rana, V.S., Guo, B., Kingsford, C., and Wickham, G.S. (2001) Experimental Construction of Very Large-Scale DNA Databases with Associative Search Capability. in Lecture Notes in Computer Science, Vol. 2340, Editors: N. Jonoska & N. Seeman, Proceedings of the 7th International Meeting on DNA-Based Computers (University of South Florida, Tampa, June 2001) ISBN 3-540-43775-4, (Springer, Berlin).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 17,
+      "citation": "Reif, J.H. and LaBean, T.H. (2000) Computationally Inspired Biotechnologies: Improved DNA Synthesis and Associative Search Using Error-Correcting Codes and Vector-Quantization. in Lecture Notes in Computer Science, Vol. 2054, Editors: A. Condon and G. Rozenberg, Proceedings of the 6th International Workshop on DNA-Based Computers (meeting at Leiden, The Netherlands, June 2000) ISBN 3-540-42076-2, (Springer, Berlin).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 18,
+      "citation": "Reif, J.H., LaBean, T.H., and Seeman, N. (2000) Challenges and Applications for Self-Assembled DNA- Nanostructures. in Lecture Notes in Computer Science, Volume 2054, Editors: A. Condon and G. Rozenberg, Proceedings of the 6th International Workshop on DNA-Based Computers (meeting at Leiden, The Netherlands, June 2000) ISBN 3-540-42076-2, (Springer, Berlin).",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 19,
+      "citation": "LaBean, T.H., Winfree, E., and Reif, J.H. (1999) Experimental Progress in Computation by Self-Assembly of DNA Tilings. in DIMACS Series in Discrete Mathematics and Theoretical Computer Science, Volume 54, pp 123-140, Editors: E. Winfree and D.K. Gifford, Proceedings of the 5th DIMACS Workshop on DNA Based Computers, MIT, Cambridge. ISBN 0-8218-2053-2",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 20,
+      "citation": "Gehani, A., LaBean, T.H., and Reif, J.H. (1999) DNA-Based Cryptography. in DIMACS Series in Discrete Mathematics and Theoretical Computer Science, Volume 54, pp 233-249, Editors: E. Winfree and D.K. Gifford, Proceedings of the 5th DIMACS Workshop on DNA Based Computers, MIT, Cambridge. ISBN 0-8218-2053-2.",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "MEETING PROCEEDING PUBLICATIONS",
+      "ordinal": 21,
+      "citation": "Lagoudakis, M.G. and LaBean, T.H. (1999) 2D DNA Self-Assembly for Satisfiability. in DIMACS Series in Discrete Mathematics and Theoretical Computer Science, Volume 54, pp 141-154, Editors: E. Winfree and D.K. Gifford, Proceedings of the 5th DIMACS Workshop on DNA Based Computers, MIT, Cambridge. ISBN 0-8218- 2053-2",
+      "publication_type_lead": "conference_or_proceedings_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 1,
+      "citation": "John H Reif & Thomas H LaBean (2007) Nanostructures and Autonomous Devices Assembled from DNA. in Bio- inspired and Nano-scale Integrated Computing (Edited by Mary Eshaghian) Publisher: Wiley, USA.",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 2,
+      "citation": "Thomas H. LaBean, Kurt V. Gothelf, and John H Reif (2006) Self-assembling DNA Nanostructures for Patterned Molecular Assembly. in Nanobiotechnology II: More Concepts and Applications, (eds. C. Niemeyer & C. Mirkin), ISBN: 978-3-527-31673-1, Wiley-VCH",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 3,
+      "citation": "J. H. Reif , M. Hauser, T. LaBean and M. Pirrung (2006) Application of Biomolecular Computing to Medical Science: A Biomolecular Database System for Storage, Processing & Retrieval of Genetic Information & Material. in Complex Systems Science in BioMedicine (Eds. Deisboeck, Thomas, Kresh) ISBN: 0-387-30241-7, Kluwer Academic - Plenum Publishers, New York.",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 4,
+      "citation": "Thom LaBean & Sung Ha Park (2005) Self-Assembled DNA Nanotubes. in Biological and Pharmaceutical Nanomaterials (volume 2 in series) Nanotechnologies for the Lifesciences (ed. Challa Kumar), ISBN: 3-527-31382- 6, Wiley \u2013 VCH.",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 5,
+      "citation": "J. Xu, T.H. LaBean, S.L. Craig (2005) DNA Structures and their Applications in Nanotechnology. in Supramolecular Polymers 2, pp 445-480 (ed. Alberto Ciferri), ISBN: 0-8247-2331-7, CRC Press - Taylor & Francis Group, Boca Raton.",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 6,
+      "citation": "Milan N. Stojanovic, Darko Stefanovic, Thomas LaBean and Hao Yan (2005) Computing with Nucleic Acids. in Bioelectronics: From Theory to Applications, pp 427-455 (ed. Itamar Willner), ISBN: 3-527-30690-0, VCH-Verlag.",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 7,
+      "citation": "Gehani, A., LaBean, T., and Reif, J. (2004) DNA-based cryptography. in Aspects of Molecular Computing: Essays Dedicated to Tom Head on the Occasion of His 70th Birthday. Series: Lecture Notes in Computer Science, Vol. 2950, pp 167-188 (Editors: Jonoska, N.; Paun, G.; Rozenberg, G.), ISBN: 3-540-20781-3, Springer",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK CHAPTERS",
+      "ordinal": 8,
+      "citation": "LaBean, T.H. (2003) Introduction to self-assembling DNA nanostructures for computation and nanofabrication. in Computational Biology and Genome Informatics, pp 35-58 (eds. Wang, J.T.L., Wu, C.H. & Wang, P.P.), ISBN 981- 238-257-7, (World Scientific Publishing, Singapore, 2003).",
+      "publication_type_lead": "book_chapter_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "duke_cv",
+      "section": "BOOK REVIEWS",
+      "ordinal": 1,
+      "citation": "T.H. LaBean (2004) Bionanotechnology, written by David Goodsell, Quarterly Review of Biology 79, 415.",
+      "publication_type_lead": "book_review_lead",
+      "unpublished_status": null,
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+        "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+        "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+        "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 1,
+      "citation": "A Functional RNA-Origami as Direct Thrombin Inhibitor with Fast-acting and Specific Single-Molecule Reversal Agents in vivo model , Molecular Therapy (2024)",
+      "year_candidates": [
+        "2024"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 2,
+      "citation": "Utilizing multiscale engineered biomaterials to examine TGF\u2010\u03b2 \u2010mediated myofibroblastic differentiation , Wound Repair and Regeneration (2024)",
+      "year_candidates": [
+        "2024"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 3,
+      "citation": "DNA aerogels and DNA-wrapped CNT aerogels for neuromorphic applications , Materials Today Bio (2022)",
+      "year_candidates": [
+        "2022"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 4,
+      "citation": "Modeling and characterization of stochastic resistive switching in single Ag2S nanowires , Scientific Reports (2022)",
+      "year_candidates": [
+        "2022"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 5,
+      "citation": "Resistive switching of two-dimensional Ag2S nanowire networks for neuromorphic applications , Journal of Vacuum Science & Technology B Nanotechnology and Microelectronics Materials Processing Measurement and Phenomena (2022)",
+      "year_candidates": [
+        "2022"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 6,
+      "citation": "Mechanical and Electrical Properties of DNA Hydrogel-Based Composites Containing Self-Assembled Three-Dimensional Nanocircuits , Applied Sciences (2021)",
+      "year_candidates": [
+        "2021"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 7,
+      "citation": "Multivalent Aptamer\u2010Functionalized Single\u2010Strand RNA Origami as Effective, Target\u2010Specific Anticoagulants with Corresponding Reversal Agents , Advanced Healthcare Materials (2021)",
+      "year_candidates": [
+        "2021"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 8,
+      "citation": "Self-Assembling Nucleic Acid Nanostructures Functionalized with Aptamers , Chemical Reviews (2021)",
+      "year_candidates": [
+        "2021"
+      ],
+      "selected": false,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 9,
+      "citation": "Genetically Encoded, Functional Single\u2010Strand RNA Origami: Anticoagulant , Advanced Materials (2019)",
+      "year_candidates": [
+        "2019"
+      ],
+      "selected": true,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    },
+    {
+      "source": "ncsu_profile",
+      "section": "Publications",
+      "ordinal": 10,
+      "citation": "Engineered Diblock Polypeptides Improve DNA and Gold Solubility during Molecular Assembly , ACS Nano (2017)",
+      "year_candidates": [
+        "2017"
+      ],
+      "selected": true,
+      "publication_type_lead": "profile_publication_lead",
+      "evidence": {
+        "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+        "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+        "url": "https://mse.ncsu.edu/people/thlabean/",
+        "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "local_file": "assets/research-20261105/labean-duke-cv.pdf",
+      "sha256": "585e704fc622686ab380a0196c8827780f72f8cca722db011d05da665e37a886",
+      "url": "https://fds.duke.edu/db/aas/Chemistry/faculty/thl/files/CV.pdf",
+      "locator": "Journal Publications, Meeting Proceeding Publications, Book Chapters and Book Reviews sections; older CV through2007, not a current career census. Patents/talks/grants excluded from publication block enumeration."
+    },
+    {
+      "local_file": "assets/research-20261105/labean-ncsu-profile.html",
+      "sha256": "d5d5731929c564e2d3b7bb5614a31cf12345f1c0d6940ed1ed8303ffad8f7924",
+      "url": "https://mse.ncsu.edu/people/thlabean/",
+      "locator": "Publications section10listed items; only2019 and2017 entries are pre2020 candidates. View-all target returned bot challenge; lab target404."
+    }
+  ],
+  "limitations": "No primary dates or design classifications inferred. Incidental FNANO citations in CV retained as conference leads; no additional FNANO program search undertaken."
+}

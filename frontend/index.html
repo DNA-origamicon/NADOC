@@ -6291,7 +6291,6 @@
               <div class="ox-card">
                 <div id="md-box-solvent-toggle" class="ox-card__header" style="color:#c9d1d9"><span id="md-box-solvent-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Box and solvent</span><span id="md-box-loading" class="md-box-spinner" role="img" aria-label="Calculating box details" title="Calculating box details…" hidden></span><button id="md-box-warning" type="button" class="md-box-warning-icon" aria-label="Box and solvent needs attention" title="Box and solvent needs attention" hidden>⚠</button></div>
                 <div id="md-box-solvent-body" class="ox-card__body" style="display:none">
-                  <div id="md-submodel"></div>
                   <label class="box-solvent-toggle" title="Display the submodel box and fixed shell, plus the estimated solvent region, margin, dimensions, bulk ion counts and boundary colors. This is a setup overlay, not a trajectory."><input id="md-box-view-details" type="checkbox"> View box, shell and solvent details</label>
                   <label class="box-solvent-toggle" title="Available in every representation. Six non-interactive design-backbone previews, shifted by one cell along ±X, ±Y and ±Z. Setup view only; no solvent, edge or corner images."><input id="md-box-view-periodic" type="checkbox"> View periodic images</label>
                   <div id="md-box-warnings" class="md-box-warnings" hidden></div>
@@ -6308,6 +6307,7 @@
                   <label class="box-solvent-field" title="Surface-control temperature is editable; ordinary DNA relaxation remains protocol-controlled.">Temperature (K)<input id="md-box-temperature" type="number" min="270" max="350" step="0.01" value="300"></label>
                   <output title="Blue: periodic faces. Amber: normal faces of the vacuum-padded slab cell. Boundary conditions follow the supported system model; colors do not change electrostatics."></output>
                   <p role="status" aria-live="polite"></p>
+                  <div id="md-submodel"></div>
                 </div>
               </div>
               <!-- ── Hard surface (graphene nanopore inherited from an oxDNA deposition) ── -->

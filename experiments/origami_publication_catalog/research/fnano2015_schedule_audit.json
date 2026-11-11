@@ -1,0 +1,199 @@
+{
+  "pages": [
+    {
+      "page": 1,
+      "transcribed": {
+        "keynote": 2,
+        "invited": 3,
+        "contributed": 2
+      },
+      "source_labels": {
+        "keynote": 2,
+        "invited": 3,
+        "contributed": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 2,
+      "transcribed": {
+        "contributed": 1,
+        "invited": 2,
+        "poster": 6
+      },
+      "source_labels": {
+        "contributed": 1,
+        "invited": 2,
+        "poster": 6
+      },
+      "counts_match": true
+    },
+    {
+      "page": 3,
+      "transcribed": {
+        "poster": 8,
+        "keynote": 1,
+        "invited": 2
+      },
+      "source_labels": {
+        "poster": 8,
+        "keynote": 1,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 4,
+      "transcribed": {
+        "invited": 3,
+        "keynote": 1,
+        "contributed": 1,
+        "poster": 5
+      },
+      "source_labels": {
+        "invited": 3,
+        "keynote": 1,
+        "contributed": 1,
+        "poster": 5
+      },
+      "counts_match": true
+    },
+    {
+      "page": 5,
+      "transcribed": {
+        "poster": 7,
+        "keynote": 1,
+        "contributed": 1
+      },
+      "source_labels": {
+        "poster": 7,
+        "keynote": 1,
+        "contributed": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 6,
+      "transcribed": {
+        "invited": 2,
+        "keynote": 1,
+        "contributed": 2,
+        "poster": 6
+      },
+      "source_labels": {
+        "invited": 2,
+        "keynote": 1,
+        "contributed": 2,
+        "poster": 6
+      },
+      "counts_match": true
+    },
+    {
+      "page": 7,
+      "transcribed": {
+        "poster": 4,
+        "keynote": 1,
+        "invited": 2
+      },
+      "source_labels": {
+        "poster": 4,
+        "keynote": 1,
+        "invited": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 8,
+      "transcribed": {
+        "invited": 4,
+        "poster": 6
+      },
+      "source_labels": {
+        "invited": 4,
+        "poster": 6
+      },
+      "counts_match": true
+    },
+    {
+      "page": 9,
+      "transcribed": {
+        "poster": 9,
+        "keynote": 1
+      },
+      "source_labels": {
+        "poster": 9,
+        "keynote": 1
+      },
+      "counts_match": true
+    },
+    {
+      "page": 10,
+      "transcribed": {
+        "contributed": 2,
+        "keynote": 1,
+        "invited": 3,
+        "poster": 4
+      },
+      "source_labels": {
+        "contributed": 2,
+        "keynote": 1,
+        "invited": 3,
+        "poster": 4
+      },
+      "counts_match": true
+    },
+    {
+      "page": 11,
+      "transcribed": {
+        "poster": 10
+      },
+      "source_labels": {
+        "poster": 10
+      },
+      "counts_match": true
+    },
+    {
+      "page": 12,
+      "transcribed": {
+        "invited": 2,
+        "keynote": 2,
+        "contributed": 2,
+        "poster": 2
+      },
+      "source_labels": {
+        "invited": 2,
+        "keynote": 2,
+        "contributed": 2,
+        "poster": 2
+      },
+      "counts_match": true
+    },
+    {
+      "page": 13,
+      "transcribed": {
+        "poster": 9
+      },
+      "source_labels": {
+        "poster": 9
+      },
+      "counts_match": true
+    },
+    {
+      "page": 14,
+      "transcribed": {
+        "poster": 2,
+        "keynote": 2,
+        "invited": 5
+      },
+      "source_labels": {
+        "poster": 2,
+        "keynote": 2,
+        "invited": 5
+      },
+      "counts_match": true
+    }
+  ],
+  "total_transcribed": 130,
+  "source_page_total": 14,
+  "scope": "All fourteen schedule pages enumerated; unnamed ISNSCE award address p12 unresolved; no abstract-book review claimed"
+}

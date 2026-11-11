@@ -14,7 +14,6 @@ import {
   diskWarningMessage,
   bigRunSummary,
   BIG_RUN_BYTES,
-  BIG_RUN_HOURS,
   isUndersizedCellRefusal,
 } from './job_activity.js'
 
@@ -95,7 +94,7 @@ describe('bigRunSummary', () => {
     est_ns_per_day: 59,
   }
 
-  it('returns null for a run that is neither big nor long', () => {
+  it('returns null for a run with small output', () => {
     expect(bigRunSummary(null)).toBeNull()
     expect(bigRunSummary(undefined)).toBeNull()
     expect(bigRunSummary({ predicted_bytes: 1 * GiB, est_hours: 2 })).toBeNull()
@@ -119,14 +118,14 @@ describe('bigRunSummary', () => {
     expect(s.bytes).toBe(BIG_RUN_BYTES + 1)
   })
 
-  it('fires on duration alone when the run is small', () => {
-    const s = bigRunSummary({ predicted_bytes: 1024, est_hours: BIG_RUN_HOURS + 1 })
-    expect(s).not.toBeNull()
-    expect(s.hours).toBe(BIG_RUN_HOURS + 1)
+  it('never warns on duration alone, including multi-day relaxation', () => {
+    for (const est_hours of [25, 27.2, 407, 10000]) {
+      expect(bigRunSummary({ predicted_bytes: 1.6 * GiB, est_hours })).toBeNull()
+    }
   })
 
-  it('does not fire exactly at the thresholds', () => {
-    expect(bigRunSummary({ predicted_bytes: BIG_RUN_BYTES, est_hours: BIG_RUN_HOURS })).toBeNull()
+  it('does not fire exactly at the output threshold', () => {
+    expect(bigRunSummary({ predicted_bytes: BIG_RUN_BYTES, est_hours: 407 })).toBeNull()
   })
 
   it('still reports size when the backend could not estimate a duration', () => {
@@ -515,4 +514,28 @@ it('shows the current Alpine allocation and last sync in the welcome tooltip', (
     slurm_job_id: '34226173', slurm_state: 'RUNNING', last_synced_at: 1792096800 })
   expect(text).toContain('SLURM 34226173 RUNNING')
   expect(text).toContain('Last synced')
+})
+
+it('explains large submodel output using retained atoms and current memory budgets', () => {
+  const result = bigRunSummary({ predicted_bytes: 11 * GiB, est_hours: 27.2,
+    n_atoms: 172522, length_ns: 19.7,
+    submodel: { source_solute_atoms:35971, retained_solute_atoms:12277, mobile_solute_atoms:7488, shell_solute_atoms:4789, shell_nm:2 },
+    memory: { current_host_mb:1705, current_vram_mb:1171, host_budget_mb:20000, vram_budget_mb:11000 },
+    completion: { available:true, calibrated_compute:false, low_hours:13.6, high_hours:81.7 },
+  })
+  expect(result.title).toBe('Large output — start it?')
+  expect(result.message).not.toContain('duration exceeds')
+  expect(result.message).toContain('output exceeds')
+  expect(result.message).toContain('172,522 atoms')
+  expect(result.message).toContain('7,488 core + 4,789 shell')
+  expect(result.message).toContain('RAM budget:')
+  expect(result.message).toContain('VRAM budget:')
+  expect(result.message).toContain('conservative admission budgets')
+  expect(result.message).toContain('uncalibrated planning estimate')
+})
+
+it('does not call an ordinary short submodel run large just because its source is large', () => {
+  expect(bigRunSummary({predicted_bytes:GiB,est_hours:2,n_atoms:100000,
+    submodel:{source_solute_atoms:5000000,retained_solute_atoms:1000}})).toBeNull()
+  expect(bigRunSummary({predicted_bytes:11*GiB,est_hours:2}).title).toBe('Large output — start it?')
 })
