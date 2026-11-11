@@ -48,7 +48,8 @@ process.stdout.write('accepted');
 
 
 @pytest.mark.parametrize("variant", ["ordinary", "loops", "tails", "reference", "child", "frame",
-    "overhang", "subdomain", "sweep", "extension", "modification", "cpd", "flexible", "ss", "ds", "duplex"])
+    "overhang", "subdomain", "sweep", "extension", "modification",
+    pytest.param("cpd", marks=pytest.mark.scientific), "flexible", "ss", "ds", "duplex"])
 def test_actual_complete_native_packet_is_accepted_by_frontend(variant, application_prefix):
     if variant == "cpd":
         source = cpd_source()

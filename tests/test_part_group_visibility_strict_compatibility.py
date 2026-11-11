@@ -35,6 +35,9 @@ def test_empty_visibility_preserves_prior_canonical_bytes_and_preservation_diges
     fields = {name for name, role in FIELD_ROLES.items()
               if role in {"presentation", "physical", "document_identity", "repair_draft"}}
     expected = {key: value for key, value in json.loads(original).items() if key in fields}
+    # Empty zoom metadata is admitted but deliberately omitted from the sealed
+    # v1 preservation digest, just like the empty part-group visibility mask.
+    assert expected.pop("zoom_volumes") == []
     assert revisions.revision_metadata(candidate).preserved_document_sha256 == digest(expected)
 
 

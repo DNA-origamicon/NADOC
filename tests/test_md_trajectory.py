@@ -69,8 +69,7 @@ def test_md_composite_meta_matches_full(generated_md):
     assert meta7["total_raw"] >= meta7["n_frames"]
 
 
-@pytest.mark.parametrize("detail", ["coarse", "chimerax"])
-def test_md_frames_atomistic_and_surface(generated_md, detail):
+def test_md_frames_atomistic_and_surface(generated_md):
     """Phase 2b: per-frame NAMD heavy atoms + surface for trajectory frame indices,
     in the same wire shapes the player's atomistic/surface paths consume."""
     from backend.core.md_trajectory import md_frames_atomistic, md_frames_surface
@@ -90,11 +89,21 @@ def test_md_frames_atomistic_and_surface(generated_md, detail):
     n_p = sum(1 for a in frame["atoms"] if a["element"] == "P")
     assert n_p > 0
 
-    surf = md_frames_surface(generated_md.psf, segments, generated_md.ref, design, [0], smooth=3, detail=detail)
+    surf = md_frames_surface(generated_md.psf, segments, generated_md.ref, design, [0], smooth=3, detail="coarse")
     assert list(surf.keys()) == ["0"]
     v = surf["0"]
     assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0
     assert len(v["faces"]) > 0 and len(v["faces"]) % 3 == 0
+
+
+def test_oversized_high_resolution_surface_retains_response_budget(generated_md):
+    from backend.core.md_trajectory import md_frames_surface
+    from backend.core.memory_budget import MemoryBudgetExceeded
+
+    segments = [(generated_md.dcd.stem, "md", generated_md.dcd)]
+    with pytest.raises(MemoryBudgetExceeded, match="buffer limit"):
+        md_frames_surface(generated_md.psf, segments, generated_md.ref,
+                          generated_md.design, [0], smooth=3, detail="chimerax")
 
 
 def test_md_rmsf_shape_and_values(generated_md):

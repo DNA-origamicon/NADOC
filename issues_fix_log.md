@@ -18,6 +18,32 @@
 - [x] 10,308 frontend tests passed / 1 skipped; 36 focused tests passed; live UI check passed; 25 smoke checks passed; lint and diff checks passed.
   Source unchanged and scratch cleanup verified. `main.js` LOC delta: 0.
 
+## Full regression follow-up (2026-11-11)
+
+- Synced upstream after committing the existing work. Full `just test` at
+  `12958aee`: 21,492 passed, 8 failed, 26 skipped in 2,510.59 seconds.
+- Corrected four stale test contracts: detached oxDNA workers no longer share
+  the parent test's mocks/thread registry; empty zoom metadata is excluded from
+  the v1 preservation digest; the rebuilt BigO fixture has 24,696 paired FEM
+  sites rather than the former snapshot's 21,168; the high-resolution 6HB
+  surface correctly exceeds the unchanged 128 MiB response budget.
+- Marked the mixed-module CPD display parameter scientific, as required by the
+  existing opt-in policy. Its underlying display-contract failure is not fixed
+  or claimed as validated; ordinary runs now deselect it.
+- Still failing: mrDNA zero-step mean error 0.691 nm (limit 0.10 nm), corner
+  fold 13 clashes (limit 11), and rod generation rejected for DNA/gold overlap.
+  Corner and rod reproduce independently. The mrDNA decoder defect is already
+  documented in `memory/project_mrdna_bead_model.md`; its candidate remains
+  unapproved. No geometry constants, placement, topology, or thresholds changed.
+- Root cause: test expectations lagged current worker, preservation, fixture,
+  and resource contracts. The chain failure is not a supervisor timing race:
+  its in-process mocks never reached the detached worker.
+- Final focused coverage: 50 passed; 1 CPD parameter deselected. Ruff and
+  whitespace checks passed. Remaining owned pytest scratch was removed after
+  checking live process references; compact logs and summary were retained.
+- Evidence: `.development-artifacts/full-test-20261111/`. The full-suite gate
+  remains red; focused validation does not clear the full-suite watermark.
+
 ## ISSUE-182 — Numeric shortcut scope and interrupted temperature edits (2026-11-10)
 
 - [x] User requested number shortcuts disabled in popups and editable fields, and

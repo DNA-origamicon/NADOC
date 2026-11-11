@@ -163,7 +163,20 @@ def test_bigo_periodic_flatten_has_one_fem_component_and_registered_seams():
 
     mesh = build_fem_mesh(flat)
     n_components, _ = _mesh_component_labels(mesh)
-    assert len(mesh.nodes) == 21168
+    # The fixture is now rebuilt through current routing commands rather than
+    # loaded from the former workspace snapshot. Check exact paired-site
+    # coverage independently of that snapshot's obsolete node count.
+    from collections import defaultdict
+    from backend.core.sequences import domain_bp_range
+
+    occupied = defaultdict(set)
+    for strand in flat.strands:
+        for domain in strand.domains:
+            for bp in domain_bp_range(domain):
+                occupied[(domain.helix_id, bp)].add(domain.direction)
+    paired = {key for key, directions in occupied.items() if len(directions) == 2}
+    assert len(mesh.nodes) == len(paired)
+    assert {(node.helix_id, node.global_bp) for node in mesh.nodes} == paired
     assert n_components == 1
 
 
