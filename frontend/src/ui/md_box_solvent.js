@@ -1,7 +1,7 @@
 import './md_box_solvent.css'
 
-export const PREPARATION_KEYS = new Set(['padding_nm','box_mode','box_size_nm','salt_mode','mg_conc_mM','ion_conc_mM','graphene_temperature_K'])
-const DEFAULTS = {sizing:'auto',padding:6,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5,temperature:300}
+export const PREPARATION_KEYS = new Set(['padding_nm','box_mode','box_size_nm','salt_mode','mg_conc_mM','ion_conc_mM'])
+const DEFAULTS = {sizing:'auto',padding:6,x:10,y:10,z:10,salt:'screening',na:0,mg:12.5}
 
 /** Bulk-salt estimate only: excluded molecular volume/counterions require preparation. */
 export function solventNumbers(dimensions, na, mg) {
@@ -50,15 +50,14 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
   const listeners=new Set()
   let committed=null
   let writes=Promise.resolve(),geometry=store?.getState()?.currentGeometry
-  const isPair=()=>!!root.querySelector('#md-two-electrodes-enable')?.checked
   const isCharged=()=>!!root.querySelector('#md-screening-enable')?.checked
+  const isPair=()=>!!root.querySelector('#md-two-electrodes-enable')?.checked
   const read=()=>Object.fromEntries(Object.entries(inputs).map(([k,el])=>[k,el.value]))
   function settings(){
     if(selectedJob && selectedPreparation)return {...selectedPreparation}
     const raw=read(),p={padding_nm:Number(raw.padding),box_mode:raw.sizing==='rotation'?'rotation':'bbox',salt_mode:raw.salt,box_size_nm:null,
       ion_conc_mM:raw.salt==='screening'?0:Number(raw.na),mg_conc_mM:raw.salt==='screening'?12.5:Number(raw.mg)}
     for(const input of Object.values(inputs))if(!input.disabled && (!input.checkValidity() || !input.value.trim()))throw Error('Correct the Box and solvent settings.')
-    if(isCharged() || isPair())p.graphene_temperature_K=Number(raw.temperature)
     if(raw.sizing==='explicit')p.box_size_nm=['x','y','z'].map(k=>Number(raw[k]))
     return p
   }
@@ -88,8 +87,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
         detail={enabled:view.checked,periodicImages:!!periodic?.checked,dimensions: dims,solvent,center:preview.center_nm || [0,0,0],solute:preview.solute_bounds_nm || null,
           padding:preview.padding_nm ?? p.padding_nm,boundary:preview.boundary || 'periodic',normal_axis:preview.normal_axis,
           na:p.ion_conc_mM,mg:p.mg_conc_mM,numbers:solventNumbers(solvent,p.ion_conc_mM,p.mg_conc_mM),
-          temperature:isCharged() || isPair()?Number(inputs.temperature.value):300,
-          temperatureLabel:isCharged() || isPair()?'K':'K target · protocol-controlled',estimated:true}
+          temperature:null,estimated:true}
         if(selectedJob){
           detail={...detail,solute:null,padding:null,estimated:false,source:'Prepared initial box',
             sourceCellCenter:!!jobMeta?.source_cell_center_nm,jobName:selectedJob.design_name,nptAllowed:jobMeta?.npt_allowed !== false,na:null,mg:null,temperature:null,
@@ -109,9 +107,6 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
     inputs.sizing.disabled=inputs.padding.disabled=pair
     for(const k of ['x','y','z'])inputs[k].disabled=pair || !explicit
     inputs.na.disabled=inputs.mg.disabled=inputs.salt.value==='screening'
-    inputs.temperature.disabled=!(isCharged() || pair)
-    if(inputs.temperature.disabled)inputs.temperature.value=300
-    inputs.temperature.title=inputs.temperature.disabled?'Ordinary DNA relaxation targets 300 K; stage temperatures remain controlled by the protocol.':'Target temperature for the surface control.'
     boundary.textContent=selectedJob?(jobMeta?.npt_allowed === false?'Saved fixed-volume periodic cell (NVT).':'Saved periodic cell; dimensions shown are before pressure equilibration.'):pair?'Slab: lateral periodic · normal vacuum padding (3×)':'Periodic on all six faces'
     if(selectedJob)for(const input of Object.values(inputs))input.disabled=true
     if(preview && (selectedJob || pair || !explicit))for(const [i,k] of ['x','y','z'].entries())inputs[k].value=(preview.selected_nm || preview.calculated_nm)[i].toFixed(3)
@@ -149,7 +144,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
         preview=result.box_preview
       }
       calculationWarning=(preview.sizing_notes || []).filter(Boolean).join(' ')
-      status.textContent=isPair()?'Cell dimensions follow Two-electrode settings; salt and temperature are setup intent until qualification.':'New preparation preview — not a saved simulation box. Ion counts estimate added salt; preparation also adds neutralizing ions.'
+      status.textContent=isPair()?'Cell dimensions follow Two-electrode settings; salt is setup intent until qualification.':'New preparation preview — not a saved simulation box. Ion counts estimate added salt; preparation also adds neutralizing ions.'
     }catch(e){if(current===version){calculationWarning=e.message;status.textContent='Box calculation could not finish. Review the warning above.'}}
     finally{if(current===version && !disposed){loading=false;paint()}}
   }
@@ -216,7 +211,7 @@ export function initBoxSolvent({api,store,root=document,saveDraftSettings}={}) {
     selectedJob=null;draftJob=null;selectedPreparation=null;jobMeta=null
     for(const input of Object.values(inputs))input.disabled=false
     const values={...DEFAULTS,padding:p.padding_nm ?? DEFAULTS.padding,sizing:p.box_size_nm?.every(v=>v!=null)?'explicit':p.box_mode || DEFAULTS.sizing,
-      salt:p.salt_mode || DEFAULTS.salt,na:p.ion_conc_mM ?? DEFAULTS.na,mg:p.mg_conc_mM ?? DEFAULTS.mg,temperature:p.graphene_temperature_K ?? DEFAULTS.temperature}
+      salt:p.salt_mode || DEFAULTS.salt,na:p.ion_conc_mM ?? DEFAULTS.na,mg:p.mg_conc_mM ?? DEFAULTS.mg}
     if(p.box_size_nm)for(const [i,k] of ['x','y','z'].entries())values[k]=p.box_size_nm[i] ?? DEFAULTS[k]
     for(const [k,v] of Object.entries(values))inputs[k].value=v
     paint();schedule()

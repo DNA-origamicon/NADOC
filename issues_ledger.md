@@ -30,6 +30,35 @@ files carry all the state a cold session needs.
 
 ---
 
+## ISSUE-182 — Numeric shortcut scope and interrupted temperature edits (2026-11-10)
+
+- [x] User requested number shortcuts disabled in popups and editable fields, and
+  editable NAMD relaxation temperature with the Aksimentiev default.
+- [x] Reproduced missing registry-level popup/focus guards and a pending protocol
+  response replacing a focused temperature input (five failing regressions).
+- [x] Numeric shortcuts now respect open dialogs and focused form/contenteditable
+  controls. Temperature input stays attached across plan refreshes, preserving drafts.
+- The stable live wizard already accepted typed temperatures; the failing hypothesis
+  that relaxation never supports temperature was rejected. Aksimentiev tutorial
+  step3 equilibration files specify 300 K for thermostat and barostat; keep that default.
+- Evidence: `.development-artifacts/wizard-keyboard-20261110/`.
+- [x] 10,272 frontend tests passed / 1 skipped; 115 focused checks passed; live typing/popup checks passed; 25 smoke checks passed; lint and diff checks passed.
+  Source unchanged; browser and smoke scratch cleanup verified. `main.js` LOC delta: 0.
+
+## ISSUE-181 — Wizard numeric defaults and literature integrator (2026-11-10)
+
+- [x] Reproduced in the running app: unstyled NAMD temperature input had a white
+  background with pale text; oxDNA defaults failed native step validation; an
+  untouched literature selection still showed/pinned 4 fs and HMR.
+- [x] User requested standard numeric fields with visible defaults and direct app
+  confirmation. Use shared input styling, valid increments, populated stage editors,
+  and the selected preset's integrator defaults; preserve explicit user overrides.
+- The integrator regression was pinned with a failing unit test before correction.
+  Root cause: `pinnedLadderIntegrator` injected the global fast default before the
+  backend could apply the selected preset. Explicit choices remain authoritative.
+- [x] Frontend: 10,267 passed / 1 skipped; final focused: 260 passed; direct app audit: passed; smoke: 25 passed; lint and diff checks passed.
+- Validation evidence: `.development-artifacts/wizard-numbers-20261110/`.
+
 ## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
 
 - [ ] During inset zoom-button validation, `just smoke` passed 22 checks and

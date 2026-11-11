@@ -17,6 +17,7 @@
  * pre-flight, disk forecast, concurrency confirms). The wizard hands the panel a payload;
  * the panel runs the gates it already runs.
  */
+import { temperatureControl, updateTemperatureControl, namdTemperature, namdTemperatureEdit } from './job_temperature.js'
 import { showWizardJobId } from './job_wizard_identity.js'
 import { createButton, createInput, createSelect, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
@@ -226,9 +227,9 @@ const PRODUCTION_FIELD_DEFS = [
     type: 'number', step: 25, min: -2000, group: 'run',
     help: 'Voltage across the periodic cell, emitted with NAMD eFieldNormalized so cell fluctuations do not change it or add field forces to the pressure.' },
   { key: 'ion_transport_current_stride_ps', requires: 'nanopore', label: 'Current sampling', unit: 'ps',
-    type: 'number', step: 1, min: 0.1, group: 'run',
+    type: 'number', step: 0.1, min: 0.1, group: 'run',
     help: 'Analysis interval recorded in ion_transport.json. The established default is 10 ps; trajectory frames must be at least this frequent for offline analysis.' },
-  { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 1, min: 0.001,
+  { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 0.001, min: 0.001,
     group: 'run',
     help: 'Amount of simulated time to produce. The solvent cell was fixed during preparation; the review step warns if an unrestrained run may rotate beyond the available cell.' },
   { key: 'dcd_freq', label: 'Trajectory interval', unit: 'steps', type: 'number', step: 100, min: 100,
@@ -244,10 +245,10 @@ const PRODUCTION_FIELD_DEFS = [
     group: 'run', check: v => !!v, parse: on => !!on,
     help: 'Intended mainly for small, elongated or plate-like designs—roughly below 500 base pairs—when preventing whole-body rotation permits a substantially smaller solvent box. Larger designs often pay more restraint overhead than they save in water. Internal bending, twisting and breathing remain free. Do not enable it when rotational diffusion is an observable.' },
   { key: 'orientation_force_constant', label: 'Orientation strength', unit: 'kcal/mol',
-    type: 'number', step: 50, min: 0.01, group: 'run',
+    type: 'number', step: 0.01, min: 0.01, group: 'run',
     help: 'Strength of the whole-body orientation restraint. The default is a strong reference value; reduce it only when some rotational freedom is desired. Used only when rotational diffusion is limited.' },
   { key: 'langevin_damping', label: 'Langevin coupling', unit: 'ps⁻¹', type: 'number',
-    step: 0.5, min: 0.01, group: 'run',
+    step: 0.01, min: 0.01, group: 'run',
     help: 'Blank uses 1 ps⁻¹, suitable for production dynamics. Stronger coupling damps motion and can distort diffusion, relaxation times and other time-dependent measurements, although equilibrium averages should remain unchanged.' },
   { key: 'seed', label: 'Random seed', type: 'number', step: 1, min: 1, group: 'run',
     help: ({ continuation }) => (continuation
@@ -650,7 +651,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   /** Wizard-local wrapper for the pure `pinnedLadderIntegrator`: a no-op in production
    *  mode, where `relax_timestep_fs` and its siblings do not apply. */
   function ladderPin() {
-    return state.mode === 'production' ? {} : pinnedLadderIntegrator(state.touched)
+    return state.mode === 'production' ? {} : pinnedLadderIntegrator(state.touched, presets.find(p => p.id === state.presetId)?.defaults)
   }
 
   /** The descriptor for a field key, from whichever list this mode renders. */
@@ -796,7 +797,17 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
 
   // ── Parameter rows ──────────────────────────────────────────────────────────
   function renderFields() {
-    mounts.fields.replaceChildren()
+    // Plan/target responses can arrive during typing. Keep this node attached so
+    // focus, the partial numeric draft, and its caret survive those refreshes.
+    const temperature = mounts.fields.querySelector('.wizard-temperature')
+    for (const child of [...mounts.fields.children]) if (child !== temperature) child.remove()
+    if (temperature) {
+      updateTemperatureControl(temperature, namdTemperature(plan?.stages))
+      temperature.querySelector('input').disabled = readOnly || !namdTemperature(plan?.stages)
+    } else mounts.fields.append(temperatureControl({ value: namdTemperature(plan?.stages), disabled: readOnly || !namdTemperature(plan?.stages),
+      help: 'Target temperature for equilibrated stages. Low-temperature preparation stages retain their schedule; review individual stages in the next tab.',
+      onChange: value => { record(); Object.assign(state, namdTemperatureEdit(state, plan, value)); void loadPlan() },
+    }))
     if (state.mode === 'production') { renderProductionFields(); return }
     if(preparation && !readOnly)mounts.fields.append(el('p',{className:'wizard-help',text:preparation.summary()}))
 
@@ -844,7 +855,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     for (const [i, axis] of ['X', 'Y', 'Z'].entries()) {
       const override = manual[i] != null
       const input = createInput({
-        size: 'sm', type: 'number', min: 0.1, step: 0.1, disabled: readOnly,
+        size: 'sm', type: 'number', min: 0.1, step: 0.001, disabled: readOnly,
         value: override ? String(manual[i]) : (calculated[i] == null ? '' : calculated[i].toFixed(3)),
         onChange: v => {
           const next = [...manual]
@@ -1422,11 +1433,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     if (readOnly) return
     if (td.querySelector('input')) return
     const before = td.textContent
-    const input = el('input', {
-      className: 'wizard-cell__input',
-      attrs: { type: 'text', value: cell.overridden ? cell.value : '' ,
-               placeholder: cell.value, 'aria-label': `${key} on stage ${stageIndex}` },
-    })
+    const initialValue = String(cell.value ?? '')
+    const input = createInput({ size: 'sm', type: 'text', className: 'wizard-cell__input', value: initialValue })
+    input.setAttribute('aria-label', `${key} on stage ${stageIndex}`)
     let done = false
     const finish = (commit) => {
       if (done) return
@@ -1435,7 +1444,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       const current = state.stageOverrides[String(stageIndex)]?.[key]
       // Committing the value that is already there is not an edit: it must not re-plan,
       // and above all it must not consume an undo.
-      if (!commit || next === current) { td.textContent = before; return }
+      if (!commit || input.value === initialValue || next === current) { td.textContent = before; return }
       record()
       state.stageOverrides = setStageOverride(state.stageOverrides, stageIndex, key, next)
       void loadPlan()

@@ -457,17 +457,16 @@ export function fieldAlert(conds) {
  * silently running WITHOUT HMR on a declash design, worse than either the old capped
  * 2 fs or the 4 fs + HMR combination the wizard is actually showing.
  *
- * The timestep default mirrors `CreateJobRequest.fast`'s own server default (True)
- * directly rather than reading a plan response: on the very FIRST request, before any
- * plan has ever loaded, there is no resolved `fast` to read, and treating "no plan yet"
- * as "fast is off" would pin 2 fs, get it echoed straight back as the RESOLVED value on
- * the next call, and never self-correct.
+ * Resolve untouched settings from the selected preset, before the first plan response.
+ * Only a missing preset default falls back to CreateJobRequest.fast (True). Pinning the
+ * generic 4 fs default ahead of preset resolution would override literature's 2 fs/no-HMR
+ * default and make the selected protocol disagree with its own settings and payload.
  */
-export function pinnedLadderIntegrator(touched = {}) {
+export function pinnedLadderIntegrator(touched = {}, presetDefaults = {}) {
   const has = (key) => Object.prototype.hasOwnProperty.call(touched, key)
   const dt = has('relax_timestep_fs')
     ? Number(touched.relax_timestep_fs)
-    : (has('fast') ? !!touched.fast : true) ? 4 : 2
+    : (has('fast') ? !!touched.fast : (presetDefaults.fast ?? true)) ? 4 : 2
   const out = {}
   if (!has('relax_timestep_fs')) out.relax_timestep_fs = dt
   if (!has('relax_rigid_bonds')) out.relax_rigid_bonds = dt <= 1 ? 'none' : 'all'

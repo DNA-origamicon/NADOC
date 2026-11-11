@@ -556,6 +556,25 @@ describe('wizard parameter loading', () => {
     return { promise, resolve }
   }
 
+  it('keeps a temperature draft and focus when a pending plan finishes', async () => {
+    const { wiz, api } = setup()
+    const thermalPlan = { ...PLAN, stages: [{ ...PLAN.stages[1], params: { langevintemp: '300' } }] }
+    api.fetchProtocolPlan.mockResolvedValue(thermalPlan)
+    await wiz.open('relaxation')
+    const pending = deferred()
+    api.fetchProtocolPlan.mockReturnValueOnce(pending.promise)
+    const seed = fieldControl('Random seed');seed.value = '12345';seed.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(api.fetchProtocolPlan).toHaveBeenCalledTimes(2))
+    const input = document.querySelector('[data-job-temperature]')
+    expect(input.disabled).toBe(false);expect(input.value).toBe('300')
+    input.focus();input.value = '293';input.dispatchEvent(new Event('input'))
+    pending.resolve(thermalPlan)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(document.querySelector('[data-job-temperature]')).toBe(input)
+    expect(document.activeElement).toBe(input);expect(input.value).toBe('293')
+    wiz.close()
+  })
+
   it('shows seeds immediately and resolves parameters before geometry', async () => {
     const { wiz, api } = setup()
     const catalog = deferred()

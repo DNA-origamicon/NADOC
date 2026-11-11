@@ -29,7 +29,19 @@ export function isEditableTarget(target) {
   const tag = target.tagName?.toUpperCase()
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
     || target.isContentEditable === true
-    || target.closest?.('[contenteditable="true"]') != null
+    || target.closest?.('[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]') != null
+}
+
+function hasOpenPopup(doc) {
+  return [...(doc?.querySelectorAll('.modal__overlay, .modal-overlay, [role="dialog"], dialog[open], [popover]') || [])].some(popup => {
+    if (popup.hasAttribute('popover') && !popup.matches(':popover-open')) return false
+    for (let node = popup; node; node = node.parentElement) {
+      const style = doc.defaultView?.getComputedStyle(node)
+      if (node.hidden || node.getAttribute('aria-hidden') === 'true'
+          || style?.display === 'none' || style?.visibility === 'hidden') return false
+    }
+    return true
+  })
 }
 
 /**
@@ -78,8 +90,12 @@ export function getShortcuts() {
  * Attach this directly to document.addEventListener('keydown', dispatchKeyEvent).
  */
 export async function dispatchKeyEvent(e) {
-  const inInput    = isEditableTarget(e.target)
+  const doc = e.target?.ownerDocument || globalThis.document
+  const inInput    = isEditableTarget(e.target) || isEditableTarget(doc?.activeElement)
   const ctrlOrMeta = e.ctrlKey || e.metaKey
+  // Number commands belong to the workspace, never to a dialog or text entry.
+  // This is a registry invariant, including registrations without blockedInInput.
+  if (/^[0-9]$/.test(e.key) && (inInput || hasOpenPopup(doc))) return
 
   for (const s of _registry) {
     // Key match (case-insensitive)

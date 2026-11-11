@@ -1,5 +1,37 @@
 # Issues fix log
 
+## ISSUE-182 — Numeric shortcut scope and interrupted temperature edits (2026-11-10)
+
+- [x] User requested number shortcuts disabled in popups and editable fields, and
+  editable NAMD relaxation temperature with the Aksimentiev default.
+- [x] Reproduced missing registry-level popup/focus guards and a pending protocol
+  response replacing a focused temperature input (five failing regressions).
+- [x] Numeric shortcuts now respect open dialogs and focused form/contenteditable
+  controls. Temperature input stays attached across plan refreshes, preserving drafts.
+- The stable live wizard already accepted typed temperatures; the failing hypothesis
+  that relaxation never supports temperature was rejected. Aksimentiev tutorial
+  step3 equilibration files specify 300 K for thermostat and barostat; keep that default.
+- Evidence: `.development-artifacts/wizard-keyboard-20261110/`.
+- [x] 10,272 frontend tests passed / 1 skipped; 115 focused checks passed; live typing/popup checks passed; 25 smoke checks passed; lint and diff checks passed.
+  Source unchanged; browser and smoke scratch cleanup verified. `main.js` LOC delta: 0.
+
+## ISSUE-181 — Wizard numeric defaults and literature integrator (2026-11-10)
+
+User authorized standard numeric fields, visible defaults and direct app checks.
+The app audit found default values present but inconsistent input styling, invalid
+oxDNA step/min grids, placeholder-only stage editors, and a literature integrator
+incorrectly pinned to 4 fs/HMR. Standard controls and valid increments fix presentation;
+prefilled editors preserve no-op blur behavior; preset-aware integrator resolution
+fixes the selected protocol without changing explicit choices or saved jobs.
+
+Root cause: global fast-mode pinning ran before preset resolution, so an automatic
+value became an explicit override. The failing unit regression and app preset audit
+capture that distinction. The initial missing-server-default hypothesis was not
+supported for the literature numeric inputs: the values existed in the plan.
+Frontend: 10,267 passed / 1 skipped; final focused: 260 passed; direct app audit: passed; smoke: 25 passed; lint and diff checks passed.
+Source unchanged and isolated browser/smoke artifacts removed and verified.
+Evidence: `.development-artifacts/wizard-numbers-20261110/`; main.js LOC delta: 0.
+
 ## ISSUE-180 — Square-lattice smoke failure intake (2026-11-10)
 
 Unresolved. Full smoke: 22 passed / 2 skipped / 1 failed; focused retry also

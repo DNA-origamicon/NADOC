@@ -518,6 +518,12 @@ describe('presetSummary', () => {
 })
 
 describe('pinnedLadderIntegrator', () => {
+  it('takes untouched integrator defaults from the selected protocol', () => {
+    expect(pinnedLadderIntegrator({}, { fast: false })).toEqual({ relax_timestep_fs: 2, relax_rigid_bonds: 'all', relax_hmr: false })
+    expect(pinnedLadderIntegrator({}, { fast: true }).relax_timestep_fs).toBe(4)
+    expect(pinnedLadderIntegrator({ relax_timestep_fs: 4 }, { fast: false }).relax_hmr).toBe(true)
+    expect(pinnedLadderIntegrator({ fast: true }, { fast: false }).relax_timestep_fs).toBe(4)
+  })
   it('pins the displayed 4 fs default on a completely untouched wizard', () => {
     // This is the bug: `fast` defaults True server-side, so the dropdown shows 4 fs with
     // NOTHING touched. Without this, that default never reached the request, so a

@@ -19,6 +19,61 @@ Prepared-input evidence and execution guards remain intact; the list no longer
 shows this advisory for expected runtime package changes such as resource reports
 and the minimized settle-restraint reference.
 
+## Job-wizard temperature controls (2026-11-10)
+
+Temperature now lives in the NAMD and oxDNA wizard settings panels (tab 2 for
+new relaxation jobs; production uses its existing run-settings panel), with a
+Kelvin input and Celsius equivalent. The Box and Solvent sidebar no longer owns
+or overrides temperature. Existing defaults remain unchanged until edited.
+
+The shared `frontend/src/ui/job_temperature.js` uses the existing persisted stage
+override paths. NAMD edits target-temperature thermostat/barostat/initialization
+values while retaining colder preparation stages and read-only reseed stages.
+Surface-only/two-electrode preparation retains its native
+`graphene_temperature_K` request path so bulk reference inputs also receive the
+chosen temperature; stale thermal overrides are cleared on this edit. oxDNA
+updates all applicable job stages, including production. Stage tables remain
+individually editable and show the effective temperatures.
+
+Verified 293.15 K (20 °C) in both live wizard flows, with no job creation or
+simulation. Frontend suite: 10,265 passed / 1 skipped; final focused checks:
+86 passed. Isolated smoke: 25 passed; lint passed. Source designs unchanged;
+temporary workspaces, project revisions, caches, reports and bridge credentials
+were removed and verified. Evidence and cleanup verification:
+`.development-artifacts/job-temperature-20261110/`. `main.js` LOC delta: 0.
+
+## Wizard keyboard entry (2026-11-10)
+
+The global shortcut registry blocks number commands while dialogs/popovers are
+open or a form/contenteditable field has focus, including retargeted events.
+The NAMD temperature control remains attached during asynchronous plan refreshes,
+so a pending response does not replace the input or erase an unfinished edit.
+A regression reproduced that failure before the fix. Default relaxation temperature
+remains 300 K, confirmed against the Aksimentiev tutorial's step3 NAMD files
+([source](https://bionano.physics.illinois.edu/node/277)); 293.15 K remains an editable
+experimental choice. Direct live typing of 293.15 K and popup shortcut blocking
+passed, with no job creation. 10,272 frontend tests passed / 1 skipped; 115 focused checks passed; live typing/popup checks passed; 25 smoke checks passed; lint and diff checks passed.
+Source hash unchanged and scratch cleanup verified. `main.js` LOC delta: 0.
+Evidence: `.development-artifacts/wizard-keyboard-20261110/`.
+
+## Wizard numeric defaults (2026-11-10)
+
+NAMD and oxDNA numeric settings use standard input styling, including temperature;
+Kelvin values and Celsius equivalents are readable in tab 2. Stage-cell editors
+start with their current value, and unchanged edits do not create overrides.
+Numeric step increments align with the allowed minima and displayed precision.
+The NAMD integrator pin now reads the selected preset before the first plan:
+untouched literature uses 2 fs and ordinary hydrogen masses, while explicit user
+choices remain authoritative. Previously the global fast default pinned 4 fs/HMR
+before the backend could apply the preset.
+
+Direct app checks covered all six available NAMD presets and oxDNA settings,
+including native numeric validity, populated values, literature plan payloads,
+and stage-editor values. Literature and oxDNA were also visually inspected.
+No jobs were created; the source design hash and scratch cleanup were verified.
+Frontend: 10,267 passed / 1 skipped; final focused: 260 passed; direct app audit: passed; smoke: 25 passed; lint and diff checks passed.
+Evidence: `.development-artifacts/wizard-numbers-20261110/` (ISSUE-181).
+
 ## Topic navigation and current boundaries
 
 Reorganized October 17, 2026. Read the retained contracts here, then only the
