@@ -1,0 +1,337 @@
+{
+  "date": "2026-11-04",
+  "catalog_id": "D003",
+  "status": "reproducible_native_design; approximate_rigid_panel_geometry",
+  "artifact": {
+    "artifact": "workspace/Shared Designs/All Origami/D003/recovered-20261104/D003.nadoc",
+    "sha256": "228649077fff78d3de215326b61fea3a7cc9543b5e2e32063dde7c72cb591442",
+    "size_bytes": 43319483
+  },
+  "reproduce": ".venv/bin/python -m tools.design_archive.shared_pipeline D003 UNIQUE_RUN --pdf experiments/origami_publication_catalog/assets/sources/tilings.pdf",
+  "native_author_reference_used": false,
+  "sources": [
+    {
+      "path": "inputs/2156fa08db34f0ea48f91dfe71daef138118f5027cf7376ff97e2b89cfb970e2.pdf",
+      "sha256": "2156fa08db34f0ea48f91dfe71daef138118f5027cf7376ff97e2b89cfb970e2",
+      "original_sha256": "2156fa08db34f0ea48f91dfe71daef138118f5027cf7376ff97e2b89cfb970e2",
+      "role": "published_figure_and_sequence_tables"
+    },
+    {
+      "path": "inputs/0c34fcb5c913feb5da52a6115ac27951d38b9a86816d7e2901e6216c50ba1fed.txt",
+      "sha256": "0c34fcb5c913feb5da52a6115ac27951d38b9a86816d7e2901e6216c50ba1fed",
+      "original_sha256": "0c34fcb5c913feb5da52a6115ac27951d38b9a86816d7e2901e6216c50ba1fed",
+      "role": "M13mp18_sequence_library"
+    }
+  ],
+  "execution_code": {
+    "commit": "54f271aa93431758bd95af243653fc4deec5352c",
+    "dirty": true,
+    "implementation_sha256": {
+      "tools/design_archive/shared_pipeline.py": "4ec36a059e9419456feb13a2a96a471b26e379913367f452896a52265d8a9d92",
+      "tools/design_archive/recorded_authoring.py": "64ff56c4dd972c72d33a8137587b045448d980c9cfb5363c26cfd35ada4a0dbb",
+      "tools/design_archive/image_sequence_evidence.py": "1952bc5748b9f994ea63fae7dfae63a15fad7d23258f741b9e82162e270df7b7",
+      "tools/design_archive/import_d003_figure.py": "f74e69f7f0cdff877affbbeddab1384dfb4557eb08922ef7c15235fc13120d50",
+      "tools/design_archive/d003_recipe.py": "132247e045cf0fcad936bcad3fb2d63cc6f22031f27f8e086842f10592a940b9",
+      "tools/design_archive/d003_audit.py": "aa8e88b5031fbe3a0c90f823591ad98427a036085da669cc41ff505611552164",
+      "tools/design_archive/rigid_fit_audit.py": "2a7f28145c8c2920159502eb8d9d974a0e9b3d6340d595a06806052c70d594d9",
+      "tools/design_archive/relax_d003_clashes.py": "37aeb332a6b380d47eaa10abfc1684322f5947b16ce1477127f26c5599616397",
+      "scripts/agent_structure_guard.py": "1a1fcec76a10455637f7ba0c3368060e62aed1498a25725b29fe2c77f8dd5b88",
+      "experiments/recorded_review_process.py": "6663f0ff2f49f173d8f896a74a80357c6e0bb9f8190c03447f10af5ff48dcffc",
+      "backend/api/feature_recording.py": "46bec23d5d0c1b279829e90f125167ba8f996949914f18107b05233f75751cf9",
+      "backend/api/part_import_relaxation.py": "48bddf15b95c19a30d02eae95accedd0d2229797f21b6fb37ceebcbcf14ecce5",
+      "backend/api/part_proof_commands.py": "6b0efaab35bc25a8b19e322f9b6e274fe3d8ceab22a63490c08f491da7668486",
+      "backend/api/part_cell_commands.py": "aa2cef167e50ef5885d860ad2d795aab05d67a091b3cc3adce8802f4ccd4eb72",
+      "backend/api/part_structural_commands.py": "8854012596f6d5638b39cf1a2b64e6a2568bc23f377ade868ade1f210d1c4abf",
+      "backend/api/part_native_commands.py": "1e9d6be1a7a8130327eef9beee19a604ff236b5289f08de3763e9da63dab5de2",
+      "backend/core/part_overlay_commands.py": "189f646d6fe672cde48132e4d84f1426037a8b1dd0409875cbf11fd88e385179",
+      "backend/api/part_ligation_commands.py": "ce9e6705f83e2a04a3c05dbd5733f6ae884b28105cbe852f823cd1a21290d874",
+      "backend/core/cluster_autodetect.py": "55c31f8e6b69bbbde07ba595dbc427f715d291ff05d059101b266bacf4de5dc4",
+      "backend/core/origami_relax.py": "ed625583ced7b4c18c658eefd9ec46aa27c3bc6eb892e1069125b3528ec61054"
+    }
+  },
+  "reconstruction": {
+    "scaffold_offset_0based": 1515,
+    "scaffold_length": 7249,
+    "sequence_rows_matched": 210,
+    "bridge_junctions": 40,
+    "bridge_bases": 226,
+    "non_poly_t_bridges": [
+      {
+        "name": "Bri-T1R07C2",
+        "junction": 1,
+        "sequence": "ATTTTT"
+      }
+    ],
+    "register_anchor_votes": [
+      [
+        1515,
+        128
+      ],
+      [
+        1500,
+        2
+      ],
+      [
+        5681,
+        1
+      ],
+      [
+        1413,
+        1
+      ],
+      [
+        5579,
+        1
+      ]
+    ],
+    "sequence_mapping_validated": true,
+    "directed_routes_checked": 211,
+    "connections_checked": 461,
+    "deletions_checked": 120,
+    "total_nucleotides_including_junction_bases": 14281,
+    "oxdna_topology_particles": 14281,
+    "oxdna_topology_sequences_and_bonds": "verified",
+    "native_validation_checks_passed": 216,
+    "figure_and_sequence_equivalence": "verified"
+  },
+  "native_history": {
+    "status": "verified",
+    "commands": 1692,
+    "physical_reference_checked": true,
+    "recovery_snapshots_used": false
+  },
+  "native_commands": {
+    "helix-add-at-cell": 88,
+    "helix-update": 88,
+    "loop-skip-insert": 120,
+    "strand-add": 672,
+    "crossover-place": 386,
+    "forced-ligation-create": 75,
+    "strand-sequence": 211,
+    "forced-ligation-extra-bases": 40,
+    "cluster_create": 4,
+    "cluster_op": 8
+  },
+  "reliability": {
+    "independent_builds": 2,
+    "authoring_fields_equal": {
+      "helices": true,
+      "strands": true,
+      "crossovers": true,
+      "forced_ligations": true,
+      "deformations": true
+    },
+    "maximum_pose_parameter_difference": 0.0,
+    "full_replay_seconds": 25.55064809399846
+  },
+  "folded_geometry": {
+    "cluster_sizes": [
+      22,
+      22,
+      22,
+      22
+    ],
+    "fit": {
+      "method": "backbone bond fit between rigid clusters with planar body clearance",
+      "planar": true,
+      "helix_count": 88,
+      "rigid_bundle_sizes": [
+        22,
+        22,
+        22,
+        22
+      ],
+      "bond_count": 43,
+      "internal_bond_count": 418,
+      "evaluations": 136,
+      "optimizer_converged": true,
+      "message": "Optimization terminated successfully",
+      "before": {
+        "max_excess_nm": 247.96152704144149,
+        "rms_bond_error_nm": 112.1537361865996,
+        "stretched_bonds": 43
+      },
+      "after": {
+        "max_excess_nm": 6.709074801552374,
+        "rms_bond_error_nm": 3.9343724564219724,
+        "stretched_bonds": 43
+      },
+      "limitations": "Local geometric fit, no simulation or base-pair energy. Clearance uses conservative helix-axis convex envelopes expanded by helix radius; it is not an atomistic clash test and does not repair internal body clashes. All geometry within each cluster is fixed.",
+      "clashes": {
+        "before": {
+          "overlapping_body_pairs": 0,
+          "minimum_axis_envelope_gap_nm": 2.9999999999999716,
+          "required_gap_nm": 2.05,
+          "max_clearance_deficit_nm": 0.0
+        },
+        "after": {
+          "overlapping_body_pairs": 0,
+          "minimum_axis_envelope_gap_nm": 2.049999999675819,
+          "required_gap_nm": 2.05,
+          "max_clearance_deficit_nm": 3.241806822984472e-10
+        }
+      },
+      "status": "applied"
+    },
+    "clearance": {
+      "interbody_helix_pairs_below_2nm": 0,
+      "minimum_interbody_axis_distance_nm": 2.050355546213199,
+      "interbody_backbone_pairs_below_0_5nm": 0
+    },
+    "largest_nonrigid_displacement_nm": 3.53169046557459e-13
+  },
+  "simulation_ready": false,
+  "simulation_run": false,
+  "profile_specific_inputs": [
+    "Fig.S71, Table S2, unextended stacking edges from Table S4.",
+    "Supplement p7 specifies 3 nm helix spacing; preserve the native B-DNA phase and rise constants.",
+    "Printed row names T1\u2013T4 map to consecutive groups of 22 helices; C sorts start positions.",
+    "Upper/lower rail polarity and square register are independently checked with sequences.",
+    "M13 represented with the figure nick; its circular closure is a biological convention.",
+    "Short scaffold loops retain their drawn unpaired helical sites; no invented atomic loop geometry."
+  ],
+  "general_pipeline_gaps": [
+    "Vector PDF decoder needs selected figure/table pages, crop, palette, symbol interpretation and rail polarity; raster images are not supported by this profile.",
+    "Staple identity mapping uses this publication's T/R/C naming convention and the selected unextended stacking-edge variant.",
+    "M13mp18 identity comes from the publication; exact scaffold sequence comes from the pinned local sequence library. Register 1515 is sequence-inferred.",
+    "The supplement Methods specifies 3 nm helix spacing; this is evidence beyond images and sequence tables alone.",
+    "Bri-T1R07C2 retains the exact ATTTTT junction remainder at its drawn endpoints; no topology correction inferred from analogous bridges.",
+    "The circular biological scaffold is represented at the nick shown by the figure; no inferred closure is added.",
+    "443 unpaired scaffold bases remain at their drawn helical sites. Rigid cluster fitting cannot relax those internal single-stranded paths, leaving max junction excess 6.709 nm. Native topology export is validated; an equilibrated conformation is not.",
+    "Other catalog profiles remain blocked before native publication when mapping or native operations are unresolved."
+  ],
+  "development_changes": [
+    "Combine Table S2 and Table S4 to resolve the apparent 166/210 staple mismatch.",
+    "Compile image-derived routes into native editor commands; assign domain sequence separately from explicit junction bases.",
+    "Version helix-update to preserve untouched lattice/frame, indels and twist; retain legacy v1 replay.",
+    "Avoid serializing discarded history recovery caches during independent replay without changing command execution or final comparison.",
+    "Store only the generated .nadoc in Shared Designs; preserve sources, recipes and diagnostic reports outside the workspace."
+  ],
+  "validation": {
+    "focused": {
+      "tests/test_d003_recovery.py": 5,
+      "tests/test_shared_origami_pipeline.py": 11,
+      "tests/test_agent_structure_guard.py": 20,
+      "tests/test_native_routing_proof.py": 35,
+      "tests/test_group_creation_v2.py": 24
+    },
+    "backend_smart": {
+      "decision": "FAST",
+      "passed": 20601,
+      "failed": 7,
+      "skipped": 19,
+      "pytest_seconds": 554.04,
+      "failure_ids": [
+        "tests/test_group_creation_v2.py::test_capabilities_advertise_local_group_versions_without_global_upgrade",
+        "tests/test_part_transform_frontend_contract.py::test_actual_complete_native_packet_is_accepted_by_frontend[cpd]",
+        "tests/test_job_archive.py::TestRoutes::test_fs_listdir_and_mkdir",
+        "tests/test_native_auto_proof.py::test_auto_commands_and_upstream_length_edit[crossover]",
+        "tests/test_fs_navigation.py::test_windows_path_is_translated_without_shell",
+        "tests/test_fs_navigation.py::test_directory_picker_preserves_order_hidden_and_symlink_rules",
+        "tests/test_fs_navigation.py::test_directory_picker_status_and_unreadable_entries"
+      ],
+      "followup": {
+        "capabilities": "Expected map updated for the explicit helix-update v2 capability; all 24 group-version tests pass.",
+        "auto_crossover_proof": "Broad synchronous verification timeout; isolated unchanged test passes (0.15 seconds call).",
+        "remaining_unrelated_failures": "Four unavailable /mnt/f filesystem enumeration cases and the previously recorded CPD frontend display contract.",
+        "broad_run_repeated": false
+      },
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "log": ".development-artifacts/d003-recovery/test-smart.log"
+    },
+    "main_js_loc_delta": 0,
+    "ruff_changed_backend_pipeline_tests": "passed",
+    "git_diff_check": "passed",
+    "timing_triage": {
+      "isolated": [
+        {
+          "nodeid": "tests/test_extrusion_auto_routing_history.py::test_resize_routed_six_helix_bundle[auto-scaffold-seamless]",
+          "broad_call_seconds": 5.41,
+          "isolated_call_seconds": 4.51,
+          "status": "passed",
+          "cause": "Native scaffold/staple rerouting, two length edits, replay and undo/redo; critical topology invariant, below budget in isolation."
+        },
+        {
+          "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+          "broad_call_seconds": 5.16,
+          "isolated_call_seconds": 3.77,
+          "status": "passed",
+          "cause": "Generated branch construction/edit/undo and two cold verification workers; critical replay coverage, below budget in isolation."
+        },
+        {
+          "nodeid": "tests/test_headless_oxdna_build.py::test_build_field_specimen_is_field_ready",
+          "broad_call_seconds": 5.0,
+          "isolated_call_seconds": 3.32,
+          "status": "passed",
+          "cause": "Serialized native export/job lifecycle and two mock field phases. OXDNA_BIN is a temporary Python fixture, not a scientific engine; below budget in isolation."
+        }
+      ],
+      "guards_and_classifications_changed": false,
+      "report": ".development-artifacts/d003-recovery/timing-triage.json"
+    },
+    "focused_passes_total": 95,
+    "additional_isolated_diagnostic_passes": 4
+  },
+  "retained_development_evidence": ".development-artifacts/all-origami/runs/D003/recovered-20261104",
+  "relocation_manifest": ".development-artifacts/all-origami/previous-runs/relocation.json",
+  "cleanup": {
+    "removed_files": 15,
+    "removed_bytes": 119763751,
+    "active_references_before_cleanup": [],
+    "dependency_check": "No maintained code, current run recipe or current run report references these temporary paths. Final part replays independently.",
+    "visual_review": "Inspected source figure, bridge detail and saved 3 nm probe native-backbone projection. Four distinct planar panels with trimmed outer corners; junction gaps remain visible. Final part molecular fields and fitted poses exactly equal that independently built probe. This is not an equilibrated conformation.",
+    "retained": "Final Shared Designs part; exact source inputs; maintained pipeline and fixture; complete final recipe/run report; compact failed and successful fit reports; replay, sequence and topology audits. Historical relocated evidence preserved with original hashes.",
+    "verified_no_disposable_files_remain": true,
+    "manifest": ".development-artifacts/d003-recovery/cleanup.json"
+  },
+  "catalog": {
+    "published_preview_hashes_verified": 32,
+    "local_image_links_checked": {
+      "catalog.html": 32,
+      "structure_map.html": 32
+    },
+    "D003_qualification_updated": true
+  },
+  "iterations": [
+    {
+      "step": 1,
+      "result": "blocked",
+      "finding": "Initial 166-row extraction missed the separate 44-row Table S4; corrected source selection recovers 210 staples."
+    },
+    {
+      "step": 2,
+      "result": "authoring_refused",
+      "finding": "Full published sequence cannot be assigned to strand.sequence when it includes junction inserts. Record domain sequence and junction bases through their respective native operations."
+    },
+    {
+      "step": 3,
+      "helix_pitch_nm": 2.25,
+      "optimizer_converged": false,
+      "after": {
+        "max_excess_nm": 13.369374343631154,
+        "rms_bond_error_nm": 6.987442567613734,
+        "stretched_bonds": 43
+      },
+      "report": ".development-artifacts/d003-recovery/fit-report.json",
+      "note": "Source Methods specifies 3 nm. Rigid fitting still cannot relax single-stranded internal paths."
+    },
+    {
+      "step": 4,
+      "helix_pitch_nm": 3.0,
+      "optimizer_converged": true,
+      "after": {
+        "max_excess_nm": 6.709074801552374,
+        "rms_bond_error_nm": 3.9343724564219724,
+        "stretched_bonds": 43
+      },
+      "report": ".development-artifacts/d003-recovery/spacing-fit-report.json",
+      "note": "Source Methods specifies 3 nm. Rigid fitting still cannot relax single-stranded internal paths."
+    },
+    {
+      "step": 5,
+      "result": "published_for_review",
+      "finding": "Fresh end-to-end PDF build exactly matches the independent 3 nm build in molecular data and fitted poses; ordinary load and all 1692 commands independently replay."
+    }
+  ],
+  "final_implementation_and_artifact_hashes_rechecked": true
+}

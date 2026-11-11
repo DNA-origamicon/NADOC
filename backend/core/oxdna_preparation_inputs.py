@@ -32,7 +32,7 @@ _EMPTY_FAMILIES = (
 _LIST_FIELDS = frozenset({
     "dimensions", "lattice_frames", "helices", "strands", "deformations", "cluster_transforms",
     "nucleotide_transforms", "cluster_joints", "overhangs", "staple_groups", "representation_overrides",
-    "view_volumes", "annotations", "crossovers", "crossover_constraints", "forced_ligations",
+    "view_volumes", "zoom_volumes", "annotations", "crossovers", "crossover_constraints", "forced_ligations",
     "camera_poses", "animations", "chain_sim_projects", "loadouts", "feature_log", *_EMPTY_FAMILIES,
 })
 

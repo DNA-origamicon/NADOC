@@ -16,6 +16,8 @@ def preserve_document_state(source, candidate):
         for name, role in FIELD_ROLES.items()
         if role in {"presentation", "physical", "document_identity"}
     }
+    from backend.core.presentation_checkpoints import restore_history_channels
+    preserved.update(restore_history_channels(source, candidate))
     # Semantic document intent survives geometry regeneration and history seeks.
     preserved['document_history'] = source.document_history
     document_keys = {key for event in source.document_history

@@ -5,6 +5,22 @@ import os
 from backend.core.workspace_listing import list_workspace_entries
 
 
+def test_nested_git_workspace_is_visible_without_scanning_metadata(tmp_path, monkeypatch):
+    for name in ("Shared Designs/.git/objects", "Shared Designs/parts"):
+        (tmp_path / name).mkdir(parents=True)
+    (tmp_path / "Shared Designs/parts/example.nadoc").touch()
+    original = os.scandir
+
+    def checked_scan(path):
+        assert ".git" not in os.fspath(path).split(os.sep)
+        return original(path)
+
+    monkeypatch.setattr(os, "scandir", checked_scan)
+    assert {entry["path"] for entry in list_workspace_entries(tmp_path)} == {
+        "Shared Designs", "Shared Designs/parts", "Shared Designs/parts/example.nadoc",
+    }
+
+
 def test_validation_keeps_documents_and_ancestors_but_not_result_folders(tmp_path):
     for name in (
         "validation/campaign/deep/part.nadoc",

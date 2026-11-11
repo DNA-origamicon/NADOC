@@ -1,0 +1,10 @@
+/* Canonical controls remain addressable in the editor, without taking viewport
+   space. Their controllers, delegated events and document ownership stay intact. */
+body.sidebars-undocked :is(#left-panel, #right-panel, #left-tab-strip, #right-tab-strip) {
+  position: fixed !important;
+  left: -30000px !important;
+  top: 0 !important;
+  height: 100vh !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

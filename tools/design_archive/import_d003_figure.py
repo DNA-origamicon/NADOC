@@ -14,6 +14,11 @@ import pymupdf
 
 
 def derive(pdf, output):
+    output = Path(output)
+    names = ('figure-derived.cadnano.json', 'registered.cadnano.json',
+             'image-only-register-hypotheses.json', 'provenance.json')
+    if any((output / name).exists() for name in names):
+        raise FileExistsError('Preserve existing extraction evidence; select a new run directory')
     output.mkdir(parents=True, exist_ok=True)
     source = Path(pdf).read_bytes()
     with pymupdf.open(stream=source, filetype="pdf") as doc:
@@ -219,6 +224,23 @@ def derive(pdf, output):
         }
         (output / "figure-derived.cadnano.json").write_text(json.dumps(draft, indent=2))
         provenance = {
+            "extractor_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "process": [
+                "Select PDF page 81 and helix labels in the declared x interval",
+                "Select colored routing strokes inside the figure crop",
+                "Fit base pitch from deletion marks and straight stroke endpoints",
+                "Classify rails, trace directed lines/crossover curves, reject conflicting links",
+                "Extract deletion/insertion marks and emit the image-derived graph",
+                "Score all 32 square-register translations; require a unique winner and 90 percent support",
+            ],
+            "case_specific_selections": {
+                "helix_label_x_interval": [175, 187], "helix_labels": [0, 87],
+                "stroke_bounds": {"x0_gt": 190, "y0_gt": 108, "y1_lt": 670},
+                "scaffold_rgb": [0, 0.4, 0.8], "color_tolerance": 0.02,
+                "grid_fit_tolerance_bp": 0.05,
+                "rail_direction_rule": "upper forward; lower reverse",
+                "slice_rule": "one column; cell (printed helix label, 0)",
+            },
             "source_sha256": hashlib.sha256(source).hexdigest(),
             "source_page": 81,
             "source_pdf": str(pdf),

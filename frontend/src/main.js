@@ -1,3 +1,4 @@
+import { initDetachedSidebars } from './ui/detached_sidebars.js'
 import { initRecordLauncher } from './ui/record_launcher.js'
 import { dnaSilhouetteEntries } from './scene/annotation_targets.js'
 import { openVRSweepEdit } from './scene/vr_sweep_edit.js'
@@ -5811,6 +5812,8 @@ async function main() {
     photoMode: _photoMode,
     animPanel,
   })
+
+  initDetachedSidebars({ store, left: _leftSidebar, right: rightSidebar })
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the

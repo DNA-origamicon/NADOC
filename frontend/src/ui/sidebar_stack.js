@@ -1,4 +1,5 @@
 import './sidebar_stack.css'
+import { mountDetachedControlView } from './detached_control_view.js'
 /** Shared-state columns for either edge of the workspace. */
 import { createSharedPanelViews, enableSharedPanelStyles } from './shared_panel_views.js'
 import { sidebarBudget, fitSidebarWidths, MIN_SIDEBAR_WIDTH, DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_WORKSPACE_WIDTH } from './sidebar_stack_layout.js'
@@ -36,6 +37,7 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
   notice.hidden = true
   strip.append(notice)
   let noticeTimer = null
+  let detached = false
   let activeTab = defaultTab
   let collapsed = defaultCollapsed
   let serial = 0
@@ -134,7 +136,7 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
   function add(type, requested = DEFAULT_SIDEBAR_WIDTH, notify = true) {
     if (!shared[type] || !allowed(type)) return false
     const remaining = budget() - total()
-    if (remaining < MIN_SIDEBAR_WIDTH) {
+    if (!detached && remaining < MIN_SIDEBAR_WIDTH) {
       if (notify) inform('No room for another sidebar. Close or narrow a panel first.')
       return false
     }
@@ -169,6 +171,7 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
     return true
   }
   function reconcile() {
+    if (detached) { changed(); return }
     const fitted = fitSidebarWidths(instances.map(item => item.width), budget())
     const removed = instances.slice(fitted.length)
     for (const item of removed) close(item.id, false)
@@ -202,6 +205,9 @@ export function initSidebarStack({ side, labels, panePrefix, defaultTab, default
   if (opposite) observer?.observe(opposite)
   const controller = {
     setActiveTab, selectTab, toggleCollapsed, close,
+    setDetached(value) { detached = value; if (value) changed(); else reconcile() },
+    mountDetached(type, host, options) { return mountDetachedControlView(panes[type], host, options) },
+    getLabel: type => labels[type] + titleSuffix(type),
     getActiveTab: () => activeTab,
     getOpenPanels: () => instances.map(item => item.type),
     getInstances: () => instances.map(({ id, type, width }) => ({ id, type, width })),

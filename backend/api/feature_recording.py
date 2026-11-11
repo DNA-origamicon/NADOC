@@ -139,7 +139,9 @@ def record_minor(session, op_subtype, label, params, fn):
     from backend.api.part_proof_commands import PROOF_MINOR_KINDS, PROOF_VERSION
 
     if op_subtype in PROOF_MINOR_KINDS:
-        params = {**params, "_proof_version": PROOF_VERSION}
+        from backend.api.part_structural_commands import HELIX_UPDATE_VERSION
+        version = HELIX_UPDATE_VERSION if op_subtype == 'helix-update' else PROOF_VERSION
+        params = {**params, "_proof_version": version}
 
     with _transaction(session, state) as before:
         # Fine Routing commands record the positions they act on (version 2), so

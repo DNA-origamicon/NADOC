@@ -8,7 +8,7 @@ Each left rail click appends another full-height sidebar from left to right, inc
 
 New panels are refused when the available width cannot accommodate their minimum width. A 320px viewport reserve and the opposite sidebar stack/strips are excluded from that budget. Resizing is clamped; on window shrink, columns narrow before excess newest columns are closed with a notice. Closing/hiding controls never turns lighting or playback off. Left layout preferences migrate from v1/v2 to v3; right preferences migrate from v1 to v2 and retain duplicate types and individual widths.
 
-Detached browser controls were requested as an assessment only. See `docs/detached_controls_feasibility.md`; no popup UI is implemented.
+Detached browser controls are implemented as of 2026-11-11. View → Un/dock sidebars opens one controls window bound to its originating editor. See `docs/detached_controls_feasibility.md` for the implementation and validation scope.
 
 The original staged scope below remains, but its stage-1 accordion layout is superseded by this revision.
 
@@ -102,7 +102,7 @@ individual widths, scrolling and close buttons; copies share their original
 controllers. Opening another right column leaves Dimensions active while
 Properties remains open. Contextual Primitives/Orientation controls live in
 Properties and reveal it when activated. Assembly columns are removed on exit
-from assembly mode. Detached controls remain unimplemented.
+from assembly mode. Detached controls subsequently shipped through View → Un/dock sidebars (2026-11-11).
 
 Verification: 403 frontend files / 6,307 tests passed; production build and lint
 passed. Both generated-design browser stack tests passed and their screenshots

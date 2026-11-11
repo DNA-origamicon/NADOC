@@ -119,39 +119,32 @@ def test_unsupported_relaxation_keeps_valid_import(session, monkeypatch, format)
     assert len(state.get_or_404().helices) == 2
 
 
-def test_image_workflow_preserves_original_and_refuses_overwrite(tmp_path):
+def test_image_workflow_refuses_history_free_publication_and_preserves_existing_files(tmp_path):
     from tools.design_archive.relax_image_import import write_relaxed_image_import
+    from experiments.recorded_review_process import ProcessRequired
 
-    report = write_relaxed_image_import(cadnano_source(), tmp_path)
-    assert report["status"] == "applied"
-    original = Design.model_validate_json(
-        (tmp_path / "image_imported.nadoc").read_text()
-    )
-    relaxed = Design.model_validate_json((tmp_path / "image_relaxed.nadoc").read_text())
-    assert original.id != relaxed.id
-    for field in ("helices", "strands", "crossovers", "forced_ligations"):
-        assert getattr(original, field) == getattr(relaxed, field)
-    assert (
-        json.loads((tmp_path / "image_relaxation.json").read_text())["relaxation"]
-        == report
-    )
-    before = (tmp_path / "image_relaxed.nadoc").read_bytes()
-    with pytest.raises(FileExistsError):
+    # Existing arbitrary evidence must remain byte-identical; no molecular fixture
+    # is manufactured to test this pre-authoring admission gate.
+    existing = tmp_path / "existing-evidence.txt"
+    existing.write_text("preserve")
+    with pytest.raises(ProcessRequired, match="native construction recipe"):
         write_relaxed_image_import(cadnano_source(), tmp_path)
-    assert (tmp_path / "image_relaxed.nadoc").read_bytes() == before
+    assert existing.read_text() == "preserve"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [existing.name]
 
 
-def test_image_workflow_retains_import_when_solver_skips(tmp_path, monkeypatch):
+def test_image_workflow_refuses_before_solver_without_a_native_recipe(tmp_path, monkeypatch):
     from tools.design_archive.relax_image_import import write_relaxed_image_import
     from backend.core import import_relaxation
+    from experiments.recorded_review_process import ProcessRequired
 
-    def unsupported(*args, **kwargs):
-        raise ValueError("Only one rigid cluster")
+    def forbidden(*args, **kwargs):
+        raise AssertionError("A missing native construction history must stop before fitting")
 
-    monkeypatch.setattr(import_relaxation, "relax_origami", unsupported)
-    assert write_relaxed_image_import(cadnano_source(), tmp_path)["status"] == "skipped"
-    assert (tmp_path / "image_imported.nadoc").exists()
-    assert not (tmp_path / "image_relaxed.nadoc").exists()
+    monkeypatch.setattr(import_relaxation, "relax_origami", forbidden)
+    with pytest.raises(ProcessRequired, match="AGENT_PROCESS_REQUIRED"):
+        write_relaxed_image_import(cadnano_source(), tmp_path)
+    assert not list(tmp_path.iterdir())
 
 
 def test_recorded_import_fit_failure_keeps_active_document(session, monkeypatch):

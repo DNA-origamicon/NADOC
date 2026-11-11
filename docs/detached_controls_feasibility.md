@@ -1,6 +1,52 @@
 # Detached controls: feasibility assessment
 
-Assessment only; no detached-window feature is implemented.
+## Implemented: 2026-11-11
+
+View → **Un/dock sidebars** opens one dedicated browser window containing the
+currently expanded left/right columns and their tab rails. Each column receives
+an equal share of the available width; a 12px gap separates the sides. Tab clicks
+add columns without the docked viewport-width limit. The popup has a close button
+and no NADOC menu bar. Closing it, or toggling the menu again, restores docking
+and applies the normal docked capacity rules.
+
+`ui/detached_sidebars.js` owns the window lifecycle. `detached_control_view.js`
+mirrors controls and forwards input to their existing owner-document nodes;
+`detached_overlays.js` mirrors dialogs and context menus. Canonical controls stay
+in the primary document so existing controllers, ID lookups, undo/history,
+selection, jobs, and API targeting remain authoritative. Repeated views have
+unique control IDs and local label/radio associations. Pointer capture and
+ancestor coordinate queries use the remote controls during event dispatch.
+
+The popup is created with a fresh `_blank` target. Authority consists only of
+direct references captured from its originating editor, guarded by the exact
+child Window/Document identity and active-session state. There is no cross-tab
+channel, discovery, API client, or second editor in the controls window. Local
+and Tailscale origins cannot attach controls to one another. Navigation or
+closure of the popup releases its controls and restores docking.
+
+Closing a part or assembly session leaves the popup blank with **the session was
+closed**. Opening another session in the same editor repopulates it. Closing or
+navigating away from the editor leaves the placeholder; reloading an editor does
+not reconnect an old popup automatically. A blocked popup leaves docking intact
+and asks the user to allow popups for that origin. Browser chrome and physical
+monitor placement remain under browser/OS control.
+
+Automated coverage lives in `ui/detached_sidebars.test.js` and
+`e2e/detached_sidebars.spec.js`. Validation: the full frontend suite passed (909 files, 10,315 passed / one
+skipped), followed by focused regression checks for the final input/lifecycle
+refinements. Both Chromium scenarios passed, including a real trajectory-slider
+widget without a simulation job, part/assembly session replacement, popup
+navigation, owner isolation, and closing the popup after its owner closes.
+`just smoke` passed 23 checks with two normally skipped experimental checks;
+`just lint` passed. Temporary workspaces, test designs, bridge credentials and
+browser artifacts were removed. `main.js` gained three lines of import/wiring.
+Physical multi-monitor usability and long-running simulation/animation
+interaction remain manual checks (MV-60). Presentation
+viewport mirrors are outside this implementation.
+
+## Original assessment (historical)
+
+The following assessment preceded the implementation above.
 
 ## Conclusion
 
