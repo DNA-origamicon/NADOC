@@ -1,5 +1,11 @@
 # Issues fix log
 
+## ISSUE-180 — Square-lattice smoke failure intake (2026-11-10)
+
+Unresolved. Full smoke: 22 passed / 2 skipped / 1 failed; focused retry also
+failed (`capturedBody?.lattice_type` undefined). Root cause not established.
+Inset zoom app regression and frontend suite pass; no New Part code changed.
+
 ## ISSUE-177 — Complete junction sequence display and default picking (2026-11-04)
 
 Root cause: separate consumers treated domain sequences and backbone meshes as

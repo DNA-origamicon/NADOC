@@ -30,6 +30,15 @@ files carry all the state a cold session needs.
 
 ---
 
+## ISSUE-180 — Square-lattice smoke request assertion fails (2026-11-10)
+
+- [ ] During inset zoom-button validation, `just smoke` passed 22 checks and
+  skipped two, but `smoke.spec.js:180` expected captured `lattice_type` SQUARE
+  and received undefined. The focused rerun reproduces the failure.
+- The test waits a fixed 500 ms after submitting New Part. Root cause is not
+  established; investigate request capture and the New Part submission path.
+  No changes to that path were made for inset zoom controls.
+
 ## ISSUE-177 — Junction bases missing from spreadsheet and default drill (2026-11-04)
 
 - [x] D003's forced-ligation inserts were absent from both strand spreadsheets;

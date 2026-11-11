@@ -52,3 +52,25 @@
   animation: zoom-volume-spin .8s linear infinite;
 }
 @keyframes zoom-volume-spin { to { transform: rotate(360deg); } }
+
+#zoom-volume-zoom-controls {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+}
+#zoom-volume-zoom-controls[hidden] { display: none; }
+#zoom-volume-zoom-controls button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #67c5ff;
+  border-radius: 4px;
+  background: #243344;
+  color: #e5f4ff;
+  font-size: 22px;
+  cursor: pointer;
+}
+#zoom-volume-zoom-controls button:hover { background: #354b63; }
+#zoom-volume-zoom-controls button:focus-visible { outline: 2px solid #e5f4ff; outline-offset: 2px; }
+#zoom-volume-zoom-controls button:disabled { opacity: .45; cursor: default; }

@@ -20,6 +20,19 @@ or authorization; current user instructions and `CLAUDE.md` take precedence.
 
 Production promotion remains deferred where native qualification failed or plateau criteria remain false. The electrode/PEG evidence and current-state details below retain those limits. Focused development checks are authorized by the task; broad suites and scientific campaigns follow current [repository policy](../CLAUDE.md), superseding the older blanket heavy-test sentence in the retained invariants.
 
+## Zoom Volume inset magnification (2026-11-10)
+
+The +/− pair beside the inset changes its camera magnification in 1.25× steps
+(±8 steps from the automatic fit). Controls follow the inset on the side with
+more viewport room and hide with it. Magnification persists across rotation,
+playback, resizing and representation rebuilds; Clear/document changes reset it.
+The main camera and selected volume bounds are unchanged. `main.js` LOC delta: 0.
+Validation: frontend 10,256 passed / 1 skipped; inset browser regression and lint
+passed. Smoke: 22 passed / 2 skipped / 1 failed in the unrelated Square-lattice
+New Part request assertion; isolated rerun also fails (tracked in issues ledger).
+Test parts, revision stores, playback scratch, reports and bridge credentials
+were cleaned and checked after validation.
+
 ## Zoom Volume trajectory synchronization (2026-11-10)
 
 Zoom subscribes to the main design renderer's physical-display updates and applies

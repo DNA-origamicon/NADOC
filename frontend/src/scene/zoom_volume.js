@@ -121,6 +121,20 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   const insetScene = new THREE.Scene(); insetScene.add(new THREE.AmbientLight(0xffffff, 2))
   const light = new THREE.DirectionalLight(0xffffff, 2); insetScene.add(light)
   const camera = new THREE.PerspectiveCamera(40, 1, .01, 10000)
+  const zoomControls = document.createElement('div'); zoomControls.id = 'zoom-volume-zoom-controls'
+  zoomControls.setAttribute('role', 'group'); zoomControls.setAttribute('aria-label', 'Inset zoom')
+  zoomControls.hidden = true
+  let zoomStep = 0
+  const zoomButtons = [1, -1].map(direction => {
+    const button = document.createElement('button'); button.type = 'button'
+    button.textContent = direction > 0 ? '+' : '−'
+    button.setAttribute('aria-label', direction > 0 ? 'Zoom in inset' : 'Zoom out inset')
+    button.title = button.getAttribute('aria-label')
+    button.onclick = () => { zoomStep = Math.max(-8, Math.min(8, zoomStep + direction)); camera.zoom = 1.25 ** zoomStep; frame() }
+    zoomControls.append(button)
+    return button
+  })
+  document.body.append(zoomControls)
   const bounds = new THREE.Box3(), externalBounds = new THREE.Box3(), displayedBounds = new THREE.Box3(), box = new THREE.Box3Helper(displayedBounds, 0x67c5ff)
   box.name = 'zoom-volume-selection-box'; box.visible = false; box.userData.helper = true; box.userData.setupOnly = true; box.raycast = () => {}; scene.add(box)
   let renderer = null, targets = [], displays = [], revision = 0, disposed = false, ready = false, customPosition = null
@@ -174,6 +188,7 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     host.setAttribute('aria-busy', 'false'); displayedBounds.makeEmpty()
     abort.abort(); revision++; ready = false; targets = []; volume = null; bounds.makeEmpty()
     for (const d of displays) d.dispose(); displays = []; contextRoots = []; contextBaseCount = 0; contextObjectCount = 0; contextConnectionCount = 0; selectionConnectionCount = 0
+    zoomStep = 0; camera.zoom = 1; zoomControls.hidden = true
     host.style.display = 'none'; svg.style.display = 'none'; box.visible = false
     $('status').textContent = 'Select an element in the 3D view.'
   }
@@ -356,13 +371,19 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
     const visible = (ready || loading || hasFrozenImage) && $('enabled').checked && canvas.getBoundingClientRect().width > 0
     host.style.display = visible ? 'block' : 'none'; box.visible = visible && !displayedBounds.isEmpty() && $('box').checked
     svg.style.display = visible && $('lines').checked ? 'block' : 'none'
+    zoomControls.hidden = !visible
     if (!visible) return
-    const rect = canvas.getBoundingClientRect(), size = Math.max(80, Math.min(Number($('size').value), rect.width - 24, rect.height - 50))
+    const rect = canvas.getBoundingClientRect(), size = Math.max(80, Math.min(Number($('size').value), rect.width - 64, rect.height - 50))
     const corner = $('position').value
     const left = Math.max(rect.left + 8, Math.min(rect.right - size - 12, customPosition?.x ?? (corner.endsWith('r') ? rect.right - size - 12 : rect.left + 12)))
     const top = Math.max(rect.top + 8, Math.min(rect.bottom - size - 40, customPosition?.y ?? (corner.startsWith('b') ? rect.bottom - size - 40 : rect.top + 12)))
     host.style.left = `${left}px`; host.style.top = `${top}px`
     host.style.width = `${size}px`; host.style.height = `${size + 26}px`
+    // Keep the pair outside the inset, on the side with more viewport room.
+    const controlsLeft = left + size / 2 > rect.left + rect.width / 2 ? left - 40 : left + size + 10
+    zoomControls.style.left = `${controlsLeft}px`; zoomControls.style.top = `${top + 30}px`
+    zoomButtons[0].disabled = loading || !ready || zoomStep === 8
+    zoomButtons[1].disabled = loading || !ready || zoomStep === -8
     if (loading || !ready) { svg.style.display = 'none'; return }
     const currentAtomVersion = getAtomisticRenderer?.()?.positionVersion?.()
     if (motionLayers.length && (appliedMotionRevision !== motionRevision || currentAtomVersion !== atomVersion)) {
@@ -406,5 +427,5 @@ export function initZoomVolume({ document, scene, canvas, store, api, designRend
   })
   assemblyRenderer?.onRebuildComplete?.(() => { if (!disposed && mode && targets.length) void rebuild() })
   addFrameCallback(frame)
-  return { capture, setBox, clear, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
+  return { capture, setBox, clear, debugAtoms: () => motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => e.kind === 'atom' ? [...zoomLiveAtoms(e.renderer)] : [])), debug: () => ({ zoom: camera.zoom, ready, loading, hasFrozenImage, targets, volume: volume ? structuredClone(volume) : null, motionRevision, appliedMotionRevision, motionPositions: motionLayers.flatMap(l => [...l.display.entries.values()].flatMap(e => (e.cg?.backboneEntries ?? []).map(b => ({ key: baseKey(b.nuc, b.nuc.copy_k ?? 0), position: b.pos.toArray() })))), contextBaseCount, contextObjectCount, selectionConnectionCount, contextConnectionCount, contextOpacity: contextOpacity(), contextVisible: contextRoots.some(root => root.visible), bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, orientation: camera.quaternion.toArray(), triangles: renderer?.info.render.triangles ?? 0 }), dispose() { disposed = true; window.removeEventListener('nadoc:zoom-volume-box', onBox); clear(); unsubscribe(); unsubscribeMotion?.(); removeFrameCallback(frame); renderer?.dispose(); host.remove(); zoomControls.remove(); svg.remove(); section.remove(); box.removeFromParent(); box.geometry.dispose(); box.material.dispose() } }
 }
